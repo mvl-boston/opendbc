@@ -193,6 +193,10 @@ class CarInterface(CarInterfaceBase):
     if ret.flags & HondaFlags.BOSCH_ALT_BRAKE:
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.FLAG_HONDA_ALT_BRAKE.value
 
+    if ret.flags & HondaFlags.BOSCH_ALT_BRAKE_PCM_ACCEL:
+      ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.FLAG_HONDA_ALT_BRAKE.value
+    
+    
     # These cars use alternate SCM messages (SCM_FEEDBACK AND SCM_BUTTON)
     if candidate in HONDA_NIDEC_ALT_SCM_MESSAGES:
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.FLAG_HONDA_NIDEC_ALT.value
