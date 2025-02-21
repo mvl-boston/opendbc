@@ -154,6 +154,8 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
 
     elif candidate == CAR.ACURA_RDX_3G_MMR:
+      if not ret.openpilotLongitudinalControl:
+        ret.minSteerSpeed = 70.0 * CV.KPH_TO_MS
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
 
