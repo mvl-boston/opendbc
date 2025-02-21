@@ -71,6 +71,7 @@ class HondaFlags(IntFlag):
   NIDEC = 16
   NIDEC_ALT_PCM_ACCEL = 32
   NIDEC_ALT_SCM_MESSAGES = 64
+  BOSCH_ALT_BRAKE_PCM_ACCEL = 128
 
 # Car button codes
 class CruiseButtons:
@@ -195,7 +196,7 @@ class CAR(Platforms):
     [HondaCarDocs("Acura RDX 2022-24", "All", footnotes=[Footnote.STEER_LIMITING_RADAR],
     CarSpecs(mass=4079 * CV.LB_TO_KG, wheelbase=2.75, steerRatio=12.0, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),  # as spec
     {Bus.pt: 'acura_rdx_2020_can_generated'},
-    flags=HondaFlags.BOSCH_ALT_BRAKE
+    flags=HondaFlags.BOSCH_ALT_BRAKE_PCM_ACCEL,
   )
   HONDA_INSIGHT = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda Insight 2019-22", "All", min_steer_speed=3. * CV.MPH_TO_MS)],
@@ -350,6 +351,6 @@ HONDA_NIDEC_ALT_PCM_ACCEL = CAR.with_flags(HondaFlags.NIDEC_ALT_PCM_ACCEL)
 HONDA_NIDEC_ALT_SCM_MESSAGES = CAR.with_flags(HondaFlags.NIDEC_ALT_SCM_MESSAGES)
 HONDA_BOSCH = CAR.with_flags(HondaFlags.BOSCH)
 HONDA_BOSCH_RADARLESS = CAR.with_flags(HondaFlags.BOSCH_RADARLESS)
-
+BOSCH_ALT_BRAKE_PCM_ACCEL = CAR.with_flags(HondaFlags.BOSCH_ALT_BRAKE_PCM_ACCEL)
 
 DBC = CAR.create_dbc_map()
