@@ -221,7 +221,7 @@ class CarState(CarStateBase):
         ret.cruiseState.nonAdaptive = acc_hud["CRUISE_CONTROL_LABEL"] != 0
         ret.cruiseState.standstill = acc_hud["CRUISE_SPEED"] == 252.
 
-        conversion = get_cruise_speed_conversion(self.CP.carFingerprint, self.is_metric)
+        conversion = return CV.MPH_TO_MS if acc_hud["IMPERIAL_UNIT"] else CV.KPH_TO_MS # note if this works, then remove function in hondacan and in includes above
         # On set, cruise set speed pulses between 254~255 and the set speed prev is set to avoid this.
         ret.cruiseState.speed = self.v_cruise_pcm_prev if acc_hud["CRUISE_SPEED"] > 160.0 else acc_hud["CRUISE_SPEED"] * conversion
         self.v_cruise_pcm_prev = ret.cruiseState.speed
