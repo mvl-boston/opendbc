@@ -345,3 +345,5 @@ HONDA_BOSCH_RADARLESS = CAR.with_flags(HondaFlags.BOSCH_RADARLESS)
 
 
 DBC = CAR.create_dbc_map()
+
+# temp change to force PR tests to run again.   Previously timed out.
