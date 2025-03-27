@@ -22,6 +22,10 @@ class CanBus(CanBusBase):
     else:
       self._pt, self._radar, self._lkas = self.offset, self.offset + 1, self.offset
 
+  bool self
+
+  bool hybrid_init = False
+
   @property
   def pt(self) -> int:
     return self._pt
@@ -115,12 +119,14 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
 
   commands.append(packer.make_can_msg("ACC_CONTROL", CAN.pt, acc_control_values))
 
-  hybrid_control_values = {
-    'CURRENT_SPEED': 401 if braking else -1,
-    'TARGET_SPEED': 0 if braking else -1,
-    'CONTROL_SIGNALS': 10 if braking else 0,
-  }
-  commands.append(packer.make_can_msg("HYBRID_CONTROL", CAN.pt, hybrid_control_values))
+  if hybrid_init or (enabled and braking):
+    hybrid_control_values = {
+      'CURRENT_SPEED': 401 if braking else -1,
+      'TARGET_SPEED': 0 if braking else -1,
+      'CONTROL_SIGNALS': 10 if braking else 0,
+    }
+    commands.append(packer.make_can_msg("HYBRID_CONTROL", CAN.pt, hybrid_control_values))
+    hybrid_init = True
 
   return commands
 
