@@ -24,7 +24,7 @@ class CanBus(CanBusBase):
 
   bool self
 
-  bool hybrid_init = False
+  hybrid_init = False
 
   @property
   def pt(self) -> int:
