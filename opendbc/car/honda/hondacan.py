@@ -22,8 +22,6 @@ class CanBus(CanBusBase):
     else:
       self._pt, self._radar, self._lkas = self.offset, self.offset + 1, self.offset
 
-  bool self
-
   hybrid_init = False
 
   @property
