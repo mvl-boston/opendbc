@@ -11,8 +11,10 @@ from opendbc.car.honda.values import HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARL
 
 class CanBus(CanBusBase):
 
+  hybrid_init = False
+  
   def __init__(self, CP=None, fingerprint=None) -> None:
-    self.hybrid_init = False
+    
     
     # use fingerprint if specified
     super().__init__(CP if fingerprint is None else None, fingerprint)
@@ -118,14 +120,14 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
 
   commands.append(packer.make_can_msg("ACC_CONTROL", CAN.pt, acc_control_values))
 
-  if self.hybrid_init or (enabled and braking):
+  if CanBus.hybrid_init or (enabled and braking):
     hybrid_control_values = {
       'CURRENT_SPEED': 401 if braking else -1,
       'TARGET_SPEED': 0 if braking else -1,
       'CONTROL_SIGNALS': 10 if braking else 0,
     }
     commands.append(packer.make_can_msg("HYBRID_CONTROL", CAN.pt, hybrid_control_values))
-    self.hybrid_init = True
+    CanBus.hybrid_init = True
 
   return commands
 
