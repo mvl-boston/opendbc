@@ -31,6 +31,7 @@ def get_can_messages(CP, gearbox_msg):
     ("VSA_STATUS", 50),
     ("STEER_STATUS", 100),
     ("STEER_MOTOR_TORQUE", 0),  # TODO: not on every car
+    ("HYBRID_CONTROL", 0), # recieve hybrid control frames
   ]
 
   if CP.carFingerprint == CAR.HONDA_ODYSSEY_CHN:
