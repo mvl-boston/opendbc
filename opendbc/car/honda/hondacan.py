@@ -10,6 +10,9 @@ from opendbc.car.honda.values import HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARL
 
 
 class CanBus(CanBusBase):
+
+  self.hybrid_init = False
+
   def __init__(self, CP=None, fingerprint=None) -> None:
     # use fingerprint if specified
     super().__init__(CP if fingerprint is None else None, fingerprint)
@@ -21,8 +24,6 @@ class CanBus(CanBusBase):
       self._lkas = self._pt if CP.openpilotLongitudinalControl else self._radar
     else:
       self._pt, self._radar, self._lkas = self.offset, self.offset + 1, self.offset
-
-    self.hybrid_init = False
 
   @property
   def pt(self) -> int:
