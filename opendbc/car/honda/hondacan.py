@@ -11,8 +11,6 @@ from opendbc.car.honda.values import HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARL
 
 class CanBus(CanBusBase):
 
-  hybrid_init = False
-
   def __init__(self, CP=None, fingerprint=None) -> None:
 
     # use fingerprint if specified
@@ -119,15 +117,13 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
 
   commands.append(packer.make_can_msg("ACC_CONTROL", CAN.pt, acc_control_values))
 
-  if CanBus.hybrid_init or (enabled and braking):
+  if enabled and CP.carFingerprint == CAR.HONDA_CIVIC_2022:
     hybrid_control_values = {
       'CURRENT_SPEED': 401 if braking else -1,
       'TARGET_SPEED': 0 if braking else -1,
       'CONTROL_SIGNALS': 10 if braking else 0,
     }
     commands.append(packer.make_can_msg("HYBRID_CONTROL", CAN.pt, hybrid_control_values))
-    CanBus.hybrid_init = True
-
   return commands
 
 
@@ -192,6 +188,13 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
     lkas_hud_values['DASHED_LANES'] = hud.lanes_visible
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
     lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
+    if not (enabled and CP.carFingerprint == CAR.HONDA_CIVIC_2022)
+      hybrid_control_values = {
+        CURRENT_SPEED: hybrid_control['CURRENT_SPEED']
+        TARGET_SPEED: hybrid_control['TARGET_SPEED']
+        CONTROL_SIGNALS: hybrid_control['CONTROL_SIGNALS']
+      }
+      commands.append(packer.make_can_msg("HYBRID_CONTROL", CAN.lkas, hybrid_control_values))
 
   if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
     lkas_hud_values['SET_ME_X48'] = 0x48
