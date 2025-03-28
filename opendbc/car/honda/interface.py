@@ -46,7 +46,7 @@ class CarInterface(CarInterfaceBase):
       # Disable the radar and let openpilot control longitudinal
       # WARNING: THIS DISABLES AEB!
       ret.experimentalLongitudinalAvailable = True
-      #ret.openpilotLongitudinalControl = experimental_long
+      ret.openpilotLongitudinalControl = experimental_long
     elif candidate in HONDA_BOSCH:
       ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaBosch)]
       ret.radarUnavailable = True
