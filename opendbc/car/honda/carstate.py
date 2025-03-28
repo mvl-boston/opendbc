@@ -33,7 +33,7 @@ def get_can_messages(CP, gearbox_msg):
     ("STEER_MOTOR_TORQUE", 0),  # TODO: not on every car
   ]
 
-  if CP.carFingerprint == CAR.HONDA_CIVIC_2022:
+  if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
      messages += [
       ("HYBRID_CONTROL", 0), # recieve hybrid control frames
     ]
