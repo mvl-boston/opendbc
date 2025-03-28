@@ -232,7 +232,7 @@ class CarController(CarControllerBase):
                     hud_control.lanesVisible, fcw_display, acc_alert, steer_required, hud_control.leadDistanceBars)
       can_sends.extend(hondacan.create_ui_commands(self.packer, self.CAN, self.CP, CC.enabled, pcm_speed, \
                                                    hud, CS.is_metric, CS.acc_hud, CS.lkas_hud, \
-                                                   CS.hybrid_control if self.CP.carFingerprint == CAR.HONDA_CIVIC_2022 else None))
+                                                   CS.hybrid_control if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS else None))
 
       if self.CP.openpilotLongitudinalControl and self.CP.carFingerprint not in HONDA_BOSCH:
         self.speed = pcm_speed
