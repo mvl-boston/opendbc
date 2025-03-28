@@ -188,10 +188,10 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
     lkas_hud_values['DASHED_LANES'] = hud.lanes_visible
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
     lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
-    if not (enabled and CP.carFingerprint == CAR.HONDA_CIVIC_2022)
+    if not (enabled and CP.carFingerprint == CAR.HONDA_CIVIC_2022):
       hybrid_control_values = {
-        CURRENT_SPEED: hybrid_control['CURRENT_SPEED']
-        TARGET_SPEED: hybrid_control['TARGET_SPEED']
+        CURRENT_SPEED: hybrid_control['CURRENT_SPEED'],
+        TARGET_SPEED: hybrid_control['TARGET_SPEED'],
         CONTROL_SIGNALS: hybrid_control['CONTROL_SIGNALS']
       }
       commands.append(packer.make_can_msg("HYBRID_CONTROL", CAN.lkas, hybrid_control_values))
