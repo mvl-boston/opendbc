@@ -106,7 +106,7 @@ class HondaCarDocs(CarDocs):
           self.car_parts = CarParts.common([CarHarness.bosch_b])
       elif CP.flags & HondaFlags.CANFD_CAR:
           self.car_parts = CarParts.common([CarHarness.bosch_c])
-      else CarParts.common([CarHarness.bosch_a])
+      else CarParts.common([CarHarness.bosch_a]):
     else:
       self.car_parts = CarParts.common([CarHarness.nidec])
 
