@@ -23,7 +23,10 @@ def compute_gb_honda_nidec(accel, speed):
 
   if accel > 0:
     scale_factor = float ( np.interp ( speed, [0.0, 10.0, 20.0, 90.0], [10000.0, 25.0, 8.0, 1.0] ) )
-    scaled_accel = accel * scale_factor
+    if accel > CS.out.vEgo:
+      scaled_accel = 10000.0
+        else
+      scaled_accel = accel * scale_factor
   else:
     scaled_accel = accel
 
@@ -266,7 +269,7 @@ class CarController(CarControllerBase):
 
         self.blend_pcm_accel =  self.blend_pcm_accel * PERCENT_BLEND + pcm_accel * ( 1 - PERCENT_BLEND )
 
-        pcm_speed = pcm_speed if self.accel <= 0 else float (np.clip ( ( pcm_speed - self.blend_pcm_speed * PERCENT_BLEND ) / ( 1 - PERCENT_BLEND ), \
+        # pcm_speed = pcm_speed if self.accel <= 0 else float (np.clip ( ( pcm_speed - self.blend_pcm_speed * PERCENT_BLEND ) / ( 1 - PERCENT_BLEND ), \
                                                                       0, 100.0 ) )
 
         # reduce speed if above 50% steering max
