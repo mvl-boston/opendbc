@@ -270,7 +270,7 @@ class CarController(CarControllerBase):
         self.blend_pcm_accel =  self.blend_pcm_accel * PERCENT_BLEND + pcm_accel * ( 1 - PERCENT_BLEND )
 
         # pcm_speed = pcm_speed if self.accel <= 0 else float (np.clip ( ( pcm_speed - self.blend_pcm_speed * PERCENT_BLEND ) / ( 1 - PERCENT_BLEND ), \
-                                                                      0, 100.0 ) )
+        #                                                              0, 100.0 ) )
 
         # reduce speed if above 50% steering max
         pcm_speed = float ( np.clip ( pcm_speed, 0, 100 if CS.out.vEgo < 10.0 else steerfactor * 0.50 * CS.out.vEgo ) )
