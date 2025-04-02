@@ -914,4 +914,12 @@ FW_VERSIONS = {
       b'28101-65J-N010\x00\x00',
     ],
   },
+  CAR.ACURA_MDX_2025: {
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'8S302-TYA-A020\x00\x00',
+    ],
+    (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'8S102-TYA-A020\x00\x00',
+    ],
+  },
 }
