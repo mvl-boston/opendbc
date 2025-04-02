@@ -115,6 +115,7 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.brake_frames_sent = 0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -202,8 +203,9 @@ class CarController(CarControllerBase):
 
     else:
       # Send gas and brake commands.
-      if self.frame % 2 == 0:
+      if (self.frame % 2 == 0) or (self.brake_frames_sent < 10):
         ts = self.frame * DT_CTRL
+        self.brake_frames_sent = min (99, self.brake_frames_sent + 1)
 
         if self.CP.carFingerprint in HONDA_BOSCH:
           self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
