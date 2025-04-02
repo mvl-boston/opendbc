@@ -162,7 +162,7 @@ class CAR(Platforms):
     flags=HondaFlags.BOSCH_RADARLESS,
   )
   ACURA_MDX_2025 = HondaBoschPlatformConfig(
-    [HondaCarDocs("Acura MDX 2022", "All")],
+    [HondaCarDocs("Acura MDX 2025", "All")],
     HONDA_CIVIC_BOSCH.specs,
     {Bus.pt: 'honda_civic_ex_2022_can_generated'},
   )
