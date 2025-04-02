@@ -53,13 +53,15 @@ def get_can_messages(CP, gearbox_msg):
     messages.append(("BRAKE_MODULE", 50))
 
   if CP.carFingerprint in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.HONDA_ODYSSEY, CAR.HONDA_ODYSSEY_CHN}):
-    messages.append(("EPB_STATUS", 50))
+    # messages.append(("EPB_STATUS", 50))
+    messages.append(("EPB_STATUS", 0))
 
   if CP.carFingerprint in HONDA_BOSCH:
     # these messages are on camera bus on radarless cars
     if not CP.openpilotLongitudinalControl and CP.carFingerprint not in HONDA_BOSCH_RADARLESS:
       messages += [
-        ("ACC_HUD", 10),
+        # ("ACC_HUD", 10),
+        ("ACC_HUD", 0),
         ("ACC_CONTROL", 50),
       ]
   else:  # Nidec signals
