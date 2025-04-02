@@ -914,7 +914,7 @@ FW_VERSIONS = {
       b'28101-65J-N010\x00\x00',
     ],
   },
-  CAR.ACURA_MDX_2025: {
+  CAR.ACURA_MDX_4G_MMR: {
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'8S302-TYA-A020\x00\x00',
     ],
