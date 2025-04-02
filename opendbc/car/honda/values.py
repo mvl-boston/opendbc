@@ -161,6 +161,11 @@ class CAR(Platforms):
     {Bus.pt: 'honda_civic_ex_2022_can_generated'},
     flags=HondaFlags.BOSCH_RADARLESS,
   )
+  ACURA_MDX_2025 = HondaBoschPlatformConfig(
+    [HondaCarDocs("Acura MDX 2022", "All")],
+    HONDA_CIVIC_BOSCH.specs,
+    {Bus.pt: 'honda_civic_ex_2022_can_generated'},
+  )
   HONDA_CRV_5G = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda CR-V 2017-22", min_steer_speed=12. * CV.MPH_TO_MS)],
     # steerRatio: 12.3 is spec end-to-end
