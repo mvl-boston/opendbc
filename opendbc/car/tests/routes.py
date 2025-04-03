@@ -111,8 +111,7 @@ routes = [
   CarTestRoute("ad9840558640c31d/0000002e--a81d0c52a8", HONDA.HONDA_PILOT_4G), # fake route to prevent CI errors
   CarTestRoute("ad9840558640c31d/0000002e--a81d0c52a8", HONDA.HONDA_CRV_6G), # fake route to prevent CI errors
   CarTestRoute("ad9840558640c31d/0000002e--a81d0c52a8", HONDA.HONDA_ACCORD_11G), # fake route to prevent CI errors
-  
-  
+
   CarTestRoute("87d7f06ade479c2e|2023-09-11--23-30-11", HYUNDAI.HYUNDAI_AZERA_6TH_GEN),
   CarTestRoute("66189dd8ec7b50e6|2023-09-20--07-02-12", HYUNDAI.HYUNDAI_AZERA_HEV_6TH_GEN),
   CarTestRoute("6fe86b4e410e4c37|2020-07-22--16-27-13", HYUNDAI.HYUNDAI_GENESIS),
