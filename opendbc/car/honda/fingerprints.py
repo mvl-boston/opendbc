@@ -942,11 +942,11 @@ FW_VERSIONS = {
   CAR.HONDA_PILOT_4G: {
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'8S102-T90-A050\x00\x00',
-      b'8S302-TYA-A020\x00\x00',
+      b'8S102-TYA-A020\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'8S302-T90-A040\x00\x00',
-      b'8S102-TYA-A020\x00\x00',
+      b'8S302-TYA-A020\x00\x00',
     ],
   },
 }
