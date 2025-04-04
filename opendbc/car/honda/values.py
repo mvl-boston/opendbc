@@ -223,6 +223,12 @@ class CAR(Platforms):
     {Bus.pt: 'honda_pilot_2023_can_generated'},
     flags=HondaFlags.CANFD_CAR | HondaFlags.BOSCH_ALT_BRAKE,
   )
+  ACURA_MDX_4G_MMR = HondaBoschPlatformConfig(
+    [HondaCarDocs("Acura MDX 2025", "All")],
+    CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=14.6, tireStiffnessFactor=0.444),  # as spec
+    {Bus.pt: 'honda_pilot_2023_can_generated'},
+    flags=HondaFlags.CANFD_CAR | HondaFlags.BOSCH_ALT_BRAKE,
+  )
 
   # Nidec Cars
   ACURA_ILX = HondaNidecPlatformConfig(
