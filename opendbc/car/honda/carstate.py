@@ -75,7 +75,7 @@ def get_can_messages(CP, gearbox_msg):
   # TODO: clean this up
   if CP.carFingerprint in (CAR.HONDA_ACCORD, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.HONDA_CRV_HYBRID, CAR.HONDA_INSIGHT,
                            CAR.ACURA_RDX_3G, CAR.HONDA_E, CAR.HONDA_CIVIC_2022, CAR.HONDA_HRV_3G, CAR.HONDA_CRV_6G, CAR.HONDA_ACCORD_11G,
-                           CAR.HONDA_CRV_HYBRID_6G, CAR.HONDA_PILOT_4G):
+                           CAR.HONDA_CRV_HYBRID_6G, CAR.HONDA_PILOT_4G, CAR.ACURA_MDX_4G_MMR):
     pass
   elif CP.carFingerprint in (CAR.HONDA_ODYSSEY_CHN, CAR.HONDA_FREED, CAR.HONDA_HRV):
     pass
@@ -147,7 +147,7 @@ class CarState(CarStateBase):
     # TODO: find a common signal across all cars
     if self.CP.carFingerprint in (CAR.HONDA_ACCORD, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.HONDA_CRV_HYBRID, CAR.HONDA_INSIGHT,
                                   CAR.ACURA_RDX_3G, CAR.HONDA_E, CAR.HONDA_CIVIC_2022, CAR.HONDA_HRV_3G, CAR.HONDA_CRV_6G, CAR.HONDA_ACCORD_11G,
-                                  CAR.HONDA_CRV_HYBRID_6G, CAR.HONDA_PILOT_4G):
+                                  CAR.HONDA_CRV_HYBRID_6G, CAR.HONDA_PILOT_4G, CAR.ACURA_MDX_4G_MMR):
       ret.doorOpen = bool(cp.vl["SCM_FEEDBACK"]["DRIVERS_DOOR_OPEN"])
     elif self.CP.carFingerprint in (CAR.HONDA_ODYSSEY_CHN, CAR.HONDA_FREED, CAR.HONDA_HRV):
       ret.doorOpen = bool(cp.vl["SCM_BUTTONS"]["DRIVERS_DOOR_OPEN"])
