@@ -37,18 +37,19 @@ class CarInterface(CarInterfaceBase):
 
     CAN = CanBus(ret, fingerprint)
 
-    if candidate in HONDA_CANFD_CAR:
-      cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaBosch)]
-      if CAN.pt >= 4:
-        cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.noOutput))
-      ret.safetyConfigs = cfgs
-      ret.radarUnavailable = True
+#   if candidate in HONDA_CANFD_CAR:
+#     cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaBosch)]
+#     if CAN.pt >= 4:
+#        cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.noOutput))
+#      ret.safetyConfigs = cfgs
+#      ret.radarUnavailable = True
       # Disable the radar and let openpilot control longitudinal
       # WARNING: THIS DISABLES AEB!
-      ret.experimentalLongitudinalAvailable = True
-      ret.openpilotLongitudinalControl = experimental_long
-      ret.pcmCruise = not ret.openpilotLongitudinalControl
-    elif candidate in HONDA_BOSCH:
+    # ret.experimentalLongitudinalAvailable = True
+    # ret.openpilotLongitudinalControl = experimental_long
+    #  ret.pcmCruise = not ret.openpilotLongitudinalControl
+    # elif candidate in HONDA_BOSCH:
+    if candidate in HONDA_BOSCH:
       ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaBosch)]
       ret.radarUnavailable = True
       # Disable the radar and let openpilot control longitudinal
@@ -211,6 +212,7 @@ class CarInterface(CarInterfaceBase):
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
 
     if ret.flags & HondaFlags.BOSCH_ALT_BRAKE:
+      # ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value
 
     # These cars use alternate SCM messages (SCM_FEEDBACK AND SCM_BUTTON)
@@ -220,7 +222,8 @@ class CarInterface(CarInterfaceBase):
     if ret.openpilotLongitudinalControl and candidate in HONDA_BOSCH:
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.BOSCH_LONG.value
 
-    if candidate in (HONDA_BOSCH_RADARLESS | HONDA_CANFD_CAR):
+    if candidate in (HONDA_BOSCH_RADARLESS):
+    #if candidate in (HONDA_BOSCH_RADARLESS | HONDA_CANFD_CAR):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
