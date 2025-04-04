@@ -109,6 +109,7 @@ routes = [
   CarTestRoute("1f032f5173c8ad99/00000006--573b3fcaf5", HONDA.HONDA_CIVIC_2022), # Civic Type R with manual transmission
   CarTestRoute("ad9840558640c31d/0000002e--a81d0c52a8", HONDA.HONDA_CRV_HYBRID_6G), # fake route to prevent CI errors
   CarTestRoute("ad9840558640c31d/0000002e--a81d0c52a8", HONDA.HONDA_PILOT_4G), # fake route to prevent CI errors
+  CarTestRoute("ad9840558640c31d/0000002e--a81d0c52a8", HONDA.ACURA_MDX_4G_MMR), # fake route to prevent CI errors
   CarTestRoute("ad9840558640c31d/0000002e--a81d0c52a8", HONDA.HONDA_CRV_6G), # fake route to prevent CI errors
   CarTestRoute("ad9840558640c31d/0000002e--a81d0c52a8", HONDA.HONDA_ACCORD_11G), # fake route to prevent CI errors
 
