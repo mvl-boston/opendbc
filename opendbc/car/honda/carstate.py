@@ -273,6 +273,7 @@ class CarState(CarStateBase):
 
     self.acc_hud = False
     self.lkas_hud = False
+    self.hybrid_control = False
     if self.CP.carFingerprint not in HONDA_BOSCH:
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
