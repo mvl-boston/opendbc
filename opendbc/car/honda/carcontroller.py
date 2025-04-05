@@ -202,7 +202,7 @@ class CarController(CarControllerBase):
 
     else:
       # Send gas and brake commands.
-      if self.frame % 2 == 0
+      if self.frame % 2 == 0:
         ts = self.frame * DT_CTRL
 
         if self.CP.carFingerprint in HONDA_BOSCH:
