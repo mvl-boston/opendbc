@@ -36,6 +36,17 @@ class CarInterface(CarInterfaceBase):
 
     CAN = CanBus(ret, fingerprint)
 
+    if candidate = CAR.ACURA_MDX_4G_MMR:
+      cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaBosch)]
+      if CAN.pt >= 4:
+        cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.noOutput))
+      ret.safetyConfigs = cfgs
+      ret.radarUnavailable = True
+      # Disable the radar and let openpilot control longitudinal
+      # WARNING: THIS DISABLES AEB!
+      ret.experimentalLongitudinalAvailable = False
+      ret.openpilotLongitudinalControl = experimental_long
+      ret.pcmCruise = not ret.openpilotLongitudinalControl
     if candidate in HONDA_BOSCH:
       # ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaBosch)]
       cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaBosch)]
@@ -209,6 +220,9 @@ class CarInterface(CarInterfaceBase):
 
     if candidate in HONDA_BOSCH_RADARLESS:
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.RADARLESS.value
+
+    if candidate == CAR.ACURA_MDX_4G_MMR:
+      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
     # to a negative value, so it won't matter. Otherwise, add 0.5 mph margin to not
