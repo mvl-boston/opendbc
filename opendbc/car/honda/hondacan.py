@@ -121,7 +121,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
     speed_control_values = {
       'CURRENT_SPEED': 401 if braking else -1,
       'TARGET_SPEED': 0 if braking else -1,
-      'SPEED_CONTROL_ON': 1 if braking else 0,
+      'SPEED_CONTROL_ON': 1,
       'PASSTHROUGH': speed_passthrough,
     }
     commands.append(packer.make_can_msg("SPEED_CONTROL", CAN.pt, speed_control_values))
