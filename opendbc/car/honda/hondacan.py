@@ -187,12 +187,12 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
     lkas_hud_values['DASHED_LANES'] = hud.lanes_visible
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
     lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
-    # if not enabled:
-    #  hybrid_control_values = {}
-    #  hybrid_control_values['CURRENT_SPEED'] = hybrid_control['CURRENT_SPEED']
-    #  hybrid_control_values['TARGET_SPEED'] = hybrid_control['TARGET_SPEED']
-    #  hybrid_control_values['CONTROL_SIGNALS'] = hybrid_control['CONTROL_SIGNALS']
-    #  commands.append(packer.make_can_msg("HYBRID_CONTROL", CAN.lkas, hybrid_control_values))
+    if not enabled:
+      hybrid_control_values = {}
+      hybrid_control_values['CURRENT_SPEED'] = hybrid_control['CURRENT_SPEED']
+      hybrid_control_values['TARGET_SPEED'] = hybrid_control['TARGET_SPEED']
+      hybrid_control_values['CONTROL_SIGNALS'] = hybrid_control['CONTROL_SIGNALS']
+      commands.append(packer.make_can_msg("HYBRID_CONTROL", CAN.lkas, hybrid_control_values))
 
   if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
     lkas_hud_values['SET_ME_X48'] = 0x48
