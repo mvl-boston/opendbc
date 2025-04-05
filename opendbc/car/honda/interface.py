@@ -36,7 +36,7 @@ class CarInterface(CarInterfaceBase):
 
     CAN = CanBus(ret, fingerprint)
 
-    if candidate = CAR.ACURA_MDX_4G_MMR:
+    if candidate == CAR.ACURA_MDX_4G_MMR:
       cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaBosch)]
       if CAN.pt >= 4:
         cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.noOutput))
