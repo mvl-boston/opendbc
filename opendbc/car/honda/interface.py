@@ -206,10 +206,10 @@ class CarInterface(CarInterfaceBase):
     if ret.openpilotLongitudinalControl and candidate in HONDA_BOSCH:
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.BOSCH_LONG.value
 
-    if candidate in ( HONDA_BOSCH_RADARLESS, HONDA_CANFD_CAR ):
+    if candidate in HONDA_BOSCH_RADARLESS:
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
-    if False: # candidate == CAR.ACURA_MDX_4G_MMR: # fix why -1
+    if candidate in HONDA_CANFD_CAR: # todo: understand / fix why -1
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
