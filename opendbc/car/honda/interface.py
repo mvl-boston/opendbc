@@ -195,7 +195,7 @@ class CarInterface(CarInterfaceBase):
     if 0x1BE in fingerprint[CAN.pt] and candidate in (CAR.HONDA_ACCORD, CAR.HONDA_HRV_3G):
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
 
-    if ret.flags & HondaFlags.BOSCH_ALT_BRAKE: 
+    if ret.flags & HondaFlags.BOSCH_ALT_BRAKE:
       # ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value - # fix why -1
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value
 
