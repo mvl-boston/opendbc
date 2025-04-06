@@ -209,7 +209,7 @@ class CarInterface(CarInterfaceBase):
     if candidate in HONDA_BOSCH_RADARLESS:
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
-    if False # candidate == CAR.ACURA_MDX_4G_MMR: # fix why -1
+    if False: # candidate == CAR.ACURA_MDX_4G_MMR: # fix why -1
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
