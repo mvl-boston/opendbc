@@ -5,7 +5,8 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.disable_ecu import disable_ecu
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, \
-                                                 HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HondaSafetyFlags
+                                      HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HONDA_CANFD_CAR, \
+                                      HondaSafetyFlags
 from opendbc.car.honda.carcontroller import CarController
 from opendbc.car.honda.carstate import CarState
 from opendbc.car.honda.radar_interface import RadarInterface
@@ -36,27 +37,13 @@ class CarInterface(CarInterfaceBase):
 
     CAN = CanBus(ret, fingerprint)
 
-    if candidate == CAR.ACURA_MDX_4G_MMR:
-      cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaBosch)]
-      if CAN.pt >= 4:
-        cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.noOutput))
-      ret.safetyConfigs = cfgs
-      ret.radarUnavailable = True
-      # Disable the radar and let openpilot control longitudinal
-      # WARNING: THIS DISABLES AEB!
-      ret.experimentalLongitudinalAvailable = False
-      ret.openpilotLongitudinalControl = experimental_long
-      ret.pcmCruise = not ret.openpilotLongitudinalControl
     if candidate in HONDA_BOSCH:
-      # ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaBosch)]
-      cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaBosch)]
-      if CAN.pt >= 4:
-        cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.noOutput))
+      ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaBosch)]
       ret.radarUnavailable = True
       # Disable the radar and let openpilot control longitudinal
       # WARNING: THIS DISABLES AEB!
       # If Bosch radarless, this blocks ACC messages from the camera
-      ret.experimentalLongitudinalAvailable = True
+      ret.experimentalLongitudinalAvailable = False if candidate in HONDA_CANFD_CAR else True;
       ret.openpilotLongitudinalControl = experimental_long
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
@@ -208,7 +195,7 @@ class CarInterface(CarInterfaceBase):
     if 0x1BE in fingerprint[CAN.pt] and candidate in (CAR.HONDA_ACCORD, CAR.HONDA_HRV_3G):
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
 
-    if ret.flags & HondaFlags.BOSCH_ALT_BRAKE:
+    if ret.flags & HondaFlags.BOSCH_ALT_BRAKE: # fix why -1
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value
 
     # These cars use alternate SCM messages (SCM_FEEDBACK AND SCM_BUTTON)
@@ -218,10 +205,10 @@ class CarInterface(CarInterfaceBase):
     if ret.openpilotLongitudinalControl and candidate in HONDA_BOSCH:
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.BOSCH_LONG.value
 
-    if candidate in HONDA_BOSCH_RADARLESS:
+    if candidate in HONDA_CANFD_CAR:
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
-    if candidate == CAR.ACURA_MDX_4G_MMR:
+    if candidate == CAR.ACURA_MDX_4G_MMR: fix why -1
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
