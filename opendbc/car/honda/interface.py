@@ -206,7 +206,7 @@ class CarInterface(CarInterfaceBase):
     if ret.openpilotLongitudinalControl and candidate in HONDA_BOSCH:
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.BOSCH_LONG.value
 
-    if candidate in HONDA_BOSCH_RADARLESS:
+    if candidate in ( HONDA_BOSCH_RADARLESS, HONDA_CANFD_CAR ):
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
     if False: # candidate == CAR.ACURA_MDX_4G_MMR: # fix why -1
