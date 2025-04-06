@@ -195,8 +195,9 @@ class CarInterface(CarInterfaceBase):
     if 0x1BE in fingerprint[CAN.pt] and candidate in (CAR.HONDA_ACCORD, CAR.HONDA_HRV_3G):
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
 
-    if ret.flags & HondaFlags.BOSCH_ALT_BRAKE: # fix why -1
-      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value
+    if ret.flags & HondaFlags.BOSCH_ALT_BRAKE: 
+      # ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value - # fix why -1
+      ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value
 
     # These cars use alternate SCM messages (SCM_FEEDBACK AND SCM_BUTTON)
     if candidate in HONDA_NIDEC_ALT_SCM_MESSAGES:
@@ -205,7 +206,7 @@ class CarInterface(CarInterfaceBase):
     if ret.openpilotLongitudinalControl and candidate in HONDA_BOSCH:
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.BOSCH_LONG.value
 
-    if candidate in HONDA_CANFD_CAR:
+    if candidate in HONDA_BOSCH_RADARLESS:
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
     if candidate == CAR.ACURA_MDX_4G_MMR: # fix why -1
