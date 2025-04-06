@@ -43,7 +43,7 @@ class CarInterface(CarInterfaceBase):
       # Disable the radar and let openpilot control longitudinal
       # WARNING: THIS DISABLES AEB!
       # If Bosch radarless, this blocks ACC messages from the camera
-      ret.experimentalLongitudinalAvailable = False if candidate in HONDA_CANFD_CAR else True;
+      ret.experimentalLongitudinalAvailable = False if candidate in HONDA_CANFD_CAR else True
       ret.openpilotLongitudinalControl = experimental_long
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
@@ -208,7 +208,7 @@ class CarInterface(CarInterfaceBase):
     if candidate in HONDA_CANFD_CAR:
       ret.safetyConfigs[0].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
-    if candidate == CAR.ACURA_MDX_4G_MMR: fix why -1
+    if candidate == CAR.ACURA_MDX_4G_MMR: # fix why -1
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
