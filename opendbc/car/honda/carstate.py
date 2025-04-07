@@ -7,7 +7,7 @@ from opendbc.car import Bus, create_button_events, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.hondacan import CanBus, get_cruise_speed_conversion
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, \
-                                                 HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, \
+                                                 HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HONDA_CANFD_CAR \
                                                  HondaFlags, CruiseButtons, CruiseSettings, GearShifter
 from opendbc.car.interfaces import CarStateBase
 
@@ -107,6 +107,7 @@ class CarState(CarStateBase):
     self.brake_switch_active = False
     self.cruise_setting = 0
     self.v_cruise_pcm_prev = 0
+    self.scm_passthrough = 0
 
     # When available we use cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] to populate vEgoCluster
     # However, on cars without a digital speedometer this is not always present (HRV, FIT, CRV 2016, ILX and RDX)
@@ -129,6 +130,8 @@ class CarState(CarStateBase):
     prev_cruise_setting = self.cruise_setting
     self.cruise_setting = cp.vl["SCM_BUTTONS"]["CRUISE_SETTING"]
     self.cruise_buttons = cp.vl["SCM_BUTTONS"]["CRUISE_BUTTONS"]
+    if self.CP.carFingerprint in HONDA_CANFD_CAR:
+      self.scm_passthrough =  cp.vl["SCM_BUTTONS"]["PASS_THROUGH"]
 
     # used for car hud message
     self.is_metric = not cp.vl["CAR_SPEED"]["IMPERIAL_UNIT"]
