@@ -7,7 +7,7 @@ from opendbc.car import Bus, create_button_events, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.hondacan import CanBus, get_cruise_speed_conversion
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, \
-                                                 HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, CANFD_CAR \
+                                                 HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HONDA_CANFD_CAR \
                                                  HondaFlags, CruiseButtons, CruiseSettings, GearShifter
 from opendbc.car.interfaces import CarStateBase
 
@@ -130,7 +130,7 @@ class CarState(CarStateBase):
     prev_cruise_setting = self.cruise_setting
     self.cruise_setting = cp.vl["SCM_BUTTONS"]["CRUISE_SETTING"]
     self.cruise_buttons = cp.vl["SCM_BUTTONS"]["CRUISE_BUTTONS"]
-    if self.CP.carFingerprint in CANFD_CAR:
+    if self.CP.carFingerprint in HONDA_CANFD_CAR:
       self.scm_passthrough =  cp.vl["SCM_BUTTONS"]["PASS_THROUGH"]
 
     # used for car hud message
