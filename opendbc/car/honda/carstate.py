@@ -130,8 +130,8 @@ class CarState(CarStateBase):
     prev_cruise_setting = self.cruise_setting
     self.cruise_setting = cp.vl["SCM_BUTTONS"]["CRUISE_SETTING"]
     self.cruise_buttons = cp.vl["SCM_BUTTONS"]["CRUISE_BUTTONS"]
-    if self.CP.carFingerprint in HONDA_CANFD_CAR:
-      self.scm_passthrough =  cp.vl["SCM_BUTTONS"]["PASS_THROUGH"]
+    # if self.CP.carFingerprint in HONDA_CANFD_CAR:
+    #   self.scm_passthrough =  cp.vl["SCM_BUTTONS"]["PASS_THROUGH"]
 
     # used for car hud message
     self.is_metric = not cp.vl["CAR_SPEED"]["IMPERIAL_UNIT"]
