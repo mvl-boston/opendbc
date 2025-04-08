@@ -1,6 +1,6 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.values import HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_CANFD_CAR, CAR, CarControllerParams
+from opendbc.car.honda.values import HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, CAR, CarControllerParams, HONDA_CANFD_CAR
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -173,15 +173,11 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
     'BEEP': 0,
   }
 
-  if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+  if CP.carFingerprint in ( HONDA_BOSCH_RADARLESS | HONDA_CANFD_CAR ):
     lkas_hud_values['LANE_LINES'] = 3
     lkas_hud_values['DASHED_LANES'] = hud.lanes_visible
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
     lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
-
-  if CP.carFingerprint in HONDA_CANFD_CAR:
-    lkas_hud_values['LANE_LINES'] = 3
-    lkas_hud_values['DASHED_LANES'] = hud.lanes_visible
 
   if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
     lkas_hud_values['SET_ME_X48'] = 0x48
@@ -210,6 +206,6 @@ def spam_buttons_command(packer, CAN, button_val, car_fingerprint):
     'CRUISE_BUTTONS': button_val,
     'CRUISE_SETTING': 0,
   }
-  # send buttons to camera on radarless cars and canFD
-  bus = CAN.camera if car_fingerprint in ( HONDA_BOSCH_RADARLESS | HONDA_CANFD_CAR ) else CAN.pt
+  # send buttons to camera on radarless cars
+  bus = CAN.camera if car_fingerprint in HONDA_BOSCH_RADARLESS else CAN.pt
   return packer.make_can_msg("SCM_BUTTONS", bus, values)
