@@ -204,14 +204,15 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
   return commands
 
 
-def spam_buttons_command(packer, CAN, button_val, car_fingerprint, scm_passthrough):
+# def spam_buttons_command(packer, CAN, button_val, car_fingerprint, scm_passthrough):
+def spam_buttons_command(packer, CAN, button_val, car_fingerprint):
   values = {
     'CRUISE_BUTTONS': button_val,
     'CRUISE_SETTING': 0,
   }
 
   if False: # car_fingerprint in HONDA_CANFD_CAR and button_val == CruiseButtons.RES_ACCEL:
-    values += { 'PASS_THROUGH': scm_passthrough } # CANFD ignores commands if not sent
+    pass # values += { 'PASS_THROUGH': scm_passthrough } # CANFD ignores commands if not sent
 
   # send buttons to camera on radarless or canfd cars
   bus = CAN.camera if car_fingerprint in (HONDA_BOSCH_RADARLESS | HONDA_CANFD_CAR ) else CAN.pt
