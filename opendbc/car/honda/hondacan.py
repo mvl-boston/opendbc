@@ -210,7 +210,7 @@ def spam_buttons_command(packer, CAN, button_val, car_fingerprint, scm_passthrou
     'CRUISE_SETTING': 0,
   }
 
-  if car_fingerprint in HONDA_CANFD_CAR and button_val == CruiseButtons.RES_ACCEL:
+  if False: # car_fingerprint in HONDA_CANFD_CAR and button_val == CruiseButtons.RES_ACCEL:
     values += { 'PASS_THROUGH': scm_passthrough } # CANFD ignores commands if not sent
 
   # send buttons to camera on radarless or canfd cars
