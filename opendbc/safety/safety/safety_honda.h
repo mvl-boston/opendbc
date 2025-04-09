@@ -380,17 +380,16 @@ static safety_config honda_bosch_init(uint16_t param) {
     } else {
       SET_TX_MSGS(HONDA_RADARLESS_TX_MSGS, ret);
     }
-  else if (honda_bosch_canfd) {
+  } else if (honda_bosch_canfd) {
     if (honda_bosch_long) {
       SET_TX_MSGS(HONDA_CANFD_LONG_TX_MSGS, ret);
     } else {
       SET_TX_MSGS(HONDA_CANFD_TX_MSGS, ret);
     }
-  else if (honda_bosch_long) {
+  } else if (honda_bosch_long) {
       SET_TX_MSGS(HONDA_BOSCH_LONG_TX_MSGS, ret);
-    } else {
+  } else {
       SET_TX_MSGS(HONDA_BOSCH_TX_MSGS, ret);
-    }
   }
   return ret;
 }
