@@ -44,7 +44,7 @@ class CarInterface(CarInterfaceBase):
       # Disable the radar and let openpilot control longitudinal
       # WARNING: THIS DISABLES AEB!
       # If Bosch radarless, this blocks ACC messages from the camera
-      ret.experimentalLongitudinalAvailable = False if candidate in HONDA_CANFD_CAR else True 
+      ret.experimentalLongitudinalAvailable = False if candidate in HONDA_CANFD_CAR else True
       ret.openpilotLongitudinalControl = experimental_long
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
