@@ -364,7 +364,7 @@ static safety_config honda_bosch_init(uint16_t param) {
 #endif
 
   safety_config ret;
-  if ( ( honda_bosch_radarless or honda_bosch_canfd ) && honda_alt_brake_msg) {
+  if ( ( honda_bosch_radarless || honda_bosch_canfd ) && honda_alt_brake_msg) {
     SET_RX_CHECKS(honda_common_alt_brake_rx_checks, ret);
   } else if (honda_bosch_radarless or honda_bosch_canfd) {
     SET_RX_CHECKS(honda_bosch_radarless_canfd_rx_checks, ret);
