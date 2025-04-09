@@ -50,7 +50,7 @@ class CarControllerParams:
 class HondaSafetyFlags(IntFlag):
   ALT_BRAKE = 1
   BOSCH_LONG = 2
-   = 4
+  NIDEC_ALT = 4
   RADARLESS = 8
   CANFD = 16
 
