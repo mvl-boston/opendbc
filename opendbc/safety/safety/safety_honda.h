@@ -106,7 +106,7 @@ static void honda_rx_hook(const CANPacket_t *to_push) {
   }
 
   // state machine to enter and exit controls for button enabling
-  // 0x1A6 for the ILX, 0x296 for the Civic Touring
+  // 0x1A6 for the ILX, 0x296 for the Civic Touring and canfd
   if (((addr == 0x1A6) || (addr == 0x296)) && (bus == pt_bus)) {
     int button = (GET_BYTE(to_push, 0) & 0xE0U) >> 5;
 
@@ -324,7 +324,7 @@ static safety_config honda_bosch_init(uint16_t param) {
   static CanMsg HONDA_RADARLESS_TX_MSGS[] = {{0xE4, 0, 5, true}, {0x296, 2, 4, false}, {0x33D, 0, 8, false}};  // Bosch radarless
   static CanMsg HONDA_RADARLESS_LONG_TX_MSGS[] = {{0xE4, 0, 5, true}, {0x33D, 0, 8, false}, {0x1C8, 0, 8, false}, {0x30C, 0, 8, false}};  // Bosch radarless w/ gas and brakes
   static CanMsg HONDA_CANFD_TX_MSGS[] = {{0xE4, 0, 5, true}, {0x33D, 0, 8, false}};  // Bosch canfd - note SCM_BUTTONS on hold pending PR998a
-  static CanMsg HONDA_CANFD_LONG_TX_MSGS[] = {{0xE4, 0, 5, true}, {0x1DF, 0, 8, true}, {0x1EF, 0, 8, false}, {0x1FA, 0, 8, false}, {0x30C, 0, 8, false}, {0x33D, 0, 5, false}, {0x33DA, 0, 5, false}, {0x33DB, 0, 8, false}, {0x39F, 0, 8, false}, {0x18DAB0F1, 0, 8, false}}; // replicating regular Bosch but try bus 0
+  static CanMsg HONDA_CANFD_LONG_TX_MSGS[] = {{0xE4, 0, 5, true}, {0xE5, 0, 8, false}, {0x1DF, 0, 8, true}, {0x1EF, 0, 8, false}, {0x30C, 0, 8, false}, {0x33D, 0, 8, false}, {0x18DAB0F1, 1, 8, false}}; // replicating regular Bosch but try bus 0
 
   const uint16_t HONDA_PARAM_ALT_BRAKE = 1;
   const uint16_t HONDA_PARAM_RADARLESS = 8;
