@@ -114,7 +114,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
     }
     commands.append(packer.make_can_msg("ACC_CONTROL_ON", CAN.pt, acc_control_on_values))
 
-  commands.append(packer.make_can_msg("ACC_CONTROL", CAN.pt, acc, acc_control_values))
+  commands.append(packer.make_can_msg("ACC_CONTROL", CAN.pt, acc_control_values))
   return commands
 
 
