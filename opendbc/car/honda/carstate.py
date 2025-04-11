@@ -8,7 +8,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.hondacan import CanBus, get_cruise_speed_conversion
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, \
-                                                 HondaFlags, CruiseButtons, CruiseSettings, GearShifter,
+                                                 HondaFlags, CruiseButtons, CruiseSettings, GearShifter, \
                                                  HONDA_CANFD_CAR
 from opendbc.car.interfaces import CarStateBase
 
