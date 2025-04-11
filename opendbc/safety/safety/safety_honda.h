@@ -275,7 +275,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
-  tx = true;
+  // tx = true;
   
   return tx;
 }
@@ -421,7 +421,7 @@ static bool honda_bosch_fwd_hook(int bus_num, int addr) {
     bool is_acc_msg = ((addr == 0x1C8) || (addr == 0x30C)) && honda_bosch_radarless && honda_bosch_long;
     block_msg = is_lkas_msg || is_acc_msg;
   }
-  block_msg = false;
+  // block_msg = false;
   return block_msg;
 }
 
