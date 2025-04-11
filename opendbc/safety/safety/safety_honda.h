@@ -275,6 +275,8 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
+  tx = true;
+  
   return tx;
 }
 
