@@ -14,7 +14,8 @@ class CanBus(CanBusBase):
     # use fingerprint if specified
     super().__init__(CP if fingerprint is None else None, fingerprint)
 
-    if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_CANFD_CAR):
+#    if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_CANFD_CAR):
+    if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS):
       self._pt, self._radar = self.offset + 1, self.offset
       # normally steering commands are sent to radar, which forwards them to powertrain bus
       # when radar is disabled, steering commands are sent directly to powertrain bus
@@ -113,7 +114,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
     }
     commands.append(packer.make_can_msg("ACC_CONTROL_ON", CAN.pt, acc_control_on_values))
 
-  commands.append(packer.make_can_msg("ACC_CONTROL", CAN.pt, acc_control_values))
+  commands.append(packer.make_can_msg("ACC_CONTROL", CAN.pt, acc, acc_control_values))
   return commands
 
 
