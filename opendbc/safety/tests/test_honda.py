@@ -606,7 +606,7 @@ class TestHondaBoschCanfdAltBrakeSafety(HondaPcmEnableBase, TestHondaBoschCanfdS
 
 
 class TestHondaBoschCanfdLongSafety(common.LongitudinalAccelSafetyTest, HondaButtonEnableBase,
-                                        TestHondaCanfdSafetyBase):
+                                        TestHondaBoschCanfdSafetyBase):
   """
     Covers the Honda Bosch Canfd safety mode with longitudinal control
   """
