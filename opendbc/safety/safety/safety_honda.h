@@ -424,27 +424,7 @@ static bool honda_nidec_fwd_hook(int bus_num, int addr) {
     bool is_brake_msg = addr == 0x1FA;
     block_msg = is_brake_msg && !honda_fwd_brake;
   }
-  
-  return block_msg;
-}
 
-static bool honda_bosch_fwd_hook(int bus_num, int addr) {
-  bool block_msg = false;
-
-  if (bus_num == 2 )  {  
-    bool is_lkas_msg = (addr == 0xE4) || (addr == 0xE5) || (addr == 0x33D) || (addr == 0x33DA) || (addr == 0x33DB);
-    bool is_radarless_acc_msg = ((addr == 0x1C8) || (addr == 0x30C)) && honda_bosch_radarless && honda_bosch_long;
-    bool is_canfd_acc_msg = ((addr == 0x1DF) || (addr == 0x1EF) ||(addr == 0x30C)) && honda_bosch_canfd && honda_bosch_long;
-    block_msg = is_lkas_msg || is_radarless_acc_msg || is_canfd_acc_msg;
-  }
-
-  if (bus_num == 0 ) {    // todo: why bus num zero helped if any
-    bool is_lkas_msg = ((addr == 0xE4) || (addr == 0x33D)) && honda_bosch_canfd && honda_bosch_long;
-    bool is_canfd_acc_msg = ((addr == 0x1DF) || (addr == 0x1EF) || (addr == 0x30C)) && honda_bosch_canfd && honda_bosch_long;
-    block_msg = block_msg || is_lkas_msg || is_canfd_acc_msg;
-  }
-
-  // block_msg = false;
   return block_msg;
 }
 
