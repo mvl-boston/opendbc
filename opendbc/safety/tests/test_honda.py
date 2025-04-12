@@ -29,6 +29,8 @@ HONDA_BOSCH = 1
 #    * Bosch with Longitudinal Support
 #  * Bosch Radarless
 #    * Bosch Radarless with Longitudinal Support
+#  * Bosch Canfd
+#    * Bosch Canfd with Longitudinal Support
 
 
 class HondaButtonEnableBase(common.PandaCarSafetyTest):
@@ -553,6 +555,68 @@ class TestHondaBoschRadarlessLongSafety(common.LongitudinalAccelSafetyTest, Hond
   def setUp(self):
     super().setUp()
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.RADARLESS | HondaSafetyFlags.BOSCH_LONG)
+    self.safety.init_tests()
+
+  def _accel_msg(self, accel):
+    values = {
+      "ACCEL_COMMAND": accel,
+    }
+    return self.packer.make_can_msg_panda("ACC_CONTROL", self.PT_BUS, values)
+
+  # Longitudinal doesn't need to send buttons
+  def test_spam_cancel_safety_check(self):
+    pass
+
+
+class TestHondaBoschCanfdSafetyBase(TestHondaBoschSafetyBase):
+  """Base class for Canfd Honda Bosch"""
+  PT_BUS = 0
+  STEER_BUS = 0
+  BUTTONS_BUS = 2  # camera controls ACC, need to send buttons on bus 2
+
+  TX_MSGS = [[0xE4, 0], [0x296, 2], [0x33D, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D)}  # STEERING_CONTROL
+
+  def setUp(self):
+    self.packer = CANPackerPanda("honda_pilot_2023_can_generated")
+    self.safety = libsafety_py.libsafety
+
+
+class TestHondaBoschCanfdSafety(HondaPcmEnableBase, TestHondaBoschCanfdSafetyBase):
+  """
+    Covers the Honda Bosch Canfd safety mode with stock longitudinal
+  """
+
+  def setUp(self):
+    super().setUp()
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.CANFD)
+    self.safety.init_tests()
+
+
+class TestHondaBoschCanfdAltBrakeSafety(HondaPcmEnableBase, TestHondaBoschCanfdSafetyBase, TestHondaBoschAltBrakeSafetyBase):
+  """
+    Covers the Honda Bosch Canfd safety mode with stock longitudinal and an alternate brake message
+  """
+
+  def setUp(self):
+    super().setUp()
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.CANFD | HondaSafetyFlags.ALT_BRAKE)
+    self.safety.init_tests()
+
+
+class TestHondaBoschCanfdLongSafety(common.LongitudinalAccelSafetyTest, HondaButtonEnableBase,
+                                        TestHondaCanfdSafetyBase):
+  """
+    Covers the Honda Bosch Canfd safety mode with longitudinal control
+  """
+  TX_MSGS = [[0xE4, 0], [0x33D, 0], [0x1C8, 0], [0x30C, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D, 0x1C8, 0x30C]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1C8, 0x30C, 0x33D)}
+
+  def setUp(self):
+    super().setUp()
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.CANFD | HondaSafetyFlags.BOSCH_LONG)
     self.safety.init_tests()
 
   def _accel_msg(self, accel):
