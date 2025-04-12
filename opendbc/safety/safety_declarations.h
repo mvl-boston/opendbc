@@ -53,7 +53,8 @@ typedef struct {
   int addr;
   int bus;
   int len;
-  bool check_relay;
+  bool check_relay;              // if true, trigger relay malfunction if existence on destination bus and block forwarding to destination bus
+  bool disable_static_blocking;  // if true, static blocking is disabled so safety mode can dynamically handle it (e.g. selective AEB pass-through)
 } CanMsg;
 
 typedef enum {
@@ -63,7 +64,10 @@ typedef enum {
 
 typedef struct {
   // torque cmd limits
-  const int max_torque;
+  const int max_torque;  // this upper limit is always enforced
+  const bool dynamic_max_torque;  // use max_torque_lookup to apply torque limit based on speed
+  const struct lookup_t max_torque_lookup;
+
   const int max_rate_up;
   const int max_rate_down;
   const int max_rt_delta;  // max change in torque per 250ms interval (MAX_TORQUE_RT_INTERVAL)
@@ -190,7 +194,8 @@ void gen_crc_lookup_table_8(uint8_t poly, uint8_t crc_lut[]);
 #ifdef CANFD
 void gen_crc_lookup_table_16(uint16_t poly, uint16_t crc_lut[]);
 #endif
-static void generic_rx_checks(bool stock_ecu_detected);
+static void generic_rx_checks(void);
+static void stock_ecu_check(bool stock_ecu_detected);
 bool steer_torque_cmd_checks(int desired_torque, int steer_req, const TorqueSteeringLimits limits);
 bool steer_angle_cmd_checks(int desired_angle, bool steer_control_enabled, const AngleSteeringLimits limits);
 bool longitudinal_accel_checks(int desired_accel, const LongitudinalLimits limits);

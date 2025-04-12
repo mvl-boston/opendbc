@@ -282,7 +282,11 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
 }
 
 static safety_config honda_nidec_init(uint16_t param) {
-  static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, true}, {0x194, 0, 4, true}, {0x1FA, 0, 8, false}, {0x30C, 0, 8, false}, {0x33D, 0, 5, false}};
+  // 0x1FA is dynamically forwarded based on stock AEB
+  // 0xE4 is steering on all cars except CRV and RDX, 0x194 for CRV and RDX,
+  // 0x1FA is brake control, 0x30C is acc hud, 0x33D is lkas hud
+  static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
+                                     {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
 
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
 
@@ -322,10 +326,18 @@ static safety_config honda_nidec_init(uint16_t param) {
 }
 
 static safety_config honda_bosch_init(uint16_t param) {
-  static CanMsg HONDA_BOSCH_TX_MSGS[] = {{0xE4, 0, 5, true}, {0xE5, 0, 8, false}, {0x296, 1, 4, false}, {0x33D, 0, 5, false}, {0x33DA, 0, 5, false}, {0x33DB, 0, 8, false}};  // Bosch
-  static CanMsg HONDA_BOSCH_LONG_TX_MSGS[] = {{0xE4, 1, 5, true}, {0x1DF, 1, 8, true}, {0x1EF, 1, 8, false}, {0x1FA, 1, 8, false}, {0x30C, 1, 8, false}, {0x33D, 1, 5, false}, {0x33DA, 1, 5, false}, {0x33DB, 1, 8, false}, {0x39F, 1, 8, false}, {0x18DAB0F1, 1, 8, false}};  // Bosch w/ gas and brakes
-  static CanMsg HONDA_RADARLESS_TX_MSGS[] = {{0xE4, 0, 5, true}, {0x296, 2, 4, false}, {0x33D, 0, 8, false}};  // Bosch radarless
-  static CanMsg HONDA_RADARLESS_LONG_TX_MSGS[] = {{0xE4, 0, 5, true}, {0x33D, 0, 8, false}, {0x1C8, 0, 8, false}, {0x30C, 0, 8, false}};  // Bosch radarless w/ gas and brakes
+  static CanMsg HONDA_BOSCH_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0xE5, 0, 8, .check_relay = true}, {0x296, 1, 4, .check_relay = false},
+                                         {0x33D, 0, 5, .check_relay = true}, {0x33DA, 0, 5, .check_relay = true}, {0x33DB, 0, 8, .check_relay = true}};  // Bosch
+
+  static CanMsg HONDA_BOSCH_LONG_TX_MSGS[] = {{0xE4, 1, 5, .check_relay = true}, {0x1DF, 1, 8, .check_relay = true}, {0x1EF, 1, 8, .check_relay = false},
+                                              {0x1FA, 1, 8, .check_relay = false}, {0x30C, 1, 8, .check_relay = false}, {0x33D, 1, 5, .check_relay = true},
+                                              {0x33DA, 1, 5, .check_relay = true}, {0x33DB, 1, 8, .check_relay = true}, {0x39F, 1, 8, .check_relay = false},
+                                              {0x18DAB0F1, 1, 8, .check_relay = false}};  // Bosch w/ gas and brakes
+
+  static CanMsg HONDA_RADARLESS_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x296, 2, 4, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}};  // Bosch radarless
+
+  static CanMsg HONDA_RADARLESS_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x33D, 0, 8, .check_relay = true}, {0x1C8, 0, 8, .check_relay = true},
+                                                  {0x30C, 0, 8, .check_relay = true}};  // Bosch radarless w/ gas and brakes
   static CanMsg HONDA_CANFD_TX_MSGS[] = {{0xE4, 0, 5, true}, {0x33D, 0, 8, false}, {0xE5, 0, 8, false}, {0x296, 0, 4, false}};  // Bosch canfd
   static CanMsg HONDA_CANFD_LONG_TX_MSGS[] = {{0xE4, 0, 5, true}, {0x1DF, 0, 8, false}, {0x1EF, 0, 8, false}, {0x30C, 0, 8, false}, {0x33D, 0, 8, false},  {0x39F, 0, 8, false}, {0x18DAB0F1, 1, 8, false}, {0xE4, 2, 5, true}, {0x1DF, 2, 8, false}, {0x1EF, 2, 8, false}, {0x30C, 2, 8, false}, {0x33D, 2, 8, false},  {0x39F, 2, 8, false}}; // replicating regular Bosch but try bus 2
 
@@ -398,19 +410,14 @@ static safety_config honda_bosch_init(uint16_t param) {
 }
 
 static bool honda_nidec_fwd_hook(int bus_num, int addr) {
-  // fwd from car to camera. also fwd certain msgs from camera to car
-  // 0xE4 is steering on all cars except CRV and RDX, 0x194 for CRV and RDX,
-  // 0x1FA is brake control, 0x30C is acc hud, 0x33D is lkas hud
   bool block_msg = false;
 
   if (bus_num == 2) {
-    // block stock lkas messages and stock acc messages (if OP is doing ACC)
-    bool is_lkas_msg = (addr == 0xE4) || (addr == 0x194) || (addr == 0x33D);
-    bool is_acc_hud_msg = addr == 0x30C;
+    // forwarded if stock AEB is active
     bool is_brake_msg = addr == 0x1FA;
-    block_msg = is_lkas_msg || is_acc_hud_msg || (is_brake_msg && !honda_fwd_brake);
+    block_msg = is_brake_msg && !honda_fwd_brake;
   }
-
+  
   return block_msg;
 }
 
@@ -448,7 +455,6 @@ const safety_hooks honda_bosch_hooks = {
   .init = honda_bosch_init,
   .rx = honda_rx_hook,
   .tx = honda_tx_hook,
-  .fwd = honda_bosch_fwd_hook,
   .get_counter = honda_get_counter,
   .get_checksum = honda_get_checksum,
   .compute_checksum = honda_compute_checksum,
