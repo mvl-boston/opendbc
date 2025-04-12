@@ -438,9 +438,9 @@ static bool honda_bosch_fwd_hook(int bus_num, int addr) {
     block_msg = is_lkas_msg || is_radarless_acc_msg || is_canfd_acc_msg;
   }
 
-  if (bus_num == 0 ) && honda_bosch_canfd && honda_bosch_long {    // todo: why bus num zero helped if any
-    is_lkas_msg = (addr == 0xE4) || (addr == 0x33D) ;
-    is_canfd_acc_msg = ((addr == 0x1DF) || (addr == 0x1EF) ||(addr == 0x30C));
+  if (bus_num == 0 ) {    // todo: why bus num zero helped if any
+    is_lkas_msg = (addr == 0xE4) || (addr == 0x33D) && honda_bosch_canfd && honda_bosch_long;
+    is_canfd_acc_msg = ((addr == 0x1DF) || (addr == 0x1EF) ||(addr == 0x30C)) && honda_bosch_canfd && honda_bosch_long;
     block_msg = block_msg || is_lkas_msg || is_canfd_acc_msg;
   }
 
