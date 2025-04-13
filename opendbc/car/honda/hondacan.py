@@ -115,6 +115,15 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
     commands.append(packer.make_can_msg("ACC_CONTROL_ON", CAN.pt, acc_control_on_values))
 
   commands.append(packer.make_can_msg("ACC_CONTROL", CAN.pt, acc_control_values))
+
+  if braking and (accel_command < -0.5) :
+    hybrid_control_values = {
+      'CURRENT_SPEED': 401,
+      'TARGET_SPEED': 0,
+      'CONTROL_SIGNALS': 10,
+    }
+    commands.append(packer.make_can_msg("HYBRID_CONTROL", CAN.pt, hybrid_control_values))
+
   return commands
 
 
