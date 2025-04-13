@@ -8,7 +8,8 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.hondacan import CanBus, get_cruise_speed_conversion
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, \
-                                                 HondaFlags, CruiseButtons, CruiseSettings, GearShifter
+                                                 HondaFlags, CruiseButtons, CruiseSettings, GearShifter, \
+                                                 HONDA_CANFD_CAR
 from opendbc.car.interfaces import CarStateBase
 
 TransmissionType = structs.CarParams.TransmissionType
@@ -31,6 +32,11 @@ def get_can_messages(CP, gearbox_msg):
     ("VSA_STATUS", 50),
     ("STEER_STATUS", 100),
     ("STEER_MOTOR_TORQUE", 0),  # TODO: not on every car
+  ]
+
+  if CP.carFingerprint == CAR.HONDA_CIVIC_2022:
+    messages += [
+    ("HYBRID_CONTROL", 0), # recieve hybrid control frames
   ]
 
   if CP.carFingerprint == CAR.HONDA_ODYSSEY_CHN:
@@ -70,14 +76,14 @@ def get_can_messages(CP, gearbox_msg):
 
   # TODO: clean this up
   if CP.carFingerprint in (CAR.HONDA_ACCORD, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.HONDA_CRV_HYBRID, CAR.HONDA_INSIGHT,
-                           CAR.ACURA_RDX_3G, CAR.HONDA_E, CAR.HONDA_CIVIC_2022, CAR.HONDA_HRV_3G):
+                           CAR.ACURA_RDX_3G, CAR.HONDA_E, CAR.HONDA_CIVIC_2022, CAR.HONDA_HRV_3G, CAR.ACURA_MDX_4G_MMR):
     pass
   elif CP.carFingerprint in (CAR.HONDA_ODYSSEY_CHN, CAR.HONDA_FREED, CAR.HONDA_HRV):
     pass
   else:
     messages.append(("DOORS_STATUS", 3))
 
-  if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+  if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_CANFD_CAR):
     messages.append(("CRUISE_FAULT_STATUS", 50))
   elif CP.openpilotLongitudinalControl:
     messages.append(("STANDSTILL", 50))
@@ -141,7 +147,7 @@ class CarState(CarStateBase):
     ret.standstill = cp.vl["ENGINE_DATA"]["XMISSION_SPEED"] < 1e-5
     # TODO: find a common signal across all cars
     if self.CP.carFingerprint in (CAR.HONDA_ACCORD, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.HONDA_CRV_HYBRID, CAR.HONDA_INSIGHT,
-                                  CAR.ACURA_RDX_3G, CAR.HONDA_E, CAR.HONDA_CIVIC_2022, CAR.HONDA_HRV_3G):
+                                  CAR.ACURA_RDX_3G, CAR.HONDA_E, CAR.HONDA_CIVIC_2022, CAR.HONDA_HRV_3G, CAR.ACURA_MDX_4G_MMR):
       ret.doorOpen = bool(cp.vl["SCM_FEEDBACK"]["DRIVERS_DOOR_OPEN"])
     elif self.CP.carFingerprint in (CAR.HONDA_ODYSSEY_CHN, CAR.HONDA_FREED, CAR.HONDA_HRV):
       ret.doorOpen = bool(cp.vl["SCM_BUTTONS"]["DRIVERS_DOOR_OPEN"])
@@ -156,7 +162,7 @@ class CarState(CarStateBase):
     # NO_TORQUE_ALERT_2 can be caused by bump or steering nudge from driver
     ret.steerFaultTemporary = steer_status not in ("NORMAL", "LOW_SPEED_LOCKOUT", "NO_TORQUE_ALERT_2")
 
-    if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_CANFD_CAR):
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
     else:
       # On some cars, these two signals are always 1, this flag is masking a bug in release
