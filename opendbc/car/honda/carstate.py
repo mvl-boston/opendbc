@@ -39,8 +39,6 @@ def get_can_messages(CP, gearbox_msg):
     ("HYBRID_CONTROL", 0), # recieve hybrid control frames
   ]
 
-
-  
   if CP.carFingerprint == CAR.HONDA_ODYSSEY_CHN:
     messages += [
       ("SCM_FEEDBACK", 25),
