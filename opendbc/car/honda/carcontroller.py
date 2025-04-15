@@ -158,9 +158,9 @@ class CarController(CarControllerBase):
 
     steer_lowered_cruise = float (np.clip ( CS.out.vEgo * steer_factor * 0.5, 20 * CV.MPH_TO_MS, 90 * CV.MPH_TO_MS )
 
-    if (steer_lowered_cruise < self.last_cruise_speed) and (CS.cruiseState.speed >= 1.0) and (CS.cruiseState.speed < 250.0): # remember user set cruise
+    if ((steer_lowered_cruise < self.last_cruise_speed) and (CS.cruiseState.speed >= 1.0) and (CS.cruiseState.speed < 250.0)): # remember user set cruise
       self.steer_cruise_override = True
-    elif (self.steer_cruise_override) and (steer_lowered_cruise >= self.last_cruise_speed): # cruise can resume to prior set speed
+    elif ((self.steer_cruise_override) and (steer_lowered_cruise >= self.last_cruise_speed)): # cruise can resume to prior set speed
       if abs (CS.cruiseState.speed - self.last_cruise_speed) < 0.5 * CV.MPH_TO_MS: # matches w rounding
         self.steer_cruise_override = False
       else:
