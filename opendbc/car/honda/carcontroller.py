@@ -165,7 +165,7 @@ class CarController(CarControllerBase):
         self.steer_cruise_override = False
       else:
         steer_lowered_cruise = self.last_cruise_speed
-  
+
     if not self.steer_cruise_override:
       self.last_cruise_speed = CS.cruiseState.speed
 
