@@ -160,11 +160,12 @@ class CarController(CarControllerBase):
 
     if ((steer_lowered_cruise < self.last_cruise_speed) and (CS.cruiseState.speed >= 1.0) and (CS.cruiseState.speed < 250.0)): # remember user set cruise
       self.steer_cruise_override = True
-    elif ((self.steer_cruise_override) and (steer_lowered_cruise >= self.last_cruise_speed)): # cruise can resume to prior set speed
-      if abs (CS.cruiseState.speed - self.last_cruise_speed) < 0.5 * CV.MPH_TO_MS: # matches w rounding
-        self.steer_cruise_override = False
-      else:
-        steer_lowered_cruise = self.last_cruise_speed
+    else:
+      if ((self.steer_cruise_override) and (steer_lowered_cruise >= self.last_cruise_speed)): # cruise can resume to prior set speed
+        if abs (CS.cruiseState.speed - self.last_cruise_speed) < 0.5 * CV.MPH_TO_MS: # matches w rounding
+          self.steer_cruise_override = False
+        else:
+          steer_lowered_cruise = self.last_cruise_speed
 
     if not self.steer_cruise_override:
       self.last_cruise_speed = CS.cruiseState.speed
