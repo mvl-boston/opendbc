@@ -158,17 +158,17 @@ class CarController(CarControllerBase):
 
     steer_lowered_cruise = float (np.clip ( CS.out.vEgo * steer_factor * 0.5, 20 * CV.MPH_TO_MS, 90 * CV.MPH_TO_MS )
 
-    if ((steer_lowered_cruise < self.last_cruise_speed) and (CS.cruiseState.speed >= 1.0) and (CS.cruiseState.speed < 250.0)): # remember user set cruise
-      self.steer_cruise_override = True
+    if ((steer_lowered_cruise < CC.last_cruise_speed) and (CS.cruiseState.speed >= 1.0) and (CS.cruiseState.speed < 250.0)): # remember user set cruise
+      CC.steer_cruise_override = True
     else:
-      if ((self.steer_cruise_override) and (steer_lowered_cruise >= self.last_cruise_speed)): # cruise can resume to prior set speed
-        if abs (CS.cruiseState.speed - self.last_cruise_speed) < 0.5 * CV.MPH_TO_MS: # matches w rounding
-          self.steer_cruise_override = False
+      if ((CC.steer_cruise_override) and (steer_lowered_cruise >= CC.last_cruise_speed)): # cruise can resume to prior set speed
+        if abs (CS.cruiseState.speed - CC.last_cruise_speed) < 0.5 * CV.MPH_TO_MS: # matches w rounding
+          CC.steer_cruise_override = False
         else:
-          steer_lowered_cruise = self.last_cruise_speed
+          steer_lowered_cruise = CC.last_cruise_speed
 
-    if not self.steer_cruise_override:
-      self.last_cruise_speed = CS.cruiseState.speed
+    if not CC.steer_cruise_override:
+      CC.last_cruise_speed = CS.cruiseState.speed
 
     # Send CAN commands
     can_sends = []
@@ -218,7 +218,7 @@ class CarController(CarControllerBase):
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.CANCEL, self.CP.carFingerprint))
       elif CC.cruiseControl.resume:
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
-      if self.steer_cruise_override:
+      if CC.steer_cruise_override:
         if CS.cruiseState.speed < steer_lowered_cruise:
           can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
         elif CS.cruiseState.speed > steer_lowered_cruise:
