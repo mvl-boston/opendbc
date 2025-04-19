@@ -123,7 +123,7 @@ class CarController(CarControllerBase):
     hud_v_cruise = hud_control.setSpeed / conversion if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
-    steerfactor = 400 if actuators.torque == 0 else abs ( self.params.STEER_MAX / max ( abs(actuators.torque), abs(apply_torque) ) )
+    steerfactor = 400 if actuators.torque == 0 else abs ( self.params.STEER_MAX / actuators.torque )
 
     if CC.longActive:
       accel = float (np.clip ( actuators.accel, -100.0, np.interp (steerfactor, [ 1.0, 3.0 ], [-2.0, 2.0]) ) )
