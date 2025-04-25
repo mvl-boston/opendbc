@@ -161,7 +161,7 @@ class CarController(CarControllerBase):
     if steer_lowered_cruise < self.last_cruise_speed: # remember user set cruise
       self.steer_cruise_override = True
     elif ((self.steer_cruise_override) and (steer_lowered_cruise >= self.last_cruise_speed)): # cruise can resume to prior set speed
-      if abs (CS.cruiseState.speed - self.last_cruise_speed) < 0.5 * CV.MPH_TO_MS: # matches w rounding
+      if abs (hud_control.setSpeed - self.last_cruise_speed) < 0.5 * CV.MPH_TO_MS: # matches w rounding
         self.steer_cruise_override = False
       else:
         steer_lowered_cruise = self.last_cruise_speed
@@ -218,9 +218,9 @@ class CarController(CarControllerBase):
       elif CC.cruiseControl.resume:
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
       if self.steer_cruise_override:
-        if CS.cruiseState.speed < steer_lowered_cruise:
+        if hud_control.setSpeed < steer_lowered_cruise:
           can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
-        elif CS.cruiseState.speed > steer_lowered_cruise:
+        elif hud_control.setSpeed > steer_lowered_cruise:
           can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.DECEL_SET, self.CP.carFingerprint))
 
     else:
