@@ -167,7 +167,7 @@ class CarController(CarControllerBase):
         steer_lowered_cruise = self.last_cruise_speed
 
     if not self.steer_cruise_override:
-      self.last_cruise_speed = CS.cruiseState.speed
+      self.last_cruise_speed = hud_control.setSpeed
 
     # Send CAN commands
     can_sends = []
