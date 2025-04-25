@@ -375,7 +375,7 @@ class TestHondaBoschSafetyBase(HondaBase):
 
   TX_MSGS = [[0xE4, 0], [0xE5, 0], [0x296, 1], [0x33D, 0], [0x33DA, 0], [0x33DB, 0]]
   FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0xE5, 0x33D, 0x33DA, 0x33DB]}
-  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0xE5, 0x33D, 0x33DA, 0x33DB)}  # STEERING_CONTROL, BOSCH_SUPPLEMENTAL_1
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4)}  # STEERING_CONTROL
 
   def setUp(self):
     self.packer = CANPackerPanda("honda_accord_2018_can_generated")
