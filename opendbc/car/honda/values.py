@@ -3,7 +3,7 @@ from enum import Enum, IntFlag
 
 from opendbc.car import Bus, CarSpecs, PlatformConfig, Platforms, structs, uds
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column, Device
+from opendbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column
 from opendbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries, p16
 
 Ecu = structs.CarParams.Ecu
@@ -68,7 +68,7 @@ class HondaFlags(IntFlag):
   NIDEC_ALT_PCM_ACCEL = 32
   NIDEC_ALT_SCM_MESSAGES = 64
 
-  BOSCH_CANFD = 128
+  CANFD_CAR = 128
 
 # Car button codes
 class CruiseButtons:
@@ -102,19 +102,9 @@ class HondaCarDocs(CarDocs):
 
   def init_make(self, CP: structs.CarParams):
     if CP.flags & HondaFlags.BOSCH:
-      if CP.flags & HondaFlags.BOSCH_CANFD:
-        harness = CarHarness.bosch_c
-      elif CP.flags & HondaFlags.BOSCH_RADARLESS:
-        harness = CarHarness.bosch_b
-      else:
-        harness = CarHarness.bosch_a
+      self.car_parts = CarParts.common([CarHarness.bosch_b]) if CP.flags & HondaFlags.BOSCH_RADARLESS else CarParts.common([CarHarness.bosch_a])
     else:
-      harness = CarHarness.nidec
-
-    if CP.carFingerprint in (CAR.HONDA_PILOT_4G,):
-      self.car_parts = CarParts([Device.threex_angled_mount, harness])
-    else:
-      self.car_parts = CarParts.common([harness])
+      self.car_parts = CarParts.common([CarHarness.nidec])
 
 
 class Footnote(Enum):
@@ -167,9 +157,6 @@ class CAR(Platforms):
     [
       HondaCarDocs("Honda Civic 2022-24", "All", video_link="https://youtu.be/ytiOT5lcp6Q"),
       HondaCarDocs("Honda Civic Hatchback 2022-24", "All", video_link="https://youtu.be/ytiOT5lcp6Q"),
-      HondaCarDocs("Honda Civic Hatchback Hybrid 2023 (Europe only)", "All"),
-      # TODO: Confirm 2024
-      HondaCarDocs("Honda Civic Hatchback Hybrid 2025", "All"),
     ],
     HONDA_CIVIC_BOSCH.specs,
     {Bus.pt: 'honda_civic_ex_2022_can_generated'},
@@ -211,16 +198,10 @@ class CAR(Platforms):
     {Bus.pt: 'acura_rdx_2020_can_generated'},
   )
   ACURA_MDX_4G_MMR = HondaBoschPlatformConfig(
-    [HondaCarDocs("Acura MDX 2025", "All")],
+    [HondaCarDocs("Honda Pilot 2023", "All")],
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=14.6, tireStiffnessFactor=0.444),  # as spec
     {Bus.pt: 'honda_pilot_2023_can_generated'},
-    flags=HondaFlags.BOSCH_CANFD | HondaFlags.BOSCH_ALT_BRAKE,
-  )
-  HONDA_PILOT_4G = HondaBoschPlatformConfig(
-    [HondaCarDocs("Honda Pilot 2023", "All")],
-    CarSpecs(mass=4278 * CV.LB_TO_KG, wheelbase=2.86, centerToFrontRatio=0.428, steerRatio=16.0, tireStiffnessFactor=0.444),  # as spec
-    {Bus.pt: 'honda_pilot_2023_can_generated'},
-    flags=HondaFlags.BOSCH_CANFD | HondaFlags.BOSCH_ALT_BRAKE,
+    flags=HondaFlags.CANFD_CAR | HondaFlags.BOSCH_ALT_BRAKE,
   )
 
   # Nidec Cars
@@ -283,7 +264,7 @@ class CAR(Platforms):
       HondaCarDocs("Honda Pilot 2016-22", min_steer_speed=12. * CV.MPH_TO_MS),
       HondaCarDocs("Honda Passport 2019-25", "All", min_steer_speed=12. * CV.MPH_TO_MS),
     ],
-    HONDA_PILOT_4G.specs,
+    CarSpecs(mass=4278 * CV.LB_TO_KG, wheelbase=2.86, centerToFrontRatio=0.428, steerRatio=16.0, tireStiffnessFactor=0.444),  # as spec
     radar_dbc_dict('acura_ilx_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
@@ -365,7 +346,7 @@ HONDA_NIDEC_ALT_PCM_ACCEL = CAR.with_flags(HondaFlags.NIDEC_ALT_PCM_ACCEL)
 HONDA_NIDEC_ALT_SCM_MESSAGES = CAR.with_flags(HondaFlags.NIDEC_ALT_SCM_MESSAGES)
 HONDA_BOSCH = CAR.with_flags(HondaFlags.BOSCH)
 HONDA_BOSCH_RADARLESS = CAR.with_flags(HondaFlags.BOSCH_RADARLESS)
-HONDA_BOSCH_CANFD = CAR.with_flags(HondaFlags.BOSCH_CANFD)
+HONDA_CANFD_CAR = CAR.with_flags(HondaFlags.CANFD_CAR)
 
 
 DBC = CAR.create_dbc_map()
