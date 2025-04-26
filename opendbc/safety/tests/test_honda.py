@@ -369,12 +369,12 @@ class TestHondaNidecPcmAltSafety(TestHondaNidecPcmSafety):
 
 
 class TestHondaBoschSafetyBase(HondaBase):
-  PT_BUS = 1
+  PT_BUS = 0
   STEER_BUS = 0
-  BUTTONS_BUS = 1
+  BUTTONS_BUS = 0
 
-  TX_MSGS = [[0xE4, 0], [0xE5, 0], [0x296, 1], [0x33D, 0], [0x33DA, 0], [0x33DB, 0]]
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0xE5, 0x33D, 0x33DA, 0x33DB]}
+  TX_MSGS = [[0xE4, 0], [0xE5, 0], [0x296, 0], [0x33D, 0], [0x33DA, 0], [0x33DB, 0], [0x30C, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0xE5, 0x33D, 0x33DA, 0x33DB, 0x30C]}
   RELAY_MALFUNCTION_ADDRS = {0: (0xE4,)}  # STEERING_CONTROL
 
   def setUp(self):
