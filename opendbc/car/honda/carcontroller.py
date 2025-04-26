@@ -170,7 +170,7 @@ class CarController(CarControllerBase):
       self.last_cruise_speed = hud_control.setSpeed
 
     self.steer_cruise_override = False # temporarily remove slowsteer logic to isolate new safety debugging
-    
+
     # Send CAN commands
     can_sends = []
 
