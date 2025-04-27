@@ -217,6 +217,12 @@ class CAR(Platforms):
     {Bus.pt: 'honda_pilot_2023_can_generated'},
     flags=HondaFlags.BOSCH_CANFD | HondaFlags.BOSCH_ALT_BRAKE,
   )
+  ACURA_MDX_4G_MMR = HondaBoschPlatformConfig(
+    [HondaCarDocs("Acura MDX 2025", "All")],
+    CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=14.6, tireStiffnessFactor=0.444),  # as spec
+    {Bus.pt: 'honda_pilot_2023_can_generated'},
+    flags=HondaFlags.BOSCH_CANFD | HondaFlags.BOSCH_ALT_BRAKE,
+  )
 
   # Nidec Cars
   ACURA_ILX = HondaNidecPlatformConfig(
@@ -361,6 +367,6 @@ HONDA_NIDEC_ALT_SCM_MESSAGES = CAR.with_flags(HondaFlags.NIDEC_ALT_SCM_MESSAGES)
 HONDA_BOSCH = CAR.with_flags(HondaFlags.BOSCH)
 HONDA_BOSCH_RADARLESS = CAR.with_flags(HondaFlags.BOSCH_RADARLESS)
 HONDA_BOSCH_CANFD = CAR.with_flags(HondaFlags.BOSCH_CANFD)
-
+HONDA_CANFD_CAR = CAR.with_flags(HondaFlags.BOSCH_CANFD)
 
 DBC = CAR.create_dbc_map()
