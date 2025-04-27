@@ -220,9 +220,9 @@ class CarController(CarControllerBase):
       elif CC.cruiseControl.resume:
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
       if self.frame % 30 == 0 and self.steer_cruise_override:  
-        if hud_control.setSpeed < steer_lowered_cruise:
+        if hud_control.setSpeed < steer_lowered_cruise - 0.5 * CV.MPH_TO_MS:
           can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
-        elif hud_control.setSpeed > steer_lowered_cruise:
+        elif hud_control.setSpeed > steer_lowered_cruise + 0.5 * CV.MPH_TO_MS:
           can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.DECEL_SET, self.CP.carFingerprint))
 
     else:
