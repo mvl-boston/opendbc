@@ -607,7 +607,7 @@ class TestHondaBoschCANFDSafetyBase(TestHondaBoschSafetyBase):
     self.safety = libsafety_py.libsafety
 
 
-class TestHondaBoschCANFDSafety(HondaPcmEnableBase, TestHondaBoschRadarlessSafetyBase):
+class TestHondaBoschCANFDSafety(HondaPcmEnableBase, TestHondaBoschCANFDSafetyBase):
   """
     Covers the Honda Bosch CANFD safety mode with stock longitudinal
   """
