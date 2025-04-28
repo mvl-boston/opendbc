@@ -617,7 +617,7 @@ class TestHondaBoschCANFDLongSafety(HondaButtonEnableBase, TestHondaBoschCANFDSa
 
   def setUp(self):
     super().setUp()
-    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_LONG)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_LONG | BOSCH_CANFD)
     self.safety.init_tests()
 
   def _send_gas_brake_msg(self, gas, accel):
