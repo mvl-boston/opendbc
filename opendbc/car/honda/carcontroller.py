@@ -117,7 +117,7 @@ class CarController(CarControllerBase):
     self.brake = 0.0
     self.last_torque = 0.0
     self.steer_cruise_reduction = 0
-  
+
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -153,7 +153,7 @@ class CarController(CarControllerBase):
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
-    steer_factor = 400 if ( actuators.torque == 0 or CS.out.steeringPressed ) else abs ( self.params.STEER_MAX / max ( abs(actuators.torque), abs(apply_torque) ) )
+    steer_factor = 400 if (actuators.torque == 0 or CS.out.steeringPressed) else abs(self.params.STEER_MAX/max(abs(actuators.torque),abs(apply_torque)))
 
     steer_lowered_cruise = float (np.clip ( CS.out.vEgo * steer_factor * 0.5, 20 * CV.MPH_TO_MS, 90 * CV.MPH_TO_MS ) )
 
