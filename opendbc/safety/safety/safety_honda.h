@@ -331,11 +331,13 @@ static safety_config honda_bosch_init(uint16_t param) {
                                          {0x33D, 0, 5, .check_relay = true}, {0x33D, 0, 8, .check_relay = true}, {0x33DA, 0, 5, .check_relay = true}, {0x33DB, 0, 8, .check_relay = true}};  // Bosch
 
   static CanMsg HONDA_BOSCH_LONG_TX_MSGS[] = {{0xE4, 1, 5, .check_relay = true}, {0x1DF, 1, 8, .check_relay = true}, {0x1EF, 1, 8, .check_relay = false}, // Bosch A
-                                              {0xE4, 0, 5, .check_relay = true}, {0x1DF, 0, 8, .check_relay = true}, {0x1EF, 0, 8, .check_relay = false}, // Bosch C  
                                               {0x1FA, 1, 8, .check_relay = false}, {0x30C, 1, 8, .check_relay = false}, {0x33D, 1, 5, .check_relay = true}, // Bosch A
                                               {0x33DA, 1, 5, .check_relay = true}, {0x33DB, 1, 8, .check_relay = true}, {0x39F, 1, 8, .check_relay = false}, // Bosch A
-                                              {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}, {0x39F, 0, 8, .check_relay = false}, // Bosch C
                                               {0x18DAB0F1, 1, 8, .check_relay = false}};  // Bosch w/ gas and brakes
+
+  static CanMsg HONDA_BOSCH_CANFD_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x1DF, 0, 8, .check_relay = true}, {0x1EF, 0, 8, .check_relay = false}, // Bosch C  
+                                                    {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}, {0x39F, 0, 8, .check_relay = false}, // Bosch C
+                                                    {0x18DAB0F1, 1, 8, .check_relay = false}};  // Bosch w/ gas and brakes
 
   static CanMsg HONDA_RADARLESS_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x296, 2, 4, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}};  // Bosch radarless
 
@@ -404,6 +406,12 @@ static safety_config honda_bosch_init(uint16_t param) {
       SET_TX_MSGS(HONDA_RADARLESS_LONG_TX_MSGS, ret);
     } else {
       SET_TX_MSGS(HONDA_RADARLESS_TX_MSGS, ret);
+  } else if {
+      if (honda_bosch_canfd) {
+    if (honda_bosch_long) {
+      SET_TX_MSGS(HONDA_BOSCH_CANFD_LONG_TX_MSGS, ret);
+    } else {
+      SET_TX_MSGS(HONDA_BOSCH_TX_MSGS, ret);
     }
   } else {
     if (honda_bosch_long) {
@@ -422,6 +430,19 @@ static bool honda_nidec_fwd_hook(int bus_num, int addr) {
     // forwarded if stock AEB is active
     bool is_brake_msg = addr == 0x1FA;
     block_msg = is_brake_msg && !honda_fwd_brake;
+  }
+
+  return block_msg;
+}
+
+static bool honda_bosch_fwd_hook(int bus_num, int addr) {
+  bool block_msg = false;
+
+  if (bus_num == 2) && honda_bosch_canfd && honda_bosch_long {
+    bool is_lkas_msg = (addr == 0xE4) || (addr == 0x33D);
+    bool is_acc_msg = (addr == 0x1DF) || (addr == 0x1EF) || (addr == 0x30C)
+    // block_msg = is_lkas_msg || is_acc_msg; - try ACC alone for now
+    block_msg = is_acc_msg;
   }
 
   return block_msg;
