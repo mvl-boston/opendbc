@@ -116,9 +116,8 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
-    self.last_cruise_speed = 0.0
-    self.steer_cruise_override = False
-
+    self.steer_cruise_reduction = 0
+  
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -154,22 +153,9 @@ class CarController(CarControllerBase):
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
-    steer_factor = 400 if actuators.torque == 0 or CS.out.steeringPressed else abs ( self.params.STEER_MAX / max ( abs(actuators.torque), abs(apply_torque) ) )
+    steer_factor = 400 if ( actuators.torque == 0 or CS.out.steeringPressed ) else abs ( self.params.STEER_MAX / max ( abs(actuators.torque), abs(apply_torque) ) )
 
     steer_lowered_cruise = float (np.clip ( CS.out.vEgo * steer_factor * 0.5, 20 * CV.MPH_TO_MS, 90 * CV.MPH_TO_MS ) )
-
-    if steer_lowered_cruise < self.last_cruise_speed: # remember user set cruise
-      self.steer_cruise_override = True
-    elif ((self.steer_cruise_override) and (steer_lowered_cruise >= self.last_cruise_speed)): # cruise can resume to prior set speed
-      if abs (hud_control.setSpeed - self.last_cruise_speed) < 0.1 * CV.MPH_TO_MS: # tolerance for rounding
-        self.steer_cruise_override = False
-      else:
-        steer_lowered_cruise = self.last_cruise_speed
-
-    if ( not self.steer_cruise_override ) and ( (self.frame + 5) % 10 == 0 ):
-      self.last_cruise_speed = hud_control.setSpeed
-
-    # self.steer_cruise_override = False # temporarily remove slowsteer logic to isolate new safety debugging
 
     # Send CAN commands
     can_sends = []
@@ -219,11 +205,13 @@ class CarController(CarControllerBase):
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.CANCEL, self.CP.carFingerprint))
       elif CC.cruiseControl.resume:
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
-      if self.frame % 10 == 0 and self.steer_cruise_override:
-        if hud_control.setSpeed < steer_lowered_cruise - 0.1 * CV.MPH_TO_MS:
+      if self.frame % 10 == 0:
+        if (hud_control.setSpeed < steer_lowered_cruise) and (self.steer_cruise_reduction > 0):
           can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
-        elif hud_control.setSpeed > steer_lowered_cruise + 0.1 * CV.MPH_TO_MS:
+          self.steer_cruise_reduction -= 1
+        elif hud_control.setSpeed > steer_lowered_cruise:
           can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.DECEL_SET, self.CP.carFingerprint))
+          self.steer_cruise_reduction += 1
 
     else:
       # Send gas and brake commands.
