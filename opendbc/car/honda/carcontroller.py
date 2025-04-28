@@ -166,7 +166,7 @@ class CarController(CarControllerBase):
       else:
         steer_lowered_cruise = self.last_cruise_speed
 
-    if not self.steer_cruise_override:
+    if not self.steer_cruise_override and (self.frame + 5) % 10:
       self.last_cruise_speed = hud_control.setSpeed
 
     # self.steer_cruise_override = False # temporarily remove slowsteer logic to isolate new safety debugging
