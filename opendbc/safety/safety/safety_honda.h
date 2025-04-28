@@ -440,7 +440,7 @@ static bool honda_bosch_fwd_hook(int bus_num, int addr) {
 
   if ( (bus_num == 2) && honda_bosch_canfd && honda_bosch_long ) {  // canfd was faulting when camera and comma attempted dual messages
     bool is_lkas_msg = (addr == 0xE4) || (addr == 0x33D);
-    bool is_acc_msg = (addr == 0x1DF) || (addr == 0x1EF) || (addr == 0x30C)
+    bool is_acc_msg = (addr == 0x1DF) || (addr == 0x1EF) || (addr == 0x30C);
     // block_msg = is_lkas_msg || is_acc_msg; - try ACC alone for now
     block_msg = is_acc_msg;
   }
