@@ -614,7 +614,7 @@ class TestHondaBoschCANFDLongSafety(HondaButtonEnableBase, TestHondaBoschCANFDSa
   FWD_BLACKLISTED_ADDRS = {2: [0x1DF, 0x1EF, 0x30C]}
   # 0x1DF is to test that radar is disabled
   # RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1DF, 0x1EF, 0x30C, 0x33D)}  # STEERING_CONTROL, ACC_CONTROL (+ON), ACC_HUD, LKAS_HUD
-  RELAY_MALFUNCTION_ADDRS = {0: (0x1DF, 0x1EF, 0x30C)}  ACC_CONTROL (+ON), ACC_HUD
+  RELAY_MALFUNCTION_ADDRS = {0: (0x1DF, 0x1EF, 0x30C)} # ACC_CONTROL (+ON), ACC_HUD
 
   def setUp(self):
     super().setUp()
