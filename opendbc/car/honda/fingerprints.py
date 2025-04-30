@@ -745,6 +745,7 @@ FW_VERSIONS = {
       b'39990-THR-A110\x00\x00',
     ],
   },
+  # mid-model refresh
   CAR.HONDA_ODYSSEY_5G_MMR: {
     (Ecu.vsa, 0x18da28f1, None): [
       b'57114-THR-A230\x00\x00',
