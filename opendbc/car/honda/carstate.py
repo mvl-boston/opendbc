@@ -244,7 +244,7 @@ class CarState(CarStateBase):
       self.initial_accFault_cleared_timer -= 1
 
     # Adds low speed warning as some models disable cruise at various speeds, ignore warning under 3mph
-    if self.CP.carFingerprint == CAR.HONDA_ODYSSEY_5G_MMR:
+    if self.CP.carFingerprint == CAR.ACURA_RDX_3G_MMR:
       ret.lowSpeedAlert = ret.cruiseState.enabled and ret.vEgo >= 4 * CV.MPH_TO_MS and \
         cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"] == 0 and not ret.steeringPressed
 
