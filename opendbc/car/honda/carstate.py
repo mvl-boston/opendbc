@@ -243,6 +243,11 @@ class CarState(CarStateBase):
     if self.initial_accFault_cleared_timer > 0:
       self.initial_accFault_cleared_timer -= 1
 
+    # Adds low speed warning as some models disable cruise at various speeds, ignore warning under 3mph
+    if self.CP.carFingerprint == CAR.HONDA_ODYSSEY_5G_MMR:
+      ret.lowSpeedAlert = ret.cruiseState.enabled and ret.vEgo >= 4 * CV.MPH_TO_MS and \
+        cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"] == 0 and not ret.steeringPressed
+
     # Gets rid of Pedal Grinding noise when brake is pressed at slow speeds for some models
     if self.CP.carFingerprint in (CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE):
       if ret.brake > 0.1:
