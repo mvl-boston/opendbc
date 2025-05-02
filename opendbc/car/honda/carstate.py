@@ -28,7 +28,7 @@ def get_can_messages(CP, gearbox_msg):
     ("SEATBELT_STATUS", 10),
     ("CRUISE", 10),
     ("POWERTRAIN_DATA", 100),
-    ("CAR_SPEED", 10),
+    ("CAR_SPEED", 0), # missing on RLX
     ("VSA_STATUS", 50),
     ("STEER_MOTOR_TORQUE", 0),  # TODO: not on every car
   ]
