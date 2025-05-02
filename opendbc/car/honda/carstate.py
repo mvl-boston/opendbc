@@ -204,8 +204,8 @@ class CarState(CarStateBase):
       conversion = CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS
       ret.vEgoCluster = cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] * conversion
 
-    ret.steeringAngleDeg = cp.vl["STEERING_SENSORS"]["STEER_ANGLE"]
-    ret.steeringRateDeg = cp.vl["STEERING_SENSORS"]["STEER_ANGLE_RATE"]
+    ret.steeringAngleDeg = 0 # cp.vl["STEERING_SENSORS"]["STEER_ANGLE"]
+    ret.steeringRateDeg = 0 # cp.vl["STEERING_SENSORS"]["STEER_ANGLE_RATE"]
 
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(
       250, cp.vl["SCM_FEEDBACK"]["LEFT_BLINKER"], cp.vl["SCM_FEEDBACK"]["RIGHT_BLINKER"])
