@@ -504,6 +504,7 @@ FW_VERSIONS = {
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'36161-TYT-A220\x00\x00',
       b'36161-TY3-A030\x00\x00',
+      b'36161-TY3-A030\x00\x00',
     ],
  #   (Ecu.shiftByWire, 0x18da0bf1, None): [
  #     b'54008-TZ5-A911\x00\x00',
