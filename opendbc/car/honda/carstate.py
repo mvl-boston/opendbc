@@ -163,7 +163,7 @@ class CarState(CarStateBase):
     ret.seatbeltUnlatched = bool(cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LAMP"] or not cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LATCHED"])
 
     # steer_status = self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
-    steer_status == "NORMAL"
+    steer_status = "NORMAL"
     ret.steerFaultPermanent = False # steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TMP_FAULT")
     # LOW_SPEED_LOCKOUT is not worth a warning
     # NO_TORQUE_ALERT_2 can be caused by bump or steering nudge from driver
