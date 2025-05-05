@@ -124,7 +124,13 @@ class HondaNidecPlatformConfig(PlatformConfig):
 
 
 def radar_dbc_dict(pt_dict):
-  return {Bus.pt: 'acura_mdx_3G_hybrid', Bus.radar: 'acura_ilx_2016_nidec', Bus.camera:'acura_mdx_3G_hybrid'}
+  return {
+    Bus.pt: 'acura_mdx_3G_hybrid', 
+    Bus.radar: 'acura_ilx_2016_nidec', 
+    Bus.cam:'acura_mdx_3G_hybrid',
+    Bus.asas:'acura_mdx_3G_hybrid',
+    Bus.body:'acura_mdx_3G_hybrid',
+  }
 
 
 class CAR(Platforms):
