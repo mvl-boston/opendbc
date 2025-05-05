@@ -315,7 +315,7 @@ class CarController(CarControllerBase):
           self.gas = min(self.gas, max_gas)
           self.bosch_last_gas = self.gas
 
-          stopping = (actuators.longControlState == LongCtrlState.stopping) or (aTarget < 0.1 and self.stopping_counter >=1)
+          stopping = (actuators.longControlState == LongCtrlState.stopping) or (aTarget < 0.1 and CS.out.vEgo < 5.0 and self.stopping_counter >=1)
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
           can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
                                                         self.stopping_counter, self.CP, gas_pedal_force))
