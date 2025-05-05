@@ -284,14 +284,14 @@ class CarState(CarStateBase):
       if self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:
         ret.stockAeb = (not self.CP.openpilotLongitudinalControl) and bool(cp.vl["ACC_CONTROL"]["AEB_STATUS"] and cp.vl["ACC_CONTROL"]["ACCEL_COMMAND"] < -1e-5)
     else:
-      ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE"] > 1e-5)
+      ret.stockAeb = True # bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE"] > 1e-5)
 
     self.acc_hud = False
     self.lkas_hud = False
     if self.CP.carFingerprint not in HONDA_BOSCH:
-      ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
+      ret.stockFcw = "no_fcw" # cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
-      self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
+      # self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
     if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
 
