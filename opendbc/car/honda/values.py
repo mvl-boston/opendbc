@@ -128,7 +128,7 @@ def radar_dbc_dict(pt_dict):
     Bus.pt: 'acura_mdx_3G_hybrid', 
     Bus.radar: 'acura_ilx_2016_nidec', 
     Bus.cam:'acura_mdx_3G_hybrid',
-    Bus.asas:'acura_mdx_3G_hybrid',
+    Bus.adas:'acura_mdx_3G_hybrid',
     Bus.body:'acura_mdx_3G_hybrid',
   }
 
