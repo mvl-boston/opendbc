@@ -266,7 +266,7 @@ class CAR(Platforms):
     [], # 2017 RLX Hybrid, don't add to cardocs since serial steering board
     CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.39, steerRatio=13.9, tireStiffnessFactor=0.8467),  #spec, stiff/ctf from Accord
     radar_dbc_dict('acura_mdx_3G_hybrid'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.NIDEC_HYBRID | HondaFlags.NIDEC_ALT_PCM_ACCEL, HondaFlags.STEER_OFF,
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.NIDEC_HYBRID | HondaFlags.NIDEC_ALT_PCM_ACCEL | HondaFlags.STEER_OFF,
   )
   HONDA_ODYSSEY = HondaNidecPlatformConfig(
     [HondaCarDocs("Honda Odyssey 2018-20")],
