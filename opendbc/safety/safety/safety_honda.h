@@ -30,6 +30,7 @@ static bool honda_brake_switch_prev = false;
 static bool honda_alt_brake_msg = false;
 static bool honda_fwd_brake = false;
 static bool honda_nidec_hybrid = false;
+static bool honda_steer_off = false;
 static bool honda_bosch_long = false;
 static bool honda_bosch_radarless = false;
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
@@ -293,10 +294,14 @@ static safety_config honda_nidec_init(uint16_t param) {
   // 0xE4 is steering on all cars except CRV and RDX, 0x194 for CRV and RDX,
   // 0x1FA is brake control, 0x30C is acc hud, 0x33D is lkas hud
   static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
-                                     {0x30C, 0, 8, .check_relay = true}}; // {0x33D, 0, 5, .check_relay = true}}; // disable LKAS HUD check
+                                     {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
 
+  static CanMsg HONDA_N_TX_MSGS_STEER_OFF[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
+                                     {0x30C, 0, 8, .check_relay = true}}; // {0x33D, 0, 5, .check_relay = true}}; // disable LKAS HUD check
+  
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
   const uint16_t HONDA_PARAM_NIDEC_HYBRID = 256;
+  const uint16_t HONDA_PARAM_STEER_OFF = 512;
 
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
@@ -306,11 +311,13 @@ static safety_config honda_nidec_init(uint16_t param) {
   honda_bosch_long = false;
   honda_bosch_radarless = false;
   honda_nidec_hybrid = false;
+  honda_steer_off = false;
 
   safety_config ret;
 
   bool enable_nidec_alt = GET_FLAG(param, HONDA_PARAM_NIDEC_ALT);
   honda_nidec_hybrid = GET_FLAG(param, HONDA_PARAM_NIDEC_HYBRID);
+  honda_steer_off = GET_FLAG(param, HONDA_PARAM_STEER_OFF;
   
   if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
@@ -330,8 +337,12 @@ static safety_config honda_nidec_init(uint16_t param) {
     SET_RX_CHECKS(honda_nidec_common_rx_checks, ret);
   }
 
-  SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
-
+  if (honda_steer_off) {
+    SET_TX_MSGS(HONDA_N_TX_MSGS_STEER_OFF, ret);
+  } else {
+    SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
+  }
+    
   return ret;
 }
 
@@ -418,8 +429,8 @@ static bool honda_nidec_fwd_hook(int bus_num, int addr) {
   bool block_msg = false;
 
   if (bus_num == 2) {
-    // forward LKAS until steering wiring
-    bool is_lkas_msg = addr == 0x33D;
+    // forward LKAS when steering is disabled
+    bool is_lkas_msg = ( addr == 0x33D ) && honda_steer_off;
     
     // forwarded if stock AEB is active
     bool is_brake_msg = addr == 0x1FA;
