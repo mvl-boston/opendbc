@@ -317,7 +317,7 @@ static safety_config honda_nidec_init(uint16_t param) {
 
   bool enable_nidec_alt = GET_FLAG(param, HONDA_PARAM_NIDEC_ALT);
   honda_nidec_hybrid = GET_FLAG(param, HONDA_PARAM_NIDEC_HYBRID);
-  honda_steer_off = GET_FLAG(param, HONDA_PARAM_STEER_OFF;
+  honda_steer_off = GET_FLAG(param, HONDA_PARAM_STEER_OFF);
   
   if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
