@@ -93,13 +93,6 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kiBP = [0., 5., 35.]
       ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
 
-      # override for actuator tuning
-      # ret.longitudinalTuning.kpBP = [0.]
-      # ret.longitudinalTuning.kpV = [0.]
-      # ret.longitudinalTuning.kiBP = [0.]
-      # ret.longitudinalTuning.kiV = [0.]
-      # ret.longitudinalActuatorDelay = 0.0 # s
-
     eps_modified = False
     for fw in car_fw:
       if fw.ecu == "eps" and b"," in fw.fwVersion:
