@@ -29,6 +29,8 @@ static int honda_brake = 0;
 static bool honda_brake_switch_prev = false;
 static bool honda_alt_brake_msg = false;
 static bool honda_fwd_brake = false;
+static bool honda_nidec_hybrid = false;
+static bool honda_steer_off = false;
 static bool honda_bosch_long = false;
 static bool honda_bosch_radarless = false;
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
@@ -150,8 +152,14 @@ static void honda_rx_hook(const CANPacket_t *to_push) {
   if (!(alternative_experience & ALT_EXP_DISABLE_STOCK_AEB)) {
     if ((bus == 2) && (addr == 0x1FA)) {
       bool honda_stock_aeb = GET_BIT(to_push, 29U);
-      int honda_stock_brake = (GET_BYTE(to_push, 0) << 2) | (GET_BYTE(to_push, 1) >> 6);
-
+      int honda_stock_brake = 0;
+      if (honda_nidec_hybrid) {
+        honda_stock_brake = (GET_BYTE(to_push, 6) << 2) | (GET_BYTE(to_push, 7) >> 6);
+      }
+      else {
+        honda_stock_brake = (GET_BYTE(to_push, 0) << 2) | (GET_BYTE(to_push, 1) >> 6);
+      }
+      
       // Forward AEB when stock braking is higher than openpilot braking
       // only stop forwarding when AEB event is over
       if (!honda_stock_aeb) {
@@ -204,7 +212,11 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
 
   // BRAKE: safety check (nidec)
   if ((addr == 0x1FA) && (bus == bus_pt)) {
-    honda_brake = (GET_BYTE(to_send, 0) << 2) + ((GET_BYTE(to_send, 1) >> 6) & 0x3U);
+    if ( honda_nidec_hybrid ) {
+      honda_brake = (GET_BYTE(to_send, 6) << 2) + ((GET_BYTE(to_send, 7) >> 6) & 0x3U);
+    } else {
+      honda_brake = (GET_BYTE(to_send, 0) << 2) + ((GET_BYTE(to_send, 1) >> 6) & 0x3U);
+    }
     if (longitudinal_brake_checks(honda_brake, HONDA_NIDEC_LONG_LIMITS)) {
       tx = false;
     }
@@ -284,7 +296,12 @@ static safety_config honda_nidec_init(uint16_t param) {
   static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
                                      {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
 
+  static CanMsg HONDA_N_TX_MSGS_STEER_OFF[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
+                                     {0x30C, 0, 8, .check_relay = true}}; // {0x33D, 0, 5, .check_relay = true}}; // disable LKAS HUD check
+  
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
+  const uint16_t HONDA_PARAM_NIDEC_HYBRID = 256;
+  const uint16_t HONDA_PARAM_STEER_OFF = 512;
 
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
@@ -293,11 +310,15 @@ static safety_config honda_nidec_init(uint16_t param) {
   honda_alt_brake_msg = false;
   honda_bosch_long = false;
   honda_bosch_radarless = false;
+  honda_nidec_hybrid = false;
+  honda_steer_off = false;
 
   safety_config ret;
 
   bool enable_nidec_alt = GET_FLAG(param, HONDA_PARAM_NIDEC_ALT);
-
+  honda_nidec_hybrid = GET_FLAG(param, HONDA_PARAM_NIDEC_HYBRID);
+  honda_steer_off = GET_FLAG(param, HONDA_PARAM_STEER_OFF);
+  
   if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
     static RxCheck honda_nidec_alt_rx_checks[] = {
@@ -316,8 +337,12 @@ static safety_config honda_nidec_init(uint16_t param) {
     SET_RX_CHECKS(honda_nidec_common_rx_checks, ret);
   }
 
-  SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
-
+  if (honda_steer_off) {
+    SET_TX_MSGS(HONDA_N_TX_MSGS_STEER_OFF, ret);
+  } else {
+    SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
+  }
+    
   return ret;
 }
 
@@ -404,9 +429,12 @@ static bool honda_nidec_fwd_hook(int bus_num, int addr) {
   bool block_msg = false;
 
   if (bus_num == 2) {
+    // forward LKAS when steering is disabled
+    bool is_lkas_msg = ( addr == 0x33D ) && honda_steer_off;
+    
     // forwarded if stock AEB is active
     bool is_brake_msg = addr == 0x1FA;
-    block_msg = is_brake_msg && !honda_fwd_brake;
+    block_msg = (is_brake_msg && !honda_fwd_brake) || is_lkas_msg;
   }
 
   return block_msg;
