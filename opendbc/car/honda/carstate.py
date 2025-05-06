@@ -322,14 +322,6 @@ class CarState(CarStateBase):
         ("LKAS_HUD", 10),
       ]
 
-    elif CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
-      pt_messages += [
-        ("LKAS_HUD", 10),
-      ]
-      cam_messages += [
-        ("ACC_HUD", 10),
-      ]
-
     elif CP.carFingerprint not in HONDA_BOSCH:
       cam_messages += [
         ("ACC_HUD", 10),
