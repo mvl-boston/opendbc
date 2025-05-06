@@ -148,6 +148,10 @@ class CarController(CarControllerBase):
 
     # **** process the car messages ****
 
+    # steer torque is converted back to CAN reference (positive when steering right)
+    apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
+                                 self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
+
     # Send CAN commands
     can_sends = []
 
