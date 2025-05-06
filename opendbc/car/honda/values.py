@@ -53,6 +53,7 @@ class HondaSafetyFlags(IntFlag):
   NIDEC_ALT = 4
   RADARLESS = 8
   NIDEC_HYBRID = 32 # reserving 16 for canFD
+  STEER_OFF = 64 # used for passing LKAS through in safety
 
 class HondaFlags(IntFlag):
   # Detected flags
