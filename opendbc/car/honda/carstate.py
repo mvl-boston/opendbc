@@ -327,7 +327,7 @@ class CarState(CarStateBase):
 
     elif CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
       pt_messages += [
-        ("LKAS_HUD", 10),
+        ("LKAS_HUD", 0), # temporarily stopped, shut off by safety?
       ]
       cam_messages += [
         ("ACC_HUD", 10),
