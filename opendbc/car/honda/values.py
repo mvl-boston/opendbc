@@ -135,8 +135,8 @@ class HondaNidecPlatformConfig(PlatformConfig):
 
 def radar_dbc_dict(pt_dict):
   return {
-    Bus.pt: 'acura_mdx_3G_hybrid', 
-    Bus.radar: 'acura_ilx_2016_nidec', 
+    Bus.pt: 'acura_mdx_3G_hybrid',
+    Bus.radar: 'acura_ilx_2016_nidec',
     Bus.cam: 'acura_mdx_3G_hybrid',
   }
 
@@ -266,7 +266,7 @@ class CAR(Platforms):
   )
   ACURA_RLX_HYBRID = HondaNidecPlatformConfig(
     [], # 2017 RLX Hybrid, don't add to cardocs since serial steering board
-    CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.39, steerRatio=13.9, tireStiffnessFactor=0.8467),  # acura spec, stiff/ctf from Accord
+    CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.39, steerRatio=13.9, tireStiffnessFactor=0.8467),  #spec, stiff/ctf from Accord
     radar_dbc_dict('acura_mdx_3G_hybrid'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.NIDEC_HYBRID | HondaFlags.NIDEC_ALT_PCM_ACCEL,
   )
@@ -378,7 +378,7 @@ HONDA_NIDEC_HYBRID = CAR.with_flags(HondaFlags.NIDEC_HYBRID)
 HONDA_BOSCH = CAR.with_flags(HondaFlags.BOSCH)
 HONDA_BOSCH_RADARLESS = CAR.with_flags(HondaFlags.BOSCH_RADARLESS)
 HONDA_BOSCH_CANFD = CAR.with_flags(HondaFlags.BOSCH_CANFD)
-SERIAL_STEERING = {CAR.ACURA_MDX_3G_HYBRID; CAR.ACURA_RLX_HYBRID}
+SERIAL_STEERING = {CAR.ACURA_MDX_3G_HYBRID, CAR.ACURA_RLX_HYBRID}
 
 
 DBC = CAR.create_dbc_map()
