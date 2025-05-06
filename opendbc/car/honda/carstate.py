@@ -280,8 +280,6 @@ class CarState(CarStateBase):
       # TODO: find the radarless AEB_STATUS bit and make sure ACCEL_COMMAND is correct to enable AEB alerts
       if self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:
         ret.stockAeb = (not self.CP.openpilotLongitudinalControl) and bool(cp.vl["ACC_CONTROL"]["AEB_STATUS"] and cp.vl["ACC_CONTROL"]["ACCEL_COMMAND"] < -1e-5)
-    else if self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
-      ret.stockAeb = True 
     else:
       ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE"] > 1e-5)
 
