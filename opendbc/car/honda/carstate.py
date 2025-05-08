@@ -207,6 +207,11 @@ class CarState(CarStateBase):
 
     self.acc_hud = False
     self.lkas_hud = False
+<<<<<<< HEAD
+=======
+    self.voacc_camera = False
+
+>>>>>>> 085126b54 (revise carstate object to VOACC_CAMERA)
     if self.CP.carFingerprint not in HONDA_BOSCH:
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
@@ -214,6 +219,7 @@ class CarState(CarStateBase):
     if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
       self.voacc_camera = cp_cam.vl["VOACC_CAMERA"]
+<<<<<<< HEAD
       # recalibrating lead spoofing inputs
       if voacc_camera[["LEAD_DISTANCE_OBSERVED"] > 0:
         if ret.vEgo >= 10:
@@ -222,6 +228,8 @@ class CarState(CarStateBase):
         if ret.aEgo <= -0.25
           self.voacc_last_target_diff = voacc_camera["LEAD_DISTANCE_OBSERVED"] - voacc_camera["LEAD_DISTANCE_TARGET"]
           self.voacc_last_target_accel = ret.aEgo
+=======
+>>>>>>> 085126b54 (revise carstate object to VOACC_CAMERA)
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
@@ -237,6 +245,34 @@ class CarState(CarStateBase):
     return ret
 
   def get_can_parsers(self, CP):
+<<<<<<< HEAD
+=======
+    pt_messages = get_can_messages(CP, self.gearbox_msg)
+
+    cam_messages = [
+      ("STEERING_CONTROL", 100),
+    ]
+
+    if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      cam_messages += [
+        ("ACC_HUD", 10),
+        ("LKAS_HUD", 10),
+        ("VOACC_CAMERA", 50),
+      ]
+
+    elif CP.carFingerprint not in HONDA_BOSCH:
+      cam_messages += [
+        ("ACC_HUD", 10),
+        ("LKAS_HUD", 10),
+        ("BRAKE_COMMAND", 50),
+      ]
+
+    body_messages = [
+      ("BSM_STATUS_LEFT", 3),
+      ("BSM_STATUS_RIGHT", 3),
+    ]
+
+>>>>>>> 085126b54 (revise carstate object to VOACC_CAMERA)
     parsers = {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).pt),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).camera),
