@@ -203,6 +203,11 @@ class CarController(CarControllerBase):
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
       pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
+    # slow steering to maintain within honda limits
+    steer_factor = 400 if (actuators.torque == 0 or CS.out.steeringPressed) else abs(self.params.STEER_MAX/max(abs(actuators.torque),abs(apply_torque)))
+    steer_max_accel = np.interp(steerfactor, [1.0, 3.0], [-2.0, 2.0])
+    steer_brake = min (atarget, steer_max_accel) - atarget
+    
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:  # radarless cars don't have supplemental message
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
@@ -223,11 +228,11 @@ class CarController(CarControllerBase):
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
 
           stoppingDecelAmount = max ( self.CP.stopAccel, self.stopping_counter * -self.CP.stoppingDecelRate / 50 ) # CC frame rate 50x speed of longplanner
-          self.accel = float(np.clip(aTarget + stoppingDecelAmount, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
-          self.gas = float(np.interp(accel + wind_brake_ms2 + hill_brake, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+          self.accel = float(np.clip(aTarget + stoppingDecelAmount + steer_brake, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
+          self.gas = float(np.interp(accel + wind_brake_ms2 + hill_brake + steer_brake, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
           can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                        self.stopping_counter, self.CP.carFingerprint, accel + wind_brake_ms2 + hill_brake))
+                                                        self.stopping_counter, self.CP.carFingerprint, accel + wind_brake_ms2 + hill_brake + steer_brake))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
