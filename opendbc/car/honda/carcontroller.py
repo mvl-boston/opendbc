@@ -1,8 +1,9 @@
 import numpy as np
 from collections import namedtuple
+import math
 
 from opendbc.can.packer import CANPacker
-from opendbc.car import Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
+from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CruiseButtons, VISUAL_HUD, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD, \
                                      HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
@@ -116,6 +117,7 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.pitch = 0.0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -124,11 +126,16 @@ class CarController(CarControllerBase):
     hud_v_cruise = hud_control.setSpeed / conversion if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
+    if len(CC.orientationNED) == 3:
+      self.pitch = CC.orientationNED[1]
+
     if CC.longActive:
       accel = actuators.accel
+      aTarget = actuators.aTarget
       gas, brake = compute_gas_brake(actuators.accel, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
+      aTarget = 0.0
       gas, brake = 0.0, 0.0
 
     # *** rate limit steer ***
@@ -156,16 +163,20 @@ class CarController(CarControllerBase):
     can_sends = []
 
     # tester present - w/ no response (keeps radar disabled)
-    if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
+    if self.CP.carFingerprint in ((HONDA_BOSCH | HONDA_BOSCH_CANFD) - HONDA_BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
       if self.frame % 10 == 0:
-        can_sends.append(make_tester_present_msg(0x18DAB0F1, 1, suppress_response=True))
+        bus = 0 if self.CP.carFingerprint in HONDA_BOSCH_CANFD else 1
+        can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
 
     # Send steering command.
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive))
 
     # wind brake from air resistance decel at high speed
-    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15])
+    wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
+    hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
+
     # all of this is only relevant for HONDA NIDEC
+    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) # not in m/s2 units
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
     # TODO this 1.44 is just to maintain previous behavior
     pcm_speed_BP = [-wind_brake,
@@ -192,6 +203,11 @@ class CarController(CarControllerBase):
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
       pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
+    # slow steering to maintain within honda limits
+    steer_factor = 400 if (actuators.torque == 0 or CS.out.steeringPressed) else abs(self.params.STEER_MAX/max(abs(actuators.torque),abs(apply_torque)))
+    steer_max_accel = np.interp(steer_factor, [1.0, 3.0], [-2.0, 2.0])
+    steer_brake = 0 if CS.out.vEgo < 5 else ( min (aTarget, steer_max_accel) - aTarget )
+
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:  # radarless cars don't have supplemental message
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
@@ -211,13 +227,16 @@ class CarController(CarControllerBase):
         ts = self.frame * DT_CTRL
 
         if self.CP.carFingerprint in HONDA_BOSCH:
-          self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
-          self.gas = float(np.interp(accel, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
+
+          stoppingDecelAmount = max ( self.CP.stopAccel, self.stopping_counter * -self.CP.stoppingDecelRate / 50 ) # CC frame rate 50x speed of longplanner
+          self.accel = float(np.clip(aTarget + stoppingDecelAmount + steer_brake, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
+          self.gas = float(np.interp(accel + wind_brake_ms2 + hill_brake + steer_brake, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+
           can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                        self.stopping_counter, self.CP.carFingerprint))
+                                                        self.stopping_counter, self.CP.carFingerprint, accel + wind_brake_ms2 + hill_brake + steer_brake))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
