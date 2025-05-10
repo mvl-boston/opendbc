@@ -216,9 +216,10 @@ def spam_buttons_command(packer, CAN, button_val, car_fingerprint):
   return packer.make_can_msg("SCM_BUTTONS", bus, values)
 
 
-def lkas_button_command(packer, CAN, button_val, stock_scm_buttons, car_fingerprint):
+def lkas_button_command(packer, CAN, settings_val, stock_scm_buttons, car_fingerprint):
   values = {
-    'CRUISE_SETTING': button_val,
+    'CRUISE_BUTTONS': 0,
+    'CRUISE_SETTING': settings_val,
     'BOH_1': stock_scm_buttons['BOH_1'],
     'BOH_2': stock_scm_buttons['BOH_2'],
   }
