@@ -205,7 +205,7 @@ class CarController(CarControllerBase):
 
     # slow steering to maintain within honda limits
     steer_factor = 400 if (actuators.torque == 0 or CS.out.steeringPressed) else abs(self.params.STEER_MAX/max(abs(actuators.torque),abs(apply_torque)))
-    steer_max_accel = np.interp(steer_factor, [1.0, 3.0], [-2.0, 2.0])
+    steer_max_accel = np.interp(steer_factor, [1.0, 4.0], [-1.0, 2.0])
     steer_brake = 0 if CS.out.vEgo < 5 else ( min (aTarget, steer_max_accel) - aTarget )
 
     if not self.CP.openpilotLongitudinalControl:
