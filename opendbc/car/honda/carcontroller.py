@@ -4,7 +4,8 @@ from collections import namedtuple
 from opendbc.can.packer import CANPacker
 from opendbc.car import Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
-from opendbc.car.honda.values import CruiseButtons, VISUAL_HUD, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
+from opendbc.car.honda.values import CruiseButtons, VISUAL_HUD, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD, \
+                                     HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -200,7 +201,7 @@ class CarController(CarControllerBase):
       elif CC.cruiseControl.resume:
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
       # disable radarless LKAS if it is unexpectedly enabled, to prevent no-steering lockout, only if conflicting buttons are not already pressed
-      elif self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      elif self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS, HONDA_BOCSH_CANFD):
         if CS.lkas_hud['ENABLED'] and CC.enabled and self.frame % 100 < 25:
           can_sends.append(hondacan.lkas_button_command(self.packer, self.CAN, CruiseButtons.LKAS, CS.scm_buttons, self.CP.carFingerprint))
 
