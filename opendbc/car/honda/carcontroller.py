@@ -118,6 +118,7 @@ class CarController(CarControllerBase):
     self.brake = 0.0
     self.last_torque = 0.0
     self.pitch = 0.0
+    self.slowgas = 1.0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -208,6 +209,11 @@ class CarController(CarControllerBase):
     steer_max_accel = np.interp(steer_factor, [1.0, 4.0], [-1.0, 2.0])
     steer_brake = 0 if CS.out.vEgo < 5 else ( min (aTarget, steer_max_accel) - aTarget )
 
+    if steer_max_accel < -0.2:
+      self.slowgas = 0
+    elif steer_max_accel > 0.2;
+      self.slowgas = float (np.clip (slowgas + 1/1000 , 0, 1))
+
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:  # radarless cars don't have supplemental message
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
@@ -233,7 +239,7 @@ class CarController(CarControllerBase):
 
           stoppingDecelAmount = max ( self.CP.stopAccel, self.stopping_counter * -self.CP.stoppingDecelRate / 50 ) # CC frame rate 50x speed of longplanner
           self.accel = float(np.clip(aTarget + stoppingDecelAmount + steer_brake, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
-          self.gas = float(np.interp(accel + wind_brake_ms2 + hill_brake + steer_brake, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+          self.gas = float(np.interp(accel + wind_brake_ms2 + hill_brake + steer_brake, self.params.BOSCH_GAS_LOOKUP_BP, slowgas * self.params.BOSCH_GAS_LOOKUP_V))
 
           can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
                                                         self.stopping_counter, self.CP.carFingerprint, accel + wind_brake_ms2 + hill_brake + steer_brake))
