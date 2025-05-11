@@ -239,8 +239,9 @@ class CarController(CarControllerBase):
 
           stoppingDecelAmount = max ( self.CP.stopAccel, self.stopping_counter * -self.CP.stoppingDecelRate / 50 ) # CC frame rate 50x speed of longplanner
           self.accel = float(np.clip(aTarget + stoppingDecelAmount + steer_brake, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
-          self.gas = float(np.interp(accel + wind_brake_ms2 + hill_brake + steer_brake, self.params.BOSCH_GAS_LOOKUP_BP, slowgas * self.params.BOSCH_GAS_LOOKUP_V))
-
+          self.gas = float(np.interp(accel + wind_brake_ms2 + hill_brake + steer_brake, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+          self.gas = float(np.clip (self.gas, 0, slowgas * 1600)
+          
           can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
                                                         self.stopping_counter, self.CP.carFingerprint, accel + wind_brake_ms2 + hill_brake + steer_brake))
         else:
