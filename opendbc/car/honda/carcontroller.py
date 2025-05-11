@@ -211,7 +211,7 @@ class CarController(CarControllerBase):
 
     if steer_max_accel < -0.2:
       self.slowgas = 0
-    elif steer_max_accel > 0.2;
+    elif steer_max_accel > 0.2:
       self.slowgas = float (np.clip (slowgas + 1/1000 , 0, 1))
 
     if not self.CP.openpilotLongitudinalControl:
