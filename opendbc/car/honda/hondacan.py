@@ -74,14 +74,14 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
-def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint):
+def create_acc_commands(packer, CAN, enabled, active, aTarget, gas, stopping_counter, car_fingerprint, gas_force):
   commands = []
   min_gas_accel = CarControllerParams.BOSCH_GAS_LOOKUP_BP[0]
 
   control_on = 5 if enabled else 0
-  gas_command = gas if active and accel > min_gas_accel else -30000
-  accel_command = accel if active else 0
-  braking = 1 if active and accel < min_gas_accel else 0
+  gas_command = gas if active and gas_force > min_gas_accel else -30000
+  accel_command = aTarget if active else 0
+  braking = 1 if active and gas_force < min_gas_accel else 0
   standstill = 1 if active and stopping_counter > 0 else 0
   standstill_release = 1 if active and stopping_counter == 0 else 0
 
@@ -168,7 +168,8 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
     commands.append(packer.make_can_msg("ACC_HUD", CAN.pt, acc_hud_values))
 
   lkas_hud_values = {
-    'SET_ME_X41': 0x41,
+    'ENABLED': 1,
+    'SET_ME_X20': 0x20,
     'STEERING_REQUIRED': hud.steer_required,
     'SOLID_LANES': hud.lanes_visible,
     'BEEP': 0,
@@ -209,6 +210,18 @@ def spam_buttons_command(packer, CAN, button_val, car_fingerprint):
   values = {
     'CRUISE_BUTTONS': button_val,
     'CRUISE_SETTING': 0,
+  }
+  # send buttons to camera on radarless (camera does ACC) cars
+  bus = CAN.camera if car_fingerprint in HONDA_BOSCH_RADARLESS else CAN.pt
+  return packer.make_can_msg("SCM_BUTTONS", bus, values)
+
+
+def lkas_button_command(packer, CAN, settings_val, stock_scm_buttons, car_fingerprint):
+  values = {
+    'CRUISE_BUTTONS': 0,
+    'CRUISE_SETTING': settings_val,
+    'BOH_1': stock_scm_buttons['BOH_1'],
+    'BOH_2': stock_scm_buttons['BOH_2'],
   }
   # send buttons to camera on radarless (camera does ACC) cars
   bus = CAN.camera if car_fingerprint in HONDA_BOSCH_RADARLESS else CAN.pt

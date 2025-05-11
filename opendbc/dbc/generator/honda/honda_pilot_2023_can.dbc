@@ -2,6 +2,12 @@ CM_ "IMPORT _honda_common.dbc";
 CM_ "IMPORT _bosch_2018.dbc";
 CM_ "IMPORT _steering_sensors_a.dbc";
 
+BO_ 388 BRAKE_ERROR: 8 XXX
+ SG_ BRAKE_ERROR_1 : 32|1@0+ (1,0) [0|1] "" EON
+ SG_ BRAKE_ERROR_2 : 34|1@0+ (1,0) [0|1] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|3] "" EON
+
 BO_ 401 GEARBOX_15T: 8 PCM
  SG_ GEAR_SHIFTER : 5|6@0+ (1,0) [0|63] "" EON
  SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
@@ -21,6 +27,7 @@ BO_ 432 STANDSTILL: 7 VSA
  SG_ CHECKSUM : 51|4@0+ (1,0) [0|15] "" EON
 
 BO_ 446 BRAKE_MODULE: 3 VSA
+ SG_ BRAKE_ERROR : 22|1@0+ (1,0) [0|1] "" XXX
  SG_ BRAKE_PRESSED : 4|1@0+ (1,0) [0|1] "" XXX
  SG_ COUNTER : 21|2@0+ (1,0) [0|3] "" XXX
  SG_ CHECKSUM : 19|4@0+ (1,0) [0|15] "" XXX
@@ -52,9 +59,9 @@ BO_ 495 ACC_CONTROL_ON: 8 XXX
  SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
 
 BO_ 829 LKAS_HUD: 8 XXX
- SG_ SET_ME_X41 : 6|7@0+ (1,0) [0|127] "" XXX
- SG_ BOH : 6|7@0+ (1,0) [0|127] "" XXX
  SG_ CAM_TEMP_HIGH : 7|1@0+ (1,0) [0|255] "" XXX
+ SG_ ENABLED : 0|1@0+ (1,0) [0|1] "" XXX
+ SG_ SET_ME_X20 : 6|6@0+ (1,0) [0|127] "" BDY
  SG_ STEERING_REQUIRED : 8|1@0+ (1,0) [0|1] "" XXX
  SG_ LDW_RIGHT : 9|1@0+ (1,0) [0|1] "" XXX
  SG_ SOLID_LANES : 10|1@0+ (1,0) [0|1] "" XXX
