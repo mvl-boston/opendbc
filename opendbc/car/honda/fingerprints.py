@@ -538,7 +538,7 @@ FW_VERSIONS = {
       b'38897-TY3-A020\x00\x00',
     ],
      (Ecu.hud, 0x18da61f1, None): [
-      b'38897-TY3-A020\x00\x00',
+      b'78209-TY3-A110\x00\x00',
     ],
     (Ecu.eps, 0x18da30f1, None): [
       b'39990-TY3-J030\x00\x00',
