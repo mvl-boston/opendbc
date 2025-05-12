@@ -42,7 +42,7 @@ def get_can_messages(CP, gearbox_msg):
       ("STEER_STATUS", 100),
     ]
 
-  if CP.carFingerprint == CAR.HONDA_ODYSSEY_CHN, CAR.ACURA_RLX:
+  if CP.carFingerprint in (CAR.HONDA_ODYSSEY_CHN, CAR.ACURA_RLX):
     messages += [
       ("SCM_FEEDBACK", 25),
       ("SCM_BUTTONS", 50),
