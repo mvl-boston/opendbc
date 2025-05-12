@@ -442,7 +442,7 @@ static bool honda_nidec_fwd_hook(int bus_num, int addr) {
     if (bus_num == 2) {
       // forwarded if stock AEB is active
       bool is_brake_msg = addr == 0x1FA;
-      block_msg = (is_brake_msg && !honda_fwd_brake) || is_lkas_msg;
+      block_msg = (is_brake_msg && !honda_fwd_brake);
     }
   }
   
