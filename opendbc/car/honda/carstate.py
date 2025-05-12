@@ -77,7 +77,7 @@ def get_can_messages(CP, gearbox_msg):
         ("ACC_CONTROL", 50),
       ]
   else:  # Nidec signals
-    if CP.carFingerprint == CAR.HONDA_ODYSSEY_CHN, CAR.ACURA_RLX:
+    if CP.carFingerprint == (CAR.HONDA_ODYSSEY_CHN, CAR.ACURA_RLX):
       messages.append(("CRUISE_PARAMS", 10))
     else:
       messages.append(("CRUISE_PARAMS", 50))
