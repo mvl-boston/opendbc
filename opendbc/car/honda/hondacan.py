@@ -71,7 +71,7 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
     "AEB_REQ_2": 0,
     "AEB_STATUS": 0,
   }
-  return packer.make_can_msg("BRAKE_COMMAND", 2 if car_fingerprint == CAR.ACURA_RLX else CAN.pt, values)
+  return packer.make_can_msg("BRAKE_COMMAND", 2 if car_fingerprint == CAR.ACURA_RLX_HYBRID else CAN.pt, values)
 
 
 def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint):
@@ -165,7 +165,7 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
       acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
       acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
       acc_hud_values['ICONS'] = acc_hud['ICONS']
-    commands.append(packer.make_can_msg("ACC_HUD", 2 if CP.carFingerprint == CAR.ACURA_RLX else CAN.pt, acc_hud_values))
+    commands.append(packer.make_can_msg("ACC_HUD", 2 if CP.carFingerprint == CAR.ACURA_RLX_HYBRID else CAN.pt, acc_hud_values))
 
   lkas_hud_values = {
     'SET_ME_X41': 0x41,
@@ -186,9 +186,7 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
   if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
     lkas_hud_values['SET_ME_X48'] = 0x48
 
-  if CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
-    pass # don't override LKAS HUD since using stock steering
-  elif CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
+  if CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
     commands.append(packer.make_can_msg('LKAS_HUD_A', CAN.lkas, lkas_hud_values))
     commands.append(packer.make_can_msg('LKAS_HUD_B', CAN.lkas, lkas_hud_values))
   else:
