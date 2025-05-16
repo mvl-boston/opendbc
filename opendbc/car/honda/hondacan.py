@@ -71,7 +71,8 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
     "AEB_REQ_2": 0,
     "AEB_STATUS": 0,
   }
-  return packer.make_can_msg("BRAKE_COMMAND", 2 if car_fingerprint == CAR.ACURA_RLX_HYBRID else CAN.pt, values)
+  # return packer.make_can_msg("BRAKE_COMMAND", 2 if car_fingerprint == CAR.ACURA_RLX_HYBRID else CAN.pt, values)
+  return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
 def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint):
@@ -165,7 +166,8 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
       acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
       acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
       acc_hud_values['ICONS'] = acc_hud['ICONS']
-    commands.append(packer.make_can_msg("ACC_HUD", 2 if CP.carFingerprint == CAR.ACURA_RLX_HYBRID else CAN.pt, acc_hud_values))
+    # commands.append(packer.make_can_msg("ACC_HUD", 2 if CP.carFingerprint == CAR.ACURA_RLX_HYBRID else CAN.pt, acc_hud_values))
+    commands.append(packer.make_can_msg("ACC_HUD", CAN.pt, acc_hud_values))
 
   lkas_hud_values = {
     'SET_ME_X41': 0x41,
