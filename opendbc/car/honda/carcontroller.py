@@ -7,6 +7,7 @@ from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CruiseButtons, VISUAL_HUD, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_NIDEC_ALT_PCM_ACCEL, HONDA_NIDEC_HYBRID, \
                                      CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
+from opendbc.car.common.conversions import Conversions as CV
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -120,7 +121,10 @@ class CarController(CarControllerBase):
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
-    conversion = hondacan.get_cruise_speed_conversion(self.CP.carFingerprint, CS.is_metric)
+    if self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
+      conversion = CV.mph_to_MS
+    else:
+      conversion = hondacan.get_cruise_speed_conversion(self.CP.carFingerprint, CS.is_metric)
     hud_v_cruise = hud_control.setSpeed / conversion if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
@@ -161,7 +165,7 @@ class CarController(CarControllerBase):
         can_sends.append(make_tester_present_msg(0x18DAB0F1, 1, suppress_response=True))
 
     # Send steering command.
-    # temporarly stop steering can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive))
+    can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive))
 
     # wind brake from air resistance decel at high speed
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15])
