@@ -8,7 +8,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.hondacan import CanBus, get_cruise_speed_conversion
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, \
-                                                 SERIAL_STEERING, HONDA_NIDEC_HYBRID, \
+                                                 HONDA_NIDEC_SERIAL_STEERING, HONDA_NIDEC_HYBRID, \
                                                  HondaFlags, CruiseButtons, CruiseSettings, GearShifter
 from opendbc.car.interfaces import CarStateBase
 
@@ -295,7 +295,7 @@ class CarState(CarStateBase):
 
     cam_messages = []
 
-    if  CP.carFingerprint in SERIAL_STEERING:
+    if  CP.carFingerprint in HONDA_NIDEC_SERIAL_STEERING:
       pt_messages += [
         ("STEERING_CONTROL", 0), # initially slow, prevent timing errors TODO: any workaround for this?
       ]
