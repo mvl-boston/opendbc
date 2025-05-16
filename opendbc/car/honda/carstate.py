@@ -38,9 +38,10 @@ def get_can_messages(CP, gearbox_msg):
       ("STEER_STATUS", 0), # initially slow to transmit
     ]
   else:
-    messages +=[
-      ("STEER_STATUS", 100),
-    ]
+    pass # temporarily disable steer status
+    # messages +=[
+    #  ("STEER_STATUS", 100),
+    #]
 
   if CP.carFingerprint in (CAR.HONDA_ODYSSEY_CHN, CAR.ACURA_RLX_HYBRID):
     messages += [
@@ -113,7 +114,7 @@ class CarState(CarStateBase):
 
     if CP.transmissionType != TransmissionType.manual:
       self.shifter_values = can_define.dv[self.gearbox_msg]["GEAR_SHIFTER"]
-    self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
+    # disable steer_status self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
 
     self.brake_switch_prev = False
     self.brake_switch_active = False
@@ -315,9 +316,10 @@ class CarState(CarStateBase):
         ("STEERING_CONTROL", 0), # initially slow, prevent timing errors
       ]
     else:
-      cam_messages += [
-        ("STEERING_CONTROL", 100),
-      ]
+      pass # temporarily disable steering control
+      # cam_messages += [
+      #  ("STEERING_CONTROL", 100),
+      #]
 
     if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       cam_messages += [
