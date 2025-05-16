@@ -1,5 +1,5 @@
 import numpy as np
-from collections import defaultdict
+# temporarily disable steer status - from collections import defaultdict
 
 from opendbc.can.can_define import CANDefine
 from opendbc.can.parser import CANParser
