@@ -30,7 +30,6 @@ static bool honda_brake_switch_prev = false;
 static bool honda_alt_brake_msg = false;
 static bool honda_fwd_brake = false;
 static bool honda_nidec_hybrid = false;
-static bool honda_rlx_brake = false;
 static bool honda_bosch_long = false;
 static bool honda_bosch_radarless = false;
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
@@ -296,12 +295,8 @@ static safety_config honda_nidec_init(uint16_t param) {
   static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
                                      {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
 
-  static CanMsg HONDA_N_TX_MSGS_RLX_BRAKE[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 2, 8, .check_relay = false},
-                                     {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
-  
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
   const uint16_t HONDA_PARAM_NIDEC_HYBRID = 256;
-  const uint16_t HONDA_PARAM_RLX_BRAKE = 512;
 
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
@@ -311,13 +306,11 @@ static safety_config honda_nidec_init(uint16_t param) {
   honda_bosch_long = false;
   honda_bosch_radarless = false;
   honda_nidec_hybrid = false;
-  honda_rlx_brake = false;
 
   safety_config ret;
 
   bool enable_nidec_alt = GET_FLAG(param, HONDA_PARAM_NIDEC_ALT);
   honda_nidec_hybrid = GET_FLAG(param, HONDA_PARAM_NIDEC_HYBRID);
-  honda_rlx_brake = GET_FLAG(param, HONDA_PARAM_RLX_BRAKE);
   
   if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
@@ -337,12 +330,8 @@ static safety_config honda_nidec_init(uint16_t param) {
     SET_RX_CHECKS(honda_nidec_common_rx_checks, ret);
   }
 
-  if (honda_rlx_brake) {
-    SET_TX_MSGS(HONDA_N_TX_MSGS_RLX_BRAKE, ret);
-  } else {
-    SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
-  }
-    
+  SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
+
   return ret;
 }
 
@@ -428,24 +417,12 @@ static safety_config honda_bosch_init(uint16_t param) {
 static bool honda_nidec_fwd_hook(int bus_num, int addr) {
   bool block_msg = false;
 
-  if (honda_rlx_brake) {
-    if (bus_num == 0) {
-      bool is_acc_hud_msg = addr == 0x30C;
-      bool is_brake_msg = addr == 0x1FA;
-      block_msg = is_acc_hud_msg || is_brake_msg;
-
-      // Matt code defines fwd bus as 2
-    }
+  if (bus_num == 2) {
+    // forwarded if stock AEB is active
+    bool is_brake_msg = addr == 0x1FA;
+    block_msg = is_brake_msg && !honda_fwd_brake;
   }
 
-  else {
-    if (bus_num == 2) {
-      // forwarded if stock AEB is active
-      bool is_brake_msg = addr == 0x1FA;
-      block_msg = (is_brake_msg && !honda_fwd_brake);
-    }
-  }
-  
   return block_msg;
 }
 
