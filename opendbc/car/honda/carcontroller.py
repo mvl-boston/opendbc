@@ -195,7 +195,7 @@ class CarController(CarControllerBase):
 
       pcm_accel = int (accel * 100)
       pcm_speed = CS.out.vEg0 + 9.99 * CV.KPH_TO_MS
-    
+
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:  # radarless cars don't have supplemental message
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
