@@ -71,8 +71,7 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
     "AEB_REQ_2": 0,
     "AEB_STATUS": 0,
   }
-  return packer.make_can_msg("BRAKE_COMMAND", 2 if car_fingerprint == CAR.ACURA_RLX_HYBRID else CAN.pt, values)
-  # return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
+  return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
 def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint):
@@ -124,7 +123,8 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active):
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
   }
-  return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
+  #return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
+  return packer.make_can_msg("STEERING_CONTROL", 2 if CP.carFingerprint in (HONDA_ALT_STEER) else CAN.lkas, values)
 
 
 def create_bosch_supplemental_1(packer, CAN):
