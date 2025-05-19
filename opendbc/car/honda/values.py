@@ -52,9 +52,7 @@ class HondaSafetyFlags(IntFlag):
   BOSCH_LONG = 2
   NIDEC_ALT = 4
   RADARLESS = 8
-  NIDEC_HYBRID = 32 # reserving 16 for canFD
-  STEER_OFF = 64 # used for passing LKAS through in safety
-
+  
 class HondaFlags(IntFlag):
   # Detected flags
   # Bosch models with alternate set of LKAS_HUD messages
@@ -71,6 +69,7 @@ class HondaFlags(IntFlag):
   BOSCH_CANFD = 128
   NIDEC_HYBRID = 256
   RLX_BRAKE = 512
+  ALT_STEER = 1024
 
 # Car button codes
 class CruiseButtons:
@@ -269,7 +268,7 @@ class CAR(Platforms):
     [], # 2017 RLX Hybrid, don't add to cardocs since serial steering board
     CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.39, steerRatio=13.9, tireStiffnessFactor=0.8467),  #spec, stiff/ctf from Accord
     radar_dbc_dict('acura_rlx'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.NIDEC_HYBRID | HondaFlags.NIDEC_ALT_PCM_ACCEL | HondaFlags.RLX_BRAKE,
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.NIDEC_HYBRID | HondaFlags.NIDEC_ALT_PCM_ACCEL | HondaFlags.RLX_BRAKE | HondaFlags.ALT_STEER,
   )
   HONDA_ODYSSEY = HondaNidecPlatformConfig(
     [HondaCarDocs("Honda Odyssey 2018-20")],
@@ -380,5 +379,6 @@ HONDA_BOSCH = CAR.with_flags(HondaFlags.BOSCH)
 HONDA_BOSCH_RADARLESS = CAR.with_flags(HondaFlags.BOSCH_RADARLESS)
 HONDA_BOSCH_CANFD = CAR.with_flags(HondaFlags.BOSCH_CANFD)
 SERIAL_STEERING = {CAR.ACURA_MDX_3G_HYBRID}
+HONDA_ALT_STEER = CAR.with_flags(HondaFlags.ALT_STEER)
 
 DBC = CAR.create_dbc_map()
