@@ -68,8 +68,7 @@ class HondaFlags(IntFlag):
   NIDEC_ALT_SCM_MESSAGES = 64
   BOSCH_CANFD = 128
   NIDEC_HYBRID = 256
-  RLX_BRAKE = 512
-  ALT_STEER = 1024
+  ALT_STEER = 512
 
 # Car button codes
 class CruiseButtons:
