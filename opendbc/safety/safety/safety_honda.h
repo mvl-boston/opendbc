@@ -293,13 +293,13 @@ static safety_config honda_nidec_init(uint16_t param) {
   static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
                                      {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
   
-  static CanMsg HONDA_N_ALT_STEER_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 2, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
+  static CanMsg HONDA_N_ALT_STEER_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 2, 4, .check_relay = false}, {0x1FA, 0, 8, .check_relay = false},
                                                {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
   
     
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
   const uint16_t HONDA_PARAM_NIDEC_HYBRID = 256;
-  const uint16_t HONDA_PARAM_ALT_STEER = 1024;
+  const uint16_t HONDA_PARAM_ALT_STEER = 512;
 
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
