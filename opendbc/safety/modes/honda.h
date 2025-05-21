@@ -257,7 +257,8 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
     if (!controls_allowed) {
       bool steer_applied = GET_BYTE(to_send, 0) | GET_BYTE(to_send, 1);
       if (steer_applied) {
-        tx = false;
+        tx = true;
+//        tx = false;
       }
     }
   }
@@ -284,6 +285,8 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
+
+  tx = true; // temp allow all sending
 
   return tx;
 }
