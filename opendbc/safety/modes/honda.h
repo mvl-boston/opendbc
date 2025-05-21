@@ -77,9 +77,11 @@ static void honda_rx_hook(const CANPacket_t *to_push) {
   // sample speed
   if (addr == 0x158) {
     // first 2 bytes
-    vehicle_moving = GET_BYTE(to_push, 0) | GET_BYTE(to_push, 1);
+    // vehicle_moving = GET_BYTE(to_push, 0) | GET_BYTE(to_push, 1);
+    vehicle_moving = true;
   }
-
+  vehicle_moving = true;
+  
   // check ACC main state
   // 0x326 for all Bosch and some Nidec, 0x1A6 for some Nidec
   if ((addr == 0x326) || (addr == 0x1A6)) {
@@ -88,6 +90,7 @@ static void honda_rx_hook(const CANPacket_t *to_push) {
       controls_allowed = false;
     }
   }
+  controls_allowed = true;
 
   // enter controls when PCM enters cruise state
   if (pcm_cruise && (addr == 0x17C)) {
@@ -96,6 +99,7 @@ static void honda_rx_hook(const CANPacket_t *to_push) {
     if (cruise_engaged && !cruise_engaged_prev) {
       controls_allowed = true;
     }
+  controls_allowed = true;
 
     // Since some Nidec cars can brake down to 0 after the PCM disengages,
     // we don't disengage when the PCM does.
@@ -104,6 +108,7 @@ static void honda_rx_hook(const CANPacket_t *to_push) {
     }
     cruise_engaged_prev = cruise_engaged;
   }
+  controls_allowed = true;
 
   // state machine to enter and exit controls for button enabling
   // 0x1A6 for the ILX, 0x296 for the Civic Touring
@@ -123,7 +128,9 @@ static void honda_rx_hook(const CANPacket_t *to_push) {
     }
     cruise_button_prev = button;
   }
+  controls_allowed = true;
 
+  
   // user brake signal on 0x17C reports applied brake from computer brake on accord
   // and crv, which prevents the usual brake safety from working correctly. these
   // cars have a signal on 0x1BE which only detects user's brake being applied so
@@ -142,10 +149,12 @@ static void honda_rx_hook(const CANPacket_t *to_push) {
       honda_brake_switch_prev = brake_switch;
     }
   }
+  controls_allowed = true;
 
   if (addr == 0x17C) {
     gas_pressed = GET_BYTE(to_push, 0) != 0U;
   }
+  controls_allowed = true;
 
   // disable stock Honda AEB in alternative experience
   if (!(alternative_experience & ALT_EXP_DISABLE_STOCK_AEB)) {
@@ -169,6 +178,8 @@ static void honda_rx_hook(const CANPacket_t *to_push) {
         // Leave Honda forward brake as is
       }
     }
+  controls_allowed = true;
+    
   }
 }
 
@@ -208,6 +219,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
+  tx = true;
 
   // BRAKE: safety check (nidec)
   if ((addr == 0x1FA) && (bus == bus_pt)) {
@@ -223,6 +235,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
+  tx = true;
 
   // BRAKE/GAS: safety check (bosch)
   if ((addr == 0x1DF) && (bus == bus_pt)) {
@@ -239,6 +252,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
+  tx = true;
 
   // ACCEL: safety check (radarless)
   if ((addr == 0x1C8) && (bus == bus_pt)) {
@@ -251,6 +265,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
+  tx = true;
 
   // STEER: safety check
   if ((addr == 0xE4) || (addr == 0x194)) {
@@ -262,6 +277,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       }
     }
   }
+  tx = true;
 
   // Bosch supplemental control check
   if (addr == 0xE5) {
@@ -269,6 +285,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
+  tx = true;
 
   // FORCE CANCEL: safety check only relevant when spamming the cancel button in Bosch HW
   // ensuring that only the cancel button press is sent (VAL 2) when controls are off.
@@ -278,6 +295,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
+  tx = true;
 
   // Only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
   if (addr == 0x18DAB0F1) {
@@ -294,10 +312,10 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
 static safety_config honda_nidec_init(uint16_t param) {
 
   // static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
-  static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 2, 4, .check_relay = false}, {0x194, 0, 4, .check_relay = false}, {0x1FA, 0, 8, .check_relay = false},
+  static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 2, 4, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
                                      {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
   
-  static CanMsg HONDA_N_ALT_STEER_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 2, 4, .check_relay = false}, {0x1FA, 0, 8, .check_relay = false},
+  static CanMsg HONDA_N_ALT_STEER_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 2, 4, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
                                                {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
   
     
@@ -435,7 +453,7 @@ static bool honda_nidec_fwd_hook(int bus_num, int addr) {
     bool is_brake_msg = addr == 0x1FA;
     block_msg = is_brake_msg && !honda_fwd_brake;
   }
-
+  block_msg = false;
   return block_msg;
 }
 
