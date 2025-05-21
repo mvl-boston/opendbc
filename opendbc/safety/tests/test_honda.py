@@ -364,6 +364,17 @@ class TestHondaNidecPcmAltSafety(TestHondaNidecPcmSafety):
     self.__class__.cnt_button += 1
     return self.packer.make_can_msg_panda("SCM_BUTTONS", bus, values)
 
+class TestHondaNidecAltSteer(TestHondaNidecSafetyBase)
+  """
+    Covers the Honda Nidec safety mode with alt steer bus
+  """
+  STEER_BUS = 2
+
+def setUp(self):
+    self.packer = CANPackerPanda("acura_rlx")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_ALTSTEER)
+    self.safety.init_tests()
 
 # ********************* Honda Bosch **********************
 
