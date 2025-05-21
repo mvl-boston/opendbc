@@ -364,7 +364,7 @@ class TestHondaNidecPcmAltSafety(TestHondaNidecPcmSafety):
     self.__class__.cnt_button += 1
     return self.packer.make_can_msg_panda("SCM_BUTTONS", bus, values)
 
-class TestHondaNidecAltSteer(TestHondaNidecSafetyBase)
+class TestHondaNidecAltSteer(TestHondaNidecSafetyBase):
   """
     Covers the Honda Nidec safety mode with alt steer bus
   """
