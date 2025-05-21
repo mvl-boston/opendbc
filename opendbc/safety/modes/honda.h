@@ -298,8 +298,8 @@ static safety_config honda_nidec_init(uint16_t param) {
   
     
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
-  const uint16_t HONDA_PARAM_NIDEC_HYBRID = 256;
-  const uint16_t HONDA_PARAM_ALT_STEER = 512;
+  const uint16_t HONDA_PARAM_NIDEC_HYBRID = 16;
+  const uint16_t HONDA_PARAM_ALT_STEER = 32;
 
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
