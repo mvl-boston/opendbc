@@ -149,12 +149,10 @@ static void honda_rx_hook(const CANPacket_t *to_push) {
       honda_brake_switch_prev = brake_switch;
     }
   }
-  controls_allowed = true;
 
   if (addr == 0x17C) {
     gas_pressed = GET_BYTE(to_push, 0) != 0U;
   }
-  controls_allowed = true;
 
   // disable stock Honda AEB in alternative experience
   if (!(alternative_experience & ALT_EXP_DISABLE_STOCK_AEB)) {
@@ -177,9 +175,7 @@ static void honda_rx_hook(const CANPacket_t *to_push) {
       } else {
         // Leave Honda forward brake as is
       }
-    }
-  controls_allowed = true;
-    
+    }    
   }
 }
 
@@ -235,7 +231,6 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  tx = true;
 
   // BRAKE/GAS: safety check (bosch)
   if ((addr == 0x1DF) && (bus == bus_pt)) {
@@ -252,7 +247,6 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  tx = true;
 
   // ACCEL: safety check (radarless)
   if ((addr == 0x1C8) && (bus == bus_pt)) {
@@ -265,7 +259,6 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  tx = true;
 
   // STEER: safety check
   if ((addr == 0xE4) || (addr == 0x194)) {
@@ -285,7 +278,6 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  tx = true;
 
   // FORCE CANCEL: safety check only relevant when spamming the cancel button in Bosch HW
   // ensuring that only the cancel button press is sent (VAL 2) when controls are off.
@@ -295,7 +287,6 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  tx = true;
 
   // Only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
   if (addr == 0x18DAB0F1) {
@@ -303,8 +294,6 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-
-  tx = true; // temp allow all sending
 
   return tx;
 }
