@@ -1262,6 +1262,7 @@ FW_VERSIONS = {
     (Ecu.gateway, 0x18daeff1, None): [
       b'38897-3S5-A110\x00\x00',
       b'38897-3S5-A210\x00\x00',
+      b'38897-3S5-A420\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-3S5-A920\x00\x00',
@@ -1269,6 +1270,7 @@ FW_VERSIONS = {
     (Ecu.vsa, 0x18da28f1, None): [
       b'57114-3S5-CA30\x00\x00',
       b'57114-3S5-CB30\x00\x00',
+      b'57114-3S5-CC10\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'8S102-3S5-AA10\x00\x00',
@@ -1276,6 +1278,7 @@ FW_VERSIONS = {
     ],
     (Ecu.transmission, 0x18da1ef1, None): [
       b'28101-6LP-A010\x00\x00',
+      b'28101-6LP-A210\x00\x00',
     ],
     (Ecu.hud, 0x18da61f1, None): [
       b'78209-3S5-A030\x00\x00',
