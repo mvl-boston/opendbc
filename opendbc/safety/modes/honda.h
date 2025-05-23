@@ -215,7 +215,6 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  tx = true;
 
   // BRAKE: safety check (nidec)
   if ((addr == 0x1FA) && (bus == bus_pt)) {
@@ -270,7 +269,6 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       }
     }
   }
-  tx = true;
 
   // Bosch supplemental control check
   if (addr == 0xE5) {
