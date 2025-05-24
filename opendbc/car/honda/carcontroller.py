@@ -193,10 +193,12 @@ class CarController(CarControllerBase):
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
       pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
+# ----------------- test override gas start -------------------
       vfactor = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [1000.0, 150.0, 150.0])
       pcm_accel = int (np.clip(accel * vfactor, 0, self.params.NIDEC_GAS_MAX) )
       pcm_speed = max (0, CS.out.vEgo + (9.99 if accel > 0 else -9.99 ) * CV.KPH_TO_MS)
-
+# ----------------- test override gas end -------------------
+    
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:  # radarless cars don't have supplemental message
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
@@ -226,6 +228,11 @@ class CarController(CarControllerBase):
             pump_on = True
           else:
             pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
+
+# ------------------ brake override begin
+          vfactorBrake = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [-75.0, -75.0, -75.0])
+          apply_brake = int(np.clip(accel * vfactorBrake, 0, self.params.NIDEC_BRAKE_MAX - 1))         
+# ------------------ brake override end
 
           pcm_override = True
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
