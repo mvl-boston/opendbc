@@ -1,5 +1,6 @@
 import numpy as np
 from collections import namedtuple
+import math
 
 from opendbc.can.packer import CANPacker
 from opendbc.car import Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
@@ -194,9 +195,14 @@ class CarController(CarControllerBase):
       pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
 # ----------------- test override gas start -------------------
-      vfactor = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [1000.0, 150.0, 150.0])
-      pcm_accel = int (np.clip(accel * vfactor, 0, self.params.NIDEC_GAS_MAX) )
-      pcm_speed = max (0, CS.out.vEgo + (9.99 if accel > 0 else -9.99 ) * CV.KPH_TO_MS)
+      wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
+      hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
+      hybrid_regen_brake = 0.25
+
+      calc_accel = accel + wind_brake_ms2 + hill_brake + hybrid_regen_brake
+      vfactor = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [1000.0, 40.0, 40.0])
+      pcm_accel = int (np.clip(calc_accel * vfactor, 0, self.params.NIDEC_GAS_MAX) )
+      pcm_speed = max (0, CS.out.vEgo + (9.99 if calc_accel > 0 else -9.99 ) * CV.KPH_TO_MS)
 # ----------------- test override gas end -------------------
     
     if not self.CP.openpilotLongitudinalControl:
@@ -231,7 +237,7 @@ class CarController(CarControllerBase):
 
 # ------------------ brake override begin
           vfactorBrake = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [-75.0, -75.0, -75.0])
-          apply_brake = int(np.clip(accel * vfactorBrake, 0, self.params.NIDEC_BRAKE_MAX - 1))         
+          apply_brake = int(np.clip(calc_accel * vfactorBrake, 0, self.params.NIDEC_BRAKE_MAX - 1))         
 # ------------------ brake override end
 
           pcm_override = True
