@@ -328,9 +328,6 @@ class CarState(CarStateBase):
       ]
 
     elif CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
-      pt_messages += [
-        ("LKAS_HUD", 0), # temporarily stopped, shut off by safety?
-      ]
       cam_messages += [
         ("ACC_HUD", 10),
         ("BRAKE_COMMAND", 50),
@@ -348,10 +345,25 @@ class CarState(CarStateBase):
       ("BSM_STATUS_RIGHT", 3),
     ]
 
+    if CP.carFingerprint in HONDA_RLX_STEER:
+      lkas_messages += [
+        ("LKAS_HUD", 10),
+        ("STEER_STATUS", 100),
+      ]
+      BUs.lkas: CANParser(DBC[CP.carFingerprint][Bus.pt], lkas_messages, CanBus(CP).camera),
+      
     parsers = {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).pt),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_messages, CanBus(CP).camera),
     }
+
+    if CP.carFingerprint in HONDA_RLX_STEER:
+      lkas_messages += [
+        ("LKAS_HUD", 10),
+        ("STEER_STATUS", 100),
+      ]
+      parsers[Bus.lkas]: CANParser(DBC[CP.carFingerprint][Bus.pt], lkas_messages, CanBus(CP).lkas),
+    
     if CP.enableBsm:
       parsers[Bus.body] = CANParser(DBC[CP.carFingerprint][Bus.body], body_messages, CanBus(CP).radar)
 
