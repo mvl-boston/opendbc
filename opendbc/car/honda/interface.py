@@ -5,7 +5,8 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.disable_ecu import disable_ecu
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
-                                                 HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HondaSafetyFlags
+                                                 HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, \
+                                                 HONDA_NIDEC_HYBRID, HONDA_RLX_STEER, HondaSafetyFlags
 from opendbc.car.honda.carcontroller import CarController
 from opendbc.car.honda.carstate import CarState
 from opendbc.car.honda.radar_interface import RadarInterface
@@ -234,10 +235,10 @@ class CarInterface(CarInterfaceBase):
     if candidate in HONDA_BOSCH_RADARLESS:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
-    if candidate in NIDEC_HYBRID_BRAKE:
+    if candidate in HONDA_NIDEC_HYBRID:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_HYBRID.value
 
-    if candidate in NIDEC_RLX_STEER:
+    if candidate in HONDA_RLX_STEER:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RLX_STEER.value
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
