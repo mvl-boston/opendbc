@@ -234,6 +234,12 @@ class CarInterface(CarInterfaceBase):
     if candidate in HONDA_BOSCH_RADARLESS:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
 
+    if candidate in NIDEC_HYBRID_BRAKE:
+      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_HYBRID.value
+
+    if candidate in NIDEC_RLX_STEER:
+      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RLX_STEER.value
+
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
     # to a negative value, so it won't matter. Otherwise, add 0.5 mph margin to not
     # conflict with PCM acc
