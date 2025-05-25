@@ -205,7 +205,7 @@ class CarController(CarControllerBase):
       hybrid_regen_brake = 0.25
 
       self.calc_accel = accel + wind_brake_ms2 + hill_brake + hybrid_regen_brake
-      vfactor = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [1000.0, 40.0, 40.0])
+      vfactor = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [1000.0, 100.0, 100.0])
       pcm_accel = int (np.clip(self.calc_accel * vfactor, 0, self.params.NIDEC_GAS_MAX) )
       pcm_speed = max (0, CS.out.vEgo + (9.99 if self.calc_accel > 0 else -9.99 ) * CV.KPH_TO_MS)
 # ----------------- test override gas end -------------------
