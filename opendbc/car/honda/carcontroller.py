@@ -241,7 +241,7 @@ class CarController(CarControllerBase):
             pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
 # ------------------ brake override begin
-          vfactorBrake = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [-75.0, -75.0, -75.0])
+          vfactorBrake = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [-100.0, -100.0, -100.0])
           apply_brake = int(np.clip(self.calc_accel * vfactorBrake, 0, self.params.NIDEC_BRAKE_MAX - 1))         
 # ------------------ brake override end
 
