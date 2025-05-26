@@ -798,7 +798,7 @@ class PandaSafetyTest(PandaSafetyTestBase):
   def test_spam_can_buses(self):
     for bus in range(5):
       for addr in self.SCANNED_ADDRS:
-        if [addr, bus] not in self.TX_MSGS and (addr not in (587, 1536) or bus != 4): # skipping elm bug
+        if [addr, bus] not in self.TX_MSGS and (addr not in (587, 1536, 1537) or bus != 4): # skipping elm bug
           self.assertFalse(self._tx(make_msg(bus, addr, 8)), f"allowed TX {addr=} {bus=}")
 
   def test_default_controls_not_allowed(self):
