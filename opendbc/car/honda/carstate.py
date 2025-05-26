@@ -364,7 +364,7 @@ class CarState(CarStateBase):
         ("LKAS_HUD", 10),
         ("STEER_STATUS", 100),
       ]
-      parsers[Bus.lkas]: CANParser(DBC[CP.carFingerprint][Bus.pt], lkas_messages, CanBus(CP).lkas),
+      parsers[Bus.lkas]: CANParser(DBC[CP.carFingerprint][Bus.pt], lkas_messages, CanBus(CP).lkas)
 
     if CP.enableBsm:
       parsers[Bus.body] = CANParser(DBC[CP.carFingerprint][Bus.body], body_messages, CanBus(CP).radar)
