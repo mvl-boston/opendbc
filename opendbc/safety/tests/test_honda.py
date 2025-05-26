@@ -172,7 +172,7 @@ class HondaBase(common.PandaCarSafetyTest):
   STEER_BUS: int | None = None  # must be set when inherited
   BUTTONS_BUS: int | None = None  # must be set when inherited, tx on this bus, rx on PT_BUS
 
-  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x194), 5: (0x194)}  # STEERING_CONTROL
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x194)}  # STEERING_CONTROL
 
   cnt_speed = 0
   cnt_button = 0
@@ -369,9 +369,9 @@ class TestHondaNidecRlxSafety(TestHondaNidecPcmAltSafety):
   """
     Covers the Honda Nidec safety mode with RLX steering bus and hybrid brake signal
   """
-  TX_MSGS = [[0xE4, 0], [0x194, 4], [0x1FA, 0], [0x30C, 0], [0x33D, 4]] # move LKAS & STEERING_CONTROL to bus 5, relay to 4
-  FWD_BLACKLISTED_ADDRS = {4: [0xE4, 0x194, 0x33D, 0x30C]}
-  RELAY_MALFUNCTION_ADDRS = {5: (0xE4, 0x194, 0x33D, 0x30C)}
+  TX_MSGS = [[0x194, 5], [0x1FA, 0], [0x33D, 5]] # move LKAS & STEERING_CONTROL to bus 5, relay to 4
+  FWD_BLACKLISTED_ADDRS = {4: [0x194, 0x33D]}
+  RELAY_MALFUNCTION_ADDRS = {0:(0xE4), 5: (0x194, 0x33D)}
 
   STEER_BUS = 5
 
