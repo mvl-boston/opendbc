@@ -376,7 +376,7 @@ class TestHondaNidecRlxSafety(TestHondaNidecPcmAltSafety):
   def setUp(self):
     self.packer = CANPackerPanda("acura_rlx")
     self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_HYBRID || HondaSafetyFlags.RLX_STEER)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_HYBRID | HondaSafetyFlags.RLX_STEER)
     self.safety.init_tests()
 
 
