@@ -52,6 +52,8 @@ class HondaSafetyFlags(IntFlag):
   BOSCH_LONG = 2
   NIDEC_ALT = 4
   RADARLESS = 8
+  # reserving 16 for canfd
+  NIDEC_HYBRID = 32
 
 
 class HondaFlags(IntFlag):
