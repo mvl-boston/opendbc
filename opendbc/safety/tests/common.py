@@ -787,7 +787,7 @@ class PandaSafetyTest(PandaSafetyTestBase):
 
   def test_fwd_hook(self):
     # some safety modes don't forward anything, while others blacklist msgs
-    for bus in range(3):
+    for bus in range(4):
       for addr in self.SCANNED_ADDRS:
         # assume len 8
         fwd_bus = self.FWD_BUS_LOOKUP.get(bus, -1)
@@ -944,7 +944,7 @@ class PandaCarSafetyTest(PandaSafetyTest):
 
     # test relay malfunction protection logic
     self.safety.set_relay_malfunction(True)
-    for bus in range(3):
+    for bus in range(4):
       for addr in self.SCANNED_ADDRS:
         self.assertFalse(self._tx(make_msg(bus, addr, 8)))
         self.assertEqual(-1, self.safety.safety_fwd_hook(bus, addr))
