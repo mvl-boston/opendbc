@@ -284,13 +284,16 @@ class TestHondaNidecSafetyBase(HondaBase):
           self.assertEqual(send, self._tx(self._send_acc_hud_msg(pcm_gas, pcm_speed)))
 
   def test_fwd_hook(self):
+
+    blacklist_old = self.FWD_BLACKLISTED_ADDRS
+
     # normal operation, not forwarding AEB
     self.FWD_BLACKLISTED_ADDRS[2].append(0x1FA)
     self.safety.set_honda_fwd_brake(False)
     super().test_fwd_hook()
 
     # forwarding AEB brake signal
-    self.FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x33D, 0x30C]}
+    self.FWD_BLACKLISTED_ADDRS = blacklist_old
     self.safety.set_honda_fwd_brake(True)
     super().test_fwd_hook()
 
