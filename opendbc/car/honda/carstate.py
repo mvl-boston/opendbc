@@ -341,7 +341,7 @@ class CarState(CarStateBase):
       if CP.carFingerprint not in HONDA_RLX_STEER:
         cam_messages += [
           ("LKAS_HUD", 10),
-        ]      
+        ]
 
     body_messages = [
       ("BSM_STATUS_LEFT", 3),
