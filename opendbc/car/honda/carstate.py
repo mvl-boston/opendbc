@@ -37,7 +37,7 @@ def get_can_messages(CP, gearbox_msg):
     messages += [
       ("STEER_STATUS", 0), # initially slow to transmit
     ]
-  elif CP.carFingerprint not in HONDA_NIDEC_STEER
+  elif CP.carFingerprint not in HONDA_NIDEC_STEER:
     messages +=[
       ("STEER_STATUS", 100),
     ]
