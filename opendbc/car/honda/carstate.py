@@ -129,10 +129,10 @@ class CarState(CarStateBase):
     cp_cam = can_parsers[Bus.cam]
     if self.CP.carFingerprint in HONDA_RLX_STEER:
       cp_rlx = can_parsers[Bus.adas]
-      cp_steer = cp_rlx
+      cp_steerstatus = cp_rlx
       cp_lkas = cp_rlx
     else:
-      cp_steer = cp
+      cp_steerstatus = cp
       cp_lkas = cp_cam
     if self.CP.enableBsm:
       cp_body = can_parsers[Bus.body]
@@ -167,7 +167,7 @@ class CarState(CarStateBase):
                           cp.vl["DOORS_STATUS"]["DOOR_OPEN_RL"], cp.vl["DOORS_STATUS"]["DOOR_OPEN_RR"]])
     ret.seatbeltUnlatched = bool(cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LAMP"] or not cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LATCHED"])
 
-    steer_status = self.steer_status_values[cp_steer.vl["STEER_STATUS"]["STEER_STATUS"]]
+    steer_status = self.steer_status_values[cp_steerstatus.vl["STEER_STATUS"]["STEER_STATUS"]]
     ret.steerFaultPermanent = steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TMP_FAULT")
     # LOW_SPEED_LOCKOUT is not worth a warning
     # NO_TORQUE_ALERT_2 can be caused by bump or steering nudge from driver
@@ -232,7 +232,7 @@ class CarState(CarStateBase):
     ret.gas = cp.vl["POWERTRAIN_DATA"]["PEDAL_GAS"]
     ret.gasPressed = ret.gas > 1e-5
 
-    ret.steeringTorque = cp_steer.vl["STEER_STATUS"]["STEER_TORQUE_SENSOR"]
+    ret.steeringTorque = cp_steerstatus.vl["STEER_STATUS"]["STEER_TORQUE_SENSOR"]
     ret.steeringTorqueEps = cp.vl["STEER_MOTOR_TORQUE"]["MOTOR_TORQUE"]
     ret.steeringPressed = abs(ret.steeringTorque) > STEER_THRESHOLD.get(self.CP.carFingerprint, 1200)
 
@@ -292,7 +292,7 @@ class CarState(CarStateBase):
       self.acc_hud = cp_cam.vl["ACC_HUD"]
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
     if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
-      self.lkas_hud = cp_cam.vl["LKAS_HUD"]
+      self.lkas_hud = cp_lkas.vl["LKAS_HUD"]
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
@@ -336,9 +336,12 @@ class CarState(CarStateBase):
     elif CP.carFingerprint not in HONDA_BOSCH:
       cam_messages += [
         ("ACC_HUD", 10),
-        ("LKAS_HUD", 10),
         ("BRAKE_COMMAND", 50),
       ]
+      if CP.carFingerprint not in HONDA_RLX_STEER:
+        cam_messages += [
+          ("LKAS_HUD", 10),
+        ]      
 
     body_messages = [
       ("BSM_STATUS_LEFT", 3),
