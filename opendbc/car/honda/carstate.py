@@ -1,5 +1,5 @@
 import numpy as np
-# temporarily disable steer status - from collections import defaultdict
+from collections import defaultdict
 
 from opendbc.can.can_define import CANDefine
 from opendbc.can.parser import CANParser
@@ -9,7 +9,7 @@ from opendbc.car.honda.hondacan import CanBus, get_cruise_speed_conversion
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, \
                                                  HondaFlags, CruiseButtons, CruiseSettings, GearShifter, \
-                                                 SERIAL_STEERING, HONDA_NIDEC_HYBRID
+                                                 SERIAL_STEERING, HONDA_NIDEC_HYBRID, HONDA_NIDEC_STEER
 from opendbc.car.interfaces import CarStateBase
 
 TransmissionType = structs.CarParams.TransmissionType
@@ -37,11 +37,10 @@ def get_can_messages(CP, gearbox_msg):
     messages += [
       ("STEER_STATUS", 0), # initially slow to transmit
     ]
-  else:
-    pass # temporarily disable steer status
-    # messages +=[
-    #  ("STEER_STATUS", 100),
-    #]
+  elif CP.carFingerprint not in HONDA_NIDEC_STEER
+    messages +=[
+      ("STEER_STATUS", 100),
+    ]
 
   if CP.carFingerprint in (CAR.HONDA_ODYSSEY_CHN, CAR.ACURA_RLX_HYBRID):
     messages += [
@@ -114,7 +113,7 @@ class CarState(CarStateBase):
 
     if CP.transmissionType != TransmissionType.manual:
       self.shifter_values = can_define.dv[self.gearbox_msg]["GEAR_SHIFTER"]
-    # disable steer_status self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
+    self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
 
     self.brake_switch_prev = False
     self.brake_switch_active = False
@@ -128,6 +127,11 @@ class CarState(CarStateBase):
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
+    if self.CP.carFingerprint in HONDA_NIDEC_STEER:
+      cp_lkas = can_parsers[Bus.lkas]
+      cp_steer = cp.lkas
+    else:
+      cp_steer = cp
     if self.CP.enableBsm:
       cp_body = can_parsers[Bus.body]
 
@@ -161,11 +165,11 @@ class CarState(CarStateBase):
                           cp.vl["DOORS_STATUS"]["DOOR_OPEN_RL"], cp.vl["DOORS_STATUS"]["DOOR_OPEN_RR"]])
     ret.seatbeltUnlatched = bool(cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LAMP"] or not cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LATCHED"])
 
-    # steer_status = self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
-    ret.steerFaultPermanent = False # steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TMP_FAULT")
+    steer_status = self.steer_status_values[cp_steer.vl["STEER_STATUS"]["STEER_STATUS"]]
+    ret.steerFaultPermanent = steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TMP_FAULT")
     # LOW_SPEED_LOCKOUT is not worth a warning
     # NO_TORQUE_ALERT_2 can be caused by bump or steering nudge from driver
-    ret.steerFaultTemporary = False # steer_status not in ("NORMAL", "LOW_SPEED_LOCKOUT", "NO_TORQUE_ALERT_2")
+    ret.steerFaultTemporary = steer_status not in ("NORMAL", "LOW_SPEED_LOCKOUT", "NO_TORQUE_ALERT_2")
 
     if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       ret.accFaulted = False # bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
@@ -229,9 +233,7 @@ class CarState(CarStateBase):
     ret.gas = cp.vl["POWERTRAIN_DATA"]["PEDAL_GAS"]
     ret.gasPressed = ret.gas > 1e-5
 
-    # ret.steeringTorque = cp.vl["STEER_STATUS"]["STEER_TORQUE_"]
-    ret.steeringTorque = cp.vl["STEER_MOTOR_TORQUE"]["MOTOR_TORQUE"] #temprorarily replace
-
+    ret.steeringTorque = cp_steer.vl["STEER_STATUS"]["STEER_TORQUE_"]
     ret.steeringTorqueEps = cp.vl["STEER_MOTOR_TORQUE"]["MOTOR_TORQUE"]
     ret.steeringPressed = abs(ret.steeringTorque) > STEER_THRESHOLD.get(self.CP.carFingerprint, 1200)
 
@@ -315,11 +317,10 @@ class CarState(CarStateBase):
       pt_messages += [
         ("STEERING_CONTROL", 0), # initially slow, prevent timing errors
       ]
-    else:
-      pass # temporarily disable steering control
-      # cam_messages += [
-      #  ("STEERING_CONTROL", 100),
-      #]
+    elif CP.carFingerprint not in HONDA_RLX_STEER:
+      cam_messages += [
+        ("STEERING_CONTROL", 100),
+      ]
 
     if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       cam_messages += [
@@ -349,6 +350,7 @@ class CarState(CarStateBase):
       lkas_messages += [
         ("LKAS_HUD", 10),
         ("STEER_STATUS", 100),
+        ("STEERING_CONTROL", 100),
       ]
       BUs.lkas: CANParser(DBC[CP.carFingerprint][Bus.pt], lkas_messages, CanBus(CP).camera),
       
