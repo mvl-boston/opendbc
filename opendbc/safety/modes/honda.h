@@ -219,7 +219,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  if (not (addr == 0x1FA)) {
+  if (addr != 0x1FA) {
     tx = true;
   }
 
@@ -237,7 +237,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  if (not (addr == 0x1FA)) {
+  if (addr != 0x1FA) {
     tx = true;
   }
 
@@ -256,7 +256,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  if (not (addr == 0x1FA)) {
+  if (addr != 0x1FA) {
     tx = true;
   }
 
@@ -271,7 +271,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  if (not (addr == 0x1FA)) {
+  if (addr != 0x1FA) {
     tx = true;
   }
 
@@ -285,7 +285,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       }
     }
   }
-  if (not (addr == 0x1FA)) {
+  if (addr != 0x1FA) {
     tx = true;
   }
 
@@ -295,7 +295,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  if not (addr == 0x1FA) {
+  if addr != 0x1FA {
     tx = true;
   }
 
@@ -307,7 +307,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  if (not (addr == 0x1FA)) {
+  if (addr != 0x1FA) {
     tx = true;
   }
 
@@ -318,8 +318,12 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
-  if (not (addr == 0x1FA)) {
+  if (addr != 0x1FA) {
     tx = true;
+  }
+
+  if (bus == 4) {
+    tx = true
   }
 
   return tx;
