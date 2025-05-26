@@ -935,7 +935,7 @@ class PandaCarSafetyTest(PandaSafetyTest):
     # if that addr is seen on specified bus, triggers the relay malfunction
     # protection logic: both tx_hook and fwd_hook are expected to return failure
     self.assertFalse(self.safety.get_relay_malfunction())
-    for bus in range(3):
+    for bus in range(4):
       for addr in self.SCANNED_ADDRS:
         self.safety.set_relay_malfunction(False)
         self._rx(make_msg(bus, addr, 8))
