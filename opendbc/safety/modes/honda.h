@@ -30,6 +30,7 @@ static bool honda_brake_switch_prev = false;
 static bool honda_alt_brake_msg = false;
 static bool honda_fwd_brake = false;
 static bool honda_nidec_hybrid = false;
+static bool honda_rlx_steer = false;
 static bool honda_bosch_long = false;
 static bool honda_bosch_radarless = false;
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
