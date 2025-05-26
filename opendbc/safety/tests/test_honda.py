@@ -369,7 +369,7 @@ class TestHondaNidecRlxSafety(TestHondaNidecPcmAltSafety):
   """
     Covers the Honda Nidec safety mode with RLX steering bus and hybrid brake signal
   """
-  TX_MSGS = [[0x194, 5], [0x1FA, 0], [0x33D, 5]] # move LKAS & STEERING_CONTROL to bus 5, relay to 4
+  TX_MSGS = [[0x30C, 0], [0x194, 5], [0x1FA, 0], [0x33D, 5]] # move LKAS & STEERING_CONTROL to bus 5, relay to 4
   FWD_BLACKLISTED_ADDRS = {2: [0x30C], 4: [0x194, 0x33D]}
   RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x30C), 5: (0x194, 0x33D)}
 
