@@ -128,10 +128,12 @@ class CarState(CarStateBase):
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
     if self.CP.carFingerprint in HONDA_RLX_STEER:
-      cp_lkas = can_parsers[Bus.adas]
-      cp_steer = cp_lkas
+      cp_rlx = can_parsers[Bus.adas]
+      cp_steer = cp_rlx
+      cp_lkas = cp_rlx
     else:
       cp_steer = cp
+      cp_lkas = cp_cam
     if self.CP.enableBsm:
       cp_body = can_parsers[Bus.body]
 
@@ -184,7 +186,7 @@ class CarState(CarStateBase):
 
       # Log non-critical stock ACC/LKAS faults if Nidec (camera)
       if self.CP.carFingerprint not in HONDA_BOSCH:
-        ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_steer.vl["LKAS_HUD"]["LKAS_PROBLEM"])
+        ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_lkas.vl["LKAS_HUD"]["LKAS_PROBLEM"])
 
     ret.espDisabled = cp.vl["VSA_STATUS"]["ESP_DISABLED"] != 0
 
