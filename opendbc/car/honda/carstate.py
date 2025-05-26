@@ -233,7 +233,7 @@ class CarState(CarStateBase):
     ret.gas = cp.vl["POWERTRAIN_DATA"]["PEDAL_GAS"]
     ret.gasPressed = ret.gas > 1e-5
 
-    ret.steeringTorque = cp_steer.vl["STEER_STATUS"]["STEER_TORQUE_"]
+    ret.steeringTorque = cp_steer.vl["STEER_STATUS"]["STEER_TORQUE_SENSOR"]
     ret.steeringTorqueEps = cp.vl["STEER_MOTOR_TORQUE"]["MOTOR_TORQUE"]
     ret.steeringPressed = abs(ret.steeringTorque) > STEER_THRESHOLD.get(self.CP.carFingerprint, 1200)
 
@@ -346,18 +346,19 @@ class CarState(CarStateBase):
       ("BSM_STATUS_RIGHT", 3),
     ]
 
-    parsers = {
-      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).pt),
-      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_messages, CanBus(CP).camera),
-    }
-
     if CP.carFingerprint in HONDA_RLX_STEER:
-      lkas_messages += [
+      lkas_messages = [
         ("LKAS_HUD", 10),
         ("STEER_STATUS", 100),
         ("STEERING_CONTROL", 100),
       ]
       parsers[Bus.lkas]: CANParser(DBC[CP.carFingerprint][Bus.pt], lkas_messages, CanBus(CP).lkas)
+
+
+    parsers = {
+      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).pt),
+      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_messages, CanBus(CP).camera),
+    }
 
     if CP.enableBsm:
       parsers[Bus.body] = CANParser(DBC[CP.carFingerprint][Bus.body], body_messages, CanBus(CP).radar)
