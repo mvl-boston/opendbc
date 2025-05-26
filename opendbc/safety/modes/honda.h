@@ -323,7 +323,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
   }
 
   if (bus == 4) {
-    tx = true
+    tx = true;
   }
 
   return tx;
