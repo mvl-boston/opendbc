@@ -337,7 +337,7 @@ static safety_config honda_nidec_init(uint16_t param) {
   }
 
   if (honda_rlx_steer) {
-    SET_TX_MSGS(HONDA_N_RLS_STEER_TX_MSGS, ret);
+    SET_TX_MSGS(HONDA_N_RLX_STEER_TX_MSGS, ret);
   } else {
     SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
 }
