@@ -369,7 +369,7 @@ class TestHondaNidecRlxSteerSafety(TestHondaNidecPcmAltSafety):
   """
     Covers the Honda Nidec safety mode with RLX steering bus
   """
-  TX_MSGS = [[0xE4, 0], [0x194, 4], [0x1FA, 0], [0x30C, 0], [0x33D, 4]] // move LKAS & STEERING_CONTROL to bus 4
+  TX_MSGS = [[0xE4, 0], [0x194, 4], [0x1FA, 0], [0x30C, 0], [0x33D, 4]] # move LKAS & STEERING_CONTROL to bus 4
   
   STEER_BUS = 4
 
