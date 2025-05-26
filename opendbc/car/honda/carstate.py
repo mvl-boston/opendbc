@@ -9,7 +9,7 @@ from opendbc.car.honda.hondacan import CanBus, get_cruise_speed_conversion
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, \
                                                  HondaFlags, CruiseButtons, CruiseSettings, GearShifter, \
-                                                 SERIAL_STEERING, HONDA_NIDEC_HYBRID, HONDA_NIDEC_STEER
+                                                 SERIAL_STEERING, HONDA_NIDEC_HYBRID, HONDA_RLX_STEER
 from opendbc.car.interfaces import CarStateBase
 
 TransmissionType = structs.CarParams.TransmissionType
@@ -37,7 +37,7 @@ def get_can_messages(CP, gearbox_msg):
     messages += [
       ("STEER_STATUS", 0), # initially slow to transmit
     ]
-  elif CP.carFingerprint not in HONDA_NIDEC_STEER:
+  elif CP.carFingerprint not in HONDA_RLX_STEER:
     messages +=[
       ("STEER_STATUS", 100),
     ]
@@ -127,7 +127,7 @@ class CarState(CarStateBase):
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
-    if self.CP.carFingerprint in HONDA_NIDEC_STEER:
+    if self.CP.carFingerprint in HONDA_RLX_STEER:
       cp_lkas = can_parsers[Bus.lkas]
       cp_steer = cp.lkas
     else:
