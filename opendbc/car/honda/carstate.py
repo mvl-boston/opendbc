@@ -128,7 +128,7 @@ class CarState(CarStateBase):
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
     if self.CP.carFingerprint in HONDA_RLX_STEER:
-      cp_lkas = can_parsers[Bus.lkas]
+      cp_lkas = can_parsers[Bus.adas]
       cp_steer = cp.lkas
     else:
       cp_steer = cp
@@ -360,7 +360,7 @@ class CarState(CarStateBase):
     }
 
     if CP.carFingerprint in HONDA_RLX_STEER:
-      parsers[Bus.lkas]: CANParser(DBC[CP.carFingerprint][Bus.lkas], lkas_messages, CanBus(CP).lkas)
+      parsers[Bus.adas]: CANParser(DBC[CP.carFingerprint][Bus.pt], lkas_messages, CanBus(CP).lkas)
 
     if CP.enableBsm:
       parsers[Bus.body] = CANParser(DBC[CP.carFingerprint][Bus.body], body_messages, CanBus(CP).radar)
