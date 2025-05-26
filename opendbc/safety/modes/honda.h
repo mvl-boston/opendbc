@@ -295,7 +295,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  if addr != 0x1FA {
+  if (addr != 0x1FA) {
     tx = true;
   }
 
