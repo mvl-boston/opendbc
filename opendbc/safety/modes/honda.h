@@ -186,7 +186,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
     .max_gas = 198,  // 0xc6
     .max_brake = 255,
 
-    .inactive_speed = 0,
+    .inactive_speed = 255, // changed from zero, since car can do SNG
   };
 
   bool tx = true;
