@@ -384,6 +384,10 @@ class TestHondaNidecRlxSafety(TestHondaNidecPcmAltSafety):
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_HYBRID | HondaSafetyFlags.RLX_STEER)
     self.safety.init_tests()
 
+  def test_steer_safety_check(self):
+    self.safety.set_controls_allowed(0)
+    self.assertTrue(self._tx(self._send_steer_msg(0x0000)))
+    self.assertFalse(self._tx(self._send_steer_msg(0x1000)))
 
 
 # ********************* Honda Bosch **********************
