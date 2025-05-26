@@ -285,6 +285,10 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
+  if ((addr == 0x194) && (bus == 2)) {
+    tx = true;
+  }
+
   return tx;
 }
 
