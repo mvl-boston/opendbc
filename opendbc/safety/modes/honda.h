@@ -219,7 +219,9 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  tx = true;
+  if not (addr == 0x1FA) {
+    tx = true;
+  }
 
   // BRAKE: safety check (nidec)
   if ((addr == 0x1FA) && (bus == bus_pt)) {
@@ -235,7 +237,9 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  tx = true;
+  if not (addr == 0x1FA) {
+    tx = true;
+  }
 
   // BRAKE/GAS: safety check (bosch)
   if ((addr == 0x1DF) && (bus == bus_pt)) {
@@ -252,7 +256,9 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  tx = true;
+  if not (addr == 0x1FA) {
+    tx = true;
+  }
 
   // ACCEL: safety check (radarless)
   if ((addr == 0x1C8) && (bus == bus_pt)) {
@@ -265,7 +271,9 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  tx = true;
+  if not (addr == 0x1FA) {
+    tx = true;
+  }
 
   // STEER: safety check
   if ((addr == 0xE4) || (addr == 0x194)) {
@@ -277,7 +285,9 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       }
     }
   }
-  tx = true;
+  if not (addr == 0x1FA) {
+    tx = true;
+  }
 
   // Bosch supplemental control check
   if (addr == 0xE5) {
@@ -285,7 +295,9 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  tx = true;
+  if not (addr == 0x1FA) {
+    tx = true;
+  }
 
   // FORCE CANCEL: safety check only relevant when spamming the cancel button in Bosch HW
   // ensuring that only the cancel button press is sent (VAL 2) when controls are off.
@@ -295,7 +307,9 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
       tx = false;
     }
   }
-  tx = true;
+  if not (addr == 0x1FA) {
+    tx = true;
+  }
 
   // Only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
   if (addr == 0x18DAB0F1) {
@@ -304,7 +318,9 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
     }
   }
 
-  tx = true; // temp allow all sending
+  if not (addr == 0x1FA) {
+    tx = true;
+  }
 
   return tx;
 }
