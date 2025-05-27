@@ -247,11 +247,11 @@ static int get_fwd_bus(int bus_num, int addr) {
   int destination_bus;
   if (bus_num == 0) {
     destination_bus = 2;
-  } else if (bus_num == 1) {
+  } else if (bus_num == 3) {
     if (addr == 0x194) {
-      destination_bus = 1;
+      destination_bus = 4;
     } else {
-      destination_bus = -1;
+      destination_bus = 4;
     }
   } else if (bus_num == 2) {
     destination_bus = 0;
