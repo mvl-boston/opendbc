@@ -246,10 +246,12 @@ bool safety_tx_hook(CANPacket_t *to_send) {
 static int get_fwd_bus(int bus_num, int addr) {
   int destination_bus;
   if (bus_num == 0) {
+    destination_bus = 2;
+  } else if (bus_num == 1) {
     if (addr == 0x194) {
-      destination_bus = 2;
+      destination_bus = 3;
     } else {
-      destination_bus = 2;
+      destination_bus = -1;
     }
   } else if (bus_num == 2) {
     destination_bus = 0;
