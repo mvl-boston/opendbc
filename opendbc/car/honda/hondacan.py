@@ -20,10 +20,11 @@ class CanBus(CanBusBase):
       # normally steering commands are sent to radar, which forwards them to powertrain bus
       # when radar is disabled, steering commands are sent directly to powertrain bus
       self._lkas = self._pt if CP.openpilotLongitudinalControl else self._radar
+      self._steer = self._lkas
     elif CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
       self._pt, self._radar, self._lkas, self._steer = self.offset, self.offset + 1, self.offset + 4, self.offset + 5
     else:
-      self._pt, self._radar, self._lkas = self.offset, self.offset + 1, self.offset
+      self._pt, self._radar, self._lkas, self._steer = self.offset, self.offset + 1, self.offset, self.offset
 
   @property
   def pt(self) -> int:
@@ -41,10 +42,9 @@ class CanBus(CanBusBase):
   def lkas(self) -> int:
     return self._lkas
 
-  if CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
-    @property
-    def steer(self) -> int:
-      return self._steer
+  @property
+  def steer(self) -> int:
+    return self._steer
   
   # B-CAN is forwarded to ACC-CAN radar side (CAN 0 on fake ethernet port)
   @property
