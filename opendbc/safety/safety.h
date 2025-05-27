@@ -243,10 +243,14 @@ bool safety_tx_hook(CANPacket_t *to_send) {
   return !relay_malfunction && whitelisted && safety_allowed;
 }
 
-static int get_fwd_bus(int bus_num) {
+static int get_fwd_bus(int bus_num, int addr) {
   int destination_bus;
   if (bus_num == 0) {
-    destination_bus = 2;
+    if (addr == 0x194) {
+      destination_bus = 4;
+    } else {
+      destination_bus = 2;
+    }
   } else if (bus_num == 2) {
     destination_bus = 0;
   } else {
@@ -260,7 +264,7 @@ int safety_fwd_hook(int bus_num, int addr) {
 
   // Block messages that are being checked for relay malfunctions. Safety modes can opt out of this
   // in the case of selective AEB forwarding
-  const int destination_bus = get_fwd_bus(bus_num);
+  const int destination_bus = get_fwd_bus(bus_num, addr);
   if (!blocked) {
     for (int i = 0; i < current_safety_config.tx_msgs_len; i++) {
       const CanMsg *m = &current_safety_config.tx_msgs[i];
