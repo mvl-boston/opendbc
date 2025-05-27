@@ -352,7 +352,7 @@ class CarState(CarStateBase):
         ("STEERING_CONTROL", 100),
       ]
 
-      lkas_messages = [
+      steer_messages = [
         ("STEER_STATUS", 100),
       ]
 
