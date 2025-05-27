@@ -249,7 +249,7 @@ static int get_fwd_bus(int bus_num, int addr) {
     destination_bus = 2;
   } else if (bus_num == 1) {
     if (addr == 0x194) {
-      destination_bus = 3;
+      destination_bus = 1;
     } else {
       destination_bus = -1;
     }
