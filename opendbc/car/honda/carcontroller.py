@@ -1,6 +1,7 @@
 import numpy as np
 from collections import namedtuple
 import math
+from opendbc.car.common.conversions import Conversions as CV
 
 from opendbc.can.packer import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
@@ -257,7 +258,7 @@ class CarController(CarControllerBase):
 
 # ------------------ brake override begin
           vfactorBrake = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [-60.0, -60.0, -60.0])
-          apply_brake = 0 if accel >= self.cutoff else int(np.clip(self.calc_accel * vfactorBrake, 0, self.params.NIDEC_BRAKE_MAX - 1))         
+          apply_brake = 0 if accel >= self.cutoff else int(np.clip(self.calc_accel * vfactorBrake, 0, self.params.NIDEC_BRAKE_MAX - 1))
 # ------------------ brake override end
 
           pcm_override = True
