@@ -219,11 +219,11 @@ class CarController(CarControllerBase):
 # ----------------- test override gas start -------------------
       wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
       hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
-      hybrid_regen_brake = 0.2
-
+      hybrid_regen_brake = 0.5
+      cutoff = -0.2
       self.calc_accel = accel + wind_brake_ms2 + hill_brake + hybrid_regen_brake
-      vfactor = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [1000.0, 100.0, 100.0])
-      pcm_accel = int (np.clip(self.calc_accel * vfactor, 0, self.params.NIDEC_GAS_MAX) )
+      vfactor = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [1000.0, 60.0, 60.0])
+      pcm_accel = 0 if accel < cutoff else int (np.clip(self.calc_accel * vfactor, 0, self.params.NIDEC_GAS_MAX) )
       pcm_speed = max (0.0, CS.out.vEgo + float (np.clip ( self.calc_accel * 100.0 * CV.KPH_TO_MS, -9.0, +9.0 ) ) )
 # ----------------- test override gas end -------------------
 
@@ -256,7 +256,7 @@ class CarController(CarControllerBase):
 
 # ------------------ brake override begin
           vfactorBrake = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [-60.0, -60.0, -60.0])
-          apply_brake = int(np.clip(self.calc_accel * vfactorBrake, 0, self.params.NIDEC_BRAKE_MAX - 1))         
+          apply_brake = 0 if accel >= cutoff else int(np.clip(self.calc_accel * vfactorBrake, 0, self.params.NIDEC_BRAKE_MAX - 1))         
 # ------------------ brake override end
 
           pcm_override = True
