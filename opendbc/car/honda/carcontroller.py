@@ -273,23 +273,23 @@ class CarController(CarControllerBase):
 
       # ----------------- new test logic start ---------------------
 
-      if CC.longActive:
+      # if CC.longActive:
         # pcm_speed = float ( np.clip ( ( CS.out.vEgo + 633.0 * ( accel ) - 14.0 ) , 0.0, 100.0 ) ) # convert m/s to kph done in hondacan
 
         # pcm_speed = float ( np.clip ( CS.out.vEgo + ( 8.0 if accel > 0 elif -8.0 if accel < 0 else 0.0 ), 0.0, 100.0 ) )
         # pcm_accel = float ( np.clip ( 600.0 * ( accel + 0.2 ) , 0.0, self.params.NIDEC_GAS_MAX )
 
         # prefer EV mode under 30mph and slower accel
-        if ( accel <= 0.2 ) and ( CS.out.vEgo > 0.0 ) and ( CS.out.vEgo < 30.0 / 2.237 ):
-          pcm_accel = 54.0
+        # if ( accel <= 0.2 ) and ( CS.out.vEgo > 0.0 ) and ( CS.out.vEgo < 30.0 / 2.237 ):
+        #  pcm_accel = 54.0
 
         # blending logic to fastforward, assume engine uses 98% of prior logic each frame
-        PERCENT_BLEND = 0.99
+        # PERCENT_BLEND = 0.99
 
         # pcm_accel = pcm_accel if self.accel <= 0 else float (np.clip ( ( pcm_accel - self.blend_pcm_accel * PERCENT_BLEND ) / ( 1 - PERCENT_BLEND ), \
         #                                                               0, self.params.NIDEC_GAS_MAX ) )
 
-        self.blend_pcm_accel =  self.blend_pcm_accel * PERCENT_BLEND + pcm_accel * ( 1 - PERCENT_BLEND )
+        # self.blend_pcm_accel =  self.blend_pcm_accel * PERCENT_BLEND + pcm_accel * ( 1 - PERCENT_BLEND )
 
         # pcm_speed = pcm_speed if self.accel <= 0 else float (np.clip ( ( pcm_speed - self.blend_pcm_speed * PERCENT_BLEND ) / ( 1 - PERCENT_BLEND ), \
         #                                                              0, 100.0 ) )
@@ -297,11 +297,11 @@ class CarController(CarControllerBase):
         # reduce speed if above 50% steering max
         # pcm_speed = float ( np.clip ( pcm_speed, 0, 100 if CS.out.vEgo < 10.0 else steerfactor * 0.50 * CS.out.vEgo ) )
 
-        self.blend_pcm_speed =  self.blend_pcm_speed * PERCENT_BLEND + pcm_speed * ( 1 - PERCENT_BLEND )
+        # self.blend_pcm_speed =  self.blend_pcm_speed * PERCENT_BLEND + pcm_speed * ( 1 - PERCENT_BLEND )
 
         # standstill disengage
-        if ( accel >= 0.01 ) and (CS.out.vEgo < 4.0 ) and ( pcm_speed < 25.0 / 3.6):
-          pcm_speed = 25.0 / 3.6
+        # if ( accel >= 0.01 ) and (CS.out.vEgo < 4.0 ) and ( pcm_speed < 25.0 / 3.6):
+        #  pcm_speed = 25.0 / 3.6
 
       # ----------------- new test logic end ---------------------
 
