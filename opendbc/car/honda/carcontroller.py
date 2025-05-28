@@ -1,8 +1,9 @@
 import numpy as np
 from collections import namedtuple
+import math
 
 from opendbc.can.packer import CANPacker
-from opendbc.car import Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
+from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CruiseButtons, VISUAL_HUD, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_NIDEC_ALT_PCM_ACCEL, HONDA_NIDEC_HYBRID, \
                                      CarControllerParams
@@ -129,6 +130,8 @@ class CarController(CarControllerBase):
     self.last_torque = 0.0
     self.blend_pcm_accel = 0.0
     self.blend_pcm_speed = 0.0
+    self.pitch = 0.0
+    self.calc_accel = 0.0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -147,6 +150,9 @@ class CarController(CarControllerBase):
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
     # steerfactor = 400 if actuators.torque == 0 else abs ( self.params.STEER_MAX / max ( abs(actuators.torque), abs(apply_torque) ) )
+
+    if len(CC.orientationNED) == 3:
+      self.pitch = CC.orientationNED[1]
 
     if CC.longActive:
       # accel = float (np.clip ( actuators.accel, -100.0, np.interp (steerfactor, [ 1.0, 4.0 ], [-3.5, 3.5]) ) )
@@ -210,6 +216,17 @@ class CarController(CarControllerBase):
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
       pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
+# ----------------- test override gas start -------------------
+      wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
+      hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
+      hybrid_regen_brake = 0.2
+
+      self.calc_accel = accel + wind_brake_ms2 + hill_brake + hybrid_regen_brake
+      vfactor = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [1000.0, 100.0, 100.0])
+      pcm_accel = int (np.clip(self.calc_accel * vfactor, 0, self.params.NIDEC_GAS_MAX) )
+      pcm_speed = max (0.0, CS.out.vEgo + float (np.clip ( self.calc_accel * 100.0 * CV.KPH_TO_MS, -9.0, +9.0 ) ) )
+# ----------------- test override gas end -------------------
+
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:  # radarless cars don't have supplemental message
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
@@ -236,6 +253,11 @@ class CarController(CarControllerBase):
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
+
+# ------------------ brake override begin
+          vfactorBrake = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [-60.0, -60.0, -60.0])
+          apply_brake = int(np.clip(self.calc_accel * vfactorBrake, 0, self.params.NIDEC_BRAKE_MAX - 1))         
+# ------------------ brake override end
 
           pcm_override = True
           pump_send = ( apply_brake > 0 ) if self.CP.carFingerprint in HONDA_NIDEC_HYBRID else pump_on
