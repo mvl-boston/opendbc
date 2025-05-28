@@ -128,7 +128,7 @@ class CarState(CarStateBase):
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
     if self.CP.carFingerprint in HONDA_RLX_STEER:
-      cp_lkas = can_parsers[Bus.adas]
+#      cp_lkas = can_parsers[Bus.adas]
       cp_steer = can_parsers[Bus.alt]
     else:
       cp_steer = cp
