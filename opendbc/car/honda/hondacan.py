@@ -80,7 +80,7 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
   }
   # return packer.make_can_msg("BRAKE_COMMAND", 2 if car_fingerprint == CAR.ACURA_RLX_HYBRID else CAN.pt, values)
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
-  return packer.make_can_msg("BRAKE_COMMAND", 5, values) // also send bus 5
+  return packer.make_can_msg("BRAKE_COMMAND", 5, values) # also send bus 5
 
 
 def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint):
