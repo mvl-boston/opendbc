@@ -279,6 +279,10 @@ int safety_fwd_hook(int bus_num, int addr) {
     blocked = current_hooks->fwd(bus_num, addr);
   }
 
+  if (bus_num >= 4) {
+    blocked = false;
+  }
+
   return blocked ? -1 : destination_bus;
 }
 
