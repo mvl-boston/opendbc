@@ -225,7 +225,7 @@ class CarController(CarControllerBase):
       self.calc_accel = accel + wind_brake_ms2 + hill_brake + hybrid_regen_brake
       vfactor = np.interp(CS.out.vEgo, [0.0, 0.5, 1.5, 5.0, 100.0], [1000.0, 300.0, 700.0, 50.0, 50.0])
       pcm_accel = int (np.clip(self.calc_accel * vfactor, 0, self.params.NIDEC_GAS_MAX) )
-      pcm_speed = max (0.0, CS.out.vEgo + float (np.clip ( (accel * 100.0 * CV.KPH_TO_MS, -9.0, +9.0 ) ) )
+      pcm_speed = max (0.0, CS.out.vEgo + float (np.clip ( accel * 100.0 * CV.KPH_TO_MS, -9.0, +9.0 ) ) )
 # ----------------- test override gas end -------------------
 
     if not self.CP.openpilotLongitudinalControl:
