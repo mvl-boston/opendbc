@@ -223,7 +223,7 @@ class CarController(CarControllerBase):
       hybrid_regen_brake = 0.2
 
       self.calc_accel = accel + wind_brake_ms2 + hill_brake + hybrid_regen_brake
-      vfactor = np.interp(CS.out.vEgo, [0.0, 0.5, 1.5, 5.0, 100.0], [1000.0, 180.0, 180.0, 50.0, 50.0])
+      vfactor = np.interp(CS.out.vEgo, [0.0, 0.5, 1.5, 5.0, 100.0], [1000.0, 300.0, 700.0, 50.0, 50.0])
       pcm_accel = int (np.clip(self.calc_accel * vfactor, 0, self.params.NIDEC_GAS_MAX) )
       pcm_speed = max (0.0, CS.out.vEgo + float (np.clip ( self.calc_accel * 100.0 * CV.KPH_TO_MS, -9.0, +9.0 ) ) )
 # ----------------- test override gas end -------------------
@@ -256,7 +256,7 @@ class CarController(CarControllerBase):
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
 # ------------------ brake override begin
-          vfactorBrake = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [-240.0, -60.0, -60.0])
+          vfactorBrake = np.interp(CS.out.vEgo, [0.0, 2.0, 100.0], [-240.0, -120.0, -120.0])
           apply_brake = int(np.clip(self.calc_accel * vfactorBrake, 0, self.params.NIDEC_BRAKE_MAX - 1))
 # ------------------ brake override end
 
