@@ -20,8 +20,11 @@ class CanBus(CanBusBase):
       # normally steering commands are sent to radar, which forwards them to powertrain bus
       # when radar is disabled, steering commands are sent directly to powertrain bus
       self._lkas = self._pt if CP.openpilotLongitudinalControl else self._radar
+      self._steer = self._lkas
+    elif CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
+      self._pt, self._radar, self._lkas, self._steer = self.offset, self.offset + 1, self.offset + 4, self.offset + 5
     else:
-      self._pt, self._radar, self._lkas = self.offset, self.offset + 1, self.offset
+      self._pt, self._radar, self._lkas, self._steer = self.offset, self.offset + 1, self.offset, self.offset
 
   @property
   def pt(self) -> int:
@@ -38,6 +41,10 @@ class CanBus(CanBusBase):
   @property
   def lkas(self) -> int:
     return self._lkas
+
+  @property
+  def steer(self) -> int:
+    return self._steer
 
   # B-CAN is forwarded to ACC-CAN radar side (CAN 0 on fake ethernet port)
   @property
@@ -71,7 +78,9 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
     "AEB_REQ_2": 0,
     "AEB_STATUS": 0,
   }
+  # return packer.make_can_msg("BRAKE_COMMAND", 2 if car_fingerprint == CAR.ACURA_RLX_HYBRID else CAN.pt, values)
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
+  return packer.make_can_msg("BRAKE_COMMAND", 5, values) # also send bus 5
 
 
 def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint):
@@ -123,7 +132,7 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active):
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
   }
-  return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
+  return packer.make_can_msg("STEERING_CONTROL", CAN.steer, values)
 
 
 def create_bosch_supplemental_1(packer, CAN):
@@ -146,7 +155,7 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
       'ENABLE_MINI_CAR': 1 if enabled else 0,
       # only moves the lead car without ACC_ON
       'HUD_DISTANCE': hud.lead_distance_bars,  # wraps to 0 at 4 bars
-      'IMPERIAL_UNIT': int(not is_metric),
+      'IMPERIAL_UNIT': 0 if (CP.carFingerprint == CAR.ACURA_RLX_HYBRID) else int(not is_metric),
       'HUD_LEAD': 2 if enabled and hud.lead_visible else 1 if enabled else 0,
       'SET_ME_X01_2': 1,
     }
@@ -165,7 +174,9 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
       acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
       acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
       acc_hud_values['ICONS'] = acc_hud['ICONS']
+    # commands.append(packer.make_can_msg("ACC_HUD", 2 if CP.carFingerprint == CAR.ACURA_RLX_HYBRID else CAN.pt, acc_hud_values))
     commands.append(packer.make_can_msg("ACC_HUD", CAN.pt, acc_hud_values))
+    commands.append(packer.make_can_msg("ACC_HUD", 5, acc_hud_values))  # also send bus 5
 
   lkas_hud_values = {
     'SET_ME_X41': 0x41,
@@ -190,7 +201,7 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
     commands.append(packer.make_can_msg('LKAS_HUD_A', CAN.lkas, lkas_hud_values))
     commands.append(packer.make_can_msg('LKAS_HUD_B', CAN.lkas, lkas_hud_values))
   else:
-    commands.append(packer.make_can_msg('LKAS_HUD', CAN.lkas, lkas_hud_values))
+    pass # commands.append(packer.make_can_msg('LKAS_HUD', CAN.lkas, lkas_hud_values))
 
   if radar_disabled:
     radar_hud_values = {
