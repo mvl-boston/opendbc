@@ -347,9 +347,11 @@ class CarState(CarStateBase):
     ]
 
     if CP.carFingerprint in HONDA_RLX_STEER:
-      lkas_messages = [
-        ("LKAS_HUD", 10),
-        ("STEERING_CONTROL", 100),
+      lkas_messages = [ # both missing, set to zero
+        # ("LKAS_HUD", 10),
+        # ("STEERING_CONTROL", 100),
+        ("LKAS_HUD", 0),
+        ("STEERING_CONTROL", 0),
       ]
 
       steer_messages = [
