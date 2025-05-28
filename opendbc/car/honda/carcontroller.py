@@ -158,9 +158,9 @@ class CarController(CarControllerBase):
     if CC.longActive:
       # accel = float (np.clip ( actuators.accel, -100.0, np.interp (steerfactor, [ 1.0, 4.0 ], [-3.5, 3.5]) ) )
       accel = float (np.clip ( actuators.accel, -3.5, 2) )
-      if accel > max ( 0, CS.out.aEgo) + 0.1:
-        accel = 10000.0
-      gas, brake = compute_gas_brake(accel, CS.out.vEgo, self.CP.carFingerprint)
+#      if accel > max ( 0, CS.out.aEgo) + 0.1:
+#        accel = 10000.0
+#      gas, brake = compute_gas_brake(accel, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
       gas, brake = 0.0, 0.0
@@ -309,7 +309,8 @@ class CarController(CarControllerBase):
       hud = HUDData(int(pcm_accel), int(round(hud_v_cruise)), hud_control.leadVisible,
                     hud_control.lanesVisible, fcw_display, acc_alert, steer_required, hud_control.leadDistanceBars)
 
-      pcm_speed_send = 0.0 if (self.brake_last > wind_brake ) and ( self.CP.carFingerprint in HONDA_NIDEC_HYBRID ) else int ( pcm_speed )
+      # pcm_speed_send = 0.0 if (self.brake_last > wind_brake ) and ( self.CP.carFingerprint in HONDA_NIDEC_HYBRID ) else int ( pcm_speed )
+      pcm_speed_send = int ( pcm_speed )
       can_sends.extend(hondacan.create_ui_commands(self.packer, self.CAN, self.CP, CC.enabled, pcm_speed_send, hud, CS.is_metric, CS.acc_hud, CS.lkas_hud))
 
       if self.CP.openpilotLongitudinalControl and self.CP.carFingerprint not in HONDA_BOSCH:
@@ -319,7 +320,7 @@ class CarController(CarControllerBase):
 
     new_actuators = actuators.as_builder()
     new_actuators.speed = self.speed
-    new_actuators.accel = self.accel
+    new_actuators.accel = self.calc_accel
     new_actuators.gas = self.gas
     new_actuators.brake = self.brake
     new_actuators.torque = self.last_torque
