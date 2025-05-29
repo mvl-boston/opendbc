@@ -138,8 +138,8 @@ class CarController(CarControllerBase):
           pass
         else:
 # ------------------ brake override begin
-          vfactorBrake = np.interp(CS.out.vEgo, [0.0, 6.0, 100.0], [-80.0, -80.0, -80.0])
-          vAlphaBrake = -1.0
+          vfactorBrake = np.interp(CS.out.vEgo, [0.0, 6.0, 100.0], [-50.0, -50.0, -50.0])
+          vAlphaBrake = -0.15
           apply_brake = 0 if (self.calc_accel >= 0) else int(np.clip( (self.calc_accel + vAlphaBrake) * vfactorBrake, 0, self.params.NIDEC_BRAKE_MAX - 1))
 # ------------------ brake override end
 
