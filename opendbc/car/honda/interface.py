@@ -56,7 +56,7 @@ class CarInterface(CarInterfaceBase):
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
       ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
-      cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.hondaNidec)) / for RLX red Panda
+      cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.hondaNidec)) # for RLX red Panda
       ret.openpilotLongitudinalControl = True
 
       ret.pcmCruise = True
