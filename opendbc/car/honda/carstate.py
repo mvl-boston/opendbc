@@ -66,7 +66,7 @@ def get_can_messages(CP, gearbox_msg):
 
   if CP.carFingerprint in HONDA_NIDEC_HYBRID:
     messages += [
-      ("HYBRID_STATUS", 100),
+      ("HYBRID_STATUS", 0), # make signal frequency optional
     ]
 
   if CP.carFingerprint in HONDA_BOSCH:
