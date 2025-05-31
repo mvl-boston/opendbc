@@ -9,6 +9,7 @@ from opendbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries,
 Ecu = structs.CarParams.Ecu
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 GearShifter = structs.CarState.GearShifter
+GasOnlyTuning = structs.CarParams.LongitudinalPIDTuning 
 
 class CarControllerParams:
   # Allow small margin below -3.5 m/s^2 from ISO 15622:2018 since we
@@ -37,8 +38,6 @@ class CarControllerParams:
   STEER_STEP = 1  # 100 Hz
   STEER_DELTA_UP = 3  # min/max in 0.33s for all Honda
   STEER_DELTA_DOWN = 3
-
-  LongitudinalPIDTuning gasonlyTuning
 
   def __init__(self, CP):
     self.STEER_MAX = CP.lateralParams.torqueBP[-1]
