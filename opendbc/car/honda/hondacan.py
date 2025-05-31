@@ -77,6 +77,19 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
+def enable_rlx(packer, car_fingerprint, enable):
+
+  chksum = enable
+
+  if True: # car_fingerprint == (CAR.ACURA_RLX):
+    values = {
+        "ENABLE"           : enable,
+        "CHKSUM"           : chksum,
+     }
+
+  return packer.make_can_msg("RLX_ENABLE", 2, values)
+
+
 def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint):
   commands = []
   min_gas_accel = CarControllerParams.BOSCH_GAS_LOOKUP_BP[0]
