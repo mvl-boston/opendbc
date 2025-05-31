@@ -11,7 +11,7 @@ class PandaRunner(AbstractContextManager):
     self.p = Panda()
     self.p.reset()
 
-    self.p.set_can_enable(bus_num: 4, enable: True)
+    self.p.set_can_enable(bus_num=4, enable=True)
 
     # setup + fingerprinting
     self.p.set_safety_mode(CarParams.SafetyModel.elm327, 1)
