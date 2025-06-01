@@ -149,10 +149,8 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate == CAR.HONDA_CRV_HYBRID:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5000], [0, 5000]]
-      ret.lateralTuning.pid.kpBP = [[0.0, 10.0]]
-      ret.lateralTuning.pid.kpV  = [[0.06, 0.58]]
-      ret.lateralTuning.pid.kiBP = [[0.0, 10.0]]
-      ret.lateralTuning.pid.kiV  = [[0.015, 0.14]]
+      ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0.0, 10.0], [0.06, 0.58]]
+      ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0.0, 10.0], [0.015, 0.14]]
       ret.wheelSpeedFactor = 1.025
 
     elif candidate == CAR.HONDA_FIT:
