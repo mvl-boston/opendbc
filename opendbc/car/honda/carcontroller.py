@@ -159,7 +159,7 @@ class CarController(CarControllerBase):
     # Send CAN commands
     can_sends = []
 
-    if self.frame % 5 == 0: # RLX needs a message for Rad Panda to start blocking messages
+    if False: # disable for now - self.frame % 5 == 0: # RLX needs a message for Rad Panda to start blocking messages
       can_sends.append(hondacan.enable_rlx(self.packer, CS.CP.carFingerprint, 1))
 
     # tester present - w/ no response (keeps radar disabled)
