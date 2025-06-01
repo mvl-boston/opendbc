@@ -83,9 +83,9 @@ class CruiseSettings:
   DISTANCE = 3
   LKAS = 1
 
-class GasOnlyTuning
-  GasOnlyTuning_kiBP = [0., 5., 35.] # values copied from Nidec Honda tune
-  GasOnlyTuning_kiV = [1.2, 0.8, 0.5] # values copied from Nidec Honda tune
+class GasOnlyTuning:  # values set in interface
+  GasOnlyTuning_kiBP = [0., 0., 0.]
+  GasOnlyTuning_kiV = [0., 0., 0.]
 
 
 # See dbc files for info on values
