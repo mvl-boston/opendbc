@@ -117,9 +117,8 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
-    self.gasonly_pid = PIDController ((GasOnlyTuning.kpBP, GasOnlyTuning.kpV),
-                                     (GasOnlyTuning.kiBP, GasOnlyTuning.kiV),
-                                     k_f=GasOnlyTuning.kf, rate=2 / DT_CTRL )
+    tune = CustomLongTuning.new_message().longTune
+    self.gasonly_pid = PIDController((tune.kpBP, tune.kpV), (tune.kiBP, tune.kiV), k_f=tune.kf, rate=2 / DT_CTRL)
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
