@@ -84,8 +84,8 @@ class CruiseSettings:
   LKAS = 1
 
 class GasOnlyTuning:  # values set in interface
-  GasOnlyTuning_kiBP = [0., 0., 0.]
-  GasOnlyTuning_kiV = [0., 0., 0.]
+  kiBP = [0.]
+  kiV = [0.]
 
 
 # See dbc files for info on values
