@@ -87,7 +87,6 @@ class GasOnlyTuning:  # values set in interface
   kiBP = [0.]
   kiV = [0.]
 
-
 # See dbc files for info on values
 VISUAL_HUD = {
   VisualAlert.none: 0,
