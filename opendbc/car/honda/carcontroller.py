@@ -11,7 +11,7 @@ from opendbc.car.common.pid import PIDController
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
-LongTuning = structs.CarParams.LongitudinalTuning
+LongTuning = structs.CarParams.LongitudinalPIDTuning
 
 
 def compute_gb_honda_bosch(accel, speed):
