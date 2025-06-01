@@ -118,7 +118,7 @@ class CarController(CarControllerBase):
     self.brake = 0.0
     self.last_torque = 0.0
     self.gasonly_pid = PIDController (k_p=([0,], [0,]),
-                                      K_i=(GasOnlyTuning.GasOnlyTuning_kiBP, GasOnlyTuning.GasOnlyTuning_kiV),
+                                      k_i=(GasOnlyTuning.GasOnlyTuning_kiBP, GasOnlyTuning.GasOnlyTuning_kiV),
                                       k_f=1, rate=2 / DT_CTRL )
 
   def update(self, CC, CS, now_nanos):
