@@ -494,6 +494,15 @@ FW_VERSIONS = {
       b'36161-TDK-J530\x00\x00',
     ],
   },
+  # mid-model refresh
+  CAR.ACURA_MDX_4G_MMR: {
+    (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'8S102-TYA-A020\x00\x00',
+    ],
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'8S302-TYA-A020\x00\x00',
+    ],
+  },
   CAR.HONDA_ODYSSEY: {
     (Ecu.gateway, 0x18daeff1, None): [
       b'38897-THR-A010\x00\x00',
@@ -870,6 +879,7 @@ FW_VERSIONS = {
       b'39990-T60-J030\x00\x00',
       b'39990-T56-A040\x00\x00',
       b'39990-T50-J030\x00\x00',
+      b'39990-T50-J110\x00\x00',
     ],
     (Ecu.gateway, 0x18daeff1, None): [
       b'38897-T20-A020\x00\x00',
@@ -883,6 +893,7 @@ FW_VERSIONS = {
       b'38897-T60-A110\x00\x00',
       b'38897-T61-A320\x00\x00',
       b'38897-T50-E310\x00\x00',
+      b'38897-T50-EA10\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-T20-A970\x00\x00',
@@ -895,6 +906,7 @@ FW_VERSIONS = {
       b'77959-T61-A920\x00\x00',
       b'77959-T50-G930\x00\x00',
       b'77959-T65-A920\x00\x00',
+      b'77959-T50-G010\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'36161-T20-A060\x00\x00',
@@ -911,6 +923,7 @@ FW_VERSIONS = {
       b'8S102-T56-A060\x00\x00',
       b'8S102-T50-EA10\x00\x00',
       b'8S102-T64-A040\x00\x00',
+      b'8S102-T43-J540\x00\x00',
     ],
     (Ecu.vsa, 0x18da28f1, None): [
       b'57114-T20-AB40\x00\x00',
@@ -933,6 +946,7 @@ FW_VERSIONS = {
   CAR.HONDA_PILOT_4G: {
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'8S102-T90-A050\x00\x00',
+      b'8S102-T90-A070\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'8S302-T90-A040\x00\x00',

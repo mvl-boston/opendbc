@@ -36,9 +36,6 @@ class CarInterface(CarInterfaceBase):
 
     CAN = CanBus(ret, fingerprint)
 
-    # Recent test route is needed to undashcam these cars
-    ret.dashcamOnly = candidate in HONDA_BOSCH_CANFD
-
     if candidate in HONDA_BOSCH:
       cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaBosch)]
       if candidate in HONDA_BOSCH_CANFD and CAN.pt >= 4:
@@ -151,8 +148,11 @@ class CarInterface(CarInterfaceBase):
       ret.wheelSpeedFactor = 1.025
 
     elif candidate == CAR.HONDA_CRV_HYBRID:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5000], [0, 5000]]
+      ret.lateralTuning.pid.kpBP = [0.0, 10.0]
+      ret.lateralTuning.pid.kpV = [0.06, 0.58]
+      ret.lateralTuning.pid.kiBP = [0.0, 10.0]
+      ret.lateralTuning.pid.kiV = [0.015, 0.14]
       ret.wheelSpeedFactor = 1.025
 
     elif candidate == CAR.HONDA_FIT:
@@ -186,7 +186,7 @@ class CarInterface(CarInterfaceBase):
       else:
         ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
 
-    elif candidate in (CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G):
+    elif candidate in (CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G, CAR.ACURA_MDX_4G_MMR):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.38], [0.11]]
 
@@ -222,6 +222,9 @@ class CarInterface(CarInterfaceBase):
 
     if candidate in HONDA_BOSCH_RADARLESS:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
+
+    if candidate in HONDA_BOSCH_CANFD:
+      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_CANFD.value
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
     # to a negative value, so it won't matter. Otherwise, add 0.5 mph margin to not
