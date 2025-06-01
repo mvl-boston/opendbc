@@ -11,7 +11,6 @@ from opendbc.car.common.pid import PIDController
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
-LongTuning = structs.CarParams.LongitudinalPIDTuning
 
 
 def compute_gb_honda_bosch(accel, speed):
@@ -118,9 +117,9 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
-    self.gasonly_pid = PIDController ((LongTuning.kpBP, LongTuning.kpV),
+    self.gasonly_pid = PIDController ((self.CP.LongitudinalTuning.kpBP, self.CP.LongitudinalTuning.kpV),
                                      (GasOnlyTuning_kiBP, GasOnlyTuning_kiV),
-                                     k_f=LongTuning.kf, rate=2 / DT_CTRL )
+                                     k_f=self.CP.LongitudinalTuning.kf, rate=2 / DT_CTRL )
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
