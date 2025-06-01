@@ -92,7 +92,7 @@ class CarInterface(CarInterfaceBase):
       # Bosch longitudinal tuning only needed for gas
         GasOnlyTuning.kf = ret.longitudinalTuning.kf
         GasOnlyTuning.kpBP = ret.longitudinalTuning.kpBP
-        GasOnlyTuning.=kpV = ret.longitudinalTuning.kpV
+        GasOnlyTuning.kpV = ret.longitudinalTuning.kpV
         GasOnlyTuning.kiBP = [0., 5., 35.]
         GasOnlyTuning.kiV = [1.2, 0.8, 0.5]
     else:
