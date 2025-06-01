@@ -9,7 +9,6 @@ from opendbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries,
 Ecu = structs.CarParams.Ecu
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 GearShifter = structs.CarState.GearShifter
-GasOnlyTuning = structs.CarParams.LongitudinalPIDTuning
 
 class CarControllerParams:
   # Allow small margin below -3.5 m/s^2 from ISO 15622:2018 since we
@@ -83,6 +82,10 @@ class CruiseButtons:
 class CruiseSettings:
   DISTANCE = 3
   LKAS = 1
+
+class GasOnlyTuning
+  GasOnlyTuning_kiBP = [0., 5., 35.] # values copied from Nidec Honda tune
+  GasOnlyTuning_kiV = [1.2, 0.8, 0.5] # values copied from Nidec Honda tune
 
 
 # See dbc files for info on values
