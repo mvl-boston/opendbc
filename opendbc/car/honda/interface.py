@@ -6,7 +6,6 @@ from opendbc.car.disable_ecu import disable_ecu
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HondaSafetyFlags, \
-                                                 GasOnlyTuning
 from opendbc.car.honda.carcontroller import CarController
 from opendbc.car.honda.carstate import CarState
 from opendbc.car.honda.radar_interface import RadarInterface
