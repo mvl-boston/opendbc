@@ -6,6 +6,7 @@ from opendbc.car import Bus, DT_CTRL, rate_limit, make_tester_present_msg, struc
 from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CruiseButtons, VISUAL_HUD, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
+from opendbc.car.common.pid import PIDController
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -115,6 +116,9 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.gasonly_pid = PIDController ((GasOnlyTuning.kpBP, GasOnlyTuning.kpV),
+                                     (GasOnlyTuning.kiBP, GasOnlyTuning.kiV),
+                                     k_f=GasOnlyTuning.kf, rate=2 / DT_CTRL )
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
