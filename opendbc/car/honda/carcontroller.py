@@ -216,7 +216,7 @@ class CarController(CarControllerBase):
           error = self.accel - CS.out.aEgo
           output_accel = self.gasonly_pid.update(error, speed=CS.out.vEgo,
                                                feedforward=self.accel)
-          output_accel = np.clip(output_accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
+          output_accel = np.clip(output_accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX)
           self.gas = float(np.interp(output_accel, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
           stopping = actuators.longControlState == LongCtrlState.stopping
