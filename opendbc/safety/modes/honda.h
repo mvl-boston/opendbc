@@ -293,7 +293,7 @@ static safety_config honda_nidec_init(uint16_t param) {
   // 0xE4 is steering on all cars except CRV and RDX, 0x194 for CRV and RDX,
   // 0x1FA is brake control, 0x30C is acc hud, 0x33D is lkas hud
   static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 4, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
-                                     {0x30C, 0, 8, .check_relay = true}, {0x33D, 4, 5, .check_relay = true}, {0x249, 2, 8, .check_relay = false}};
+                                     {0x30C, 0, 8, .check_relay = true}, {0x33D, 4, 5, .check_relay = true}, {0x249, 2, 8, .check_relay = false},
                                      {0x33D, 6, 5, .check_relay = true}, {0x194, 6, 4, .check_relay = true} };
                                       // moved 0x33D and 0x194 to bus 4, add RLX enable, add bus 6
 
