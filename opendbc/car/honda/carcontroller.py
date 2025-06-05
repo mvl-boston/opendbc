@@ -165,7 +165,7 @@ class CarController(CarControllerBase):
 
       pcm_speed_send = int ( pcm_speed )
       can_sends.extend(hondacan.create_ui_commands(self.packer, self.CAN, self.CP, CC.enabled, pcm_speed_send, hud, CS.is_metric, CS.acc_hud, CS.lkas_hud, \
-                                                  CS.out.vEgo))
+                                                  speed_control))
 
       if self.CP.openpilotLongitudinalControl and self.CP.carFingerprint not in HONDA_BOSCH:
         self.speed = pcm_speed * 3.6 # conversion done in hondacan
