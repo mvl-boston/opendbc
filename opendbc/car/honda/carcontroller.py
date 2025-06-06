@@ -87,7 +87,9 @@ class CarController(CarControllerBase):
     else:
       accel = 0.0
       gas, brake = 0.0, 0.0
-    
+
+    speed_control = 1 if ( (self.calc_accel <= 0.0) and (CS.out.vEgo == 0) ) else 0
+
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
     fcw_display, steer_required, acc_alert = process_hud_alert(hud_control.visualAlert)
 
@@ -121,7 +123,6 @@ class CarController(CarControllerBase):
       pcm_accel = int (np.clip( (self.calc_accel + gas_accel_addon) * vfactor, 10, self.params.NIDEC_GAS_MAX) )
       pcm_speed = max (0.0, CS.out.vEgo + float (np.clip ( self.calc_accel * 100.0 * CV.KPH_TO_MS, -9.0, +9.0 ) ) )
 
-      speed_control = 1 if ( (self.calc_accel <= 0.0) and (CS.out.vEgo == 0) ) else 0
       if speed_control == 1 and CC.longActive:
         pcm_accel = 198
 # ----------------- test override gas end -------------------
