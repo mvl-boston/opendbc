@@ -56,6 +56,10 @@ class CarInterface(CarInterfaceBase):
     else:
       cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
  #     cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.hondaNidec)) # for RLX red Panda
+
+      if CAN.pt >= 4:
+        cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.hondaNidec)) # try this RLX red Panda insted
+      
       ret.safetyConfigs = cfgs
       ret.openpilotLongitudinalControl = True
 
