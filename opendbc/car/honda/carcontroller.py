@@ -87,6 +87,7 @@ class CarController(CarControllerBase):
     else:
       accel = 0.0
       gas, brake = 0.0, 0.0
+      self.calc_accel = 0.0
 
     speed_control = 1 if ( (self.calc_accel <= 0.0) and (CS.out.vEgo == 0) ) else 0
 
@@ -109,6 +110,7 @@ class CarController(CarControllerBase):
     if not CC.longActive:
       pcm_speed = 0.0
       pcm_accel = int(0.0)
+      self.calc_accel = 0.0
     else:
 
 # ----------------- test override gas start -------------------
