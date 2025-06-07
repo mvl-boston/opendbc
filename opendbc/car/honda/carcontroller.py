@@ -120,7 +120,7 @@ class CarController(CarControllerBase):
 
       self.calc_accel = float(accel + wind_brake_ms2 + hill_brake + hybrid_regen_brake)
       
-      gas_accel_addon = np.interp(CS.out.vEgo, [0.0, 2.5, 5.0, 100.0], [3.6, 2.6, 1.7, 1.6])
+      gas_accel_addon = np.interp(CS.out.vEgo, [0.0, 2.5, 5.0, 6.0, 100.0], [3.6, 2.6, 1.7, 1.6, 1.6])
       vfactor = np.interp(CS.out.vEgo, [0.0, 0.5, 1.5, 3.0, 100.0], [50.0, 50.0, 50.0, 50.0, 50.0])
       pcm_accel = 0 if self.calc_accel <= 0 else int (np.clip( (self.calc_accel + gas_accel_addon) * vfactor, 10, self.params.NIDEC_GAS_MAX) )
       pcm_speed = max (0.0, CS.out.vEgo + float (np.clip ( self.calc_accel * 100.0 * CV.KPH_TO_MS, -9.0, +9.0 ) ) )
