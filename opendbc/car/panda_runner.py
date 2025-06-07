@@ -22,10 +22,10 @@ class PandaRunner(AbstractContextManager):
     self.CI.init(self.CI.CP, self._can_recv, self.p.can_send_many)
     self.p.set_safety_mode(safety_model, self.CI.CP.safetyConfigs[0].safetyParam)
 
-    safety_model = self.CI.CP.safetyConfigs[1].safetyModel
-    self.p.set_safety_mode(CarParams.SafetyModel.elm327, 2)
-    self.CI.init(self.CI.CP, self._can_recv, self.p.can_send_many)
-    self.p.set_safety_mode(safety_model, self.CI.CP.safetyConfigs[1].safetyParam)
+#    safety_model = self.CI.CP.safetyConfigs[1].safetyModel
+#    self.p.set_safety_mode(CarParams.SafetyModel.elm327, 2)
+#    self.CI.init(self.CI.CP, self._can_recv, self.p.can_send_many)
+#    self.p.set_safety_mode(safety_model, self.CI.CP.safetyConfigs[1].safetyParam)
 
     return self
 
