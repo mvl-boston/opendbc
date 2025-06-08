@@ -6,7 +6,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.can.packer import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
-from opendbc.car.honda.values import CruiseButtons, VISUAL_HUD, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_NIDEC_ALT_PCM_ACCEL, HONDA_NIDEC_HYBRID, \
+from opendbc.car.honda.values import CruiseButtons, VISUAL_HUD, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, \
                                      CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
 
@@ -86,7 +86,6 @@ class CarController(CarControllerBase):
       accel = float (np.clip ( actuators.accel, -3.5, 2) )
     else:
       accel = 0.0
-      gas, brake = 0.0, 0.0
       self.calc_accel = 0.0
 
     speed_control = 1 if ( (self.calc_accel <= 0.0) and (CS.out.vEgo == 0) ) else 0
@@ -119,7 +118,7 @@ class CarController(CarControllerBase):
       hybrid_regen_brake = float(np.interp(CS.out.vEgo, [0.0, 3.25, 5.0, 6.0], [-2.0, -1.15, -0.1, -0.7]))
 
       self.calc_accel = float(accel + wind_brake_ms2 + hill_brake + hybrid_regen_brake)
-      
+
       gas_accel_addon = np.interp(CS.out.vEgo, [0.0, 2.5, 5.0, 6.0, 100.0], [5.8, 3.5, 1.7, 1.6, 1.6])
       vfactor = np.interp(CS.out.vEgo, [0.0, 0.5, 1.5, 3.0, 100.0], [50.0, 50.0, 50.0, 50.0, 50.0])
       pcm_accel = 0 if self.calc_accel <= 0 else int (np.clip( (self.calc_accel + gas_accel_addon) * vfactor, 10, self.params.NIDEC_GAS_MAX) )
