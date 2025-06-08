@@ -97,10 +97,6 @@ class CruiseSettings:
   DISTANCE = 3
   LKAS = 1
 
-class GasOnlyTuning:  # values set in interface
-  kiBP = [0.]
-  kiV = [0.]
-
 
 @dataclass
 class HondaCarDocs(CarDocs):
