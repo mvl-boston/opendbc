@@ -26,7 +26,6 @@ non_tested_cars = [
   HONDA.HONDA_ODYSSEY_CHN,
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
-  TESLA.TESLA_MODEL_3,
 ]
 
 
@@ -60,6 +59,7 @@ routes = [
   CarTestRoute("e36b272d5679115f/00000369--a3e8499a85", FORD.FORD_F_150_MK14),
   CarTestRoute("83a4e056c7072678|2023-11-13--16-51-33", FORD.FORD_MUSTANG_MACH_E_MK1),
   CarTestRoute("37998aa0fade36ab/00000000--48f927c4f5", FORD.FORD_RANGER_MK2),
+  CarTestRoute("61a1b9e7a4eae0f6/00000000--79d85d1315", FORD.FORD_EXPEDITION_MK4),
   #TestRoute("f1b4c567731f4a1b|2018-04-30--10-15-35", FORD.FUSION),
 
   CarTestRoute("7cc2a8365b4dd8a9|2018-12-02--12-10-44", GM.GMC_ACADIA),
@@ -108,7 +108,8 @@ routes = [
   CarTestRoute("f44aa96ace22f34a|2021-12-22--06-22-31", HONDA.HONDA_CIVIC_2022),
   CarTestRoute("1f032f5173c8ad99/00000006--573b3fcaf5", HONDA.HONDA_CIVIC_2022),  # Civic Type R with manual transmission
   CarTestRoute("b1c832ad56b6bc9d/00000010--debfcf5867", HONDA.HONDA_CIVIC_2022),  # 2025 Civic Hatch Hybrid with new eCVT transmission
-  CarTestRoute("f9c43864cf057d05|2024-01-15--23-01-20", HONDA.HONDA_PILOT_4G),  # TODO: Replace with a newer route
+  CarTestRoute("09c0833f9154ec75/00000001--363c8ffbc8", HONDA.HONDA_PILOT_4G),
+  CarTestRoute("ad9840558640c31d/0000001a--d6cd4871c2", HONDA.ACURA_MDX_4G_MMR),  # 2025 MDX
 
   CarTestRoute("87d7f06ade479c2e|2023-09-11--23-30-11", HYUNDAI.HYUNDAI_AZERA_6TH_GEN),
   CarTestRoute("66189dd8ec7b50e6|2023-09-20--07-02-12", HYUNDAI.HYUNDAI_AZERA_HEV_6TH_GEN),
@@ -313,6 +314,7 @@ routes = [
 
   CarTestRoute("bc095dc92e101734/000000db--ee9fe46e57", RIVIAN.RIVIAN_R1_GEN1),
 
+  CarTestRoute("7dc058789994da80/00000112--adb970f6a8", TESLA.TESLA_MODEL_3),
   CarTestRoute("46cdc864ec865f4b/00000007--42f94db730", TESLA.TESLA_MODEL_Y),
   CarTestRoute("2c912ca5de3b1ee9/0000025d--6eb6bcbca4", TESLA.TESLA_MODEL_Y, segment=4),
 
