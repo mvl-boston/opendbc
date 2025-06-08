@@ -140,7 +140,6 @@ class CarController(CarControllerBase):
     else:
       # Send gas and brake commands.
       if self.frame % 2 == 0:
-        ts = self.frame * DT_CTRL
 
         if self.CP.carFingerprint in HONDA_BOSCH:
           pass
@@ -152,7 +151,7 @@ class CarController(CarControllerBase):
 # ------------------ brake override end
 
           pcm_override = True
-          pump_send = ( apply_brake > 0 ) 
+          pump_send = ( apply_brake > 0 )
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_send,
                                                          pcm_override, pcm_cancel_cmd, fcw_display,
                                                          self.CP.carFingerprint, CS.stock_brake))
