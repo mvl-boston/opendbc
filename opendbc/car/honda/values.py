@@ -83,6 +83,10 @@ class CruiseSettings:
   DISTANCE = 3
   LKAS = 1
 
+class GasOnlyTuning:  # values set in interface
+  kiBP = [0.]
+  kiV = [0.]
+
 
 # See dbc files for info on values
 VISUAL_HUD = {
@@ -201,6 +205,12 @@ class CAR(Platforms):
     {Bus.pt: 'acura_rdx_2020_can_generated'},
     flags=HondaFlags.BOSCH_ALT_BRAKE,
   )
+  ACURA_RDX_3G_MMR = HondaBoschPlatformConfig(
+    [HondaCarDocs("Acura RDX 2022", "All")],
+    CarSpecs(mass=4079 * CV.LB_TO_KG, wheelbase=2.75, steerRatio=12.0, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),  # as spec
+    {Bus.pt: 'acura_rdx_2020_can_generated'},
+    flags=HondaFlags.BOSCH_ALT_BRAKE,
+  )
   HONDA_INSIGHT = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda Insight 2019-22", "All", min_steer_speed=3. * CV.MPH_TO_MS)],
     CarSpecs(mass=2987 * CV.LB_TO_KG, wheelbase=2.7, steerRatio=15.0, centerToFrontRatio=0.39, tireStiffnessFactor=0.82),  # as spec
@@ -216,6 +226,12 @@ class CAR(Platforms):
     CarSpecs(mass=4278 * CV.LB_TO_KG, wheelbase=2.86, centerToFrontRatio=0.428, steerRatio=16.0, tireStiffnessFactor=0.444),  # as spec
     {Bus.pt: 'honda_pilot_2023_can_generated'},
     flags=HondaFlags.BOSCH_CANFD | HondaFlags.BOSCH_ALT_BRAKE,
+  )
+  HONDA_ODYSSEY_5G_MMR = HondaBoschPlatformConfig(
+    [HondaCarDocs("Honda Odyssey 2021-25", "All", min_steer_speed=70. * CV.KPH_TO_MS)],
+    CarSpecs(mass=4590 * CV.LB_TO_KG, wheelbase=3.00, steerRatio=19.4, centerToFrontRatio=0.41, tireStiffnessFactor=1.02),  # per spec + plotjuggler
+    {Bus.pt: 'acura_rdx_2020_can_generated'},
+    flags=HondaFlags.BOSCH_ALT_BRAKE,
   )
   ACURA_INTEGRA = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura Integra 2024-25", "All")],
@@ -344,9 +360,10 @@ FW_QUERY_CONFIG = FwQueryConfig(
   # Note that we still attempt to match with them when they are present
   # This is or'd with (ALL_ECUS - ESSENTIAL_ECUS) from fw_versions.py
   non_essential_ecus={
-    Ecu.eps: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC_2022, CAR.HONDA_E, CAR.HONDA_HRV_3G, CAR.ACURA_INTEGRA],
-    Ecu.vsa: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_2022, CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID,
-              CAR.HONDA_E, CAR.HONDA_HRV_3G, CAR.HONDA_INSIGHT, CAR.ACURA_INTEGRA],
+    Ecu.eps: [CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC_2022, CAR.HONDA_E, CAR.HONDA_HRV_3G, CAR.HONDA_ODYSSEY_5G_MMR,
+              CAR.ACURA_INTEGRA],
+    Ecu.vsa: [CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_ODYSSEY_5G_MMR, CAR.HONDA_CIVIC_2022,
+              CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID, CAR.HONDA_E, CAR.HONDA_HRV_3G, CAR.HONDA_INSIGHT, CAR.ACURA_INTEGRA],
   },
   extra_ecus=[
     (Ecu.combinationMeter, 0x18da60f1, None),
