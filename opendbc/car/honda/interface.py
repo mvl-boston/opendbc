@@ -58,7 +58,7 @@ class CarInterface(CarInterfaceBase):
  #     cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.hondaNidec)) # for RLX red Panda
 
 #      if CAN.pt >= 4:
-#        cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.hondaNidec)) # try this RLX red Panda insted
+#        cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.hondaNidec)) # try this RLX red Panda instead
 
       if candidate == CAR.ACURA_RLX_HYBRID:
         ret.safetyConfigs[0] = cfgs
