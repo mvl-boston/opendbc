@@ -221,16 +221,18 @@ class CarController(CarControllerBase):
         if self.CP.carFingerprint in HONDA_BOSCH:
           self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
 
-          # perform a gas-only pid
-          if (actuators.longControlState == LongCtrlState.pid):
+          if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+            gas_pedal_force = self.accel # radarless does not need a pid
+          elif (actuators.longControlState == LongCtrlState.pid): # perform a gas-only pid
             gas_error = self.accel - CS.out.aEgo
             self.gasonly_pid.neg_limit = self.params.BOSCH_ACCEL_MIN
             self.gasonly_pid.pos_limit = self.params.BOSCH_ACCEL_MAX
             gas_pedal_force = self.gasonly_pid.update(gas_error, speed=CS.out.vEgo, feedforward=self.accel)
+            gas_pedal_force += wind_brake_ms2 + hill_brake
           else:
             gas_pedal_force = self.accel
             self.gasonly_pid.reset()
-          gas_pedal_force += wind_brake_ms2 + hill_brake
+            gas_pedal_force += wind_brake_ms2 + hill_brake
           self.gas = float(np.interp(gas_pedal_force, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
           stopping = actuators.longControlState == LongCtrlState.stopping
