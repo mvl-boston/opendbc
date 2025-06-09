@@ -63,8 +63,8 @@ class CarInterface(CarInterfaceBase):
       if candidate == CAR.ACURA_RLX_HYBRID:
         cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.hondaNidec))
         ret.safetyConfigs = cfgs
-        ret.safetyConfigs[0] = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
-        ret.safetyConfigs[1] = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
+        ret.safetyConfigs[0] = get_safety_config(structs.CarParams.SafetyModel.hondaNidec)
+        ret.safetyConfigs[1] = get_safety_config(structs.CarParams.SafetyModel.hondaNidec)
       else:
         ret.safetyConfigs = cfgs
       ret.openpilotLongitudinalControl = True
