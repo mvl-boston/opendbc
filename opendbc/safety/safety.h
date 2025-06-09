@@ -252,6 +252,10 @@ static int get_fwd_bus(int bus_num) {
     destination_bus = 2;
   } else if (bus_num == 2) {
     destination_bus = 0;
+  } else if (bus_num == 4) {
+    destination_bus = 6;
+    } else if (bus_num == 6) {
+    destination_bus = 4;
   } else {
     destination_bus = -1;
   }
