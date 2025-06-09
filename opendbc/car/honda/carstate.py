@@ -225,7 +225,7 @@ class CarState(CarStateBase):
     ret.gasPressed = ret.gas > 1e-5
 
     # ret.steeringTorque = cp.vl["STEER_STATUS"]["STEER_TORQUE_"]
-    ret.steeringTorque = cp.vl["STEER_MOTOR_TORQUE"]["MOTOR_TORQUE"] #temprorarily replace
+    ret.steeringTorque = cp.vl["STEER_MOTOR_TORQUE"]["MOTOR_TORQUE"] #temporarily replace
 
     ret.steeringTorqueEps = cp.vl["STEER_MOTOR_TORQUE"]["MOTOR_TORQUE"]
     ret.steeringPressed = abs(ret.steeringTorque) > STEER_THRESHOLD.get(self.CP.carFingerprint, 1200)
