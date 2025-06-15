@@ -61,6 +61,8 @@ class CarController(CarControllerBase):
     self.blend_pcm_speed = 0.0
     self.pitch = 0.0
     self.calc_accel = 0.0
+    self.man_step = 0
+    self.last_time_frame = 0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -83,11 +85,45 @@ class CarController(CarControllerBase):
       self.pitch = CC.orientationNED[1]
 
     if CC.longActive:
-      accel = float (np.clip ( actuators.accel, -3.5, 2) )
+      # accel = float (np.clip ( actuators.accel, -3.5, 2) )
+# ----------------- test forced accel start -------------------
+      if self.man_step == 0:
+        if CS.out.vEgo > 0.0:
+          actuators.accel = -0.5
+          accel = -0.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 1
+
+      if self.man_step == 1:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          actuators.accel = -2.0
+          accel = -2.0
+        else:
+          self.man_step = 2
+
+      if self.man_step == 2:
+        if CS.out.vEgo < 8.9408: # 20 mph
+          actuators.accel = 0.5
+          accel = 0.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 3
+
+      if self.man_step == 3:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          actuators.accel = 0.0
+          accel = 0.0
+        else:
+          self.man_step = 0
+
+# ----------------- test forced accel end -------------------
     else:
       accel = 0.0
       self.calc_accel = 0.0
-
+      self.man_step = 0
+      self.last_time_frame = 0
+    
     speed_control = 1 if ( (self.calc_accel <= 0.0) and (CS.out.vEgo == 0) ) else 0
 
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
@@ -110,6 +146,7 @@ class CarController(CarControllerBase):
       pcm_speed = 0.0
       pcm_accel = int(0.0)
       self.calc_accel = 0.0
+
     else:
 
 # ----------------- test override gas start -------------------
