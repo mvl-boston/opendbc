@@ -89,7 +89,6 @@ class CarController(CarControllerBase):
 # ----------------- test forced accel start -------------------
       if self.man_step == 0:
         if CS.out.vEgo > 0.0:
-          actuators.accel = -0.5
           accel = -0.5
         else:
           self.last_time_frame = self.frame
@@ -97,14 +96,12 @@ class CarController(CarControllerBase):
 
       if self.man_step == 1:
         if self.frame < self.last_time_frame + 300: # 3 seconds
-          actuators.accel = -2.0
           accel = -2.0
         else:
           self.man_step = 2
 
       if self.man_step == 2:
         if CS.out.vEgo < 8.9408: # 20 mph
-          actuators.accel = 0.5
           accel = 0.5
         else:
           self.last_time_frame = self.frame
@@ -112,7 +109,6 @@ class CarController(CarControllerBase):
 
       if self.man_step == 3:
         if self.frame < self.last_time_frame + 300: # 3 seconds
-          actuators.accel = 0.0
           accel = 0.0
         else:
           self.man_step = 0
@@ -212,7 +208,7 @@ class CarController(CarControllerBase):
 
     new_actuators = actuators.as_builder()
     new_actuators.speed = self.speed
-    new_actuators.accel = self.calc_accel
+    new_actuators.accel = self.accel
     new_actuators.gas = self.gas
     new_actuators.brake = self.brake
     new_actuators.torque = self.last_torque
