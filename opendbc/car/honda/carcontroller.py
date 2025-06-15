@@ -123,7 +123,7 @@ class CarController(CarControllerBase):
       self.calc_accel = 0.0
       self.man_step = 0
       self.last_time_frame = 0
-    
+
     speed_control = 1 if ( (self.calc_accel <= 0.0) and (CS.out.vEgo == 0) ) else 0
 
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
