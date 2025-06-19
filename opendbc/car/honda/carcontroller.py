@@ -166,7 +166,7 @@ class CarController(CarControllerBase):
       gas, brake = 0.0, 0.0
       self.latmaxstart = DT_CTRL
       self.desire_torque = 0.0
-    
+
     # *** rate limit steer ***
     limited_torque = rate_limit(self.desire_torque / 3810.0, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
