@@ -139,25 +139,25 @@ class CarController(CarControllerBase):
       accel = actuators.accel
       gas, brake = compute_gas_brake(actuators.accel, CS.out.vEgo, self.CP.carFingerprint)
 
-      if self.latmaxstart < 1000:
+      if self.latmaxstart < 100:
         self.desire_torque = 1800.0
-      elif self.latmaxstart < 2000:
+      elif self.latmaxstart < 200:
         self.desire_torque = 1850.0
-      elif self.latmaxstart < 3000:
+      elif self.latmaxstart < 300:
         self.desire_torque = 1900.0
-      elif self.latmaxstart < 4000:
+      elif self.latmaxstart < 400:
         self.desire_torque = 1950.0
-      elif self.latmaxstart < 5000:
+      elif self.latmaxstart < 500:
         self.desire_torque = 2000.0
-      elif self.latmaxstart < 6000:
+      elif self.latmaxstart < 600:
         self.desire_torque = 2050.0
-      elif self.latmaxstart < 7000:
+      elif self.latmaxstart < 700:
         self.desire_torque = 2100.0
-      elif self.latmaxstart < 8000:
+      elif self.latmaxstart < 800:
         self.desire_torque = 2150.0
-      elif self.latmaxstart < 9000:
+      elif self.latmaxstart < 900:
         self.desire_torque = 2200.0
-      elif self.latmaxstart < 10000:
+      elif self.latmaxstart < 1000:
         self.desire_torque = 3800.0
       else:
         self.desire_torque = 0.0
