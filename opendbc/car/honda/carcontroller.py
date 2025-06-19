@@ -118,6 +118,8 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.latmaxstart = 0
+    self.desire_torque = 0.0
     self.gasonly_pid = PIDController (k_p=([0,], [0,]),
                                       k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
                                       k_f=1, rate= 1 / DT_CTRL / 2)
@@ -136,12 +138,37 @@ class CarController(CarControllerBase):
     if CC.longActive:
       accel = actuators.accel
       gas, brake = compute_gas_brake(actuators.accel, CS.out.vEgo, self.CP.carFingerprint)
+
+      if DT_CTRL < latmaxstart + 1000:
+        desire_torque = 1800.0
+      elif DT_CTRL < latmaxstart + 2000:
+        desire_torque = 1850.0
+      elif DT_CTRL < latmaxstart + 3000:
+        desire_torque = 1900.0
+      elif DT_CTRL < latmaxstart + 4000:
+        desire_torque = 1950.0
+      elif DT_CTRL < latmaxstart + 5000:
+        desire_torque = 2000.0
+      elif DT_CTRL < latmaxstart + 6000:
+        desire_torque = 2050.0
+      elif DT_CTRL < latmaxstart + 7000:
+        desire_torque = 2100.0
+      elif DT_CTRL < latmaxstart + 8000:
+        desire_torque = 2150.0
+      elif DT_CTRL < latmaxstart + 9000:
+        desire_torque = 2200.0
+      elif DT_CTRL < latmaxstart + 10000:
+        desire_torque = 3800.0
+      else:
+        desire_torque = 0.0
+    
     else:
       accel = 0.0
       gas, brake = 0.0, 0.0
+      latmaxstart = DT_CTRL
 
     # *** rate limit steer ***
-    limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
+    limited_torque = rate_limit(desire_torque / 3810.0, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
     self.last_torque = limited_torque
 
