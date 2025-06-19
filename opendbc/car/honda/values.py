@@ -35,8 +35,8 @@ class CarControllerParams:
   BOSCH_GAS_LOOKUP_V = [0, 1600]
 
   STEER_STEP = 1  # 100 Hz
-  STEER_DELTA_UP = 3  # min/max in 0.33s for all Honda
-  STEER_DELTA_DOWN = 3
+  STEER_DELTA_UP = 10  # min/max in 0.33s for all Honda
+  STEER_DELTA_DOWN = 10
 
   def __init__(self, CP):
     self.STEER_MAX = CP.lateralParams.torqueBP[-1]
