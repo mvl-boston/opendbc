@@ -414,16 +414,16 @@ static bool honda_nidec_fwd_hook(int bus_num, int addr) {
 }
 
 static bool honda_bosch_fwd_hook(int bus_num, int addr) {
-
   bool block_msg = false;
 
   if (bus_num == 2)  {
-    bool is_lkas_msg = (addr == 0xE4);
-    block_msg = is_lkas_msg
+    bool is_lkas_msg = (addr == 0xE4) || (addr == 0xE5) || (addr == 0x33D) || (addr == 0x33DA) || (addr == 0x33DB);
+    bool is_acc_msg = ((addr == 0x1C8) || (addr == 0x30C)) && honda_bosch_radarless && honda_bosch_long;
+    block_msg = is_lkas_msg || is_acc_msg;
   }
+
   return block_msg;
 }
-
 
 const safety_hooks honda_nidec_hooks = {
   .init = honda_nidec_init,
