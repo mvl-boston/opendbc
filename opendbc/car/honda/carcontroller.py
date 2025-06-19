@@ -146,7 +146,7 @@ class CarController(CarControllerBase):
           self.man_step = 1
 
       if self.man_step == 1:
-        if self.frame < self.last_time_frame + 300: # 3 seconds
+        if self.frame < self.last_time_frame + 30: # 3 seconds
           accel = -2.0
         else:
           self.man_step = 2
@@ -159,7 +159,7 @@ class CarController(CarControllerBase):
           self.man_step = 3
 
       if self.man_step == 3:
-        if self.frame < self.last_time_frame + 300: # 3 seconds
+        if self.frame < self.last_time_frame + 30: # 3 seconds
           accel = 0.0
         else:
           self.man_step = 4
@@ -172,7 +172,7 @@ class CarController(CarControllerBase):
           self.man_step = 5
 
       if self.man_step == 5:
-        if self.frame < self.last_time_frame + 300: # 3 seconds
+        if self.frame < self.last_time_frame + 30: # 3 seconds
           accel = -2.0
         else:
           self.man_step = 6
@@ -185,7 +185,7 @@ class CarController(CarControllerBase):
           self.man_step = 7
 
       if self.man_step == 7:
-        if self.frame < self.last_time_frame + 300: # 3 seconds
+        if self.frame < self.last_time_frame + 30: # 3 seconds
           accel = 0.0
         else:
           self.man_step = 0
