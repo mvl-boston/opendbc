@@ -118,8 +118,10 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.man_step = 0
+    self.last_time_frame = 0
     self.gasonly_pid = PIDController (k_p=([0,], [0,]),
-                                      k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
+                                      k_i= ([0.], [0.]),
                                       k_f=1, rate= 1 / DT_CTRL / 2)
     self.pitch = 0.0
 
@@ -134,7 +136,61 @@ class CarController(CarControllerBase):
       self.pitch = CC.orientationNED[1]
 
     if CC.longActive:
-      accel = actuators.accel
+      # accel = actuators.accel
+# ----------------- test forced accel start -------------------
+      if self.man_step == 0:
+        if CS.out.vEgo > 0.0:
+          accel = -0.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 1
+
+      if self.man_step == 1:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = -2.0
+        else:
+          self.man_step = 2
+
+      if self.man_step == 2:
+        if CS.out.vEgo < 8.9408: # 20 mph
+          accel = 0.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 3
+
+      if self.man_step == 3:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = 0.0
+        else:
+          self.man_step = 4
+
+      if self.man_step == 4:
+        if CS.out.vEgo > 0.0:
+          accel = -1.0
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 5
+
+      if self.man_step == 5:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = -2.0
+        else:
+          self.man_step = 6
+
+      if self.man_step == 6:
+        if CS.out.vEgo < 8.9408: # 20 mph
+          accel = 1.0
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 7
+
+      if self.man_step == 7:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = 0.0
+        else:
+          self.man_step = 0
+
+# ----------------- test forced accel end -------------------
       gas, brake = compute_gas_brake(actuators.accel, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
