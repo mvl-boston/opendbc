@@ -217,7 +217,6 @@ class CarController(CarControllerBase):
           self.man_step = 0
           accel = -0.5
 
-      
 # ----------------- test forced accel end -------------------
       gas, brake = compute_gas_brake(actuators.accel, CS.out.vEgo, self.CP.carFingerprint)
     else:
