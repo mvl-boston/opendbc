@@ -505,7 +505,7 @@ class TestHondaBoschRadarlessSafetyBase(TestHondaBoschSafetyBase):
   BUTTONS_BUS = 2  # camera controls ACC, need to send buttons on bus 2
 
   TX_MSGS = [[0xE4, 0], [0x296, 2], [0x33D, 0]]
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0xE5, 0x33D, 0x33DA, 0x33DB]}
   RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D)}  # STEERING_CONTROL
 
   def setUp(self):
