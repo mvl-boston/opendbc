@@ -179,7 +179,8 @@ def get_present_ecus(can_recv: CanRecvCallable, can_send: CanSendCallable, set_o
     # Skip query if no panda available
     if num_pandas is None:
       continue
-    elif r.bus > num_pandas * 4 - 1:
+    elif r.bus > 2 * 4 - 1:
+    # elif r.bus > num_pandas * 4 - 1:
       continue
 
     for ecu_type, addr, sub_addr in config.get_all_ecus(VERSIONS[brand]):
