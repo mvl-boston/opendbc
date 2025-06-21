@@ -223,7 +223,7 @@ class TestCanParserPacker:
     dbc_file = "honda_civic_touring_2016_can_generated"
 
     freq = 100
-    msgs = [("VSA_STATUS", freq), ("STEER_MOTOR_TORQUE", freq/2)]
+    msgs = [("VSA_STATUS", freq/2), ("STEER_STATUS", freq)]
 
     parser = CANParser(dbc_file, msgs, 0)
     packer = CANPacker(dbc_file)
