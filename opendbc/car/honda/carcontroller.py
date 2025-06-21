@@ -6,7 +6,7 @@ from opendbc.can.packer import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CruiseButtons, VISUAL_HUD, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_NIDEC_ALT_PCM_ACCEL, \
-                                     CarControllerParams, HONDA_BOSCH_ALT_CAMERA
+                                     CarControllerParams, BOSCH_ALT_RADAR
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 
@@ -162,10 +162,6 @@ class CarController(CarControllerBase):
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
-    # alt_camera models fault if user and comma both apply torque
-    if CS.out.steeringPressed and self.CP.carFingerprint in (HONDA_BOSCH_ALT_CAMERA):
-      apply_torque = 0
-
     # Send CAN commands
     can_sends = []
 
@@ -175,7 +171,7 @@ class CarController(CarControllerBase):
         can_sends.append(make_tester_present_msg(0x18DAB0F1, 1, suppress_response=True))
 
     # Send steering command.
-    if self.CP.carFingerprint in (HONDA_BOSCH_ALT_CAMERA): # faults when steer control occurs while steeringPressed
+    if self.CP.carFingerprint in (HONDA_BOSCH_ALT_RADAR): # faults when steer control occurs while steeringPressed
       steerDisable = CS.out.steeringPressed or ( abs ( CS.out.steeringTorque - self.steeringTorque_last ) > 100 )
       self.steeringTorque_last = CS.out.steeringTorque
       if steerDisable:
