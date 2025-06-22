@@ -185,6 +185,8 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.ACURA_RDX_3G_MMR:
       if not (ret.openpilotLongitudinalControl):
         ret.minSteerSpeed = 45.0 * CV.MPH_TO_MS # min is 45mph to activate but 40mph to deactivate.  Used 45mph to clarify for warning message
+      else:
+        ret.minSteerSpeed = 3.0 * CV.MPH_TO_MS
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3810], [0, 3810]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2250]
@@ -199,9 +201,9 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
       if not ret.openpilotLongitudinalControl:
         ret.minSteerSpeed = 45.0 * CV.MPH_TO_MS # min is 45mph to activate but 40mph to deactivate.  Used 45mph to clarify for warning message
-        ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]  # clipped by radar
       else:
-        ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
+        ret.minSteerSpeed = 3.0 * CV.MPH_TO_MS
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # matching RDX, todo: check if higher works
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
 
     elif candidate in (CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G):
