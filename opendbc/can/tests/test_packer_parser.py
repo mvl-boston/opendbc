@@ -88,8 +88,8 @@ class TestCanParserPacker:
     msgs = [
       ("STEERING_CONTROL", 0),
     ]
-    packer = CANPacker("honda_civic_touring_2016_can_generated")
-    parser = CANParser("honda_civic_touring_2016_can_generated", msgs, 0)
+    packer = CANPacker("acura_rlx")
+    parser = CANParser("acura_rlx", msgs, 0)
 
     msg = packer.make_can_msg("STEERING_CONTROL", 0, {"COUNTER": 0})
 
