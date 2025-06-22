@@ -212,7 +212,7 @@ class CarController(CarControllerBase):
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
       pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
-    if not self.CP.openpilotLongitudinalControl:
+    if (not self.CP.openpilotLongitudinalControl) or (self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR):
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:  # radarless cars don't have supplemental message
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
       # If using stock ACC, spam cancel command to kill gas when OP disengages.
