@@ -88,8 +88,8 @@ class TestCanParserPacker:
     msgs = [
       ("STEERING_CONTROL", 0),
     ]
-    packer = CANPacker("honda_civic_touring_2016_can_generated")
-    parser = CANParser("honda_civic_touring_2016_can_generated", msgs, 0)
+    packer = CANPacker("acura_rlx")
+    parser = CANParser("acura_rlx", msgs, 0)
 
     msg = packer.make_can_msg("STEERING_CONTROL", 0, {"COUNTER": 0})
 
@@ -223,7 +223,7 @@ class TestCanParserPacker:
     dbc_file = "honda_civic_touring_2016_can_generated"
 
     freq = 100
-    msgs = [("VSA_STATUS", freq), ("STEER_MOTOR_TORQUE", freq/2)]
+    msgs = [("VSA_STATUS", freq/2), ("STEER_STATUS", freq)]
 
     parser = CANParser(dbc_file, msgs, 0)
     packer = CANPacker(dbc_file)
