@@ -104,7 +104,7 @@ class CarState(CarStateBase):
     self.brake_switch_active = False
     self.cruise_setting = 0
     self.v_cruise_pcm_prev = 0
-    self.lowspeed_warn_ready = True
+    self.steeringBlocked = False
 
     # When available we use cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] to populate vEgoCluster
     # However, on cars without a digital speedometer this is not always present (HRV, FIT, CRV 2016, ILX and RDX)
@@ -256,13 +256,10 @@ class CarState(CarStateBase):
     ret.cruiseState.enabled = cp.vl["POWERTRAIN_DATA"]["ACC_STATUS"] != 0
     ret.cruiseState.available = bool(cp.vl[self.main_on_sig_msg]["MAIN_ON"])
 
-    if self.CP.carFingerprint in HONDA_BOSCH_ALT_CAMERA:
-    # Adds low speed warning once each time steer control is disabled, silence after steering is engaged
-      if cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"] != 0 and ret.cruiseState.enabled:
-        self.lowspeed_warn_ready = True
-      ret.lowSpeedAlert = self.lowspeed_warn_ready and ret.cruiseState.enabled and cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"] == 0
-      if ret.lowSpeedAlert and ret.steeringPressed:
-        self.lowspeed_warn_ready = False
+    if (self.CP.carFingerprint in HONDA_BOSCH_ALT_CAMERA) and (cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"] == 0) and ret.cruiseState.enabled:
+      self.steeringBlocked  = True
+    else:
+      self.steeringBlocked  = False
 
     # Gets rid of Pedal Grinding noise when brake is pressed at slow speeds for some models
     if self.CP.carFingerprint in (CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE):
