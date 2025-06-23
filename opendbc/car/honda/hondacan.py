@@ -1,7 +1,7 @@
 import numpy as np
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.values import HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD, HONDA_BOSCH_ALT_CAMERA, CAR, CarControllerParams
+from opendbc.car.honda.values import HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD, HONDA_BOSCH_ALT_RADAR, CAR, CarControllerParams
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -48,7 +48,7 @@ class CanBus(CanBusBase):
 
 def get_cruise_speed_conversion(car_fingerprint: str, is_metric: bool) -> float:
   # on certain cars, CRUISE_SPEED changes to imperial with car's unit setting
-  return CV.MPH_TO_MS if car_fingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD | HONDA_BOSCH_ALT_CAMERA) and not is_metric else CV.KPH_TO_MS
+  return CV.MPH_TO_MS if car_fingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD | HONDA_BOSCH_ALT_RADAR) and not is_metric else CV.KPH_TO_MS
 
 def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_cancel_cmd, fcw, car_fingerprint, stock_brake):
   # TODO: do we loose pressure if we keep pump off for long?
@@ -118,11 +118,11 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   return commands
 
 
-def create_steering_control(packer, CAN, apply_torque, lkas_active, alt_radar):
+def create_steering_control(packer, CAN, apply_torque, lkas_active, fingerprint):
   values = {
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
-    "LKAS_FAULT_RECOVERY": alt_radar and lkas_active,
+    "LKAS_FAULT_RECOVERY": lkas_active and fingerprint in HONDA_BOSCH_ALT_RADAR,
   }
   return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
 
