@@ -220,7 +220,7 @@ class CarState(CarStateBase):
     ret.steeringTorqueEps = cp.vl["STEER_MOTOR_TORQUE"]["MOTOR_TORQUE"]
     ret.steeringPressed = abs(ret.steeringTorque) > STEER_THRESHOLD.get(self.CP.carFingerprint, 1200) or \
                           ( (self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR) and (abs (steeringTorque - self.steeringTorque_last) > 200) )
-     self.steeringTorque_last = steeringTorque
+    self.steeringTorque_last = steeringTorque
 
     if self.CP.carFingerprint in HONDA_BOSCH:
       # The PCM always manages its own cruise control state, but doesn't publish it
