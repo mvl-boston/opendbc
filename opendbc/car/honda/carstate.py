@@ -259,11 +259,6 @@ class CarState(CarStateBase):
     ret.cruiseState.available = bool(cp.vl[self.main_on_sig_msg]["MAIN_ON"])
 
     if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
-    # bosch_alt_radar models disable steer under 45mph, keep long control.  Lowspeedalert too intrusive for under 45mph cruise.
-    # Adds low speed alert once each drive, silence after steering is engaged.  Stock LKAS lines warn thereafter.
-      ret.lowSpeedAlert = self.lowspeed_warn_ready and ret.cruiseState.enabled and cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"] == 0
-      if ret.lowSpeedAlert and ret.steeringPressed:
-        self.lowspeed_warn_ready = False
       self.show_lanelines = ret.cruiseState.enabled and cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"] == 1
     else:
       self.show_lanelines = True
