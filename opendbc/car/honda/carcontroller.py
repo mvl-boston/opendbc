@@ -171,7 +171,7 @@ class CarController(CarControllerBase):
 
     # Send steering command.
     enable_steer = CC.latActive and not CS.lkas_blocked and \
-                   (not CS.steeringPressed if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR else True)
+                   (not CS.out.steeringPressed if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR else True)
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, enable_steer, self.CP.carFingerprint))
 
     # wind brake from air resistance decel at high speed
