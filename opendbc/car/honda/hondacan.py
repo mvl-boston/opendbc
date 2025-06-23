@@ -122,7 +122,7 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active):
   values = {
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
-    "SET_ME_X00_2": 1,
+#    "SET_ME_X00_2": 1,
     "STEER_DOWN_TO_ZERO": lkas_active,
   }
   return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
@@ -173,7 +173,7 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
     'SET_ME_X41': 0x41,
     'STEERING_REQUIRED': hud.steer_required,
     'SOLID_LANES': hud.lanes_visible,
-    'LDW_ON': 1,
+#    'LDW_ON': 1,
     'BEEP': 0,
   }
 
