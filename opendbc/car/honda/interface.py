@@ -195,7 +195,7 @@ class CarInterface(CarInterfaceBase):
         ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
 
     elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # matching RDX, todo: check if higher works
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3810], [0, 3810]]  # matching RDX, todo: check if higher works
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
 
     elif candidate in (CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G):
