@@ -254,9 +254,10 @@ class CarController(CarControllerBase):
 
     # Send dashboard UI commands.
     # On Nidec, this controls longitudinal positive acceleration
+    show_lines = hud_control.lanesVisible and (not CS.lkas_blocked) and (abs(apply_torque) < self.params.STEER_MAX)
     if self.frame % 10 == 0:
       hud = HUDData(int(pcm_accel), int(round(hud_v_cruise)), hud_control.leadVisible,
-                    hud_control.lanesVisible and not CS.lkas_blocked, fcw_display, acc_alert, steer_required, hud_control.leadDistanceBars)
+                    show_lines, fcw_display, acc_alert, steer_required, hud_control.leadDistanceBars)
       can_sends.extend(hondacan.create_ui_commands(self.packer, self.CAN, self.CP, CC.enabled, pcm_speed, hud, CS.is_metric, CS.acc_hud, CS.lkas_hud))
 
       if self.CP.openpilotLongitudinalControl and self.CP.carFingerprint not in HONDA_BOSCH:
