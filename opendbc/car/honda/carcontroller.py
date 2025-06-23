@@ -1,11 +1,14 @@
 import numpy as np
 from collections import namedtuple
+import math
 
 from opendbc.can.packer import CANPacker
-from opendbc.car import Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
+from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
-from opendbc.car.honda.values import CruiseButtons, VISUAL_HUD, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
+from opendbc.car.honda.values import CruiseButtons, VISUAL_HUD, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_NIDEC_ALT_PCM_ACCEL, \
+                                     CarControllerParams, HONDA_BOSCH_ALT_CAMERA
 from opendbc.car.interfaces import CarControllerBase
+from opendbc.car.common.pid import PIDController
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -115,6 +118,12 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.man_step = 0
+    self.last_time_frame = 0
+    self.gasonly_pid = PIDController (k_p=([0,], [0,]),
+                                      k_i= ([0.], [0.]),
+                                      k_f=1, rate= 1 / DT_CTRL / 2)
+    self.pitch = 0.0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -123,8 +132,94 @@ class CarController(CarControllerBase):
     hud_v_cruise = hud_control.setSpeed / conversion if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
+    if len(CC.orientationNED) == 3:
+      self.pitch = CC.orientationNED[1]
+
     if CC.longActive:
-      accel = actuators.accel
+      # accel = actuators.accel
+# ----------------- test forced accel start -------------------
+      accel = 0.0
+
+      if self.man_step == 0:
+        if CS.out.vEgo > 0.0:
+          accel = -0.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 1
+
+      if self.man_step == 1:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = -2.0
+        else:
+          self.man_step = 2
+
+      if self.man_step == 2:
+        if CS.out.vEgo < (0.5 * 7):
+          accel = 0.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 3
+
+      if self.man_step == 3:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = 0.0
+        else:
+          self.man_step = 4
+
+      if self.man_step == 4:
+        if CS.out.vEgo > 0.0:
+          accel = -1.0
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 5
+
+      if self.man_step == 5:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = -2.0
+        else:
+          self.man_step = 6
+
+      if self.man_step == 6:
+        if CS.out.vEgo <  (1.0 * 7):
+          accel = 1.0
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 7
+
+      if self.man_step == 7:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = 0.0
+        else:
+          self.man_step = 8
+
+      if self.man_step == 8:
+        if CS.out.vEgo > 0.0:
+          accel = -3.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 9
+
+      if self.man_step == 9:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = -2.0
+        else:
+          self.man_step = 10
+
+      if self.man_step == 10:
+        if CS.out.vEgo <  (2.0 * 7):
+          accel = 2.0
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 11
+
+      if self.man_step == 11:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = 0.0
+        else:
+          self.man_step = 0
+          accel = -0.5
+
+# ----------------- test forced accel end -------------------
       gas, brake = compute_gas_brake(actuators.accel, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
@@ -151,6 +246,10 @@ class CarController(CarControllerBase):
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
+    # alt_camera models fault if user and comma both apply torque
+    if CS.out.steeringPressed and self.CP.carFingerprint in (HONDA_BOSCH_ALT_CAMERA):
+      apply_torque = 0
+
     # Send CAN commands
     can_sends = []
 
@@ -163,8 +262,11 @@ class CarController(CarControllerBase):
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive))
 
     # wind brake from air resistance decel at high speed
-    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15])
+    wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
+    hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
+
     # all of this is only relevant for HONDA NIDEC
+    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) # not in m/s2 units
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
     # TODO this 1.44 is just to maintain previous behavior
     pcm_speed_BP = [-wind_brake,
@@ -207,12 +309,26 @@ class CarController(CarControllerBase):
 
         if self.CP.carFingerprint in HONDA_BOSCH:
           self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
-          self.gas = float(np.interp(accel, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+
+          if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+            gas_pedal_force = self.accel # radarless does not need a pid
+          # elif (actuators.longControlState == LongCtrlState.pid) and not CS.out.gasPressed: # perform a gas-only pid
+          elif False: # skip PID
+            gas_error = self.accel - CS.out.aEgo
+            self.gasonly_pid.neg_limit = self.params.BOSCH_ACCEL_MIN
+            self.gasonly_pid.pos_limit = self.params.BOSCH_ACCEL_MAX
+            gas_pedal_force = self.gasonly_pid.update(gas_error, speed=CS.out.vEgo, feedforward=self.accel)
+            gas_pedal_force += wind_brake_ms2 + hill_brake
+          else:
+            gas_pedal_force = self.accel
+            self.gasonly_pid.reset()
+            gas_pedal_force += wind_brake_ms2 + hill_brake
+          self.gas = float(np.interp(gas_pedal_force, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
           can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                        self.stopping_counter, self.CP.carFingerprint))
+                                                        self.stopping_counter, self.CP.carFingerprint, gas_pedal_force, CS.out.vEgo))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
