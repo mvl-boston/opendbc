@@ -43,7 +43,7 @@ class CanBus(CanBusBase):
   @property
   def steer(self) -> int:
     return self._steer
-  
+
   # B-CAN is forwarded to ACC-CAN radar side (CAN 0 on fake ethernet port)
   @property
   def body(self) -> int:
