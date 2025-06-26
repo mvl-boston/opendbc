@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
+from cereal import car
 from opendbc.can.parser import CANParser
-from opendbc.car import Bus, structs
-from opendbc.car.interfaces import RadarInterfaceBase
-from opendbc.car.honda.values import DBC
+from openpilot.selfdrive.car.interfaces import RadarInterfaceBase
+from openpilot.selfdrive.car.honda.values import DBC
 
 
 def _create_nidec_can_parser(car_fingerprint):
   radar_messages = [0x400] + list(range(0x430, 0x43A)) + list(range(0x440, 0x446))
   messages = [(m, 20) for m in radar_messages]
-  return CANParser(DBC[car_fingerprint][Bus.radar], messages, 1)
+  return CANParser(DBC[car_fingerprint]['radar'], messages, 1)
 
 
 class RadarInterface(RadarInterfaceBase):
@@ -18,6 +18,9 @@ class RadarInterface(RadarInterfaceBase):
     self.radar_fault = False
     self.radar_wrong_config = False
     self.radar_off_can = CP.radarUnavailable
+    self.radar_ts = CP.radarTimeStep
+
+    self.delay = int(round(0.1 / CP.radarTimeStep))   # 0.1s delay of radar
 
     # Nidec
     if self.radar_off_can:
@@ -44,7 +47,7 @@ class RadarInterface(RadarInterfaceBase):
     return rr
 
   def _update(self, updated_messages):
-    ret = structs.RadarData()
+    ret = car.RadarData.new_message()
 
     for ii in sorted(updated_messages):
       cpt = self.rcp.vl[ii]
@@ -54,7 +57,7 @@ class RadarInterface(RadarInterfaceBase):
         self.radar_wrong_config = cpt['RADAR_STATE'] == 0x69
       elif cpt['LONG_DIST'] < 255:
         if ii not in self.pts or cpt['NEW_TRACK']:
-          self.pts[ii] = structs.RadarData.RadarPoint()
+          self.pts[ii] = car.RadarData.RadarPoint.new_message()
           self.pts[ii].trackId = self.track_id
           self.track_id += 1
         self.pts[ii].dRel = cpt['LONG_DIST']  # from front of car
@@ -67,12 +70,14 @@ class RadarInterface(RadarInterfaceBase):
         if ii in self.pts:
           del self.pts[ii]
 
+    errors = []
     if not self.rcp.can_valid:
-      ret.errors.canError = True
+      errors.append("canError")
     if self.radar_fault:
-      ret.errors.radarFault = True
+      errors.append("fault")
     if self.radar_wrong_config:
-      ret.errors.wrongConfig = True
+      errors.append("wrongConfig")
+    ret.errors = errors
 
     ret.points = list(self.pts.values())
 
