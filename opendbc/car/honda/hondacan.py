@@ -20,7 +20,7 @@ class CanBus(CanBusBase):
       # normally steering commands are sent to radar, which forwards them to powertrain bus
       # when radar is disabled, steering commands are sent directly to powertrain bus
       self._lkas = self._pt if CP.openpilotLongitudinalControl else self._radar
-      self._steer = self.offset + 2
+ #     self._steer = self.offset + 2
     else:
       self._pt, self._radar, self._lkas = self.offset, self.offset + 1, self.offset
 
@@ -40,9 +40,9 @@ class CanBus(CanBusBase):
   def lkas(self) -> int:
     return self._lkas
 
-  @property
-  def steer(self) -> int:
-    return self._steer
+  #@property
+  #def steer(self) -> int:
+  #  return self._steer
 
   # B-CAN is forwarded to ACC-CAN radar side (CAN 0 on fake ethernet port)
   @property
@@ -128,7 +128,8 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active):
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
   }
-  return packer.make_can_msg("STEERING_CONTROL", CAN.steer, values)
+#  return packer.make_can_msg("STEERING_CONTROL", CAN.steer, values)
+  return packer.make_can_msg("STEERING_CONTROL", 2 , values)
 
 
 def create_bosch_supplemental_1(packer, CAN):
