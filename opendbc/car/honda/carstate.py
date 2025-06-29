@@ -9,7 +9,7 @@ from opendbc.car.honda.hondacan import CanBus, get_cruise_speed_conversion
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, \
                                                  HondaFlags, CruiseButtons, CruiseSettings, GearShifter, \
-                                                 SERIAL_STEERING, HONDA_NIDEC_HYBRID
+                                                 HONDA_NIDEC_HYBRID
 from opendbc.car.interfaces import CarStateBase
 
 TransmissionType = structs.CarParams.TransmissionType
@@ -33,15 +33,9 @@ def get_can_messages(CP, gearbox_msg):
     ("STEER_MOTOR_TORQUE", 0),  # TODO: not on every car
   ]
 
-  if  CP.carFingerprint in SERIAL_STEERING:
-    messages += [
-      ("STEER_STATUS", 0), # initially slow to transmit
-    ]
-  else:
-    pass # temporarily disable steer status
-    # messages +=[
-    #  ("STEER_STATUS", 100),
-    #]
+  # messages +=[
+  #  ("STEER_STATUS", 100),
+  #]
 
   if CP.carFingerprint in (CAR.HONDA_ODYSSEY_CHN, CAR.ACURA_RLX_HYBRID):
     messages += [
@@ -306,15 +300,9 @@ class CarState(CarStateBase):
 
     cam_messages = []
 
-    if  CP.carFingerprint in SERIAL_STEERING:
-      pt_messages += [
-        ("STEERING_CONTROL", 0), # initially slow, prevent timing errors
-      ]
-    else:
-      pass # temporarily disable steering control
-      # cam_messages += [
-      #  ("STEERING_CONTROL", 100),
-      #]
+    # cam_messages += [
+    #  ("STEERING_CONTROL", 100),
+    #]
 
     if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       cam_messages += [
