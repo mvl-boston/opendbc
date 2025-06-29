@@ -503,9 +503,6 @@ FW_VERSIONS = {
     (Ecu.shiftByWire, 0x18da0bf1, None): [
       b'54008-TY3-J010\x00\x00',
     ],
-#    (Ecu.combinationMeter, 0x18da60f1, None): [   - remove creates ci test error
-#      b'78109-TY3-A050\x00\x00',
-#    ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-TY3-L130\x00\x00',
     ],
