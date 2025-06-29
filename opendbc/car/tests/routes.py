@@ -24,7 +24,7 @@ non_tested_cars = [
   GM.CHEVROLET_MALIBU,
   HYUNDAI.GENESIS_G90,
   HONDA.HONDA_ODYSSEY_CHN,
-  HONDA.ACURA_RLX_HYBRID # will add route once steering works
+  HONDA.ACURA_RLX_HYBRID, # will add route once steering works
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
 ]
