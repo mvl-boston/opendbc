@@ -85,8 +85,10 @@ class CarController(CarControllerBase):
       self.pitch = CC.orientationNED[1]
 
     if CC.longActive:
-      # accel = float (np.clip ( actuators.accel, -3.5, 2) )
+      # accel = actuators.accel
 # ----------------- test forced accel start -------------------
+      accel = 0.0
+
       if self.man_step == 0:
         if CS.out.vEgo > 0.0:
           accel = -0.5
@@ -101,7 +103,7 @@ class CarController(CarControllerBase):
           self.man_step = 2
 
       if self.man_step == 2:
-        if CS.out.vEgo < 8.9408: # 20 mph
+        if CS.out.vEgo < (0.5 * 7):
           accel = 0.5
         else:
           self.last_time_frame = self.frame
@@ -127,7 +129,7 @@ class CarController(CarControllerBase):
           self.man_step = 6
 
       if self.man_step == 6:
-        if CS.out.vEgo < 8.9408: # 20 mph
+        if CS.out.vEgo <  (1.0 * 7):
           accel = 1.0
         else:
           self.last_time_frame = self.frame
@@ -137,7 +139,34 @@ class CarController(CarControllerBase):
         if self.frame < self.last_time_frame + 300: # 3 seconds
           accel = 0.0
         else:
+          self.man_step = 8
+
+      if self.man_step == 8:
+        if CS.out.vEgo > 0.0:
+          accel = -3.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 9
+
+      if self.man_step == 9:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = -2.0
+        else:
+          self.man_step = 10
+
+      if self.man_step == 10:
+        if CS.out.vEgo <  (2.0 * 7):
+          accel = 2.0
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 11
+
+      if self.man_step == 11:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = 0.0
+        else:
           self.man_step = 0
+          accel = -0.5
 
 # ----------------- test forced accel end -------------------
     else:
