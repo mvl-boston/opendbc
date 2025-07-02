@@ -84,7 +84,11 @@ class CarController(CarControllerBase):
     if len(CC.orientationNED) == 3:
       self.pitch = CC.orientationNED[1]
 
+    if len(CC.orientationNED) == 3:
+      self.pitch = CC.orientationNED[1]
+
     if CC.longActive:
+=======
       # accel = actuators.accel
 # ----------------- test forced accel start -------------------
       accel = 0.0
