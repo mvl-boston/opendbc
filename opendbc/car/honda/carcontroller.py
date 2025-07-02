@@ -104,7 +104,7 @@ class CarController(CarControllerBase):
 
       if self.man_step == 2:
         if CS.out.vEgo < (0.5 * 7):
-          accel = 0.5
+          accel = 1.33
         else:
           self.last_time_frame = self.frame
           self.man_step = 3
@@ -130,7 +130,7 @@ class CarController(CarControllerBase):
 
       if self.man_step == 6:
         if CS.out.vEgo <  (1.0 * 7):
-          accel = 1.0
+          accel = 1.67
         else:
           self.last_time_frame = self.frame
           self.man_step = 7
