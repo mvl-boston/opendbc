@@ -89,6 +89,7 @@ routes = [
   CarTestRoute("03be5f2fd5c508d1|2020-04-19--18-44-15", HONDA.HONDA_HRV),
   CarTestRoute("320098ff6c5e4730|2023-04-13--17-47-46", HONDA.HONDA_HRV_3G),
   CarTestRoute("147613502316e718/00000001--dd141a3140", HONDA.HONDA_HRV_3G),  # Brazilian model
+  CarTestRoute("1e4baee1aa2687a0/00000001--74c4cc0b23", HONDA.HONDA_HRV_3G),  # Thailand model use ALT_GEAR
   CarTestRoute("917b074700869333|2021-05-24--20-40-20", HONDA.ACURA_ILX),
   CarTestRoute("08a3deb07573f157|2020-03-06--16-11-19", HONDA.HONDA_ACCORD),  # 1.5T
   CarTestRoute("1da5847ac2488106|2021-05-24--19-31-50", HONDA.HONDA_ACCORD),  # 2.0T
@@ -109,6 +110,7 @@ routes = [
   CarTestRoute("1f032f5173c8ad99/00000006--573b3fcaf5", HONDA.HONDA_CIVIC_2022),  # Civic Type R with manual transmission
   CarTestRoute("b1c832ad56b6bc9d/00000010--debfcf5867", HONDA.HONDA_CIVIC_2022),  # 2025 Civic Hatch Hybrid with new eCVT transmission
   CarTestRoute("f9c43864cf057d05|2024-01-15--23-01-20", HONDA.HONDA_PILOT_4G),  # TODO: Replace with a newer route
+  CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA),
 
   CarTestRoute("87d7f06ade479c2e|2023-09-11--23-30-11", HYUNDAI.HYUNDAI_AZERA_6TH_GEN),
   CarTestRoute("66189dd8ec7b50e6|2023-09-20--07-02-12", HYUNDAI.HYUNDAI_AZERA_HEV_6TH_GEN),
