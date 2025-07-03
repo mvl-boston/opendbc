@@ -203,7 +203,8 @@ class CarController(CarControllerBase):
 # ----------------- test override gas start -------------------
       wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
       hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
-      hybrid_regen_brake = float(np.interp(CS.out.vEgo, [0.0, 0.1, 1.0, 2.5, 3.25, 4.2, 5.0, 6.0, 7.0, 7.7], [0.0, -1.7, -1.0, -0.5, 0.1, 0.1, 0.1, 0.3, 0.2, 0.0]))
+      hybrid_regen_brake = float(np.interp(CS.out.vEgo, [0.0,  0.1,  1.0,  2.5, 3.25, 4.2, 5.0, 6.0, 7.0, 7.7], \
+                                                        [0.0, -1.7, -1.0, -0.5,  0.1, 0.1, 0.1, 0.3, 0.2, 0.0]))
 #      hybrid_regen_brake = float(np.interp(CS.out.vEgo, [0.0, 1.0, 2.5, 3.25, 4.2, 5.0, 6.0, 7.0, 7.7, 10.8, 13.9, 17.0], \
 #                                                        [0.6, 0.4, 0.9,  1.0, 1.0, 1.2, 1.4, 1.4, 1.4,  1.8,  1.6,  1.5]))
 
