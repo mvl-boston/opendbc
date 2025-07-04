@@ -129,8 +129,8 @@ class CarController(CarControllerBase):
           self.man_step = 6
 
       if self.man_step == 6:
-        if CS.out.vEgo <  (1.0 * 7):
-          accel = 1.67
+        if CS.out.vEgo <  (1.5 * 7):
+          accel = 1.5
         else:
           self.last_time_frame = self.frame
           self.man_step = 7
@@ -210,7 +210,7 @@ class CarController(CarControllerBase):
 
       self.calc_accel = float(accel + wind_brake_ms2 + hill_brake + hybrid_regen_brake)
 
-      gas_accel_addon = np.interp(CS.out.vEgo, [0.0, 1.4, 2.5, 4.2, 5.2, 6.2, 7.2], [9.6, 8.0, 4.6, 2.2, 2.0, 1.6, 3.7])
+      gas_accel_addon = np.interp(CS.out.vEgo, [0.0, 1.0, 1.8, 3.5, 5.0, 6.2, 7.2], [9.6, 9.0, 5.6, 1.9, 1.7, 1.6, 3.7])
       vfactor = np.interp(CS.out.vEgo, [0.0, 0.5, 1.5, 3.0, 100.0], [40.0, 40.0, 40.0, 40.0, 40.0])
       pcm_accel = 0 if self.calc_accel <= 0 else int (np.clip( (self.calc_accel + gas_accel_addon) * vfactor, 10, self.params.NIDEC_GAS_MAX -1) )
 #      pcm_speed = max (0.0, CS.out.vEgo + float (np.clip ( self.calc_accel * 1000.0 * CV.KPH_TO_MS, -9.0, +41.0 ) ) )
