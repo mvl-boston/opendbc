@@ -92,6 +92,7 @@ class CarInterface(CarInterfaceBase):
       # default longitudinal tuning for all hondas
       ret.longitudinalTuning.kiBP = [0.] # override for long maneuver testing, was [0., 5., 35.]
       ret.longitudinalTuning.kiV = [0.] # override for long maneuver testing, was [1.2, 0.8, 0.5]
+      ret.stoppingDecelRate = 0.3
 
     eps_modified = False
     for fw in car_fw:
