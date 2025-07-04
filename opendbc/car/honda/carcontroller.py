@@ -268,7 +268,7 @@ class CarController(CarControllerBase):
 
     new_actuators = actuators.as_builder()
     new_actuators.speed = self.speed
-    new_actuators.accel = self.accel
+    new_actuators.accel = accel
     new_actuators.gas = self.gas
     new_actuators.brake = self.brake
     new_actuators.torque = self.last_torque
