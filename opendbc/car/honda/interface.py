@@ -55,18 +55,9 @@ class CarInterface(CarInterfaceBase):
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
       cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
- #     cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.hondaNidec)) # for RLX red Panda
-
-#      if CAN.pt >= 4:
-#        cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.hondaNidec)) # try this RLX red Panda instead
-
-      if candidate == CAR.ACURA_RLX_HYBRID:
-        cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.hondaNidec))
-        ret.safetyConfigs = cfgs
-        ret.safetyConfigs[0] = get_safety_config(structs.CarParams.SafetyModel.hondaNidec)
-        ret.safetyConfigs[1] = get_safety_config(structs.CarParams.SafetyModel.hondaNidec)
-      else:
-        ret.safetyConfigs = cfgs
+      if CAN.pt >= 4:
+        cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.allOutput))
+      ret.safetyConfigs = cfgs
       ret.openpilotLongitudinalControl = True
 
       ret.pcmCruise = True
