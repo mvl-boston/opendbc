@@ -157,6 +157,7 @@ class CarController(CarControllerBase):
       accel = float (max ( actuators.accel + hill_brake, CarControllerParams.NIDEC_ACCEL_MIN ) )
       if accel > max ( 0, CS.out.aEgo) + 0.1:
         accel = 10000.0
+      accel = -2.0 if (CS.out.vEgo == 0 ) else -99.0 
       gas, brake = compute_gas_brake(accel, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
