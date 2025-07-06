@@ -320,7 +320,7 @@ class CarState(CarStateBase):
 
     cam_messages = []
 
-    if  CP.carFingerprint in SERIAL_STEERING:
+    if (CP.carFingerprint in SERIAL_STEERING) or (CP.carFingerprint == CAR.ACURA_RLX_HYBRID):
       pt_messages += [
         ("STEERING_CONTROL", 0), # initially slow, prevent timing errors
       ]
