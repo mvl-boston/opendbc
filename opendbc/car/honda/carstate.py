@@ -28,14 +28,18 @@ def get_can_messages(CP, gearbox_msg):
     ("SEATBELT_STATUS", 10),
     ("CRUISE", 10),
     ("POWERTRAIN_DATA", 100),
-    ("CAR_SPEED", 10),
     ("VSA_STATUS", 50),
     ("STEER_MOTOR_TORQUE", 0),  # TODO: not on every car
   ]
 
-  if  CP.carFingerprint in SERIAL_STEERING:
+  if  CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
+    messages += [("CAR_SPEED", 0),] # missing on RLX
+  else:
+    messages += [("CAR_SPEED", 10),]
+
+  if  CP.carFingerprint in (SERIAL_STEERING, CAR.ACURA_RLX_HYBRID):
     messages += [
-      ("STEER_STATUS", 0), # initially slow to transmit
+      ("STEER_STATUS", 0), # initially slow to transmit, temp disable RLX
     ]
   else:
     messages +=[
@@ -53,7 +57,7 @@ def get_can_messages(CP, gearbox_msg):
       ("SCM_BUTTONS", 25),
     ]
 
-  if CP.carFingerprint in (CAR.HONDA_CRV_HYBRID, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.ACURA_RDX_3G, CAR.HONDA_E):
+  if CP.carFingerprint in (CAR.HONDA_CRV_HYBRID, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.ACURA_RDX_3G, CAR.HONDA_E, CAR.ACURA_RLX_HYBRID):
     messages.append((gearbox_msg, 50))
   else:
     messages.append((gearbox_msg, 100))
@@ -109,7 +113,9 @@ class CarState(CarStateBase):
 
     if CP.transmissionType != TransmissionType.manual:
       self.shifter_values = can_define.dv[self.gearbox_msg]["GEAR_SHIFTER"]
-    self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
+
+    if CP.carFingerprint != CAR.ACURA_RLX_HYBRID:
+      self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
 
     self.brake_switch_prev = False
     self.brake_switch_active = False
