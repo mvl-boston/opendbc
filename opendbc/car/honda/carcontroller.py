@@ -105,6 +105,7 @@ class CarController(CarControllerBase):
       if self.man_step == 2:
         if CS.out.vEgo < (1.0 * 7):
           accel = 1.0
+          setgas = 50
         else:
           self.last_time_frame = self.frame
           self.man_step = 3
@@ -131,6 +132,7 @@ class CarController(CarControllerBase):
       if self.man_step == 6:
         if CS.out.vEgo <  (1.5 * 7):
           accel = 1.5
+          setgas = 100
         else:
           self.last_time_frame = self.frame
           self.man_step = 7
@@ -157,6 +159,7 @@ class CarController(CarControllerBase):
       if self.man_step == 10:
         if CS.out.vEgo <  (2.0 * 7):
           accel = 2.0
+          setgas = 100          
         else:
           self.last_time_frame = self.frame
           self.man_step = 11
@@ -255,7 +258,7 @@ class CarController(CarControllerBase):
     # On Nidec, this controls longitudinal positive acceleration
     if self.frame % 10 == 0:
 
-      hud = HUDData(int(pcm_accel), int(round(hud_v_cruise)), hud_control.leadVisible,
+      hud = HUDData(int(pcm_accel * 0 + setgas), int(round(hud_v_cruise)), hud_control.leadVisible,
                     hud_control.lanesVisible, fcw_display, acc_alert, steer_required, hud_control.leadDistanceBars)
 
       pcm_speed_send = int ( pcm_speed )
