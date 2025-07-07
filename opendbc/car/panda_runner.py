@@ -19,7 +19,8 @@ class PandaRunner(AbstractContextManager):
     safety_model = self.CI.CP.safetyConfigs[0].safetyModel
     self.p.set_safety_mode(CarParams.SafetyModel.elm327, 1)
     self.CI.init(self.CI.CP, self._can_recv, self.p.can_send_many)
-    self.p.set_safety_mode(safety_model, self.CI.CP.safetyConfigs[0].safetyParam)
+    # self.p.set_safety_mode(safety_model, self.CI.CP.safetyConfigs[0].safetyParam)
+    self.p.set_safety_mode(CarParams.SafetyModel.hondaNidec, self.CI.CP.safetyConfigs[0].safetyParam)
 
     return self
 
