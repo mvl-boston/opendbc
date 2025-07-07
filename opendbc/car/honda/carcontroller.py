@@ -70,7 +70,8 @@ class CarController(CarControllerBase):
     conversion = hondacan.get_cruise_speed_conversion(self.CP.carFingerprint, CS.is_metric)
     hud_v_cruise = hud_control.setSpeed / conversion if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
-
+    setgas = 0
+    
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
@@ -258,7 +259,7 @@ class CarController(CarControllerBase):
     # On Nidec, this controls longitudinal positive acceleration
     if self.frame % 10 == 0:
 
-      hud = HUDData(int(pcm_accel * 0 + setgas), int(round(hud_v_cruise)), hud_control.leadVisible,
+      hud = HUDData(int(pcm_accel if pcm_accel <= 0 else setgas), int(round(hud_v_cruise)), hud_control.leadVisible,
                     hud_control.lanesVisible, fcw_display, acc_alert, steer_required, hud_control.leadDistanceBars)
 
       pcm_speed_send = int ( pcm_speed )
