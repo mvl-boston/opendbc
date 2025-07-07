@@ -71,7 +71,7 @@ class CarController(CarControllerBase):
     hud_v_cruise = hud_control.setSpeed / conversion if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
     setgas = 0
-    
+
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
@@ -160,7 +160,7 @@ class CarController(CarControllerBase):
       if self.man_step == 10:
         if CS.out.vEgo <  (2.0 * 7):
           accel = 2.0
-          setgas = 100          
+          setgas = 100
         else:
           self.last_time_frame = self.frame
           self.man_step = 11
