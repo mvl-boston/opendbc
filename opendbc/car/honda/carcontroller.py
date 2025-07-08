@@ -90,7 +90,7 @@ class CarController(CarControllerBase):
 # ----------------- test forced accel start -------------------
       accel = 0.0
       setgas = 100
-      # plan: 10 / 30 / 50 / 100 / 150 / max
+      # plan: 10 / 30 / 50 / 100 / 150 / max 197
 
       if self.man_step == 0:
         if CS.out.vEgo > 0.0:
