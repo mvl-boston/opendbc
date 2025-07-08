@@ -90,8 +90,8 @@ class CarController(CarControllerBase):
 # ----------------- test forced accel start -------------------
       accel = 0.0
       setgas = 10
-      # plan: 10 / 30 / 50 / 100 / 150 
-      
+      # plan: 10 / 30 / 50 / 100 / 150
+
       if self.man_step == 0:
         if CS.out.vEgo > 0.0:
           accel = -1.0 # -0.5
@@ -106,7 +106,7 @@ class CarController(CarControllerBase):
           self.man_step = 2
 
       if self.man_step == 2:
-        if CS.out.vEgo < (1.0 * 7):
+        if CS.out.vEgo < 13.4: # 30 mph (1.0 * 7):
           accel = 1.0
         else:
           self.last_time_frame = self.frame
@@ -132,7 +132,7 @@ class CarController(CarControllerBase):
           self.man_step = 6
 
       if self.man_step == 6:
-        if CS.out.vEgo <  (1.5 * 7):
+        if CS.out.vEgo <  13.4: # 30 mph (1.5 * 7):
           accel = 1.5
         else:
           self.last_time_frame = self.frame
@@ -158,7 +158,7 @@ class CarController(CarControllerBase):
           self.man_step = 10
 
       if self.man_step == 10:
-        if CS.out.vEgo <  (2.0 * 7):
+        if CS.out.vEgo <  13.4: # 30 mph (2.0 * 7):
           accel = 2.0
         else:
           self.last_time_frame = self.frame
