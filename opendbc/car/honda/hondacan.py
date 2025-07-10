@@ -118,11 +118,20 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   return commands
 
 
-def create_steering_control(packer, CAN, apply_torque, lkas_active):
-  values = {
-    "STEER_TORQUE": apply_torque if lkas_active else 0,
-    "STEER_TORQUE_REQUEST": lkas_active,
-  }
+def create_steering_control(packer, CAN, apply_torque, lkas_active, stock_steer_control):
+  if lkas_active:
+    values = {
+      "STEER_TORQUE": apply_torque if lkas_active else 0,
+      "STEER_TORQUE_REQUEST": lkas_active,
+    }
+  else:
+    values = {
+      "STEER_TORQUE": stock_steer_control[STEER_TORQUE]
+      "STEER_TORQUE_REQUEST": stock_steer_control[STEER_TORQUE_REQUEST]
+      "SET_ME_X00": stock_steer_control[SET_ME_X00]
+      "SET_ME_X02": stock_steer_control[SET_ME_X02]
+      "STEER_DOWN_TO_ZERO": stock_steer_control[STEER_DOWN_TO_ZERO]
+    }
   return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
 
 
