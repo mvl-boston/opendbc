@@ -276,7 +276,7 @@ class CarState(CarStateBase):
     if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
 
-    if CP.carFingerprint == CAR.ACURA_MDX_4G:
+    if self.CP.carFingerprint == CAR.ACURA_MDX_4G:
       self.stock_steer_control = cp.v1["STEERING_CONTROL"]
 
     if self.CP.enableBsm:
