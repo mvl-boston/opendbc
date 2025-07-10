@@ -277,7 +277,7 @@ class CarState(CarStateBase):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
 
     if self.CP.carFingerprint == CAR.ACURA_MDX_4G:
-      self.stock_steer_control = cp.v1["STEERING_CONTROL"]
+      self.stock_steer_control = cp.vl["STEERING_CONTROL"]
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
