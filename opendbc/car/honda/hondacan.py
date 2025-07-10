@@ -118,8 +118,8 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   return commands
 
 
-def create_steering_control(packer, CAN, apply_torque, lkas_active, stock_steer_control):
-  if lkas_active:
+def create_steering_control(packer, CAN, apply_torque, lkas_active, car_fingerprint, stock_steer_control):
+  if lkas_active or car_fingerprint not in ("HONDA_BOSCH"):
     values = {
       "STEER_TORQUE": apply_torque if lkas_active else 0,
       "STEER_TORQUE_REQUEST": lkas_active,
