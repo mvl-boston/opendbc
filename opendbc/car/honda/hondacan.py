@@ -47,7 +47,7 @@ class CanBus(CanBusBase):
 
 def get_cruise_speed_conversion(car_fingerprint: str, is_metric: bool) -> float:
   # on certain cars, CRUISE_SPEED changes to imperial with car's unit setting
-  return CV.MPH_TO_MS if car_fingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD) and not is_metric else CV.KPH_TO_MS
+  return CV.MPH_TO_MS if car_fingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD | {CAR.ACURA_MDX_4G} ) and not is_metric else CV.KPH_TO_MS
 
 
 def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_cancel_cmd, fcw, car_fingerprint, stock_brake):
@@ -118,11 +118,20 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   return commands
 
 
-def create_steering_control(packer, CAN, apply_torque, lkas_active):
-  values = {
-    "STEER_TORQUE": apply_torque if lkas_active else 0,
-    "STEER_TORQUE_REQUEST": lkas_active,
-  }
+def create_steering_control(packer, CAN, apply_torque, lkas_active, car_fingerprint, stock_steer_control):
+  if lkas_active or car_fingerprint != CAR.ACURA_MDX_4G:
+    values = {
+      "STEER_TORQUE": apply_torque if lkas_active else 0,
+      "STEER_TORQUE_REQUEST": lkas_active,
+    }
+  else:
+    values = {
+      "STEER_TORQUE": stock_steer_control['STEER_TORQUE'],
+      "STEER_TORQUE_REQUEST": stock_steer_control['STEER_TORQUE_REQUEST'],
+      "SET_ME_X00": stock_steer_control['SET_ME_X00'],
+      "SET_ME_X00_2": stock_steer_control['SET_ME_X00_2'],
+      "STEER_DOWN_TO_ZERO": stock_steer_control['STEER_DOWN_TO_ZERO'],
+    }
   return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
 
 
