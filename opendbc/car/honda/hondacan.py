@@ -126,11 +126,11 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active, stock_steer_
     }
   else:
     values = {
-      "STEER_TORQUE": stock_steer_control[STEER_TORQUE],
-      "STEER_TORQUE_REQUEST": stock_steer_control[STEER_TORQUE_REQUEST],
-      "SET_ME_X00": stock_steer_control[SET_ME_X00],
-      "SET_ME_X02": stock_steer_control[SET_ME_X02],
-      "STEER_DOWN_TO_ZERO": stock_steer_control[STEER_DOWN_TO_ZERO],
+      "STEER_TORQUE": stock_steer_control['STEER_TORQUE'],
+      "STEER_TORQUE_REQUEST": stock_steer_control['STEER_TORQUE_REQUEST'],
+      "SET_ME_X00": stock_steer_control['SET_ME_X00'],
+      "SET_ME_X02": stock_steer_control['SET_ME_X02'],
+      "STEER_DOWN_TO_ZERO": stock_steer_control['STEER_DOWN_TO_ZERO'],
     }
   return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
 
