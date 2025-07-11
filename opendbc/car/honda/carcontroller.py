@@ -152,7 +152,7 @@ class CarController(CarControllerBase):
       self.pitch = CC.orientationNED[1]
 
     if CC.longActive:
-      if self.CP.safetyConfigs[1].SafetyModel == get_safety_config(structs.CarParams.SafetyModel.noOutput):
+      if self.CP.safetyConfigs[1].SafetyModel == get_safety_config(structs.CarParams.SafetyModel.noOutput) and self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
         self.CP.safetyConfigs[1].SafetyModel = get_safety_config(structs.CarParams.SafetyModel.hondaRlxRedPanda)
 
       # accel = float (np.clip ( actuators.accel, -100.0, np.interp (steerfactor, [ 1.0, 4.0 ], [-3.5, 3.5]) ) )
