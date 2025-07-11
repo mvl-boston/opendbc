@@ -154,7 +154,8 @@ class CarController(CarControllerBase):
     if CC.longActive:
       if self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
         if self.CP.safetyConfigs[1].safetyModel == get_safety_config(structs.CarParams.SafetyModel.noOutput):
-          self.CP.safetyConfigs[1].safetyModel = get_safety_config(structs.CarParams.SafetyModel.hondaRlxRedPanda)
+          del self.CP.safetyConfigs[1]
+          self.CP.safetyConfigs.insert (1, get_safety_config(structs.CarParams.SafetyModel.hondaRlxRedPanda))
 
       # accel = float (np.clip ( actuators.accel, -100.0, np.interp (steerfactor, [ 1.0, 4.0 ], [-3.5, 3.5]) ) )
       hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
