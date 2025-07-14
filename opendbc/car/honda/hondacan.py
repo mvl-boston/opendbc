@@ -126,7 +126,7 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active, fingerprint)
     "STEER_TORQUE_REQUEST": lkas_active,
   }
   if fingerprint in HONDA_BOSCH_ALT_RADAR:
-    values ['DISABLE_LOWSPEED_FAULT'] = lkas_active
+    pass # values ['DISABLE_LOWSPEED_FAULT'] = lkas_active
   return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
 
 
