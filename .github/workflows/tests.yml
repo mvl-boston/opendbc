@@ -37,7 +37,18 @@ jobs:
     - uses: ./.github/workflows/cache
     - name: Run safety tests
       run: ./opendbc/safety/tests/test.sh ${{ matrix.flags }}
+    # Add these steps below to always upload coverage artifacts
+    - name: Upload coverage XML report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-xml
+        path: coverage.xml
 
+    - name: Upload coverage HTML report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-html
+        path: htmlcov/
   mutation:
     name: Safety mutation tests
     runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-latest' }}
