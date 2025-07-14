@@ -6,8 +6,7 @@
 #define HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(pt_bus)                                                                                      \
   {.msg = {{0x1A6, (pt_bus), 8, .max_counter = 3U, .ignore_quality_flag = true, .frequency = 25U},                  /* SCM_BUTTONS */       \
            {0x296, (pt_bus), 4, .max_counter = 3U, .ignore_quality_flag = true, .frequency = 25U}, { 0 }}},                                 \
-  {.msg = {{0x158, (pt_bus), 8, .max_counter = 3U, .ignore_quality_flag = true, .frequency = 100U},                     /* ENGINE_DATA */   \
-           {0x309, (pt_bus), 8, .max_counter = 3U, .ignore_quality_flag = true, .frequency = 10U}, { 0 }}},               /* CAR_SPEED */   \
+  {.msg = {{0x158, (pt_bus), 8, .max_counter = 3U, .ignore_quality_flag = true, .frequency = 100U}, { 0 }, { 0 }}},  /* ENGINE_DATA */      \
   {.msg = {{0x17C, (pt_bus), 8, .max_counter = 3U, .ignore_quality_flag = true, .frequency = 100U}, { 0 }, { 0 }}},  /* POWERTRAIN_DATA */  \
 
 #define HONDA_COMMON_RX_CHECKS(pt_bus)                                                                                                  \
@@ -32,13 +31,12 @@ static bool honda_alt_brake_msg = false;
 static bool honda_fwd_brake = false;
 static bool honda_bosch_long = false;
 static bool honda_bosch_radarless = false;
-static bool honda_bosch_canfd = false;
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
 static HondaHw honda_hw = HONDA_NIDEC;
 
 
 static int honda_get_pt_bus(void) {
-  return ((honda_hw == HONDA_BOSCH) && !honda_bosch_radarless && !honda_bosch_canfd) ? 1 : 0;
+  return ((honda_hw == HONDA_BOSCH) && !honda_bosch_radarless) ? 1 : 0;
 }
 
 static uint32_t honda_get_checksum(const CANPacket_t *to_push) {
@@ -75,8 +73,8 @@ static void honda_rx_hook(const CANPacket_t *to_push) {
   int addr = GET_ADDR(to_push);
   int bus = GET_BUS(to_push);
 
-  // 0x158 used for all supported Hondas except Integra (use 0x309 car_speed message)
-  if ((addr == 0x158) || (addr == 0x309)){
+  // sample speed
+  if (addr == 0x158) {
     // first 2 bytes
     vehicle_moving = GET_BYTE(to_push, 0) | GET_BYTE(to_push, 1);
   }
@@ -173,7 +171,7 @@ static bool honda_tx_hook(const CANPacket_t *to_send) {
     .max_accel = 200,   // accel is used for brakes
     .min_accel = -350,
 
-    .max_gas = 2200,
+    .max_gas = 2000,
     .inactive_gas = -30000,
   };
 
