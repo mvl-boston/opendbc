@@ -9,6 +9,7 @@
 // include the safety policies.
 #include "opendbc/safety/modes/defaults.h"
 #include "opendbc/safety/modes/honda.h"
+#include "opendbc/safety/modes/honda_rlx.h"
 #include "opendbc/safety/modes/toyota.h"
 #include "opendbc/safety/modes/tesla.h"
 #include "opendbc/safety/modes/gm.h"
@@ -395,6 +396,7 @@ int set_safety_hooks(uint16_t mode, uint16_t param) {
   const safety_hook_config safety_hook_registry[] = {
     {SAFETY_SILENT, &nooutput_hooks},
     {SAFETY_HONDA_NIDEC, &honda_nidec_hooks},
+    {SAFETY_HONDA_RLX_RED_PANDA, &honda_rlx_red_panda_hooks},
     {SAFETY_TOYOTA, &toyota_hooks},
     {SAFETY_ELM327, &elm327_hooks},
     {SAFETY_GM, &gm_hooks},
