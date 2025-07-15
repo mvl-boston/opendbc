@@ -193,6 +193,7 @@ class CarInterface(CarInterfaceBase):
       else:
         ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
+      CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
 
     elif candidate in (CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
