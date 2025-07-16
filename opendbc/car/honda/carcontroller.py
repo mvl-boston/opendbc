@@ -151,7 +151,7 @@ class CarController(CarControllerBase):
     # steer torque is converted back to CAN reference (positive when steering right)
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
-    self.steer_restricted = (abs(apply_torque) == self.params.STEER_MAX) # for hud lane line display
+    self.steer_restricted = (abs(apply_torque) == self.params.STEER_MAX) or CS.steering_blocked # for hud lane line display
 
     # Send CAN commands
     can_sends = []
