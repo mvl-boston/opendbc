@@ -176,7 +176,7 @@ class CarState(CarStateBase):
         self.steer_blocked_prev = True
       else:
         self.steer_blocked_prev = False
-    
+
     self.dash_speed_seen = self.dash_speed_seen or cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] > 1e-3
     if self.dash_speed_seen:
       conversion = CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS
