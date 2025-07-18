@@ -79,7 +79,7 @@ def process_hud_alert(hud_alert, steering_done):
   fcw_display = 0
   steer_required = 0
   acc_alert = 0
-  lanes_off = 0
+  lanes_steer_restricted = 0
 
   # priority is: FCW, steer required without steer, all others
   # don't use "steer required" (emergency) alert if driver was already steering, instead turn off lanelines to match stock
@@ -93,7 +93,7 @@ def process_hud_alert(hud_alert, steering_done):
   # hide lanes whenever steer required (matching stock)
   lanes_off = hud_alert in (VisualAlert.steerRequired, VisualAlert.ldw)
 
-  return fcw_display, steer_required, acc_alert, lanes_off
+  return fcw_display, steer_required, acc_alert, lanes_steer_restricted
 
 
 HUDData = namedtuple("HUDData",
@@ -245,7 +245,8 @@ class CarController(CarControllerBase):
     if self.frame % 10 == 0:
       hud = HUDData(int(pcm_accel), int(round(hud_v_cruise)), hud_control.leadVisible,
                     hud.lanes_visible, fcw_display, acc_alert, steer_required, hud_control.leadDistanceBars)      
-      can_sends.extend(hondacan.create_ui_commands(self.packer, self.CAN, self.CP, CC.enabled, pcm_speed, hud, CS.is_metric, CS.acc_hud, CS.lkas_hud, lanes_off))
+      can_sends.extend(hondacan.create_ui_commands(self.packer, self.CAN, self.CP, CC.enabled, pcm_speed, hud, CS.is_metric, CS.acc_hud, CS.lkas_hud,
+                                                   lanes_steer_restricted))
 
       if self.CP.openpilotLongitudinalControl and self.CP.carFingerprint not in HONDA_BOSCH:
         self.speed = pcm_speed
