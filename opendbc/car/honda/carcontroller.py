@@ -149,7 +149,7 @@ class CarController(CarControllerBase):
     # *** rate limit after the enable check ***
     self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., DT_CTRL)
 
-    # steering_after_alert = whether steeringpressed since last rising edge of steering_required, downgrades hud alert to laneline off (matches stock)
+    # steering_after_alert = whether steeringpressed since last rising edge of steering_required, downgrades hud alert to laneline off
     new_steer_required = hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw)
     if (not self.last_steer_required) and new_steer_required:
       self.steering_after_alert = False
@@ -160,7 +160,7 @@ class CarController(CarControllerBase):
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
     fcw_display, steer_required, acc_alert, lanes_steer_restricted = process_hud_alert(hud_control.visualAlert, self.steering_after_alert)
 
-    lanes_steer_restricted |= CS.steerSaturated # also hide lane lines if beyond Honda EPS steer limits
+    lanes_steer_restricted |= (abs(apply_torque) == self.params.STEER_MAX) # also hide lane lines if beyond Honda EPS steer limits
 
     # **** process the car messages ****
 
