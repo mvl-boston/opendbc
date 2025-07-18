@@ -160,13 +160,13 @@ class CarController(CarControllerBase):
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
     fcw_display, steer_required, acc_alert, lanes_steer_restricted = process_hud_alert(hud_control.visualAlert, self.steering_after_alert)
 
-    lanes_steer_restricted |= (abs(apply_torque) == self.params.STEER_MAX) # also hide lane lines if beyond Honda EPS steer limits
-
     # **** process the car messages ****
 
     # steer torque is converted back to CAN reference (positive when steering right)
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
+
+    lanes_steer_restricted |= (abs(apply_torque) == self.params.STEER_MAX) # also hide lane lines if beyond Honda EPS steer limits
 
     # Send CAN commands
     can_sends = []
