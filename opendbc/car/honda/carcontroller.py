@@ -153,7 +153,7 @@ class CarController(CarControllerBase):
     new_steer_required = hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw)
     if (not self.last_steer_required) and new_steer_required:
       self.steering_done = False
-    if CS.steeringPressed:
+    if CS.out.steeringPressed:
       self.steering_done = True
     self.last_steer_requried = new_steer_required
 
