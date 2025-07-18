@@ -82,7 +82,7 @@ def process_hud_alert(hud_alert, steering_done):
   lanes_steer_restricted = 0
 
   # priority is: FCW, steer required without steer, all others
-  # don't use "steer required" (emergency) alert if driver was already steering, instead turn off lanelines to match stock
+  # don't use "steer required" (emergency) alert if driver was already steering, instead make lanelines dashed to match stock
   if hud_alert == VisualAlert.fcw:
     fcw_display = VISUAL_HUD[hud_alert.raw]
   elif hud_alert in (VisualAlert.steerRequired, VisualAlert.ldw) and not steering_done:
@@ -90,8 +90,8 @@ def process_hud_alert(hud_alert, steering_done):
   else:
     acc_alert = VISUAL_HUD[hud_alert.raw]
 
-  # hide lanes whenever steer required (matching stock)
-  lanes_off = hud_alert in (VisualAlert.steerRequired, VisualAlert.ldw)
+  # make lanelines dashed whenever steer required (matching stock)
+  lanes_steer_restricted = hud_alert in (VisualAlert.steerRequired, VisualAlert.ldw)
 
   return fcw_display, steer_required, acc_alert, lanes_steer_restricted
 
