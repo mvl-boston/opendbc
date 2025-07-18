@@ -74,7 +74,7 @@ def brake_pump_hysteresis(apply_brake, apply_brake_last, last_pump_ts, ts):
   return pump_on, last_pump_ts
 
 
-def process_hud_alert(hud_alert, steering_done):
+def process_hud_alert(hud_alert, steering_after_alert):
   # initialize to no alert
   fcw_display = 0
   steer_required = 0
@@ -85,7 +85,7 @@ def process_hud_alert(hud_alert, steering_done):
   # don't use "steer required" (emergency) alert if driver was already steering, instead make lanelines dashed to match stock
   if hud_alert == VisualAlert.fcw:
     fcw_display = VISUAL_HUD[hud_alert.raw]
-  elif hud_alert in (VisualAlert.steerRequired, VisualAlert.ldw) and not steering_done:
+  elif hud_alert in (VisualAlert.steerRequired, VisualAlert.ldw) and not steering_after_alert:
     steer_required = VISUAL_HUD[hud_alert.raw]
   else:
     acc_alert = VISUAL_HUD[hud_alert.raw]
