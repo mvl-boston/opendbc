@@ -170,7 +170,8 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
   lkas_hud_values = {
     'SET_ME_X41': 0x41,
     'STEERING_REQUIRED': hud.steer_required,
-    'SOLID_LANES': hud.lanes_visible and not steer_restricted,
+#    'SOLID_LANES': hud.lanes_visible and not steer_restricted,
+    'SOLID_LANES': int (enabled and not steer_restricted),
     'DASHED_LANES': int(enabled),
     'BEEP': 0,
   }
