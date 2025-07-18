@@ -121,7 +121,7 @@ class CarController(CarControllerBase):
     self.brake = 0.0
     self.last_torque = 0.0
     self.last_steer_required = False
-    self.steering_done = False
+    self.steering_after_alert = False
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -149,16 +149,16 @@ class CarController(CarControllerBase):
     # *** rate limit after the enable check ***
     self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., DT_CTRL)
 
-    # steering_done = whether steeringpressed since last rising edge of steering_required, downgrades hud alert to laneline off (matches stock)
+    # steering_after_alert = whether steeringpressed since last rising edge of steering_required, downgrades hud alert to laneline off (matches stock)
     new_steer_required = hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw)
     if (not self.last_steer_required) and new_steer_required:
-      self.steering_done = False
+      self.steering_after_alert = False
     if CS.out.steeringPressed:
-      self.steering_done = True
+      self.steering_after_alert = True
     self.last_steer_requried = new_steer_required
 
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
-    fcw_display, steer_required, acc_alert, lanes_off = process_hud_alert(hud_control.visualAlert, self.steering_done)
+    fcw_display, steer_required, acc_alert, lanes_steer_restricted = process_hud_alert(hud_control.visualAlert, self.steering_after_alert)
 
     # **** process the car messages ****
 
@@ -244,7 +244,7 @@ class CarController(CarControllerBase):
     # On Nidec, this controls longitudinal positive acceleration
     if self.frame % 10 == 0:
       hud = HUDData(int(pcm_accel), int(round(hud_v_cruise)), hud_control.leadVisible,
-                    hud_control.lanesVisible, fcw_display, acc_alert, steer_required, hud_control.leadDistanceBars)      
+                    hud_control.lanesVisible, fcw_display, acc_alert, steer_required, hud_control.leadDistanceBars)
       can_sends.extend(hondacan.create_ui_commands(self.packer, self.CAN, self.CP, CC.enabled, pcm_speed, hud, CS.is_metric, CS.acc_hud, CS.lkas_hud,
                                                    lanes_steer_restricted))
 
