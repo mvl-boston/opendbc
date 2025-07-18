@@ -89,8 +89,8 @@ def process_hud_alert(hud_alert, steering_done):
     steer_required = VISUAL_HUD[hud_alert.raw]
   else:
     acc_alert = VISUAL_HUD[hud_alert.raw]
-  
-  # hide lanes whenver steer required (matching stock)
+
+  # hide lanes whenever steer required (matching stock)
   lanes_off = hud_alert in (VisualAlert.steerRequired, VisualAlert.ldw)
 
   return fcw_display, steer_required, acc_alert, lanes_off
@@ -156,7 +156,7 @@ class CarController(CarControllerBase):
     if CS.steeringPressed:
       self.steering_done = True
     self.last_steer_requried = new_steer_required
-    
+
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
     fcw_display, steer_required, acc_alert, lanes_off = process_hud_alert(hud_control.visualAlert, self.steering_done)
 
