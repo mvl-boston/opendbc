@@ -159,7 +159,7 @@ class CarController(CarControllerBase):
 
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
     fcw_display, steer_required, acc_alert, lanes_steer_restricted = process_hud_alert(hud_control.visualAlert, self.steering_after_alert)
-    
+
     lanes_steer_restricted |= CS.steerSaturated # also hide lane lines if beyond Honda EPS steer limits
 
     # **** process the car messages ****
