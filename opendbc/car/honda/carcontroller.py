@@ -74,21 +74,26 @@ def brake_pump_hysteresis(apply_brake, apply_brake_last, last_pump_ts, ts):
   return pump_on, last_pump_ts
 
 
-def process_hud_alert(hud_alert):
+def process_hud_alert(hud_alert, steering_done):
   # initialize to no alert
   fcw_display = 0
   steer_required = 0
   acc_alert = 0
+  lanes_off = 0
 
-  # priority is: FCW, steer required, all others
+  # priority is: FCW, steer required without steer, all others
+  # don't use "steer required" (emergency) alert if driver was already steering, instead turn off lanelines to match stock
   if hud_alert == VisualAlert.fcw:
     fcw_display = VISUAL_HUD[hud_alert.raw]
-  elif hud_alert in (VisualAlert.steerRequired, VisualAlert.ldw):
+  elif hud_alert in (VisualAlert.steerRequired, VisualAlert.ldw) and not steering_done:
     steer_required = VISUAL_HUD[hud_alert.raw]
   else:
     acc_alert = VISUAL_HUD[hud_alert.raw]
+  
+  # hide lanes whenver steer required (matching stock)
+  lanes_off = hud_alert in (VisualAlert.steerRequired, VisualAlert.ldw)
 
-  return fcw_display, steer_required, acc_alert
+  return fcw_display, steer_required, acc_alert, lanes_off
 
 
 HUDData = namedtuple("HUDData",
@@ -115,6 +120,8 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.last_steer_required = False
+    self.steering_done = False
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -142,8 +149,16 @@ class CarController(CarControllerBase):
     # *** rate limit after the enable check ***
     self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., DT_CTRL)
 
+    # steering_done = whether steeringpressed since last rising edge of steering_required, downgrades hud alert to laneline off (matches stock)
+    new_steer_required = hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw)
+    if (not self.last_steer_required) and new_steer_required:
+      self.steering_done = False
+    if CS.steeringPressed:
+      self.steering_done = True
+    self.last_steer_requried = new_steer_required
+    
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
-    fcw_display, steer_required, acc_alert = process_hud_alert(hud_control.visualAlert)
+    fcw_display, steer_required, acc_alert, lanes_off = process_hud_alert(hud_control.visualAlert, self.steering_done)
 
     # **** process the car messages ****
 
@@ -230,6 +245,8 @@ class CarController(CarControllerBase):
     if self.frame % 10 == 0:
       hud = HUDData(int(pcm_accel), int(round(hud_v_cruise)), hud_control.leadVisible,
                     hud_control.lanesVisible, fcw_display, acc_alert, steer_required, hud_control.leadDistanceBars)
+      # disable hud lanes when steering required, matches stock UI
+      hud.lanes_visible &= not lanes_off
       can_sends.extend(hondacan.create_ui_commands(self.packer, self.CAN, self.CP, CC.enabled, pcm_speed, hud, CS.is_metric, CS.acc_hud, CS.lkas_hud))
 
       if self.CP.openpilotLongitudinalControl and self.CP.carFingerprint not in HONDA_BOSCH:
