@@ -181,11 +181,11 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
     lkas_hud_values['DASHED_LANES'] = hud.lanes_visible
     
     lkas_hud_2_values = {
-      'SET_ME_X01': 1
-      'COUNTER_2': lkas_hud_2['COUNTER_2']
+      'SET_ME_X01': 1,
+      'COUNTER_2': lkas_hud_2['COUNTER_2'],
       'LKAS_BOH_1': (32 + lkas_hud_values['SOLID_LANES'] * 2) if enabled else 0,
-      'LEFT_LANE': lkas_hud_values['SOLID_LANES'] * 3
-      'RIGHT_LANE': lkas_hud_values['SOLID_LANES'] * 3
+      'LEFT_LANE': lkas_hud_values['SOLID_LANES'] * 3,
+      'RIGHT_LANE': lkas_hud_values['SOLID_LANES'] * 3,
     }
     commands.append(packer.make_can_msg('LKAS_HUD_2', CAN.lkas, lkas_hud_values))
 
