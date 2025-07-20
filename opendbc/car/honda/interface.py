@@ -57,7 +57,8 @@ class CarInterface(CarInterfaceBase):
     else:
       cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
       if candidate == CAR.ACURA_RLX_HYBRID:
-        cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.noOutput))
+#        cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.noOutput))
+        cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.hondaRlxRedPanda))
 #        cfgs[0].safetyModel = get_safety_config(structs.CarParams.SafetyModel.hondaNidec)
 #        cfgs[1].safetyModel = get_safety_config(structs.CarParams.SafetyModel.noOutput)
 #        cfgs[1].SafetyModel = get_safety_config(structs.CarParams.SafetyModel.hondaRlxRedPanda)
