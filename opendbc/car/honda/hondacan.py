@@ -179,7 +179,7 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
   if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
     lkas_hud_values['LANE_LINES'] = 3
     lkas_hud_values['DASHED_LANES'] = hud.lanes_visible
-    
+
     lkas_hud_2_values = {
       'SET_ME_X01': 1,
       'COUNTER_2': lkas_hud_2['COUNTER_2'],
@@ -187,7 +187,7 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
       'LEFT_LANE': lkas_hud_values['SOLID_LANES'] * 3,
       'RIGHT_LANE': lkas_hud_values['SOLID_LANES'] * 3,
     }
-    commands.append(packer.make_can_msg('LKAS_HUD_2', CAN.lkas, lkas_hud_values))
+    commands.append(packer.make_can_msg('LKAS_HUD_2', CAN.lkas, lkas_hud_2_values))
 
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
     # TODO: needed for Bosch CAN FD?
