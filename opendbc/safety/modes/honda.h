@@ -420,7 +420,7 @@ static bool honda_nidec_fwd_hook(int bus_num, int addr) {
 }
 
 /*
-static bool honda_bosch_fwd_hook(int bus_num, int addr) {
+  static bool honda_bosch_fwd_hook(int bus_num, int addr) {
   bool block_msg = false;
 
   if (bus_num == 2)  {
