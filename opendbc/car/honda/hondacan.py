@@ -195,7 +195,7 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
         'RIGHT_LANE': lkas_hud_values['SOLID_LANES'] * 3,
       }
       commands.append(packer.make_can_msg('LKAS_HUD_2', CAN.lkas, lkas_hud_2_values))
-  
+
   if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
     lkas_hud_values['SET_ME_X48'] = 0x48
 
