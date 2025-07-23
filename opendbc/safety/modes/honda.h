@@ -377,7 +377,7 @@ static safety_config honda_bosch_init(uint16_t param) {
   static CanMsg HONDA_CANFD_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x1DF, 0, 8, .check_relay = true}, {0x1EF, 0, 8, .check_relay = false},
                                               {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}, {0x18DAB0F1, 0, 8, .check_relay = false}};
 
-  const uint16_t HONDA_PARAM_ALT_BRAKE = 32;
+  const uint16_t HONDA_PARAM_ALT_BRAKE = 1;
   const uint16_t HONDA_PARAM_RADARLESS = 8;
   const uint16_t HONDA_PARAM_BOSCH_CANFD = 16;
   const uint16_t HONDA_PARAM_NO_ENGINE_DATA_MSG = 128;
