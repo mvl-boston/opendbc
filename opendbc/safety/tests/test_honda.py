@@ -392,6 +392,18 @@ class TestHondaNidecPcmHybridSafety(TestHondaNidecPcmAltSafety):
     return self.packer.make_can_msg_panda("BRAKE_COMMAND", bus, values)
 
 
+class TestHondaNidecPcmHybridSafety(TestHondaNidecPcmAltSafety):
+  """
+    Covers the Honda Nidec safety mode with alt SCM messages and hybrid brake
+  """
+
+  def setUp(self):
+    self.packer = CANPackerPanda("acura_mdx_3G_hybrid")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_ALT | HondaSafetyFlags.NIDEC_HYBRID )
+    self.safety.init_tests()
+
+
 # ********************* Honda Bosch **********************
 
 
