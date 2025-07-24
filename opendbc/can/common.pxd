@@ -25,6 +25,7 @@ cdef extern from "common_dbc.h":
     CHRYSLER_CHECKSUM
     HKG_CAN_FD_CHECKSUM,
     FCA_GIORGIO_CHECKSUM,
+    TESLA_CHECKSUM,
 
   cdef struct Signal:
     string name
@@ -63,7 +64,7 @@ cdef extern from "common.h":
   cdef const DBC* dbc_lookup(const string) except +
 
   cdef cppclass MessageState:
-    vector[Signal] parse_sigs
+    vector[Signal] signals
     vector[double] vals
     vector[vector[double]] all_vals
     uint64_t last_seen_nanos
@@ -85,5 +86,5 @@ cdef extern from "common.h":
     MessageState *getMessageState(uint32_t address) nogil
 
   cdef cppclass CANPacker:
-   CANPacker(string)
-   vector[uint8_t] pack(uint32_t, vector[SignalPackValue]&)
+   CANPacker(string) nogil
+   vector[uint8_t] pack(uint32_t, vector[SignalPackValue]&) nogil
