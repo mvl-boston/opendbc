@@ -75,15 +75,15 @@ class CarState(CarStateBase):
   def __init__(self, CP):
     super().__init__(CP)
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
-    self.gearbox_msg = "GEARBOX"
+    self.gearbox_msg = "GEARBOX_AUTO"
     if CP.carFingerprint in (CAR.HONDA_ACCORD, CAR.HONDA_ACCORD_11G) and CP.transmissionType == TransmissionType.cvt:
-      self.gearbox_msg = "GEARBOX_15T"
+      self.gearbox_msg = "GEARBOX_CVT"
     elif CP.carFingerprint == CAR.HONDA_CRV_6G:
-      self.gearbox_msg = "GEARBOX_15T"
+      self.gearbox_msg = "GEARBOX_CVT"
     elif CP.carFingerprint in (CAR.HONDA_CIVIC_2022, CAR.HONDA_HRV_3G) and CP.transmissionType == TransmissionType.cvt:
-      self.gearbox_msg = "GEARBOX_ALT"
+      self.gearbox_msg = "GEARBOX_CVT"
     elif CP.transmissionType == TransmissionType.manual:
-      self.gearbox_msg = "GEARBOX_ALT_2"
+      self.gearbox_msg = "GEARBOX_CVT"
 
     self.main_on_sig_msg = "SCM_FEEDBACK"
     if CP.carFingerprint in HONDA_NIDEC_ALT_SCM_MESSAGES:
@@ -200,8 +200,8 @@ class CarState(CarStateBase):
       ret.parkingBrake = cp.vl["EPB_STATUS"]["EPB_STATE"] != 0
 
     if self.CP.transmissionType == TransmissionType.manual:
-      ret.clutchPressed = cp.vl["GEARBOX_ALT_2"]["GEAR_MT"] == 0
-      if cp.vl["GEARBOX_ALT_2"]["GEAR_MT"] == 14:
+      ret.clutchPressed = cp.vl["GEARBOX_CVT"]["GEAR_MT"] == 0
+      if cp.vl["GEARBOX_CVT"]["GEAR_MT"] == 14:
         ret.gearShifter = GearShifter.reverse
       else:
         ret.gearShifter = GearShifter.drive
