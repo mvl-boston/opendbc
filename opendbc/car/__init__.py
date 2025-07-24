@@ -237,7 +237,10 @@ class CanBusBase:
       num = max([k for k, v in fingerprint.items() if len(v)], default=0) // 4 + 1
     else:
       num = len(CP.safetyConfigs)
-    self.offset = 4 * (num - 1)
+    if True: # fingerprint == CAR.ACURA_RLX_HYBRID:
+      self.offset = 0
+    else:
+      self.offset = 4 * (num - 1)
 
 
 class CanSignalRateCalculator:

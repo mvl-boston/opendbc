@@ -1,3 +1,4 @@
+""" AUTO-FORMATTED USING opendbc/car/debug/format_fingerprints.py, EDIT STRUCTURE THERE."""
 from opendbc.car.structs import CarParams
 from opendbc.car.honda.values import CAR
 
@@ -54,6 +55,7 @@ FW_VERSIONS = {
       b'57114-TVA-C050\x00\x00',
       b'57114-TVA-C060\x00\x00',
       b'57114-TVA-C530\x00\x00',
+      b'57114-TVA-D520\x00\x00',
       b'57114-TVA-E520\x00\x00',
       b'57114-TVE-H250\x00\x00',
       b'57114-TWA-A040\x00\x00',
@@ -494,6 +496,55 @@ FW_VERSIONS = {
       b'36161-TDK-J530\x00\x00',
     ],
   },
+  CAR.ACURA_MDX_3G_HYBRID: {
+ #   (Ecu.programmedFuelInjection, 0x18da10f1, None): [
+ #     b'37805-5BN-A521\x00\x00',
+ #   ],
+    (Ecu.vsa, 0x18da28f1, None): [
+      b'57114-TRX-H130\x00\x00',
+    ],
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'36161-TYT-A220\x00\x00',
+    ],
+ #   (Ecu.shiftByWire, 0x18da0bf1, None): [
+ #     b'54008-TZ5-A911\x00\x00',
+ #   ],
+ #   (Ecu.transmission, 0x18da1ef1, None): [
+ #     b'28101-5DH-A401\x00\x00',
+ #   ],
+#    (Ecu.combinationMeter, 0x18da60f1, None): [
+#      b'78109-TYS-A611\x00\x00',
+#    ],
+    (Ecu.srs, 0x18da53f1, None): [
+      b'77959-TRX-A011\x00\x00',
+    ],
+#     (Ecu.gateway, 0x18daeff1, None): [
+#      b'38897-TYR-A011\x00\x00',
+#    ],
+  },
+  CAR.ACURA_RLX_HYBRID: {
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'36161-TY3-A030\x00\x00',
+    ],
+    (Ecu.shiftByWire, 0x18da0bf1, None): [
+      b'54008-TY3-J010\x00\x00',
+    ],
+#    (Ecu.combinationMeter, 0x18da60f1, None): [   - remove creates ci test error
+#      b'78109-TY3-A050\x00\x00',
+#    ],
+    (Ecu.srs, 0x18da53f1, None): [
+      b'77959-TY3-L130\x00\x00',
+    ],
+     (Ecu.gateway, 0x18daeff1, None): [
+      b'38897-TY3-A020\x00\x00',
+    ],
+     (Ecu.hud, 0x18da61f1, None): [
+      b'78209-TY3-A110\x00\x00',
+    ],
+    (Ecu.eps, 0x18da30f1, None): [
+      b'39990-TY3-J030\x00\x00',
+    ],
+  },
   CAR.HONDA_ODYSSEY: {
     (Ecu.gateway, 0x18daeff1, None): [
       b'38897-THR-A010\x00\x00',
@@ -867,10 +918,10 @@ FW_VERSIONS = {
       b'39990-T39-A130\x00\x00',
       b'39990-T43-J020\x00\x00',
       b'39990-T43-J030\x00\x00',
-      b'39990-T60-J030\x00\x00',
-      b'39990-T56-A040\x00\x00',
       b'39990-T50-J030\x00\x00',
       b'39990-T50-J110\x00\x00',
+      b'39990-T56-A040\x00\x00',
+      b'39990-T60-J030\x00\x00',
     ],
     (Ecu.gateway, 0x18daeff1, None): [
       b'38897-T20-A020\x00\x00',
@@ -881,10 +932,10 @@ FW_VERSIONS = {
       b'38897-T22-A110\x00\x00',
       b'38897-T24-Z120\x00\x00',
       b'38897-T47-AA20\x00\x00',
-      b'38897-T60-A110\x00\x00',
-      b'38897-T61-A320\x00\x00',
       b'38897-T50-E310\x00\x00',
       b'38897-T50-EA10\x00\x00',
+      b'38897-T60-A110\x00\x00',
+      b'38897-T61-A320\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-T20-A970\x00\x00',
@@ -893,11 +944,11 @@ FW_VERSIONS = {
       b'77959-T39-A910\x00\x00',
       b'77959-T47-A940\x00\x00',
       b'77959-T47-A950\x00\x00',
+      b'77959-T50-G010\x00\x00',
+      b'77959-T50-G930\x00\x00',
       b'77959-T60-A920\x00\x00',
       b'77959-T61-A920\x00\x00',
-      b'77959-T50-G930\x00\x00',
       b'77959-T65-A920\x00\x00',
-      b'77959-T50-G010\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'36161-T20-A060\x00\x00',
@@ -906,15 +957,16 @@ FW_VERSIONS = {
       b'36161-T24-T070\x00\x00',
       b'36161-T38-A060\x00\x00',
       b'36161-T47-A050\x00\x00',
+      b'36161-T47-A060\x00\x00',
       b'36161-T47-A070\x00\x00',
-      b'8S102-T47-AA20\x00\x00',
       b'8S102-T20-AA10\x00\x00',
-      b'8S102-T47-AA10\x00\x00',
-      b'8S102-T60-AA10\x00\x00',
-      b'8S102-T56-A060\x00\x00',
-      b'8S102-T50-EA10\x00\x00',
-      b'8S102-T64-A040\x00\x00',
       b'8S102-T43-J540\x00\x00',
+      b'8S102-T47-AA10\x00\x00',
+      b'8S102-T47-AA20\x00\x00',
+      b'8S102-T50-EA10\x00\x00',
+      b'8S102-T56-A060\x00\x00',
+      b'8S102-T60-AA10\x00\x00',
+      b'8S102-T64-A040\x00\x00',
     ],
     (Ecu.vsa, 0x18da28f1, None): [
       b'57114-T20-AB40\x00\x00',
@@ -922,9 +974,9 @@ FW_VERSIONS = {
       b'57114-T38-AA20\x00\x00',
       b'57114-T43-JA30\x00\x00',
       b'57114-T43-JB30\x00\x00',
+      b'57114-T50-JC20\x00\x00',
       b'57114-T60-AA20\x00\x00',
       b'57114-T61-AJ30\x00\x00',
-      b'57114-T50-JC20\x00\x00',
     ],
     (Ecu.transmission, 0x18da1ef1, None): [
       b'28101-65D-A020\x00\x00',

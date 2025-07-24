@@ -163,6 +163,8 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
   CP.fingerprintSource = source
   CP.fuzzyFingerprint = not exact_match
 
+  carlog.error({"event": "interface retrieved", "carFw": CP.carFw, "safetyConfig": CP.safetyConfigs})
+
   return interfaces[CP.carFingerprint](CP)
 
 
