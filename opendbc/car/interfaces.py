@@ -311,7 +311,7 @@ class CarStateBase(ABC):
     wheelSpeeds.rl = rl * factor
     wheelSpeeds.rr = rr * factor
     return wheelSpeeds
-  
+
   def parse_wheel_speeds(self, cs, fl, fr, rl, rr, unit=CV.KPH_TO_MS):
     cs.vEgoRaw = float(np.mean([fl, fr, rl, rr]) * unit * self.CP.wheelSpeedFactor)
     cs.vEgo, cs.aEgo = self.update_speed_kf(cs.vEgoRaw)
