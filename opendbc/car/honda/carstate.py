@@ -193,7 +193,7 @@ class CarState(CarStateBase):
     else:
 
       if self.CP.openpilotLongitudinalControl and self.CP.carFingerprint in HONDA_BOSCH_CANFD:
-        if False: remove in case it broke something --- bool(cp_cam.vl["STEERING_CONTROL"]["STEER_TORQUE"]) == 0:
+        if False: # remove in case it broke something --- bool(cp_cam.vl["STEERING_CONTROL"]["STEER_TORQUE"]) == 0:
           pass # await a steer control signal before fault detection is accurate.  TODO: see if this allows faults below to move to critical
         if self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE:
           ret.carFaultedNonCritical = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
