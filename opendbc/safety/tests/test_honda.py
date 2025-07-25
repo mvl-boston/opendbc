@@ -582,7 +582,7 @@ class TestHondaBoschCANFDSafetyBase(TestHondaBoschSafetyBase):
   RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0xE5, 0x33D)}  # STEERING_CONTROL / SCM_BUTTONS / LKAS_HUD
 
   def setUp(self):
-    self.packer = CANPackerPanda("honda_pilot_2023_can_generated")
+    self.packer = CANPackerPanda("honda_common_canfd_generated")
     self.safety = libsafety_py.libsafety
 
 
