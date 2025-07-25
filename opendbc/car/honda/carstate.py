@@ -237,7 +237,7 @@ class CarState(CarStateBase):
     else:
       gear_position = self.shifter_values.get(cp.vl[self.gearbox_msg]["GEAR_SHIFTER"], None)
       ret.gearShifter = self.parse_gear_shifter(gear_position)
-      
+
     ret.gas = cp.vl["POWERTRAIN_DATA"]["PEDAL_GAS"]
     ret.gasPressed = ret.gas > 1e-5
 
