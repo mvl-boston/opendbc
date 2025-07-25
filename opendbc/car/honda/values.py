@@ -330,13 +330,13 @@ class CAR(Platforms):
     [HondaCarDocs("Acura MDX Hybrid 2018-20")],
     CarSpecs(mass=4486 * CV.LB_TO_KG, wheelbase=2.82, centerToFrontRatio=0.428, steerRatio=15.76, tireStiffnessFactor=0.444),  # acura spec, stiff from Pilot
     radar_dbc_dict('acura_mdx_3G_hybrid'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.NIDEC_HYBRID | HondaFlags.HAS_ALL_DOOR_STATES,
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.NIDEC_HYBRID,
   )
   ACURA_RLX_HYBRID = HondaNidecPlatformConfig(
     [], # 2017 RLX Hybrid, don't add to cardocs since custom panda
     CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.39, steerRatio=13.9, tireStiffnessFactor=0.8467),  #spec, stiff/ctf from Accord
     radar_dbc_dict('acura_rlx'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.NIDEC_HYBRID | HondaFlags.HAS_ALL_DOOR_STATES,
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.NIDEC_HYBRID,
   )
   HONDA_PILOT = HondaNidecPlatformConfig(
     [
