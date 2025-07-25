@@ -47,7 +47,7 @@ class CanBus(CanBusBase):
 
 def get_cruise_speed_conversion(car_fingerprint: str, is_metric: bool) -> float:
   # on certain cars, CRUISE_SPEED changes to imperial with car's unit setting
-  return CV.MPH_TO_MS if car_fingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD) and not is_metric else CV.KPH_TO_MS
+  return CV.MPH_TO_MS if car_fingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD | {CAR.ACURA_MDX_4G} ) and not is_metric else CV.KPH_TO_MS
 
 
 def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_cancel_cmd, fcw, car_fingerprint, stock_brake):
@@ -129,9 +129,18 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active):
 def create_bosch_supplemental_1(packer, CAN):
   # non-active params
   values = {
+
+    # "SET_ME_X04": 0, # 0x04,
+    # "SET_ME_X00": 5, # 0
+    # "SET_ME_X80": 128, # 0x80,
+    # "SET_ME_X10": 0, # 0x10,
+    # "ROW5": 208,
+
     "SET_ME_X04": 0x04,
+    "SET_ME_X00": 0,
     "SET_ME_X80": 0x80,
     "SET_ME_X10": 0x10,
+
   }
   return packer.make_can_msg("BOSCH_SUPPLEMENTAL_1", CAN.lkas, values)
 
@@ -180,17 +189,17 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
 
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
     # TODO: needed for Bosch CAN FD?
-    if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    if CP.carFingerprint in HONDA_BOSCH:
       lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
 
   if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
     lkas_hud_values['SET_ME_X48'] = 0x48
 
-  if CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
-    commands.append(packer.make_can_msg('LKAS_HUD_A', CAN.lkas, lkas_hud_values))
-    commands.append(packer.make_can_msg('LKAS_HUD_B', CAN.lkas, lkas_hud_values))
-  else:
-    commands.append(packer.make_can_msg('LKAS_HUD', CAN.lkas, lkas_hud_values))
+#  if CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
+    # commands.append(packer.make_can_msg('LKAS_HUD_A', CAN.lkas, lkas_hud_values))
+    # commands.append(packer.make_can_msg('LKAS_HUD_B', CAN.lkas, lkas_hud_values))
+#  else:
+#    commands.append(packer.make_can_msg('LKAS_HUD', CAN.lkas, lkas_hud_values))
 
   if radar_disabled:
     radar_hud_values = {
