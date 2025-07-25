@@ -6,7 +6,8 @@
 #define HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(pt_bus)                                                                                      \
   {.msg = {{0x1A6, (pt_bus), 8, .max_counter = 3U, .ignore_quality_flag = true, .frequency = 25U},                  /* SCM_BUTTONS */       \
            {0x296, (pt_bus), 4, .max_counter = 3U, .ignore_quality_flag = true, .frequency = 25U}, { 0 }}},                                 \
-  {.msg = {{0x158, (pt_bus), 8, .max_counter = 3U, .ignore_quality_flag = true, .frequency = 100U}, { 0 }, { 0 }}},  /* ENGINE_DATA */      \
+  {.msg = {{0x158, (pt_bus), 8, .max_counter = 3U, .ignore_quality_flag = true, .frequency = 100U},                   /* ENGINE_DATA */     \
+           {0x309, (pt_bus), 8, .max_counter = 3U, .ignore_quality_flag = true, .frequency = 10U}, { 0 }}},             /* CAR_SPEED */     \
   {.msg = {{0x17C, (pt_bus), 8, .max_counter = 3U, .ignore_quality_flag = true, .frequency = 100U}, { 0 }, { 0 }}},  /* POWERTRAIN_DATA */  \
 
 #define HONDA_COMMON_RX_CHECKS(pt_bus)                                                                                                  \
@@ -73,8 +74,8 @@ static void honda_rx_hook(const CANPacket_t *to_push) {
   int addr = GET_ADDR(to_push);
   int bus = GET_BUS(to_push);
 
-  // sample speed
-  if (addr == 0x158) {
+  // 0x158 used for all supported Hondas except Integra (use 0x309 car_speed message)
+  if ((addr == 0x158) || (addr == 0x309)){
     // first 2 bytes
     vehicle_moving = GET_BYTE(to_push, 0) | GET_BYTE(to_push, 1);
   }
@@ -333,10 +334,12 @@ static safety_config honda_bosch_init(uint16_t param) {
                                               {0x33DA, 1, 5, .check_relay = true}, {0x33DB, 1, 8, .check_relay = true}, {0x39F, 1, 8, .check_relay = false},
                                               {0x18DAB0F1, 1, 8, .check_relay = false}};  // Bosch w/ gas and brakes
 
-  static CanMsg HONDA_RADARLESS_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x296, 2, 4, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}};  // Bosch radarless
-
+  static CanMsg HONDA_RADARLESS_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x296, 2, 4, .check_relay = false}, {0x33D, 0, 8, .check_relay = true},  // Bosch radarless
+                                             {0xF31AA54, 0, 8, .check_relay = true}};
+  
   static CanMsg HONDA_RADARLESS_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x33D, 0, 8, .check_relay = true}, {0x1C8, 0, 8, .check_relay = true},
-                                                  {0x30C, 0, 8, .check_relay = true}};  // Bosch radarless w/ gas and brakes
+                                                  {0x30C, 0, 8, .check_relay = true},  // Bosch radarless w/ gas and brakes
+                                                  {0xF31AA54, 0, 8, .check_relay = true}};
 
   const uint16_t HONDA_PARAM_ALT_BRAKE = 1;
   const uint16_t HONDA_PARAM_RADARLESS = 8;
