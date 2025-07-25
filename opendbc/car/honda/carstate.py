@@ -34,13 +34,13 @@ def get_can_messages(CP, gearbox_msg):
     ("SCM_BUTTONS", 25),  # FIXME: there are different frequencies for different arb IDs
   ]
 
-  if  CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
+  if CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
     messages += [
       ("CAR_SPEED", 0), # missing on RLX
     ]
   else:
     messages += [("CAR_SPEED", 10),]
-  
+
   if CP.carFingerprint != CAR.ACURA_INTEGRA:
     messages += [
       ("ENGINE_DATA", 100), # Not found on Integra, but still want to check all others
@@ -333,6 +333,8 @@ class CarState(CarStateBase):
 
   def get_can_parsers(self, CP):
     pt_messages = get_can_messages(CP, self.gearbox_msg)
+
+    cam_messages = []
 
     if (CP.carFingerprint in (SERIAL_STEERING)) or (CP.carFingerprint in (CAR.ACURA_RLX_HYBRID)):
       pt_messages += [
