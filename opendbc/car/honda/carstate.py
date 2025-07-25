@@ -10,7 +10,6 @@ from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HON
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, \
                                                  HondaFlags, CruiseButtons, CruiseSettings, GearShifter, \
                                                  SERIAL_STEERING, HONDA_NIDEC_HYBRID
-
 from opendbc.car.interfaces import CarStateBase
 
 TransmissionType = structs.CarParams.TransmissionType
@@ -21,7 +20,7 @@ BUTTONS_DICT = {CruiseButtons.RES_ACCEL: ButtonType.accelCruise, CruiseButtons.D
 SETTINGS_BUTTONS_DICT = {CruiseSettings.DISTANCE: ButtonType.gapAdjustCruise, CruiseSettings.LKAS: ButtonType.lkas}
 
 
-def get_can_messages(CP, gearbox_msg):
+def get_can_messages(CP):
   messages = [
     ("WHEEL_SPEEDS", 50),
     ("STEERING_SENSORS", 100),
@@ -41,10 +40,10 @@ def get_can_messages(CP, gearbox_msg):
   else:
     messages += [("CAR_SPEED", 10),]
 
-  if CP.carFingerprint != CAR.ACURA_INTEGRA:
-    messages += [
-      ("ENGINE_DATA", 100), # Not found on Integra, but still want to check all others
-    ]
+  if CP.transmissionType == TransmissionType.automatic:
+    messages.append(("GEARBOX_AUTO", 50))
+  elif CP.transmissionType == TransmissionType.cvt:
+    messages.append(("GEARBOX_CVT", 100))
 
   if  CP.carFingerprint in SERIAL_STEERING:
     messages += [
@@ -59,11 +58,10 @@ def get_can_messages(CP, gearbox_msg):
       ("STEER_STATUS", 100),
     ]
 
-  if CP.carFingerprint in (CAR.HONDA_CRV_HYBRID, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.ACURA_RDX_3G, CAR.HONDA_E, *HONDA_BOSCH_ALT_RADAR, \
-                           CAR.ACURA_INTEGRA):
-    messages.append((gearbox_msg, 50))
-  else:
-    messages.append((gearbox_msg, 100))
+  if CP.carFingerprint != CAR.ACURA_INTEGRA:
+    messages += [
+      ("ENGINE_DATA", 100), # Not found on Integra, but still want to check all others
+    ]
 
   if CP.carFingerprint in HONDA_NIDEC_HYBRID:
     messages += [
@@ -101,15 +99,12 @@ class CarState(CarStateBase):
   def __init__(self, CP):
     super().__init__(CP)
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
-    self.gearbox_msg = "GEARBOX_AUTO"
-    if CP.carFingerprint in (CAR.HONDA_ACCORD, CAR.HONDA_ACCORD_11G) and CP.transmissionType == TransmissionType.cvt:
-      self.gearbox_msg = "GEARBOX_CVT"
-    elif CP.carFingerprint == CAR.HONDA_CRV_6G:
-      self.gearbox_msg = "GEARBOX_CVT"
-    elif CP.carFingerprint in (CAR.HONDA_CIVIC_2022, CAR.HONDA_HRV_3G) and CP.transmissionType == TransmissionType.cvt:
-      self.gearbox_msg = "GEARBOX_CVT"
-    elif CP.transmissionType == TransmissionType.manual:
-      self.gearbox_msg = "GEARBOX_CVT"
+
+    if CP.transmissionType != TransmissionType.manual:
+      self.gearbox_msg = "GEARBOX_AUTO"
+      if CP.transmissionType == TransmissionType.cvt:
+        self.gearbox_msg = "GEARBOX_CVT"
+      self.shifter_values = can_define.dv[self.gearbox_msg]["GEAR_SHIFTER"]
 
     self.main_on_sig_msg = "SCM_FEEDBACK"
     if CP.carFingerprint in HONDA_NIDEC_ALT_SCM_MESSAGES:
@@ -240,9 +235,9 @@ class CarState(CarStateBase):
     if self.CP.transmissionType == TransmissionType.manual:
       ret.gearShifter = GearShifter.reverse if bool(cp.vl["SCM_FEEDBACK"]["REVERSE_LIGHT"]) else GearShifter.drive
     else:
-      gear = int(cp.vl[self.gearbox_msg]["GEAR_SHIFTER"])
-      ret.gearShifter = self.parse_gear_shifter(self.shifter_values.get(gear, None))
-
+      gear_position = self.shifter_values.get(cp.vl[self.gearbox_msg]["GEAR_SHIFTER"], None)
+      ret.gearShifter = self.parse_gear_shifter(gear_position)
+      
     ret.gas = cp.vl["POWERTRAIN_DATA"]["PEDAL_GAS"]
     ret.gasPressed = ret.gas > 1e-5
 
@@ -327,7 +322,7 @@ class CarState(CarStateBase):
     return ret
 
   def get_can_parsers(self, CP):
-    pt_messages = get_can_messages(CP, self.gearbox_msg)
+    pt_messages = get_can_messages(CP)
 
     cam_messages = []
 
