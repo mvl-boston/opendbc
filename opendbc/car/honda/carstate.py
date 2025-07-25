@@ -46,11 +46,6 @@ def get_can_messages(CP, gearbox_msg):
       ("ENGINE_DATA", 100), # Not found on Integra, but still want to check all others
     ]
 
-  if CP.transmissionType == TransmissionType.automatic:
-    messages.append(("GEARBOX_AUTO", 50))
-  elif CP.transmissionType == TransmissionType.cvt:
-    messages.append(("GEARBOX_CVT", 100))
-
   if  CP.carFingerprint in SERIAL_STEERING:
     messages += [
       ("STEER_STATUS", 0), # no stock message, only after serial steering board initializes
@@ -198,7 +193,7 @@ class CarState(CarStateBase):
     else:
 
       if self.CP.openpilotLongitudinalControl and self.CP.carFingerprint in HONDA_BOSCH_CANFD:
-        if bool(cp_cam.vl["STEERING_CONTROL"]["STEER_TORQUE"]) == 0:
+        if False: remove in case it broke something --- bool(cp_cam.vl["STEERING_CONTROL"]["STEER_TORQUE"]) == 0:
           pass # await a steer control signal before fault detection is accurate.  TODO: see if this allows faults below to move to critical
         if self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE:
           ret.carFaultedNonCritical = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
