@@ -1,7 +1,7 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, IntFlag
 
-from opendbc.car import Bus, CarSpecs, PlatformConfig, Platforms, structs, uds
+from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, structs, uds
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column, Device
 from opendbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries, p16
@@ -131,11 +131,22 @@ class Footnote(Enum):
     Column.FSR_STEERING)
 
 
+@dataclass
 class HondaBoschPlatformConfig(PlatformConfig):
   def init(self):
     self.flags |= HondaFlags.BOSCH
 
 
+@dataclass
+class HondaBoschCANFDPlatformConfig(HondaBoschPlatformConfig):
+  dbc_dict: DbcDict = field(default_factory=lambda: {Bus.pt: 'honda_common_canfd_generated'})
+
+  def init(self):
+    super().init()
+    self.flags |= HondaFlags.BOSCH_CANFD
+
+
+@dataclass
 class HondaNidecPlatformConfig(PlatformConfig):
   def init(self):
     self.flags |= HondaFlags.NIDEC
