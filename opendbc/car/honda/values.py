@@ -234,43 +234,31 @@ class CAR(Platforms):
     CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=16.71, tireStiffnessFactor=0.82),
     {Bus.pt: 'acura_rdx_2020_can_generated'},
   )
-  HONDA_PILOT_4G = HondaBoschPlatformConfig(
+  HONDA_PILOT_4G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Pilot 2023-25", "All")],
     CarSpecs(mass=4660 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=15.0, tireStiffnessFactor=0.444),  # as spec
-    {Bus.cam: 'honda_pilot_2023_can_generated', Bus.pt: 'honda_pilot_2023_can_generated'},
-    flags=HondaFlags.BOSCH_CANFD | HondaFlags.BOSCH_ALT_BRAKE,
   )
-  HONDA_PASSPORT_4G = HondaBoschPlatformConfig(
+  HONDA_PASSPORT_4G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Passport 2026", "All")],
-    CarSpecs(mass=4705 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=15.6, tireStiffnessFactor=0.444),  # as spec
-    {Bus.cam: 'honda_pilot_2023_can_generated', Bus.pt: 'honda_pilot_2023_can_generated'},
-    flags=HondaFlags.BOSCH_CANFD,
+    CarSpecs(mass=4705 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=15.6, tireStiffnessFactor=0.444),  # as 
   )
-  ACURA_MDX_4G_MMR = HondaBoschPlatformConfig(
+  ACURA_MDX_4G_MMR = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Acura MDX 2025", "All")],
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=14.6, tireStiffnessFactor=0.444),  # as spec
-    {Bus.cam: 'honda_pilot_2023_can_generated', Bus.pt: 'honda_pilot_2023_can_generated'},
-    flags=HondaFlags.BOSCH_CANFD,
   )
-  HONDA_ACCORD_11G = HondaBoschPlatformConfig(
+  HONDA_ACCORD_11G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Accord 2023-25", "All")],
     CarSpecs(mass=3279 * CV.LB_TO_KG, wheelbase=2.83, steerRatio=16.33, centerToFrontRatio=0.39, tireStiffnessFactor=0.8467),
-    {Bus.cam: 'honda_pilot_2023_can_generated', Bus.pt: 'honda_pilot_2023_can_generated'},
-    flags=HondaFlags.BOSCH_CANFD,
   )
-  HONDA_CRV_HYBRID_6G = HondaBoschPlatformConfig(
-    [HondaCarDocs("Honda CR-V Hybrid 2024", "All")],
+  HONDA_CRV_HYBRID_6G = HondaBoschCANFDPlatformConfig(
+    [HondaCarDocs("Honda CR-V Hybrid 2023-25", "All")],
     # mass: mean of 4 models in kg, steerRatio: 12.3 is spec end-to-end
     CarSpecs(mass=1667, wheelbase=2.66, steerRatio=16, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),
-    {Bus.cam: 'honda_pilot_2023_can_generated', Bus.pt: 'honda_pilot_2023_can_generated'},
-    flags=HondaFlags.BOSCH_CANFD,
   )
-  HONDA_CRV_6G = HondaBoschPlatformConfig(
-    [HondaCarDocs("Honda CR-V 2024", "All")],
+  HONDA_CRV_6G = HondaBoschCANFDPlatformConfig(
+    [HondaCarDocs("Honda CR-V 2023-25", "All")],
     # mass: mean of 4 models in kg, steerRatio: 12.3 is spec end-to-end
     CarSpecs(mass=1667, wheelbase=2.66, steerRatio=16, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),
-    {Bus.cam: 'honda_pilot_2023_can_generated', Bus.pt: 'honda_pilot_2023_can_generated'},
-    flags=HondaFlags.BOSCH_CANFD,
   )
   ACURA_INTEGRA = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura Integra 2024-25", "All")],
