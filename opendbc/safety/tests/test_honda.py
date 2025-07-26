@@ -25,6 +25,8 @@ class Btn:
 #    * Bosch with Longitudinal Support
 #  * Bosch Radarless
 #    * Bosch Radarless with Longitudinal Support
+#  * Bosch CANFD
+#    * Bosch CANFD with Longitudinal Support
 
 
 class HondaButtonEnableBase(common.PandaCarSafetyTest):
@@ -89,21 +91,21 @@ class HondaButtonEnableBase(common.PandaCarSafetyTest):
 
     # TODO: move this test to common
     # checksum checks
-    for msg_type in ["btn", "gas", "speed"]:
+    for msg in ["btn", "gas", "speed"]:
       self.safety.set_controls_allowed(1)
-      if msg_type == "btn":
-        msg = self._button_msg(Btn.SET)
-      if msg_type == "gas":
-        msg = self._user_gas_msg(0)
-      if msg_type == "speed":
-        msg = self._speed_msg(0)
-      self.assertTrue(self._rx(msg))
-      if msg_type != "btn":
-        msg[0].data[4] = 0  # invalidate checksum
-        msg[0].data[5] = 0
-        msg[0].data[6] = 0
-        msg[0].data[7] = 0
-        self.assertFalse(self._rx(msg))
+      if msg == "btn":
+        to_push = self._button_msg(Btn.SET)
+      if msg == "gas":
+        to_push = self._user_gas_msg(0)
+      if msg == "speed":
+        to_push = self._speed_msg(0)
+      self.assertTrue(self._rx(to_push))
+      if msg != "btn":
+        to_push[0].data[4] = 0  # invalidate checksum
+        to_push[0].data[5] = 0
+        to_push[0].data[6] = 0
+        to_push[0].data[7] = 0
+        self.assertFalse(self._rx(to_push))
         self.assertFalse(self.safety.get_controls_allowed())
 
     # counter
@@ -359,6 +361,18 @@ class TestHondaNidecPcmAltSafety(TestHondaNidecPcmSafety):
     return self.packer.make_can_msg_panda("SCM_BUTTONS", bus, values)
 
 
+class TestHondaNidecPcmHybridSafety(TestHondaNidecPcmAltSafety):
+  """
+    Covers the Honda Nidec safety mode with alt SCM messages and hybrid brake
+  """
+
+  def setUp(self):
+    self.packer = CANPackerPanda("acura_mdx_3G_hybrid")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_ALT | HondaSafetyFlags.NIDEC_HYBRID )
+    self.safety.init_tests()
+
+
 # ********************* Honda Bosch **********************
 
 
@@ -408,10 +422,10 @@ class TestHondaBoschAltBrakeSafetyBase(TestHondaBoschSafetyBase):
   def test_alt_brake_rx_hook(self):
     self.safety.set_honda_alt_brake_msg(1)
     self.safety.set_controls_allowed(1)
-    msg = self._alt_brake_msg(0)
-    self.assertTrue(self._rx(msg))
-    msg[0].data[2] = msg[0].data[2] & 0xF0  # invalidate checksum
-    self.assertFalse(self._rx(msg))
+    to_push = self._alt_brake_msg(0)
+    self.assertTrue(self._rx(to_push))
+    to_push[0].data[2] = to_push[0].data[2] & 0xF0  # invalidate checksum
+    self.assertFalse(self._rx(to_push))
     self.assertFalse(self.safety.get_controls_allowed())
 
   def test_alt_disengage_on_brake(self):
@@ -565,12 +579,12 @@ class TestHondaBoschCANFDSafetyBase(TestHondaBoschSafetyBase):
   STEER_BUS = 0
   BUTTONS_BUS = 0
 
-  TX_MSGS = [[0xE4, 0], [0x296, 0], [0x33D, 0], [0x33DA, 0], [0x33DB, 0]]
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0xE5, 0x33D, 0x33DA, 0x33DB]}
-  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0xE5, 0x33D, 0x33DA, 0x33DB)}  # STEERING_CONTROL
+  TX_MSGS = [[0xE4, 0], [0x296, 0], [0x33D, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0xE5, 0x33D]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0xE5, 0x33D)}  # STEERING_CONTROL / SCM_BUTTONS / LKAS_HUD
 
   def setUp(self):
-    self.packer = CANPackerPanda("honda_pilot_2023_can_generated")
+    self.packer = CANPackerPanda("honda_common_canfd_generated")
     self.safety = libsafety_py.libsafety
 
 
@@ -595,6 +609,23 @@ class TestHondaBoschCANFDAltBrakeSafety(HondaPcmEnableBase, TestHondaBoschCANFDS
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.ALT_BRAKE)
     self.safety.init_tests()
 
+class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANFDSafetyBase):
+  """
+    Covers the Honda Bosch CANFD safety mode with longitudinal control
+  """
+
+  PT_BUS = 0
+  STEER_BUS = 0
+  BUTTONS_BUS = 0
+
+  TX_MSGS = [[0xE4, 0], [0x1DF, 0],  [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x18DAB0F1, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x1DF, 0x33D]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1DF, 0x33D)}  # STEERING_CONTROL / ACC_CONTROL / LKAS_HUD
+
+  def setUp(self):
+    super().setUp()
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG)
+    self.safety.init_tests()
 
 if __name__ == "__main__":
   unittest.main()
