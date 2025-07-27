@@ -27,6 +27,7 @@ non_tested_cars = [
   HONDA.HONDA_CRV_HYBRID_6G, # TODO: get route
   HONDA.HONDA_CRV_6G, # TODO: get route
   HONDA.ACURA_MDX_3G_HYBRID, # TODO: get route once steering fixed
+  HONDA.ACURA_MDX_4G, # TODO: get route once working
   HONDA.ACURA_RLX_HYBRID, # TODO: get route once tuning done
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
