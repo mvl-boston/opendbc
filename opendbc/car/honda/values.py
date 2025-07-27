@@ -242,6 +242,11 @@ class CAR(Platforms):
     [HondaCarDocs("Honda Passport 2026", "All")],
     CarSpecs(mass=4705 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=15.6, tireStiffnessFactor=0.444),  # as spec
   )
+  ACURA_MDX_4G = HondaBoschPlatformConfig(
+    [HondaCarDocs("Acura MDX 2022", "Type S", min_steer_speed=3. * CV.MPH_TO_MS)],
+    CarSpecs(mass=4788 * CV.LB_TO_KG, wheelbase=2.89, steerRatio=14.6, centerToFrontRatio=0.428, tireStiffnessFactor=0.444),  # as spec
+    {Bus.pt: 'honda_common_canfd_generated'}, # so far DBC matches Bosch C
+  )
   ACURA_MDX_4G_MMR = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Acura MDX 2025", "All")],
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=14.6, tireStiffnessFactor=0.444),  # as spec
