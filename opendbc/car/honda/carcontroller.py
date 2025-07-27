@@ -185,7 +185,8 @@ class CarController(CarControllerBase):
     if self.CP.carFingerprint in ((HONDA_BOSCH | HONDA_BOSCH_CANFD) - HONDA_BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
       if self.frame % 10 == 0:
         bus = 0 if self.CP.carFingerprint in HONDA_BOSCH_CANFD else 1
-        can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
+        if self.CP.carFingerprint not in (HONDA_BOSCH_ALT_RADAR):
+          can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
 
     # Send steering command.
     if self.CP.carFingerprint in (HONDA_BOSCH_ALT_RADAR): # faults when steer control occurs while steeringPressed
@@ -196,7 +197,8 @@ class CarController(CarControllerBase):
         self.last_torque = 0
     else:
       steerDisable = False
-    can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive and not steerDisable,
+    if self.CP.carFingerprint not in (HONDA_BOSCH_ALT_RADAR):
+      can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive and not steerDisable,
                                                       self.CP.carFingerprint))
 
     # wind brake from air resistance decel at high speed
@@ -242,12 +244,15 @@ class CarController(CarControllerBase):
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:  # radarless cars don't have supplemental message
-        can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
+        if self.CP.carFingerprint not in (HONDA_BOSCH_ALT_RADAR):
+          can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
       # If using stock ACC, spam cancel command to kill gas when OP disengages.
       if pcm_cancel_cmd:
-        can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.CANCEL, self.CP.carFingerprint))
+        if self.CP.carFingerprint not in (HONDA_BOSCH_ALT_RADAR):
+          can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.CANCEL, self.CP.carFingerprint))
       elif CC.cruiseControl.resume:
-        can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
+        if self.CP.carFingerprint not in (HONDA_BOSCH_ALT_RADAR):
+          can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
 
     else:
       # Send gas and brake commands.
@@ -275,7 +280,8 @@ class CarController(CarControllerBase):
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
-          can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
+          if self.CP.carFingerprint not in (HONDA_BOSCH_ALT_RADAR):
+            can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
                                                         self.stopping_counter, self.CP.carFingerprint, gas_pedal_force, CS.out.vEgo))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
@@ -284,7 +290,8 @@ class CarController(CarControllerBase):
 
           pcm_override = True
           pump_send = ( apply_brake > 0 ) if self.CP.carFingerprint in HONDA_NIDEC_HYBRID else pump_on
-          can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_send,
+          if self.CP.carFingerprint not in (HONDA_BOSCH_ALT_RADAR):
+            can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_send,
                                                          pcm_override, pcm_cancel_cmd, fcw_display,
                                                          self.CP.carFingerprint, CS.stock_brake))
           self.apply_brake_last = apply_brake
@@ -301,7 +308,8 @@ class CarController(CarControllerBase):
       display_lines = hud_control.lanesVisible and CS.show_lanelines and (abs(apply_torque) < self.params.STEER_MAX) and not steerDisable
       hud = HUDData(int(pcm_accel), int(round(hud_v_cruise)), hud_control.leadVisible,
                     display_lines, fcw_display, acc_alert, steer_required, hud_control.leadDistanceBars)
-      can_sends.extend(hondacan.create_ui_commands(self.packer, self.CAN, self.CP, CC.enabled, pcm_speed, hud, CS.is_metric, CS.acc_hud, CS.lkas_hud,
+      if self.CP.carFingerprint not in (HONDA_BOSCH_ALT_RADAR):
+        can_sends.extend(hondacan.create_ui_commands(self.packer, self.CAN, self.CP, CC.enabled, pcm_speed, hud, CS.is_metric, CS.acc_hud, CS.lkas_hud,
                                                    speed_control))
 
       if self.CP.openpilotLongitudinalControl and self.CP.carFingerprint not in HONDA_BOSCH:
