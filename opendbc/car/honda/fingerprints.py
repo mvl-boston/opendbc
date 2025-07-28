@@ -1088,6 +1088,23 @@ FW_VERSIONS = {
       b'39494-T20-A010\x00\x00',
     ],
   },
+  CAR.ACURA_MDX_3G: {
+    (Ecu.vsa, 0x18da28f1, None): [
+      b'57114-TZ6-A910\x00\x00',
+    ],
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'36161-TZ6-A640\x00\x00',
+    ],
+    (Ecu.shiftByWire, 0x18da0bf1, None): [
+      b'54008-TZ5-A910\x00\x00',
+    ],
+    (Ecu.srs, 0x18da53f1, None): [
+      b'77959-TZ5-A220\x00\x00',
+    ],
+    (Ecu.transmission, 0x18da1ef1, None): [
+      b'28101-5NC-A310\x00\x00',
+    ],
+  },
   CAR.ACURA_MDX_3G_HYBRID: {
     (Ecu.vsa, 0x18da28f1, None): [
       b'57114-TRX-H130\x00\x00',
@@ -1103,11 +1120,6 @@ FW_VERSIONS = {
       b'54008-TZ5-A910\x00\x00',
       b'77959-TZ5-A110\x00\x00',
     ],
-#    (Ecu.combinationMeter, 0x18da60f1, None): [ - remove, creates CI test error
-#      b'78109-TYS-A611\x00\x00',
-#      b'78109-TYT-A220\x00\x00',
-#      b'78109-TZ6-A720\x00\x00',
-#    ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-TRX-A011\x00\x00',
       b'77959-TZ5-A220\x00\x00',
