@@ -135,11 +135,8 @@ class CarController(CarControllerBase):
     hud_control = CC.hudControl
 
     if self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
-      conversion = CV.MPH_TO_MS
-    else:
-      conversion = hondacan.get_cruise_speed_conversion(self.CP.carFingerprint, CS.is_metric)
-
-    hud_v_cruise = hud_control.setSpeed / conversion if hud_control.speedVisible else 255
+      CS.v_cruise_factor = CV.MPH_TO_MS
+    hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
     if len(CC.orientationNED) == 3:
