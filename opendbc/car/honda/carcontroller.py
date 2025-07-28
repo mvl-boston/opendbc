@@ -83,7 +83,7 @@ def process_hud_alert(hud_alert, steering_after_alert, CS):
 
   # priority is: FCW, steer required without steer, all others
   # don't use "steer required" (emergency) alert if driver was already steering, instead make lanelines dashed to match stock
-  steeringRequired = hud_alert in (VisualAlert.steerRequired, VisualAlert.ldw) or CS.steerFaultTemporary or CS.lowSpeedAlert
+  steeringRequired = hud_alert in (VisualAlert.steerRequired, VisualAlert.ldw) or CS.out.steerFaultTemporary or CS.out.lowSpeedAlert
   if hud_alert == VisualAlert.fcw:
     fcw_display = VISUAL_HUD[hud_alert.raw]
   elif steeringRequired and not steering_after_alert:
@@ -151,7 +151,7 @@ class CarController(CarControllerBase):
     self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., DT_CTRL)
 
     # steering_after_alert = whether steeringpressed since last rising edge of steering_required, downgrades hud alert to laneline off
-    new_steer_required = hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw) or CS.steerFaultTemporary or CS.lowSpeedAlert
+    new_steer_required = hud_control.visualAlert in (VisualAlert.steerRequired, VisualAlert.ldw) or CS.out.steerFaultTemporary or CS.out.lowSpeedAlert
     if (not self.last_steer_required) and new_steer_required:
       self.steering_after_alert = False
     if CS.out.steeringPressed:
