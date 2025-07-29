@@ -190,8 +190,6 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
   if CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
     commands.append(packer.make_can_msg('LKAS_HUD_A', CAN.lkas, lkas_hud_values))
     commands.append(packer.make_can_msg('LKAS_HUD_B', CAN.lkas, lkas_hud_values))
-    if CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
-      commands.append(packer.make_can_msg('LKAS_HUD', CAN.lkas, lkas_hud_values))
   else:
     commands.append(packer.make_can_msg('LKAS_HUD', CAN.lkas, lkas_hud_values))
 
