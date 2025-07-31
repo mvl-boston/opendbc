@@ -118,7 +118,7 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active, steer_contro
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
   }
-  if (steer_control_passthrough != False) and not (lkas_active"):
+  if (steer_control_passthrough != False) and not (lkas_active):
     values['SET_ME_X00'] = steer_control_passthrough['SET_ME_X00']
     values['SET_ME_X00_2'] = steer_control_passthrough['SET_ME_X00_2']
   
