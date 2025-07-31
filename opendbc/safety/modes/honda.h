@@ -73,8 +73,8 @@ static void honda_rx_hook(const CANPacket_t *msg) {
   const bool pcm_cruise = ((honda_hw == HONDA_BOSCH) && !honda_bosch_long) || (honda_hw == HONDA_NIDEC);
   unsigned int pt_bus = honda_get_pt_bus();
 
-  // sample speed
-  if (msg->addr == 0x158U) {
+  // sample speed - 0x158 used for all supported Hondas except Integra (use 0x309 car_speed message)
+  if (msg->addr == 0x158U) or (msg->addr == 0x309U) {
     vehicle_moving = msg->data[0] | msg->data[1];
   }
 
