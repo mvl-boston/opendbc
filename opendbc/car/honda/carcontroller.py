@@ -10,7 +10,7 @@ from opendbc.car.interfaces import CarControllerBase
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 
-MAX_STEER_RATE = 60  # deg/s, LKA angle-rate limit for avoiding EPS faults
+MAX_STEER_RATE = 40  # deg/s, LKA angle-rate limit for avoiding EPS faults
 
 
 def compute_gb_honda_bosch(accel, speed):
