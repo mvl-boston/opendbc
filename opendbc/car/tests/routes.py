@@ -29,6 +29,8 @@ non_tested_cars = [
   HONDA.ACURA_MDX_3G, # TODO: get route once steering fixed
   HONDA.ACURA_MDX_3G_HYBRID, # TODO: get route once steering fixed
   HONDA.ACURA_RLX_HYBRID, # TODO: get route once tuning done
+  HONDA.HONDA_PASSPORT_4G,  # TODO: find public route
+  HONDA.HONDA_ODYSSEY_5G_MMR,  # TODO: find public route
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
 
@@ -104,7 +106,6 @@ routes = [
   CarTestRoute("f29e2b57a55e7ad5/2021-03-24--20-52-38", HONDA.HONDA_ACCORD),  # hybrid, 2021 with new style HUD msgs
   CarTestRoute("1ad763dd22ef1a0e/2020-02-29--18-37-03", HONDA.HONDA_CRV_5G),
   CarTestRoute("0a96f86fcfe35964/2020-02-05--07-25-51", HONDA.HONDA_ODYSSEY),
-  CarTestRoute("558ac87ada6a88cd/00000036--7d59e2af08", HONDA.HONDA_ODYSSEY_5G_MMR),
   CarTestRoute("d83f36766f8012a5/2020-02-05--18-42-21", HONDA.HONDA_CIVIC_BOSCH_DIESEL),
   CarTestRoute("f0890d16a07a236b/2021-05-25--17-27-22", HONDA.HONDA_INSIGHT),
   CarTestRoute("07d37d27996096b6/2020-03-04--21-57-27", HONDA.HONDA_PILOT),
@@ -121,7 +122,8 @@ routes = [
   CarTestRoute("09c0833f9154ec75/00000001--363c8ffbc8", HONDA.HONDA_PILOT_4G),
   CarTestRoute("ad9840558640c31d/0000001a--d6cd4871c2", HONDA.ACURA_MDX_4G_MMR),  # 2025 MDX
   CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA),
-  CarTestRoute("913512e598516683/00000001--f9fab64e9f", HONDA.HONDA_PASSPORT_4G),
+#  CarTestRoute("913512e598516683/00000001--f9fab64e9f", HONDA.HONDA_PASSPORT_4G),  # TODO: find public route
+#  CarTestRoute("558ac87ada6a88cd/00000036--7d59e2af08", HONDA.HONDA_ODYSSEY_5G_MMR),  # TODO: find public route
 
   CarTestRoute("87d7f06ade479c2e/2023-09-11--23-30-11", HYUNDAI.HYUNDAI_AZERA_6TH_GEN),
   CarTestRoute("66189dd8ec7b50e6/2023-09-20--07-02-12", HYUNDAI.HYUNDAI_AZERA_HEV_6TH_GEN),
