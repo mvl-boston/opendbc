@@ -1,6 +1,7 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.values import HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD, CAR, CarControllerParams
+from opendbc.car.honda.values import HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD, HONDA_BOSCH_ALT_RADAR, \
+                                     CAR, CarControllerParams
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -113,12 +114,12 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   return commands
 
 
-def create_steering_control(packer, CAN, apply_torque, lkas_active, steer_control_passthrough):
+def create_steering_control(packer, CAN, apply_torque, lkas_active, car_fingerprint, steer_control_passthrough):
   values = {
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
   }
-  if (steer_control_passthrough != False) and not (lkas_active):
+  if (car_fingerprint in HONDA_BOSCH_ALT_RADAR) and not (lkas_active):
     values['SET_ME_X00'] = steer_control_passthrough['SET_ME_X00']
     values['SET_ME_X00_2'] = steer_control_passthrough['SET_ME_X00_2']
   
