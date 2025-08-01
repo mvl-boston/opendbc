@@ -145,7 +145,7 @@ class CarController(CarControllerBase):
 
     if CC.longActive:
       accel = actuators.accel
-      if (self.CP.carFingerprint in (HONDA_NIDEC_HYBRID)) and (accel > max ( 0, CS.out.aEgo) + 0.1):
+      if ((self.CP.carFingerprint in HONDA_NIDEC_HYBRID) or (self.CP.carFingerprint in CAR.ACURA_MDX_3G)) and (accel > max ( 0, CS.out.aEgo) + 0.1):
         accel = 10000.0 # help with lagged accel until pedal tuning is inserted
       gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
@@ -290,7 +290,7 @@ class CarController(CarControllerBase):
     # Send dashboard UI commands.
     # On Nidec, this controls longitudinal positive acceleration
     if self.frame % 10 == 0:
-      if CC.longActive and self.CP.carFingerprint in HONDA_NIDEC_HYBRID:
+      if CC.longActive and ((self.CP.carFingerprint in HONDA_NIDEC_HYBRID) or (self.CP.carFingerprint in CAR.ACURA_MDX_3G)):
         # standstill disengage
         if ( accel >= 0.01 ) and (CS.out.vEgo < 4.0 ) and ( pcm_speed < 25.0 / 3.6):
           pcm_speed = 25.0 / 3.6
