@@ -89,10 +89,15 @@ BO_ 400 STEER_STATUS: 5 EPS
  SG_ COUNTER : 37|2@0+ (1,0) [0|3] "" XXX
 
 BO_ 419 GEARBOX_AUTO: 8 PCM
- SG_ GEAR : 7|8@0+ (1,0) [0|255] "" EON
- SG_ GEAR_SHIFTER : 29|6@0+ (1,0) [0|63] "" EON
+ SG_ TRANS_SHIFT_ACTIVITY : 7|8@0+ (1,0) [0|256] "" EON
+ SG_ TRANS_TARGET_GEAR : 11|4@0+ (1,0) [0|15] "" XXX
+ SG_ FORWARD_DRIVING_MODE : 20|1@0+ (1,0) [0|1] "" XXX
+ SG_ AUTO_UNKNOWN_1 : 27|2@0+ (1,0) [0|3] "" XXX
+ SG_ AUTO_UNKNOWN_2 : 29|1@0+ (1,0) [0|1] "" XXX
+ SG_ GEAR_SHIFTER : 35|4@0+ (1,0) [0|15] "" EON
  SG_ CHECKSUM : 59|4@0+ (1,0) [0|3] "" EON
  SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ AUTO_UNKNOWN_3 : 62|1@0+ (1,0) [0|1] "" XXX
 
 BO_ 420 VSA_STATUS: 8 VSA
  SG_ USER_BRAKE : 7|16@0+ (0.015625,-1.609375) [0|1000] "" EON
@@ -333,7 +338,7 @@ CM_ SG_ 780 CRUISE_SPEED "255 = no speed";
 CM_ SG_ 804 CRUISE_SPEED_PCM "255 = no speed";
 CM_ SG_ 829 BEEP "beeps are pleasant, chimes are for warnngs etc...";
 VAL_ 400 STEER_STATUS 6 "tmp_fault" 5 "fault_1" 4 "no_torque_alert_2" 3 "low_speed_lockout" 2 "no_torque_alert_1" 0 "normal" 2 "lkas_fatal_error" 1 "no_torque_alert_1" 0 "normal";
-VAL_ 419 GEAR_SHIFTER 32 "D" 8 "R" 4 "P";
+VAL_ 419 GEAR_SHIFTER 1 "P" 2 "R" 3 "N" 4 "D" 7 "L" 10 "S";
 VAL_ 422 LIGHTS_SETTING 3 "high_beam" 2 "low_beam" 1 "position" 0 "no_lights";
 VAL_ 422 CRUISE_BUTTONS 7 "tbd" 6 "tbd" 5 "tbd" 4 "accel_res" 3 "decel_set" 2 "cancel" 1 "main" 0 "none";
 VAL_ 422 CRUISE_SETTING 3 "distance_adj" 2 "tbd" 1 "lkas_button" 0 "none";
