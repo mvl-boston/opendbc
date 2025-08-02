@@ -208,7 +208,7 @@ class CarController(CarControllerBase):
           self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
           self.gas = float(np.interp(accel, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
-          if CC.enabled and CC.longActive and self.CS.steeringPressed:
+          if CC.enabled and CC.longActive and CS.out.steeringPressed:
             self.gas = 2500 # fault the car by exceeding gas safety limit
 
           stopping = actuators.longControlState == LongCtrlState.stopping
