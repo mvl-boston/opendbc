@@ -370,6 +370,10 @@ class TestHondaNidecPcmHybridSafety(TestHondaNidecPcmAltSafety):
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_ALT | HondaSafetyFlags.NIDEC_HYBRID )
     self.safety.init_tests()
 
+  def _send_brake_msg(self, brake, aeb_req=0, bus=0):
+    values = {"COMPUTER_BRAKE_HYBRID": brake, "AEB_REQ_1": aeb_req}
+    return self.packer.make_can_msg_panda("BRAKE_COMMAND", bus, values)
+
 
 # ********************* Honda Bosch **********************
 
