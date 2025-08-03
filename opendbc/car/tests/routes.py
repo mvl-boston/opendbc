@@ -27,7 +27,6 @@ non_tested_cars = [
   HONDA.HONDA_CRV_HYBRID_6G, # TODO: get route
   HONDA.HONDA_CRV_6G, # TODO: get route
   HONDA.ACURA_MDX_3G, # TODO: get route once steering fixed
-  HONDA.ACURA_MDX_3G_HYBRID, # TODO: get route once steering fixed
   HONDA.ACURA_RLX_HYBRID, # TODO: get route once tuning done
   HONDA.HONDA_PASSPORT_4G,  # TODO: find public route
   HONDA.HONDA_ODYSSEY_5G_MMR,  # TODO: find public route
@@ -124,6 +123,7 @@ routes = [
   CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA),
 #  CarTestRoute("913512e598516683/00000001--f9fab64e9f", HONDA.HONDA_PASSPORT_4G),  # TODO: find public route
 #  CarTestRoute("558ac87ada6a88cd/00000036--7d59e2af08", HONDA.HONDA_ODYSSEY_5G_MMR),  # TODO: find public route
+  CarTestRoute("ad9840558640c31d/0000003d--a35002b59f", HONDA.ACURA_MDX_3G_HYBRID),
 
   CarTestRoute("87d7f06ade479c2e/2023-09-11--23-30-11", HYUNDAI.HYUNDAI_AZERA_6TH_GEN),
   CarTestRoute("66189dd8ec7b50e6/2023-09-20--07-02-12", HYUNDAI.HYUNDAI_AZERA_HEV_6TH_GEN),
