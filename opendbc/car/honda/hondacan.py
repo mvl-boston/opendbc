@@ -54,12 +54,10 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
   pcm_fault_cmd = False
 
   values = {
-    "COMPUTER_BRAKE": apply_brake,
     "BRAKE_PUMP_REQUEST": pump_on,
     "CRUISE_OVERRIDE": pcm_override,
     "CRUISE_FAULT_CMD": pcm_fault_cmd,
     "CRUISE_CANCEL_CMD": pcm_cancel_cmd,
-    "COMPUTER_BRAKE_REQUEST": brake_rq,
     "SET_ME_1": 1,
     "BRAKE_LIGHTS": brakelights,
     "CHIME": stock_brake["CHIME"] if fcw else 0,  # send the chime for stock fcw
@@ -68,6 +66,16 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
     "AEB_REQ_2": 0,
     "AEB_STATUS": 0,
   }
+  if car_fingerprint in HONDA_NIDEC_HYBRID:
+    values.update({
+    "COMPUTER_BRAKE_HYBRID": apply_brake,
+    "COMPUTER_BRAKE_REQUEST_HYBRID": brake_rq,
+    })
+  else:
+    values.update({
+    "COMPUTER_BRAKE": apply_brake,
+    "COMPUTER_BRAKE_REQUEST": brake_rq,
+    })
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
