@@ -144,7 +144,8 @@ class CarController(CarControllerBase):
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
     if CC.longActive:
-      accel = actuators.accel
+      # accel = actuators.accel
+      accel = (2.2352 - CS.out.vEgo) / 3.0 # target 5mph within 3 seconds
       if ((self.CP.carFingerprint in HONDA_NIDEC_HYBRID) or (self.CP.carFingerprint in CAR.ACURA_MDX_3G)) and (accel > max ( 0, CS.out.aEgo) + 0.1):
         accel = 10000.0 # help with lagged accel until pedal tuning is inserted
       gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
