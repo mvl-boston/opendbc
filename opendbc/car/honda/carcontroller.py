@@ -135,10 +135,7 @@ class CarController(CarControllerBase):
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
 
-    if self.CP.carFingerprint in (HONDA_BOSCH):
-      apply_steer_req = CC.latActive and (not abs(CS.out.steeringRateDeg) >= MAX_STEER_RATE) and (not CS.steer_blocked)
-    else:
-      apply_steer_req = CC.latActive
+    apply_steer_req = CC.latActive and (not abs(CS.out.steeringRateDeg) >= MAX_STEER_RATE) and (not CS.steer_blocked)
     if not apply_steer_req:
       limited_torque = 0
     self.last_torque = limited_torque
