@@ -252,13 +252,11 @@ class CAR(Platforms):
   )
   HONDA_CRV_HYBRID_6G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda CR-V Hybrid 2023-25", "All")],
-    # mass: mean of 4 models in kg, steerRatio: 12.3 is spec end-to-end
-    CarSpecs(mass=1667, wheelbase=2.66, steerRatio=16, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),
+    CarSpecs(mass=1767, wheelbase=2.7, steerRatio=12.35, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),
   )
   HONDA_CRV_6G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda CR-V 2023-25", "All")],
-    # mass: mean of 4 models in kg, steerRatio: 12.3 is spec end-to-end
-    CarSpecs(mass=1667, wheelbase=2.66, steerRatio=16, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),
+    CarSpecs(mass=1639, wheelbase=2.7, steerRatio=12.35, centerToFrontRatio=0.42, tireStiffnessFactor=0.677),
   )
   ACURA_INTEGRA = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura Integra 2024-25", "All")],
