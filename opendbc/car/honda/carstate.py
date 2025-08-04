@@ -41,6 +41,7 @@ class CarState(CarStateBase):
     self.dynamic_v_cruise_units = self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD)
     self.cruise_setting = 0
     self.v_cruise_pcm_prev = 0
+    self.steer_blocked = False
     self.steer_blocked_prev = False
     self.steer_control_passthrough = False
 
@@ -124,6 +125,8 @@ class CarState(CarStateBase):
         self.steer_blocked_prev = True
       else:
         self.steer_blocked_prev = False
+
+      self.steer_blocked = (ret.cruiseState.enabled and (cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"] != 1) )
 
     self.dash_speed_seen = self.dash_speed_seen or cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] > 1e-3
     if self.dash_speed_seen:
