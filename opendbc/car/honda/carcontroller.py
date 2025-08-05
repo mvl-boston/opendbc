@@ -130,7 +130,7 @@ class CarController(CarControllerBase):
 #                                      k_f=1, rate= 1 / DT_CTRL / 2)
     self.pitch = 0.0
     self.steer_stage = 0
-    sele.new_torque_percent = 0.0
+    self.new_torque_percent = 0.0
 
 
   def update(self, CC, CS, now_nanos):
