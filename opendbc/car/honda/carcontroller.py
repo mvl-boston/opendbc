@@ -113,6 +113,7 @@ class CarController(CarControllerBase):
     self.apply_brake_last = 0
     self.last_pump_ts = 0.
     self.stopping_counter = 0
+    self.last_time_frame = 0
 
     self.accel = 0.0
     self.speed = 0.0
@@ -128,6 +129,7 @@ class CarController(CarControllerBase):
 #                                      k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
 #                                      k_f=1, rate= 1 / DT_CTRL / 2)
     self.pitch = 0.0
+    self.test_stage = 0
 
 
   def update(self, CC, CS, now_nanos):
@@ -171,9 +173,40 @@ class CarController(CarControllerBase):
     # **** process the car messages ****
 
     # steer torque is converted back to CAN reference (positive when steering right)
-    apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
-                                 self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
+    #apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
+    #                             self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
+    prior_max_torque = self.params.STEER_LOOKUP_V(1)
+
+    if self.steer_stage == 0:
+      self.last_time_frame = self.frame
+      self_steer_stage = 1
+
+    if self.steer_stage == 1:
+      new_torque_percent = 0.3
+      if self.frame > last_time_frame + 1000:
+          self.last_time_frame = self.frame
+          self_steer_stage = 2
+
+    if self.steer_stage == 2:
+      new_torque_percent = 0.6
+      if self.frame > last_time_frame + 1000:
+          self_steer_stage = 3
+
+    if self.steer_stage == 3:
+      if self.frame > last_time_frame + 1000:
+          self.last_time_frame = self.frame
+          if new_torque_percent < 0.9:
+            new_torque_percent += 0.1
+          else:
+            new_torque_percent += 0.01
+    
+    limited_torque = rate_limit(new_torque_percent, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
+                                self.params.STEER_DELTA_UP * DT_CTRL)
+    self.last_torque = limited_torque
+    
+    apply_torque = int (limited_torque * prior_max_torque)
+    
     speed_control = 1 if ( (accel <= 0.0) and (CS.out.vEgo == 0) ) else 0
 
     # Send CAN commands
