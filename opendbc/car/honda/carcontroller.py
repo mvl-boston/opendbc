@@ -179,35 +179,38 @@ class CarController(CarControllerBase):
 
     prior_max_torque = self.params.STEER_LOOKUP_V[1]
 
-    if self.steer_stage == 0:
-      self.last_time_frame = self.frame
-      self.steer_stage = 1
+    if CC.longActive:
+      if self.steer_stage == 0:
+        self.last_time_frame = self.frame
+        self.steer_stage = 1
 
-    if self.steer_stage == 1:
-      self.new_torque_percent = 0.3
-      if self.frame > self.last_time_frame + 1000:
-          self.last_time_frame = self.frame
-          self.steer_stage = 2
+      if self.steer_stage == 1:
+        self.new_torque_percent = 0.3
+        if self.frame > self.last_time_frame + 1000:
+            self.last_time_frame = self.frame
+            self.steer_stage = 2
 
-    if self.steer_stage == 2:
-      self.new_torque_percent = 0.6
-      if self.frame > self.last_time_frame + 1000:
-          self.steer_stage = 3
+      if self.steer_stage == 2:
+        self.new_torque_percent = 0.6
+        if self.frame > self.last_time_frame + 1000:
+            self.steer_stage = 3
 
-    if self.steer_stage == 3:
-      if self.frame > self.last_time_frame + 1000:
-          self.last_time_frame = self.frame
-          if self.new_torque_percent < 0.9:
-            self.new_torque_percent += 0.1
-          else:
-            self.new_torque_percent += 0.01
+      if self.steer_stage == 3:
+        if self.frame > self.last_time_frame + 1000:
+            self.last_time_frame = self.frame
+            if self.new_torque_percent < 0.9:
+              self.new_torque_percent += 0.1
+            else:
+              self.new_torque_percent += 0.01
 
-    limited_torque = rate_limit(self.new_torque_percent, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
-                                self.params.STEER_DELTA_UP * DT_CTRL)
-    self.last_torque = limited_torque
+      limited_torque = rate_limit(self.new_torque_percent, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
+                                  self.params.STEER_DELTA_UP * DT_CTRL)
+      self.last_torque = limited_torque
 
-    apply_torque = int (limited_torque * prior_max_torque)
-
+      apply_torque = int (limited_torque * prior_max_torque)
+    else:
+      apply_torque = 0
+    
     speed_control = 1 if ( (accel <= 0.0) and (CS.out.vEgo == 0) ) else 0
 
     # Send CAN commands
