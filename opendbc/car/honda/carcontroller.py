@@ -129,7 +129,8 @@ class CarController(CarControllerBase):
 #                                      k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
 #                                      k_f=1, rate= 1 / DT_CTRL / 2)
     self.pitch = 0.0
-    self.test_stage = 0
+    self.steer_stage = 0
+    sele.new_torque_percent = 0.0
 
 
   def update(self, CC, CS, now_nanos):
@@ -180,28 +181,28 @@ class CarController(CarControllerBase):
 
     if self.steer_stage == 0:
       self.last_time_frame = self.frame
-      self_steer_stage = 1
+      self.steer_stage = 1
 
     if self.steer_stage == 1:
-      new_torque_percent = 0.3
+      self.new_torque_percent = 0.3
       if self.frame > last_time_frame + 1000:
           self.last_time_frame = self.frame
-          self_steer_stage = 2
+          self.steer_stage = 2
 
     if self.steer_stage == 2:
-      new_torque_percent = 0.6
+      self.new_torque_percent = 0.6
       if self.frame > last_time_frame + 1000:
-          self_steer_stage = 3
+          self.steer_stage = 3
 
     if self.steer_stage == 3:
       if self.frame > last_time_frame + 1000:
           self.last_time_frame = self.frame
-          if new_torque_percent < 0.9:
+          if self.new_torque_percent < 0.9:
             new_torque_percent += 0.1
           else:
-            new_torque_percent += 0.01
+            self.new_torque_percent += 0.01
     
-    limited_torque = rate_limit(new_torque_percent, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
+    limited_torque = rate_limit(self.new_torque_percent, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
     self.last_torque = limited_torque
     
