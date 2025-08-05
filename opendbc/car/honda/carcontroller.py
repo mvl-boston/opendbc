@@ -176,7 +176,7 @@ class CarController(CarControllerBase):
     #apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
     #                             self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
-    prior_max_torque = self.params.STEER_LOOKUP_V(1)
+    prior_max_torque = self.params.STEER_LOOKUP_V[1]
 
     if self.steer_stage == 0:
       self.last_time_frame = self.frame
