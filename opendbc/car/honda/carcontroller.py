@@ -207,7 +207,7 @@ class CarController(CarControllerBase):
 #                                  self.params.STEER_DELTA_UP * DT_CTRL)
       self.last_torque = self.new_torque_percent
 
-      limited_torque = 0.3
+      limited_torque = self.new_torque_percent
 
       apply_torque = int (limited_torque * prior_max_torque)
     else:
