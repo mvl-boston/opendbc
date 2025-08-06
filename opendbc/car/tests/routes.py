@@ -23,8 +23,16 @@ non_tested_cars = [
   GM.HOLDEN_ASTRA,
   GM.CHEVROLET_MALIBU,
   HYUNDAI.GENESIS_G90,
+  HONDA.HONDA_ACCORD_11G, # TODO: get route
+  HONDA.HONDA_CRV_HYBRID_6G, # TODO: get route
+  HONDA.HONDA_CRV_6G, # TODO: get route
+  HONDA.ACURA_MDX_3G, # TODO: get route once steering fixed
+  HONDA.ACURA_RLX_HYBRID, # TODO: get route once tuning done
+  HONDA.HONDA_PASSPORT_4G,  # TODO: find public route
+  HONDA.HONDA_ODYSSEY_5G_MMR,  # TODO: find public route
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
+
 ]
 
 
@@ -103,12 +111,19 @@ routes = [
   CarTestRoute("684e8f96bd491a0e/2021-11-03--11-08-42", HONDA.HONDA_PILOT),  # Passport
   CarTestRoute("0a78dfbacc8504ef/2020-03-04--13-29-55", HONDA.HONDA_CIVIC_BOSCH),
   CarTestRoute("f34a60d68d83b1e5/2020-10-06--14-35-55", HONDA.ACURA_RDX),
+  CarTestRoute("0416c2843c0bfc91/0000001d--59c7744d87", HONDA.ACURA_RDX_3G_MMR),
   CarTestRoute("54fd8451b3974762/2021-04-01--14-50-10", HONDA.HONDA_RIDGELINE),
   CarTestRoute("2d5808fae0b38ac6/2021-09-01--17-14-11", HONDA.HONDA_E),
   CarTestRoute("f44aa96ace22f34a/2021-12-22--06-22-31", HONDA.HONDA_CIVIC_2022),
   CarTestRoute("1f032f5173c8ad99/00000006--573b3fcaf5", HONDA.HONDA_CIVIC_2022),  # Civic Type R with manual transmission
   CarTestRoute("b1c832ad56b6bc9d/00000010--debfcf5867", HONDA.HONDA_CIVIC_2022),  # 2025 Civic Hatch Hybrid with new eCVT transmission
   CarTestRoute("f9c43864cf057d05/2024-01-15--23-01-20", HONDA.HONDA_PILOT_4G),  # TODO: Replace with a newer route
+  CarTestRoute("09c0833f9154ec75/00000001--363c8ffbc8", HONDA.HONDA_PILOT_4G),
+  CarTestRoute("ad9840558640c31d/0000001a--d6cd4871c2", HONDA.ACURA_MDX_4G_MMR),  # 2025 MDX
+  CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA),
+#  CarTestRoute("913512e598516683/00000001--f9fab64e9f", HONDA.HONDA_PASSPORT_4G),  # TODO: find public route
+#  CarTestRoute("558ac87ada6a88cd/00000036--7d59e2af08", HONDA.HONDA_ODYSSEY_5G_MMR),  # TODO: find public route
+  CarTestRoute("ad9840558640c31d/0000003d--a35002b59f", HONDA.ACURA_MDX_3G_HYBRID),
 
   CarTestRoute("87d7f06ade479c2e/2023-09-11--23-30-11", HYUNDAI.HYUNDAI_AZERA_6TH_GEN),
   CarTestRoute("66189dd8ec7b50e6/2023-09-20--07-02-12", HYUNDAI.HYUNDAI_AZERA_HEV_6TH_GEN),
