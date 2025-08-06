@@ -205,7 +205,7 @@ class CarController(CarControllerBase):
 
 #      limited_torque = rate_limit(self.new_torque_percent, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
 #                                  self.params.STEER_DELTA_UP * DT_CTRL)
-      self.last_torque new_torque_percent
+      self.last_torque = new_torque_percent
 
       limited_torque = 0.3
 
