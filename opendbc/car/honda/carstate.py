@@ -126,7 +126,7 @@ class CarState(CarStateBase):
       else:
         self.steer_blocked_prev = False
 
-      self.steer_blocked = (ret.cruiseState.enabled and ((cp.vl["STEER_STATUS"]["STEER_STATUS"] != "NORMAL") or 
+      self.steer_blocked = (ret.cruiseState.enabled and ((cp.vl["STEER_STATUS"]["STEER_STATUS"] != "NORMAL") or
                                                          (cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"] != 1)))
 
     self.dash_speed_seen = self.dash_speed_seen or cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] > 1e-3
