@@ -118,6 +118,7 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.last_time_frame = 0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -138,6 +139,8 @@ class CarController(CarControllerBase):
 
     apply_steer_req = CC.latActive and (not abs(CS.out.steeringRateDeg) >= MAX_STEER_RATE) and (not CS.steer_blocked)
     if not apply_steer_req:
+      self.last_time_frame = self.frame
+    if (not apply_steer_req) or (self.frame < self.last_time_frame + 1000): # add 1 sec before steering
       limited_torque = 0
     self.last_torque = limited_torque
 
