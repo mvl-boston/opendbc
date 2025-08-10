@@ -172,7 +172,7 @@ class CAR(Platforms):
     {Bus.pt: 'honda_accord_2018_can_generated'},
   )
   HONDA_ACCORD_11G = HondaBoschCANFDPlatformConfig(
-    [HondaCarDocs("Honda Accord 2023", "All")],
+    [HondaCarDocs("Honda Accord 2023-25", "All")],
     CarSpecs(mass=3477 * CV.LB_TO_KG, wheelbase=2.83, steerRatio=16.0, centerToFrontRatio=0.39),
   )
   HONDA_CIVIC_BOSCH = HondaBoschPlatformConfig(
@@ -252,10 +252,6 @@ class CAR(Platforms):
   ACURA_MDX_4G_MMR = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Acura MDX 2025", "All")],
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=14.6, tireStiffnessFactor=0.444),  # as spec
-  )
-  HONDA_ACCORD_11G = HondaBoschCANFDPlatformConfig(
-    [HondaCarDocs("Honda Accord 2023-25", "All")],
-    CarSpecs(mass=3477 * CV.LB_TO_KG, wheelbase=2.83, steerRatio=13.9, centerToFrontRatio=0.39, tireStiffnessFactor=0.8467), # Sport (best selling) trim specs
   )
   HONDA_CRV_HYBRID_6G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda CR-V Hybrid 2023-25", "All")],
