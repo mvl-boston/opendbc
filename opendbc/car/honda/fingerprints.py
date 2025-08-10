@@ -1069,6 +1069,8 @@ FW_VERSIONS = {
     ],
     (Ecu.vsa, 0x18da28f1, None): [
       b'57114-30B-A030\x00\x00',
+    ],
+  },
   CAR.ACURA_INTEGRA: {
     (Ecu.eps, 0x18da30f1, None): [
       b'39990-T38-A040\x00\x00',
