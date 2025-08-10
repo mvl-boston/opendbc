@@ -576,6 +576,7 @@ class TestHondaBoschRadarlessLongSafety(common.LongitudinalAccelSafetyTest, Hond
   def test_spam_cancel_safety_check(self):
     pass
 
+
 class TestHondaBoschCANFDSafetyBase(TestHondaBoschSafetyBase):
   """Base class for CANFD Honda Bosch"""
   PT_BUS = 0
@@ -630,8 +631,6 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
     super().setUp()
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG)
     self.safety.init_tests()
-
-
 
 
 if __name__ == "__main__":
