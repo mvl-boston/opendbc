@@ -633,7 +633,5 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
     self.safety.init_tests()
 
 
-
-
 if __name__ == "__main__":
   unittest.main()
