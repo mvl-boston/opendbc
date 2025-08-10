@@ -121,14 +121,13 @@ class CarController(CarControllerBase):
     self.last_torque = 0.0 # last eps torque
     self.steeringTorque_last = 0.0 # last driver torque
     # try new Bosch pid
-    self.gasonly_pid = PIDController (k_p=([0,], [0.5,]),
-                                      k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
-                                      k_f=1, rate= 1 / DT_CTRL / 2)
+    self.gasonly_pid = PIDController(k_p=([0,], [0.5,]),
+                                     k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
+                                     k_f=1, rate= 1 / DT_CTRL / 2)
 #    self.gasonly_pid = PIDController (k_p=([0,], [0,]),
 #                                      k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
 #                                      k_f=1, rate= 1 / DT_CTRL / 2)
     self.pitch = 0.0
-
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -145,7 +144,7 @@ class CarController(CarControllerBase):
 
     if CC.longActive:
       accel = actuators.accel
-      if ((self.CP.carFingerprint in HONDA_NIDEC_HYBRID) or (self.CP.carFingerprint in CAR.ACURA_MDX_3G)) and (accel > max ( 0, CS.out.aEgo) + 0.1):
+      if ((self.CP.carFingerprint in HONDA_NIDEC_HYBRID) or (self.CP.carFingerprint in CAR.ACURA_MDX_3G)) and (accel > max(0, CS.out.aEgo) + 0.1):
         accel = 10000.0 # help with lagged accel until pedal tuning is inserted
       gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
@@ -173,7 +172,7 @@ class CarController(CarControllerBase):
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
-    speed_control = 1 if ( (accel <= 0.0) and (CS.out.vEgo == 0) ) else 0
+    speed_control = 1 if ((accel <= 0.0) and (CS.out.vEgo == 0)) else 0
 
     # Send CAN commands
     can_sends = []
@@ -254,7 +253,6 @@ class CarController(CarControllerBase):
         if self.CP.carFingerprint in HONDA_BOSCH:
           self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
 
-
           if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
             gas_pedal_force = self.accel # radarless does not need a pid
           elif (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
@@ -280,7 +278,7 @@ class CarController(CarControllerBase):
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
           pcm_override = True
-          pump_send = ( apply_brake > 0 ) if self.CP.carFingerprint in HONDA_NIDEC_HYBRID else pump_on
+          pump_send = (apply_brake > 0) if self.CP.carFingerprint in HONDA_NIDEC_HYBRID else pump_on
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_send,
                                                          pcm_override, pcm_cancel_cmd, fcw_display,
                                                          self.CP.carFingerprint, CS.stock_brake))
@@ -292,7 +290,7 @@ class CarController(CarControllerBase):
     if self.frame % 10 == 0:
       if CC.longActive and ((self.CP.carFingerprint in HONDA_NIDEC_HYBRID) or (self.CP.carFingerprint in CAR.ACURA_MDX_3G)):
         # standstill disengage
-        if ( accel >= 0.01 ) and (CS.out.vEgo < 4.0 ) and ( pcm_speed < 25.0 / 3.6):
+        if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
           pcm_speed = 25.0 / 3.6
 
       display_lines = hud_control.lanesVisible and CS.show_lanelines and (abs(apply_torque) < self.params.STEER_MAX) and not steerDisable
