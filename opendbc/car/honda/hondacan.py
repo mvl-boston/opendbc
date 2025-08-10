@@ -121,7 +121,7 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active, car_fingerpr
   }
   if (car_fingerprint in HONDA_BOSCH_ALT_RADAR) and not (lkas_active):
     values['SET_ME_X00'] = steer_control_passthrough['SET_ME_X00']
-    values['SET_ME_X00_2'] = steer_control_passthrough['SET_ME_X00_2']
+    values['SET_ME_X00_2'] = 65
 
   return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
 
