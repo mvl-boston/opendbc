@@ -395,7 +395,6 @@ static safety_config honda_bosch_init(uint16_t param) {
     } else {
       SET_RX_CHECKS(honda_bosch_pt0_rx_checks, ret);
     }
-
   } else {
    if (honda_alt_brake_msg) {
      SET_RX_CHECKS(honda_bosch_pt1_alt_brake_rx_checks, ret);
