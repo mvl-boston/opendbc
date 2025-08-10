@@ -368,7 +368,7 @@ class TestHondaNidecPcmHybridSafety(TestHondaNidecPcmAltSafety):
   def setUp(self):
     self.packer = CANPackerPanda("acura_mdx_3G_hybrid")
     self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_ALT | HondaSafetyFlags.NIDEC_HYBRID )
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_ALT | HondaSafetyFlags.NIDEC_HYBRID)
     self.safety.init_tests()
 
   def _send_brake_msg(self, brake, aeb_req=0, bus=0):
@@ -588,7 +588,7 @@ class TestHondaBoschCANFDSafetyBase(TestHondaBoschSafetyBase):
   RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D)}
 
   def setUp(self):
-    self.packer = CANPackerSafety("honda_common_canfd_generated")
+    self.packer = CANPackerPanda("honda_common_canfd_generated")
     self.safety = libsafety_py.libsafety
 
 
@@ -613,12 +613,15 @@ class TestHondaBoschCANFDAltBrakeSafety(HondaPcmEnableBase, TestHondaBoschCANFDS
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.ALT_BRAKE)
     self.safety.init_tests()
 
+
 class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANFDSafetyBase):
   """
     Covers the Honda Bosch CANFD safety mode with longitudinal control
   """
 
+  PT_BUS = 0
   STEER_BUS = 0
+  BUTTONS_BUS = 0
 
   TX_MSGS = [[0xE4, 0], [0x1DF, 0],  [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x18DAB0F1, 0]]
   FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x1DF, 0x33D]}
@@ -628,6 +631,9 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
     super().setUp()
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG)
     self.safety.init_tests()
+
+
+
 
 if __name__ == "__main__":
   unittest.main()
