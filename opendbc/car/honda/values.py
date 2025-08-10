@@ -57,7 +57,7 @@ class HondaSafetyFlags(IntFlag):
   BOSCH_CANFD = 16
   NIDEC_HYBRID = 32
 
-  
+
 class HondaFlags(IntFlag):
   # Detected flags
   # Bosch models with alternate set of LKAS_HUD messages
