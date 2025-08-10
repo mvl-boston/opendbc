@@ -10,6 +10,7 @@ Ecu = structs.CarParams.Ecu
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 GearShifter = structs.CarState.GearShifter
 
+
 class CarControllerParams:
   # Allow small margin below -3.5 m/s^2 from ISO 15622:2018 since we
   # perform the closed loop control, and might need some
@@ -56,6 +57,7 @@ class HondaSafetyFlags(IntFlag):
   BOSCH_CANFD = 16
   NIDEC_HYBRID = 32
 
+  
 class HondaFlags(IntFlag):
   # Detected flags
   # Bosch models with alternate set of LKAS_HUD messages
@@ -77,6 +79,7 @@ class HondaFlags(IntFlag):
   HAS_ALL_DOOR_STATES = 256  # Some Hondas have all door states, others only driver door
   HAS_EPB = 512
   ALLOW_MANUAL_TRANS = 1024
+
 
 # Car button codes
 class CruiseButtons:
@@ -167,6 +170,10 @@ class CAR(Platforms):
     # steerRatio: 11.82 is spec end-to-end
     CarSpecs(mass=3279 * CV.LB_TO_KG, wheelbase=2.83, steerRatio=16.33, centerToFrontRatio=0.39, tireStiffnessFactor=0.8467),
     {Bus.pt: 'honda_accord_2018_can_generated'},
+  )
+  HONDA_ACCORD_11G = HondaBoschCANFDPlatformConfig(
+    [HondaCarDocs("Honda Accord 2023", "All")],
+    CarSpecs(mass=3477 * CV.LB_TO_KG, wheelbase=2.83, steerRatio=16.0, centerToFrontRatio=0.39),
   )
   HONDA_CIVIC_BOSCH = HondaBoschPlatformConfig(
     [
@@ -364,10 +371,39 @@ class CAR(Platforms):
   )
 
 
+HONDA_NIDEC_ALT_PCM_ACCEL = CAR.with_flags(HondaFlags.NIDEC_ALT_PCM_ACCEL)
+HONDA_NIDEC_ALT_SCM_MESSAGES = CAR.with_flags(HondaFlags.NIDEC_ALT_SCM_MESSAGES)
+HONDA_BOSCH = CAR.with_flags(HondaFlags.BOSCH)
+HONDA_BOSCH_RADARLESS = CAR.with_flags(HondaFlags.BOSCH_RADARLESS)
+HONDA_BOSCH_CANFD = CAR.with_flags(HondaFlags.BOSCH_CANFD)
+HONDA_NIDEC_HYBRID = CAR.with_flags(HondaFlags.NIDEC_HYBRID)
+HONDA_BOSCH_ALT_RADAR = CAR.with_flags(HondaFlags.BOSCH_ALT_RADAR)
+SERIAL_STEERING = {CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_HYBRID}
+
+
+DBC = CAR.create_dbc_map()
+
+
+STEER_THRESHOLD = {
+  # default is 1200, overrides go here
+  CAR.ACURA_RDX: 400,
+  CAR.HONDA_CRV_EU: 400,
+  CAR.HONDA_ACCORD_11G: 600,
+  CAR.ACURA_MDX_3G: 30, # TODO: try higher number
+  CAR.ACURA_MDX_3G_HYBRID: 30, # TODO: try higher number
+  CAR.HONDA_CRV_HYBRID_6G
+  CAR.HONDA_CRV_6G
+  CAR.ACURA_MDX_4G_MMR
+  CAR.HONDA_PASSPORT_4G 
+  CAR.HONDA_PILOT_4G
+}
+
+
 HONDA_ALT_VERSION_REQUEST = bytes([uds.SERVICE_TYPE.READ_DATA_BY_IDENTIFIER]) + \
   p16(0xF112)
 HONDA_ALT_VERSION_RESPONSE = bytes([uds.SERVICE_TYPE.READ_DATA_BY_IDENTIFIER + 0x40]) + \
   p16(0xF112)
+
 
 FW_QUERY_CONFIG = FwQueryConfig(
   requests=[
@@ -405,10 +441,10 @@ FW_QUERY_CONFIG = FwQueryConfig(
   # This is or'd with (ALL_ECUS - ESSENTIAL_ECUS) from fw_versions.py
   non_essential_ecus={
     Ecu.eps: [CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC_2022, CAR.HONDA_E, CAR.HONDA_HRV_3G, CAR.HONDA_ODYSSEY_5G_MMR,
-              CAR.ACURA_INTEGRA, CAR.HONDA_CRV_HYBRID_6G, CAR.HONDA_CRV_6G, CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_HYBRID, CAR.ACURA_RLX_HYBRID],
+              CAR.ACURA_INTEGRA,  CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_HYBRID, CAR.ACURA_RLX_HYBRID, *HONDA_BOSCH_CANFD],
     Ecu.vsa: [CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_ODYSSEY_5G_MMR, CAR.HONDA_CIVIC_2022,
-              CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID, CAR.HONDA_E, CAR.HONDA_HRV_3G, CAR.HONDA_INSIGHT, CAR.ACURA_INTEGRA, CAR.HONDA_CRV_HYBRID_6G,
-              CAR.HONDA_CRV_6G, CAR.ACURA_RLX_HYBRID],
+              CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID, CAR.HONDA_E, CAR.HONDA_HRV_3G, CAR.HONDA_INSIGHT, CAR.ACURA_INTEGRA,
+              CAR.ACURA_RLX_HYBRID, *HONDA_BOSCH_CANFD],
   },
   extra_ecus=[
     (Ecu.combinationMeter, 0x18da60f1, None),
@@ -420,22 +456,3 @@ FW_QUERY_CONFIG = FwQueryConfig(
     # (Ecu.unknown, 0x18DAB3F1, None),
   ],
 )
-
-STEER_THRESHOLD = {
-  # default is 1200, overrides go here
-  CAR.ACURA_RDX: 400,
-  CAR.HONDA_CRV_EU: 400,
-  CAR.ACURA_MDX_3G: 30, # TODO: try higher number
-  CAR.ACURA_MDX_3G_HYBRID: 30, # TODO: try higher number
-}
-
-HONDA_NIDEC_ALT_PCM_ACCEL = CAR.with_flags(HondaFlags.NIDEC_ALT_PCM_ACCEL)
-HONDA_NIDEC_ALT_SCM_MESSAGES = CAR.with_flags(HondaFlags.NIDEC_ALT_SCM_MESSAGES)
-HONDA_NIDEC_HYBRID = CAR.with_flags(HondaFlags.NIDEC_HYBRID)
-HONDA_BOSCH = CAR.with_flags(HondaFlags.BOSCH)
-HONDA_BOSCH_RADARLESS = CAR.with_flags(HondaFlags.BOSCH_RADARLESS)
-HONDA_BOSCH_CANFD = CAR.with_flags(HondaFlags.BOSCH_CANFD)
-HONDA_BOSCH_ALT_RADAR = CAR.with_flags(HondaFlags.BOSCH_ALT_RADAR)
-SERIAL_STEERING = {CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_HYBRID}
-
-DBC = CAR.create_dbc_map()
