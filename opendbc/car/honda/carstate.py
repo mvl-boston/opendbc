@@ -91,7 +91,7 @@ class CarState(CarStateBase):
     # NO_TORQUE_ALERT_2 can be caused by bump or steering nudge from driver
     if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
       # Other states cause a lockout no-steer period
-      ret.steerFaultTemporary = (steer_status != "NORMAL") or (cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"] != 1)
+      ret.steerFaultTemporary = (steer_status != "NORMAL")
     else:
       # LOW_SPEED_LOCKOUT is not worth a warning
       # NO_TORQUE_ALERT_2 can be caused by bump or steering nudge from driver
