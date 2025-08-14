@@ -812,6 +812,7 @@ FW_VERSIONS = {
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'8S102-3M3-T050\x00\x00',
       b'8S102-3M6-P030\x00\x00',
+      b'8S102-3M6-PA20\x00\x00',
       b'8S102-3W0-A060\x00\x00',
       b'8S102-3W0-AB10\x00\x00',
       b'8S102-3W0-AB20\x00\x00',
@@ -959,6 +960,52 @@ FW_VERSIONS = {
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'8S102-30A-A050\x00\x00',
       b'8S102-30A-A060\x00\x00',
+    ],
+  },
+  CAR.HONDA_CRV_6G: {
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'8S302-3C0-Q050\x00\x00',
+      b'8S302-3D4-A050\x00\x00',
+    ],
+    (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'8S102-3C0-Q060\x00\x00',
+      b'8S102-3D4-A060\x00\x00',
+      b'8S102-3D4-A070\x00\x00',
+      b'8S102-3D4-A080\x00\x00',
+      b'8S102-3D4-A090\x00\x00',
+    ],
+  },
+  CAR.ACURA_INTEGRA: {
+    (Ecu.eps, 0x18da30f1, None): [
+      b'39990-T38-A040\x00\x00',
+      b'39990-T38-A140\x00\x00',
+    ],
+    (Ecu.gateway, 0x18daeff1, None): [
+      b'38897-3S5-A110\x00\x00',
+      b'38897-3S5-A210\x00\x00',
+      b'38897-3S5-A420\x00\x00',
+    ],
+    (Ecu.srs, 0x18da53f1, None): [
+      b'77959-3S5-A920\x00\x00',
+    ],
+    (Ecu.vsa, 0x18da28f1, None): [
+      b'57114-3S5-CA30\x00\x00',
+      b'57114-3S5-CB30\x00\x00',
+      b'57114-3S5-CC10\x00\x00',
+    ],
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'8S102-3S5-AA10\x00\x00',
+      b'8S102-3S5-AA20\x00\x00',
+    ],
+    (Ecu.transmission, 0x18da1ef1, None): [
+      b'28101-6LP-A010\x00\x00',
+      b'28101-6LP-A210\x00\x00',
+    ],
+    (Ecu.hud, 0x18da61f1, None): [
+      b'78209-3S5-A030\x00\x00',
+    ],
+    (Ecu.electricBrakeBooster, 0x18da2bf1, None): [
+      b'39494-T20-A010\x00\x00',
     ],
   },
 }

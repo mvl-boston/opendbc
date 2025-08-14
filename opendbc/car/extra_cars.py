@@ -37,7 +37,6 @@ class CAR(Platforms):
 
   EXTRA_HONDA = ExtraPlatformConfig(
     [
-      CommunityCarDocs("Acura Integra 2023-25", "All"),
       CommunityCarDocs("Acura MDX 2015-16", "Advance Package"),
       CommunityCarDocs("Acura MDX 2017-20", "All"),
       CommunityCarDocs("Acura RDX 2022-25", "All"),
@@ -47,8 +46,6 @@ class CAR(Platforms):
       GMSecurityCarDocs("Acura ZDX 2024", "All"),
       CommunityCarDocs("Honda Accord 2016-17", "Honda Sensing"),
       CommunityCarDocs("Honda Clarity 2018-21", "All"),
-      CommunityCarDocs("Honda CR-V 2023-25", "All"),
-      CommunityCarDocs("Honda CR-V Hybrid 2023-25", "All"),
       CommunityCarDocs("Honda Odyssey 2021-25", "All"),
       CommunityCarDocs("Honda Passport 2026", "All"),
       GMSecurityCarDocs("Honda Prologue 2024-25", "All"),

@@ -209,6 +209,13 @@ class CAR(Platforms):
     {Bus.pt: 'honda_crv_ex_2017_can_generated', Bus.body: 'honda_crv_ex_2017_body_generated'},
     flags=HondaFlags.BOSCH_ALT_BRAKE,
   )
+  HONDA_CRV_6G = HondaBoschCANFDPlatformConfig(
+    [
+      HondaCarDocs("Honda CR-V 2023-25", "All"),
+      HondaCarDocs("Honda CR-V Hybrid 2023-25", "All"),
+    ],
+    CarSpecs(mass=1703, wheelbase=2.7, steerRatio=16.2, centerToFrontRatio=0.42),
+  )
   HONDA_CRV_HYBRID = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda CR-V Hybrid 2017-22", min_steer_speed=12. * CV.MPH_TO_MS)],
     # mass: mean of 4 models in kg, steerRatio: 12.3 is spec end-to-end
@@ -245,6 +252,12 @@ class CAR(Platforms):
   ACURA_MDX_4G_MMR = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Acura MDX 2025", "All except Type S")],
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.2),
+  )
+  ACURA_INTEGRA = HondaBoschPlatformConfig(
+    [HondaCarDocs("Acura Integra 2023-25", "All")],
+    CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=16.71, tireStiffnessFactor=0.82),
+    {Bus.pt: 'honda_civic_ex_2022_can_generated'},
+    flags=HondaFlags.BOSCH_RADARLESS | HondaFlags.ALLOW_MANUAL_TRANS,
   )
 
   # Nidec Cars
@@ -339,6 +352,7 @@ STEER_THRESHOLD = {
   CAR.HONDA_ACCORD_11G: 600,
   CAR.HONDA_PILOT_4G: 600,
   CAR.ACURA_MDX_4G_MMR: 600,
+  CAR.HONDA_CRV_6G: 600,
 }
 
 
@@ -383,9 +397,9 @@ FW_QUERY_CONFIG = FwQueryConfig(
   # Note that we still attempt to match with them when they are present
   # This is or'd with (ALL_ECUS - ESSENTIAL_ECUS) from fw_versions.py
   non_essential_ecus={
-    Ecu.eps: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC_2022, CAR.HONDA_E, CAR.HONDA_HRV_3G, *HONDA_BOSCH_CANFD],
+    Ecu.eps: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC_2022, CAR.HONDA_E, CAR.HONDA_HRV_3G, CAR.ACURA_INTEGRA, *HONDA_BOSCH_CANFD],
     Ecu.vsa: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_2022, CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID,
-              CAR.HONDA_E, CAR.HONDA_HRV_3G, CAR.HONDA_INSIGHT, *HONDA_BOSCH_CANFD],
+              CAR.HONDA_E, CAR.HONDA_HRV_3G, CAR.HONDA_INSIGHT, CAR.ACURA_INTEGRA, *HONDA_BOSCH_CANFD],
   },
   extra_ecus=[
     (Ecu.combinationMeter, 0x18da60f1, None),

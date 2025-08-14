@@ -161,6 +161,11 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
       ret.wheelSpeedFactor = 1.025
 
+    elif candidate in (CAR.HONDA_CRV_6G):
+      ret.steerActuatorDelay = 0.15
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+
     elif candidate == CAR.HONDA_FIT:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.05]]
@@ -176,6 +181,11 @@ class CarInterface(CarInterfaceBase):
         ret.wheelSpeedFactor = 1.025
       else:
         ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]  # TODO: can probably use some tuning
+
+    elif candidate == CAR.ACURA_INTEGRA:
+      ret.steerActuatorDelay = 0.15
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV  = [[0, 2560], [0, 2560]]
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.ACURA_RDX:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 1000], [0, 1000]]  # TODO: determine if there is a dead zone at the top end
