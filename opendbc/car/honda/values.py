@@ -79,6 +79,7 @@ class HondaFlags(IntFlag):
   HAS_ALL_DOOR_STATES = 256  # Some Hondas have all door states, others only driver door
   HAS_EPB = 512
   ALLOW_MANUAL_TRANS = 1024
+  HYBRID = 2048
 
 
 # Car button codes
@@ -172,7 +173,10 @@ class CAR(Platforms):
     {Bus.pt: 'honda_accord_2018_can_generated'},
   )
   HONDA_ACCORD_11G = HondaBoschCANFDPlatformConfig(
-    [HondaCarDocs("Honda Accord 2023-25", "All")],
+    [
+      HondaCarDocs("Honda Accord 2023-25", "All"),
+      HondaCarDocs("Honda Accord Hybrid 2023-25", "All"),
+  ],
     CarSpecs(mass=3477 * CV.LB_TO_KG, wheelbase=2.83, steerRatio=16.0, centerToFrontRatio=0.39),
   )
   HONDA_CIVIC_BOSCH = HondaBoschPlatformConfig(
@@ -207,6 +211,13 @@ class CAR(Platforms):
     # steerRatio: 12.3 is spec end-to-end
     CarSpecs(mass=3410 * CV.LB_TO_KG, wheelbase=2.66, steerRatio=16.0, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),
     {Bus.pt: 'honda_crv_ex_2017_can_generated', Bus.body: 'honda_crv_ex_2017_body_generated'},
+  )
+  HONDA_CRV_6G = HondaBoschCANFDPlatformConfig(
+    [
+      HondaCarDocs("Honda CR-V 2023-25", "All"),
+      HondaCarDocs("Honda CR-V Hybrid 2023-25", "All"),
+    ],
+    CarSpecs(mass=1703, wheelbase=2.7, steerRatio=16.2, centerToFrontRatio=0.42),
   )
   HONDA_CRV_HYBRID = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda CR-V Hybrid 2017-22", min_steer_speed=12. * CV.MPH_TO_MS)],
@@ -243,23 +254,16 @@ class CAR(Platforms):
   )
   HONDA_PILOT_4G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Pilot 2023-25", "All")],
-    CarSpecs(mass=4660 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=15.0, tireStiffnessFactor=0.444),  # as spec
+    CarSpecs(mass=4660 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=17.5),
+  )
+  # mid-model refresh
+  ACURA_MDX_4G_MMR = HondaBoschCANFDPlatformConfig(
+    [HondaCarDocs("Acura MDX 2025", "All except Type S")],
+    CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.2),
   )
   HONDA_PASSPORT_4G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Passport 2026", "All")],
     CarSpecs(mass=4705 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=15.6, tireStiffnessFactor=0.444),  # as spec
-  )
-  ACURA_MDX_4G_MMR = HondaBoschCANFDPlatformConfig(
-    [HondaCarDocs("Acura MDX 2025", "All")],
-    CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=14.6, tireStiffnessFactor=0.444),  # as spec
-  )
-  HONDA_CRV_HYBRID_6G = HondaBoschCANFDPlatformConfig(
-    [HondaCarDocs("Honda CR-V Hybrid 2023-25", "All")],
-    CarSpecs(mass=1767, wheelbase=2.7, steerRatio=12.35, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),
-  )
-  HONDA_CRV_6G = HondaBoschCANFDPlatformConfig(
-    [HondaCarDocs("Honda CR-V 2023-25", "All")],
-    CarSpecs(mass=1639, wheelbase=2.7, steerRatio=12.35, centerToFrontRatio=0.42, tireStiffnessFactor=0.677),
   )
   ACURA_INTEGRA = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura Integra 2024-25", "All")],
@@ -385,11 +389,10 @@ STEER_THRESHOLD = {
   CAR.ACURA_RDX: 400,
   CAR.HONDA_CRV_EU: 400,
   CAR.HONDA_ACCORD_11G: 600,
-  CAR.HONDA_CRV_HYBRID_6G: 600,
-  CAR.HONDA_CRV_6G: 600,
-  CAR.ACURA_MDX_4G_MMR: 600,
-  CAR.HONDA_PASSPORT_4G: 600,
   CAR.HONDA_PILOT_4G: 600,
+  CAR.ACURA_MDX_4G_MMR: 600,
+  CAR.HONDA_CRV_6G: 600,
+  CAR.HONDA_PASSPORT_4G: 600,
   CAR.ACURA_MDX_3G: 30, # TODO: try higher number
   CAR.ACURA_MDX_3G_HYBRID: 30, # TODO: try higher number
 }
