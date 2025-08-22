@@ -5,7 +5,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.disable_ecu import disable_ecu
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_CANFD, \
-                                     HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS,  HONDA_NIDEC_HYBRID, HondaSafetyFlags
+                                     HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS,  HondaSafetyFlags
 from opendbc.car.honda.carcontroller import CarController
 from opendbc.car.honda.carstate import CarState
 from opendbc.car.honda.radar_interface import RadarInterface
@@ -52,14 +52,14 @@ class CarInterface(CarInterfaceBase):
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
       cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
-      if candidate == CAR.ACURA_RLX_HYBRID:
+      if candidate == CAR.ACURA_RLX:
         cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.noOutput))
       ret.safetyConfigs = cfgs
       ret.openpilotLongitudinalControl = True
 
       ret.pcmCruise = True
 
-    if candidate in HONDA_NIDEC_HYBRID:
+    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX):
       ret.stoppingDecelRate = 0.3
 
     if candidate == CAR.HONDA_CRV_5G:
@@ -78,7 +78,7 @@ class CarInterface(CarInterfaceBase):
     if ret.flags & HondaFlags.ALLOW_MANUAL_TRANS and all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
       # Manual transmission support for allowlisted cars only, to prevent silent fall-through on auto-detection failures
       ret.transmissionType = TransmissionType.manual
-    elif 0x191 in fingerprint[CAN.pt] and candidate not in (CAR.ACURA_RDX, CAR.ACURA_RLX_HYBRID):
+    elif 0x191 in fingerprint[CAN.pt] and candidate not in (CAR.ACURA_RDX, CAR.ACURA_RLX):
       # Traditional CVTs, gearshift position in GEARBOX_CVT
       ret.transmissionType = TransmissionType.cvt
     else:
@@ -181,13 +181,13 @@ class CarInterface(CarInterfaceBase):
       else:
         ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]  # TODO: can probably use some tuning
 
-    elif candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_HYBRID):
+    elif candidate == CAR.ACURA_MDX_3G:
       ret.steerActuatorDelay = 0.3
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 239], [0, 239]]
       ret.lateralTuning.pid.kf = 0.000035
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
-    elif candidate == CAR.ACURA_RLX_HYBRID: # copying MDX
+    elif candidate == CAR.ACURA_RLX: # copying MDX
       ret.steerActuatorDelay = 0.3
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 239], [0, 239]]
       ret.lateralTuning.pid.kf = 0.000035
@@ -261,7 +261,7 @@ class CarInterface(CarInterfaceBase):
     if ret.openpilotLongitudinalControl and candidate in HONDA_BOSCH:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_LONG.value
 
-    if candidate in HONDA_NIDEC_HYBRID:
+    if ret.flags & HondaFlags.NIDEC & HondaFlags.HYBRID:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_HYBRID.value
 
     if candidate in HONDA_BOSCH_RADARLESS:
@@ -273,7 +273,7 @@ class CarInterface(CarInterfaceBase):
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
     # to a negative value, so it won't matter. Otherwise, add 0.5 mph margin to not
     # conflict with PCM acc
-    ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_HYBRID, CAR.ACURA_RLX_HYBRID})
+    ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G, CAR.ACURA_RLX})
     ret.minEnableSpeed = -1. if ret.autoResumeSng else 25.51 * CV.MPH_TO_MS
 
     ret.steerLimitTimer = 0.8
