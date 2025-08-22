@@ -33,7 +33,7 @@ class CarState(CarStateBase):
     if CP.carFingerprint in HONDA_NIDEC_ALT_SCM_MESSAGES:
       self.main_on_sig_msg = "SCM_BUTTONS"
 
-    if CP.carFingerprint != CAR.ACURA_RLX_HYBRID:
+    if CP.carFingerprint != CAR.ACURA_RLX:
       self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
 
     self.brake_switch_prev = False
@@ -90,7 +90,7 @@ class CarState(CarStateBase):
 
     ret.seatbeltUnlatched = bool(cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LAMP"] or not cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LATCHED"])
 
-    if self.CP.carFingerprint != CAR.ACURA_RLX_HYBRID:
+    if self.CP.carFingerprint != CAR.ACURA_RLX:
       steer_status = self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
       ret.steerFaultPermanent = steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TMP_FAULT", "DRIVER_STEERING")
       # LOW_SPEED_LOCKOUT is not worth a warning
@@ -102,7 +102,7 @@ class CarState(CarStateBase):
 
     # Log non-critical stock ACC/LKAS faults if Nidec (camera) or longitudinal CANFD alt-brake
     if self.CP.carFingerprint not in HONDA_BOSCH:
-      if self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
+      if self.CP.carFingerprint == CAR.ACURA_RLX:
         ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"]) # TODO: fix LKAS_HUD bus 4 once red panda working
       else:
         ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
