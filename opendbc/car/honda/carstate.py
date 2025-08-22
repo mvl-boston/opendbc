@@ -116,7 +116,7 @@ class CarState(CarStateBase):
         if self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE:
           ret.carFaultedNonCritical = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
         else:
-          ret.carFaultedNonCritical = bool(cp.vl["BRAKE_ERROR"]["BRAKE_ERROR_1"] or cp.vl["BRAKE_ERROR"]["BRAKE_ERROR_2"])
+          ret.carFaultedNonCritical = bool(cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_1"] or cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_2"])
       elif self.CP.openpilotLongitudinalControl:
         if self.CP.flags & HondaFlags.HYBRID:
           ret.accFaulted = bool(cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_1"] or cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_2"])
