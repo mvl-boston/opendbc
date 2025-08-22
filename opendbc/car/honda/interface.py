@@ -215,6 +215,10 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
 
+    elif candidate == CAR.HONDA_PILOT:
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.38], [0.11]]
+
     elif candidate == CAR.HONDA_PILOT_4G:
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
       ret.steerActuatorDelay = 0.15
