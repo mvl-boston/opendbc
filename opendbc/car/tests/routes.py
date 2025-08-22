@@ -24,9 +24,6 @@ non_tested_cars = [
   GM.HOLDEN_ASTRA,
   GM.CHEVROLET_MALIBU,
   HYUNDAI.GENESIS_G90,
-  HONDA.HONDA_ACCORD_11G, # TODO: get route
-  HONDA.HONDA_CRV_HYBRID_6G, # TODO: get route
-  HONDA.HONDA_CRV_6G, # TODO: get route
   HONDA.ACURA_MDX_3G, # TODO: get route once steering fixed
   HONDA.ACURA_RLX_HYBRID, # TODO: get route once tuning done
   HONDA.HONDA_PASSPORT_4G,  # TODO: find public route
