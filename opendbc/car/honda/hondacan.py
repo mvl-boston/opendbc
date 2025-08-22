@@ -57,6 +57,7 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
     "CRUISE_OVERRIDE": pcm_override,
     "CRUISE_FAULT_CMD": pcm_fault_cmd,
     "CRUISE_CANCEL_CMD": pcm_cancel_cmd,
+    "COMPUTER_BRAKE_REQUEST": brake_rq,
     "SET_ME_1": 1,
     "BRAKE_LIGHTS": brakelights,
     "CHIME": stock_brake["CHIME"] if fcw else 0,  # send the chime for stock fcw
