@@ -399,27 +399,6 @@ FW_VERSIONS = {
       b'77959-TMM-F040\x00\x00',
     ],
   },
-  CAR.HONDA_CRV_HYBRID_6G: {
-    (Ecu.fwdRadar, 0x18dab0f1, None): [
-      b'8S302-3D4-A050\x00\x00',
-    ],
-    (Ecu.fwdCamera, 0x18dab5f1, None): [
-      b'8S102-3D4-A060\x00\x00',
-      b'8S102-3D4-A070\x00\x00',
-      b'8S102-3D4-A080\x00\x00',
-      b'8S102-3D4-A090\x00\x00',
-    ],
-  },
-  CAR.HONDA_CRV_6G: {
-    (Ecu.fwdRadar, 0x18dab0f1, None): [
-      b'8S302-3A0-A060\x00\x00',
-      b'8S302-3C0-Q050\x00\x00',
-    ],
-    (Ecu.fwdCamera, 0x18dab5f1, None): [
-      b'8S102-3A0-A090\x00\x00',
-      b'8S102-3C0-Q060\x00\x00',
-    ],
-  },
   CAR.HONDA_CRV_EU: {
     (Ecu.vsa, 0x18da28f1, None): [
       b'57114-T1V-G920\x00\x00',
@@ -1056,10 +1035,12 @@ FW_VERSIONS = {
   },
   CAR.HONDA_CRV_6G: {
     (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'8S302-3A0-A060\x00\x00',
       b'8S302-3C0-Q050\x00\x00',
       b'8S302-3D4-A050\x00\x00',
     ],
     (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'8S102-3A0-A090\x00\x00',
       b'8S102-3C0-Q060\x00\x00',
       b'8S102-3D4-A060\x00\x00',
       b'8S102-3D4-A070\x00\x00',
