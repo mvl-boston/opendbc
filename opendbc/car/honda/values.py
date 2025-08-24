@@ -159,6 +159,12 @@ def radar_dbc_dict(pt_dict):
   return {Bus.pt: pt_dict, Bus.radar: 'acura_ilx_2016_nidec'}
 
 
+# Certain Hondas have an extra steering sensor at the bottom of the steering rack,
+# which improves controls quality as it removes the steering column torsion from feedback.
+# Tire stiffness factor fictitiously lower if it includes the steering column torsion effect.
+# For modeling details, see p.198-200 in "The Science of Vehicle Dynamics (2014), M. Guiggiani"
+
+
 class CAR(Platforms):
   # Bosch Cars
   HONDA_ACCORD = HondaBoschPlatformConfig(
@@ -377,7 +383,6 @@ HONDA_BOSCH = CAR.with_flags(HondaFlags.BOSCH)
 HONDA_BOSCH_RADARLESS = CAR.with_flags(HondaFlags.BOSCH_RADARLESS)
 HONDA_BOSCH_CANFD = CAR.with_flags(HondaFlags.BOSCH_CANFD)
 HONDA_BOSCH_ALT_RADAR = CAR.with_flags(HondaFlags.BOSCH_ALT_RADAR)
-HONDA_HYBRID = CAR.with_flags(HondaFlags.HYBRID)
 SERIAL_STEERING = {CAR.ACURA_MDX_3G}
 
 
