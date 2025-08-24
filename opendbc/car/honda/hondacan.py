@@ -1,3 +1,4 @@
+import numpy as np
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD, CAR, CarControllerParams
@@ -77,14 +78,15 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
-def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint):
+def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint, gas_force, vEgo):
+
   commands = []
-  min_gas_accel = CarControllerParams.BOSCH_GAS_LOOKUP_BP[0]
+  min_gas_accel = float(np.interp(vEgo, [5.0, 10.0], [0.01, CarControllerParams.BOSCH_GAS_LOOKUP_BP[0]]))
 
   control_on = 5 if enabled else 0
-  gas_command = gas if active and accel > min_gas_accel else -30000
+  gas_command = gas if active and gas_force > min_gas_accel else -30000
   accel_command = accel if active else 0
-  braking = 1 if active and accel < min_gas_accel else 0
+  braking = 1 if active and gas_force < min_gas_accel else 0
   standstill = 1 if active and stopping_counter > 0 else 0
   standstill_release = 1 if active and stopping_counter == 0 else 0
 
@@ -121,7 +123,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   return commands
 
 
-def create_steering_control(packer, CAN, apply_torque, lkas_active):
+def create_steering_control(packer, CAN, apply_torque, lkas_active, fingerprint):
   values = {
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
@@ -139,7 +141,7 @@ def create_bosch_supplemental_1(packer, CAN):
   return packer.make_can_msg("BOSCH_SUPPLEMENTAL_1", CAN.lkas, values)
 
 
-def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_hud, lkas_hud):
+def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_hud, lkas_hud, speed_control):
   commands = []
   radar_disabled = CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and CP.openpilotLongitudinalControl
 
@@ -149,7 +151,7 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
       'ENABLE_MINI_CAR': 1 if enabled else 0,
       # only moves the lead car without ACC_ON
       'HUD_DISTANCE': hud.lead_distance_bars,  # wraps to 0 at 4 bars
-      'IMPERIAL_UNIT': int(not is_metric),
+      'IMPERIAL_UNIT': 0 if (CP.carFingerprint == CAR.ACURA_RLX) else int(not is_metric),
       'HUD_LEAD': 2 if enabled and hud.lead_visible else 1 if enabled else 0,
       'SET_ME_X01_2': 1,
     }
@@ -163,7 +165,7 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
       acc_hud_values['ACC_ON'] = int(enabled)
       acc_hud_values['PCM_SPEED'] = pcm_speed * CV.MS_TO_KPH
       acc_hud_values['PCM_GAS'] = hud.pcm_accel
-      acc_hud_values['SET_ME_X01'] = 1
+      acc_hud_values['SET_ME_X01'] = speed_control if (CP.carFingerprint in (HONDA_HYBRID)) else 1
       acc_hud_values['FCM_OFF'] = acc_hud['FCM_OFF']
       acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
       acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
@@ -174,6 +176,7 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
     'SET_ME_X41': 0x41,
     'STEERING_REQUIRED': hud.steer_required,
     'SOLID_LANES': hud.lanes_visible,
+    'DASHED_LANES': int(enabled),
     'BEEP': 0,
   }
 
