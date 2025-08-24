@@ -295,6 +295,16 @@ class CarStateBase(ABC):
   def update(self, can_parsers) -> structs.CarState:
     pass
 
+  def get_wheel_speeds(self, fl, fr, rl, rr, unit=CV.KPH_TO_MS):
+    factor = unit * self.CP.wheelSpeedFactor
+
+    wheelSpeeds = structs.CarState.WheelSpeeds()
+    wheelSpeeds.fl = fl * factor
+    wheelSpeeds.fr = fr * factor
+    wheelSpeeds.rl = rl * factor
+    wheelSpeeds.rr = rr * factor
+    return wheelSpeeds
+
   def parse_wheel_speeds(self, cs, fl, fr, rl, rr, unit=CV.KPH_TO_MS):
     cs.vEgoRaw = sum((fl, fr, rl, rr)) / 4 * unit * self.CP.wheelSpeedFactor
     cs.vEgo, cs.aEgo = self.update_speed_kf(cs.vEgoRaw)
