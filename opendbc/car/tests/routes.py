@@ -27,6 +27,7 @@ non_tested_cars = [
   HONDA.ACURA_RLX, # TODO: get route once tuning done
   HONDA.HONDA_PASSPORT_4G,  # TODO: find public route
   HONDA.HONDA_ODYSSEY_5G_MMR,  # TODO: find public route
+  HONDA.ACURA_TLX_2G,  # TODO: get test route
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
 ]
