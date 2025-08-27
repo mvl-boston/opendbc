@@ -3633,12 +3633,13 @@
     ],
     "package": "All"
   },
-  "Toyota Yaris (Non-US only) 2023": {
+  "Toyota Yaris (Non-US only) 2020, 2023": {
     "platform": "TOYOTA_YARIS",
     "make": "Toyota",
     "brand": "toyota",
     "model": "Yaris (Non-US only)",
     "year": [
+      "2020",
       "2023"
     ],
     "package": "All"
