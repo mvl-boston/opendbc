@@ -11,6 +11,8 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.common.conversions import Conversions as CV
 
+from opendbc.sunnypilot.car.honda.mads import MadsCarController
+
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 
@@ -97,12 +99,13 @@ def process_hud_alert(hud_alert):
 
 HUDData = namedtuple("HUDData",
                      ["pcm_accel", "v_cruise", "lead_visible",
-                      "lanes_visible", "fcw", "acc_alert", "steer_required", "lead_distance_bars"])
+                      "lanes_visible", "fcw", "acc_alert", "steer_required", "lead_distance_bars", "dashed_lanes"])
 
 
-class CarController(CarControllerBase):
-  def __init__(self, dbc_names, CP):
-    super().__init__(dbc_names, CP)
+class CarController(CarControllerBase, MadsCarController):
+  def __init__(self, dbc_names, CP, CP_SP):
+    CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
+    MadsCarController.__init__(self)
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.params = CarControllerParams(CP)
     self.CAN = hondacan.CanBus(CP)
@@ -129,7 +132,8 @@ class CarController(CarControllerBase):
 #                                      k_f=1, rate= 1 / DT_CTRL / 2)
     self.pitch = 0.0
 
-  def update(self, CC, CS, now_nanos):
+  def update(self, CC, CC_SP, CS, now_nanos):
+    MadsCarController.update(self, self.CP, CC, CC_SP)
     actuators = CC.actuators
     hud_control = CC.hudControl
 

@@ -89,6 +89,10 @@ static void gm_rx_hook(const CANPacket_t *msg) {
     if (msg->addr == 0xBDU) {
       regen_braking = (msg->data[0] >> 4) != 0U;
     }
+
+    if (msg->addr == 0xC9U) {
+      acc_main_on = GET_BIT(msg, 29U);
+    }
   }
 }
 
