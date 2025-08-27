@@ -319,8 +319,6 @@ static safety_config honda_nidec_init(uint16_t param) {
   bool enable_nidec_alt = GET_FLAG(param, HONDA_PARAM_NIDEC_ALT);
   honda_nidec_hybrid = GET_FLAG(param, HONDA_PARAM_NIDEC_HYBRID);
 
-  honda_clarity = GET_FLAG(current_safety_param_sp, HONDA_PARAM_SP_CLARITY);
-
   if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
     static RxCheck honda_nidec_alt_rx_checks[] = {
