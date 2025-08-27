@@ -1,4 +1,25 @@
 {
+  "Acura Integra 2024-25": {
+    "platform": "ACURA_INTEGRA",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "Integra",
+    "year": [
+      "2024",
+      "2025"
+    ],
+    "package": "All"
+  },
+  "Acura MDX 2025": {
+    "platform": "ACURA_MDX_4G_MMR",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX",
+    "year": [
+      "2025"
+    ],
+    "package": "All except Type S"
+  },
   "Acura ILX 2016-18": {
     "platform": "ACURA_ILX",
     "make": "Acura",
@@ -42,6 +63,19 @@
       "2019",
       "2020",
       "2021"
+    ],
+    "package": "All"
+  },
+  "Acura RDX 2022-25": {
+    "platform": "ACURA_RDX_3G_MMR",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "RDX",
+    "year": [
+      "2022",
+      "2023",
+      "2024",
+      "2025"
     ],
     "package": "All"
   },
