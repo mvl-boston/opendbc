@@ -1535,13 +1535,14 @@
     ],
     "package": "Smart Cruise Control (SCC)"
   },
-  "Hyundai Kona 2022": {
+  "Hyundai Kona 2022-23": {
     "platform": "HYUNDAI_KONA_2022",
     "make": "Hyundai",
     "brand": "hyundai",
     "model": "Kona",
     "year": [
-      "2022"
+      "2022",
+      "2023"
     ],
     "package": "Smart Cruise Control (SCC)"
   },
