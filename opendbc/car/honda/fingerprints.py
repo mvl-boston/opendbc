@@ -1152,7 +1152,6 @@ FW_VERSIONS = {
       b'39990-TY3-J030\x00\x00',
     ],
   },
-}
   CAR.ACURA_TLX_2G: {
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'36802-TGV-A060\x00\x00',
