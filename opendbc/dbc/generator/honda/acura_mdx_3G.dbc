@@ -31,38 +31,6 @@ BO_ 422 SCM_BUTTONS: 8 SCM
  SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
  SG_ DRIVERS_DOOR_OPEN : 63|1@0+ (1,0) [0|1] "" EON
 
-BO_ 512 LKAS_SERIAL: 6 XXX
- SG_ BIG_STEER : 3|4@0- (1,0) [0|15] "" XXX
- SG_ SERIAL_COUNTER : 5|1@0+ (1,0) [0|1] "" XXX
- SG_ LITTLE_STEER : 12|5@0- (1,0) [0|31] "" XXX
- SG_ LKAS_ON : 13|1@0+ (1,0) [0|1] "" XXX
- SG_ SET_1 : 15|1@0+ (1,0) [0|1] "" XXX
- SG_ LKAS_OFF : 22|1@0+ (1,0) [0|1] "" XXX
- SG_ SET_1_1 : 23|1@0+ (1,0) [0|1] "" XXX
- SG_ SERIAL_CHECKSUM : 24|8@1+ (1,32) [0|255] "" XXX
- SG_ APPLY_STEER : 32|9@1- (1,0) [-256|255] "" XXX
-
-BO_ 521 LIN_DATA_IN: 8 XXX
- SG_ BIG_STEER : 0|4@1+ (1,0) [0|15] "" XXX
- SG_ UNK_SIGNAL : 4|1@0+ (1,0) [0|1] "" XXX
- SG_ LITTLE_STEER : 12|5@0+ (1,0) [0|31] "" XXX
- SG_ LKAS_ENABLED : 13|1@0+ (1,0) [0|1] "" XXX
- SG_ UNK_LDW_SIGNAL2 : 20|1@0+ (1,0) [0|1] "" XXX
- SG_ UNK_LDW_SIGNAL1 : 21|1@0+ (1,0) [0|1] "" XXX
- SG_ LKAS_ENABLED_INVERT : 22|1@0+ (1,0) [0|1] "" XXX
- SG_ BIG_DRIVER_TORQUE : 24|4@1+ (1,0) [0|15] "" XXX
- SG_ LIN_EPS_B0_O4 : 28|1@0+ (1,0) [0|1] "" XXX
- SG_ EPS_TO_LKAS_COUNTER_BIT : 29|1@0+ (1,0) [0|1] "" XXX
- SG_ SMALL_DRIVER_TORQUE : 36|5@0+ (1,0) [0|31] "" XXX
- SG_ LKAS_ON_FROM_EPS : 37|1@0+ (1,0) [0|1] "" XXX
- SG_ LIN_EPS_B1_O6 : 38|1@0+ (1,0) [0|1] "" XXX
- SG_ LIN_EPS_B2_O0_2 : 40|3@1+ (1,0) [0|7] "" XXX
- SG_ BIG_MOTOR_TORQUE : 45|3@0- (1,0) [0|7] "" XXX
- SG_ LKAS_ON_FROM_EPS_INVERT : 46|1@0+ (1,0) [0|1] "" XXX
- SG_ SMALL_MOTOR_TORQUE : 54|7@0+ (1,0) [0|127] "" XXX
- SG_ CAN_CHECKSUM : 56|4@1+ (1,0) [0|15] "" XXX
- SG_ CAN_COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
-
 BO_ 660 SCM_FEEDBACK: 8 SCM
  SG_ WIPERS_SPEED : 4|2@0+ (1,0) [0|3] "" EON
  SG_ LEFT_BLINKER : 5|1@0+ (1,0) [0|1] "" EON
@@ -76,8 +44,6 @@ CM_ SG_ 228 LDW_SIGNAL_2 "LKAS B1O4";
 CM_ SG_ 228 LDW_SIGNAL_1 "LKAS B1 5";
 CM_ SG_ 228 DISABLE_LIN_BOARD_WIGGLE_BIT "this makes the apply_steer value never be the same. it will c hange the LSB. so it could actually go over OP max torque by 1.. this needs to be redone, but it works for now";
 CM_ SG_ 400 OP_STEERING_CONTROL_MSG_ACTIVE "this comes on when the LIN_interface sees the 0xe4 message";
-CM_ SG_ 512 APPLY_STEER "thi sis big_steer and little_steer put together";
-CM_ SG_ 521 UNK_SIGNAL "ive never seen this move like this..";
 VAL_ 400 STEER_STATUS 6 "tmp_fault" 5 "fault_1" 4 "no_torque_alert_2" 3 "low_speed_lockout" 2 "no_torque_alert_1" 0 "normal" 2 "lkas_fatal_error" 1 "no_torque_alert_1" 0 "normal";
 VAL_ 422 LIGHTS_SETTING 3 "high_beam" 2 "low_beam" 1 "position" 0 "no_lights";
 VAL_ 422 CRUISE_BUTTONS 7 "tbd" 6 "tbd" 5 "tbd" 4 "accel_res" 3 "decel_set" 2 "cancel" 1 "main" 0 "none";
