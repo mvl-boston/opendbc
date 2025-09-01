@@ -240,6 +240,8 @@ class CarInterface(CarInterfaceBase):
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
     elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
+      if not ret.openpilotLongitudinalControl:
+        ret.minSteerSpeed = 45.0 * CV.MPH_TO_MS
 
     # These cars use alternate user brake msg (0x1BE)
     # TODO: Review if CAR.HONDA_CRV_5G and CAR.ACURA_RDX_3G can be removed to match master
