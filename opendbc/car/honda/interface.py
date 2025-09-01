@@ -201,11 +201,6 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.28], [0.08]]
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
 
-    elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3810], [0, 3810]]  # TODO: determine if there is a dead zone at the top end
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
-      CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
-
     elif candidate in CAR.HONDA_PILOT:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       # ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.38], [0.11]] replace w Marco tune below
@@ -243,7 +238,9 @@ class CarInterface(CarInterfaceBase):
 
     if candidate == CAR.HONDA_PILOT_4G:
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
-
+    elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
+      CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
+    
     # These cars use alternate user brake msg (0x1BE)
     # TODO: Review if CAR.HONDA_CRV_5G and CAR.ACURA_RDX_3G can be removed to match master
     if 0x1BE in fingerprint[CAN.pt] and candidate in (CAR.HONDA_ACCORD, CAR.HONDA_HRV_3G, CAR.HONDA_CRV_5G, CAR.ACURA_RDX_3G,
