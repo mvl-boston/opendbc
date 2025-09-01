@@ -291,7 +291,7 @@ class CAR(Platforms):
   )
   ACURA_TLX_2G = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura TLX 2021", "All")],
-    CarSpecs(mass=3982 * CV.LB_TO_KG, wheelbase=2.87, steerRatio=13.0, centerToFrontRatio=0.43, tireStiffnessFactor=0.8467),  # per spec
+    CarSpecs(mass=3982 * CV.LB_TO_KG, wheelbase=2.87, steerRatio=13.6, centerToFrontRatio=0.43),  # per spec
     {Bus.pt: 'acura_tlx_2021_can_generated'},
     flags=HondaFlags.BOSCH_ALT_RADAR,
   )
