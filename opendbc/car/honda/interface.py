@@ -240,7 +240,7 @@ class CarInterface(CarInterfaceBase):
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
     elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
-    
+
     # These cars use alternate user brake msg (0x1BE)
     # TODO: Review if CAR.HONDA_CRV_5G and CAR.ACURA_RDX_3G can be removed to match master
     if 0x1BE in fingerprint[CAN.pt] and candidate in (CAR.HONDA_ACCORD, CAR.HONDA_HRV_3G, CAR.HONDA_CRV_5G, CAR.ACURA_RDX_3G,
