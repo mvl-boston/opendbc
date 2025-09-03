@@ -201,7 +201,7 @@ class CarState(CarStateBase):
 
     if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
       ret.lowSpeedAlert = ret.cruiseState.enabled and cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"] == 0 and not ret.steerFaultTemporary and \
-                          ( ret.lowSpeedAlert or ret.vEgo >= 4 * CV.MPH_TO_MS ) # exclude under 4mph but don't create falling edge
+                          (ret.lowSpeedAlert or ret.vEgo >= 4 * CV.MPH_TO_MS) # exclude under 4mph but don't create falling edge
 
     # Gets rid of Pedal Grinding noise when brake is pressed at slow speeds for some models
     if self.CP.carFingerprint in (CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE):
