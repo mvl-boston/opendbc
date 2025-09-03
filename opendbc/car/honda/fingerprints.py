@@ -567,6 +567,7 @@ FW_VERSIONS = {
       b'57114-THR-A520\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'36161-T6A-U230\x00\x00',
       b'36802-THR-A220\x00\x00',
     ],
     (Ecu.fwdCamera, 0x18dab5f1, None): [
@@ -577,10 +578,12 @@ FW_VERSIONS = {
       b'54008-THR-A310\x00\x00',
     ],
     (Ecu.transmission, 0x18da1ef1, None): [
+      b'28101-5X9-U010\x00\x00',
       b'28102-5MX-A200\x00\x00',
       b'28102-5MX-A410\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
+      b'77959-T6A-J130\x00\x00',
       b'77959-THR-A220\x00\x00',
       b'77959-THR-A230\x00\x00',
       b'77959-THR-A320\x00\x00',
@@ -591,11 +594,13 @@ FW_VERSIONS = {
       b'46114-THR-A720\x00\x00',
     ],
     (Ecu.gateway, 0x18daeff1, None): [
+      b'38897-T6A-J110\x00\x00',
       b'38897-THR-A130\x00\x00',
       b'38897-THR-A320\x00\x00',
       b'38897-THR-A410\x00\x00',
     ],
     (Ecu.eps, 0x18da30f1, None): [
+      b'39990-T6A-J420\x00\x00',
       b'39990-THR-A050\x00\x00',
       b'39990-THR-A110\x00\x00',
     ],
