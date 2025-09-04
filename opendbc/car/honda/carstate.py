@@ -29,9 +29,9 @@ class CarState(CarStateBase):
         self.gearbox_msg = "GEARBOX_CVT"
       self.shifter_values = can_define.dv[self.gearbox_msg]["GEAR_SHIFTER"]
 
-    self.main_on_sig_msg = "SCM_FEEDBACK"
+    self.car_state_scm_msg = "SCM_FEEDBACK"
     if CP.carFingerprint in HONDA_NIDEC_ALT_SCM_MESSAGES:
-      self.main_on_sig_msg = "SCM_BUTTONS"
+      self.car_state_scm_msg = "SCM_BUTTONS"
 
     self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
 
@@ -97,7 +97,10 @@ class CarState(CarStateBase):
       # On some cars, these two signals are always 1, this flag is masking a bug in release
       # FIXME: find and set the ACC faulted signals on more platforms
       if self.CP.openpilotLongitudinalControl:
-        ret.accFaulted = bool(cp.vl["STANDSTILL"]["BRAKE_ERROR_1"] or cp.vl["STANDSTILL"]["BRAKE_ERROR_2"])
+        if self.CP.flags & HondaFlags.HYBRID:
+          ret.accFaulted = bool(cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_1"] or cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_2"])
+        else:
+          ret.accFaulted = bool(cp.vl["STANDSTILL"]["BRAKE_ERROR_1"] or cp.vl["STANDSTILL"]["BRAKE_ERROR_2"])
 
       # Log non-critical stock ACC/LKAS faults if Nidec (camera)
       if self.CP.carFingerprint not in HONDA_BOSCH:
@@ -121,10 +124,12 @@ class CarState(CarStateBase):
 
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(
       250, cp.vl["SCM_FEEDBACK"]["LEFT_BLINKER"], cp.vl["SCM_FEEDBACK"]["RIGHT_BLINKER"])
-    ret.brakeHoldActive = cp.vl["VSA_STATUS"]["BRAKE_HOLD_ACTIVE"] == 1
+    if self.CP.flags & HondaFlags.ALT_BRAKEHOLD:
+      ret.brakeHoldActive = (cp.vl["VSA_STATUS"]["BRAKE_HOLD_ACTIVE"] == 1) or (cp.vl["BRAKE_HOLD_ALT"]["BRAKE_HOLD_ACTIVE"] == 1)
+    else:
+      ret.brakeHoldActive = cp.vl["VSA_STATUS"]["BRAKE_HOLD_ACTIVE"] == 1
 
-    if self.CP.flags & HondaFlags.HAS_EPB:
-      ret.parkingBrake = cp.vl["EPB_STATUS"]["EPB_STATE"] != 0
+    ret.parkingBrake = bool(cp.vl[self.car_state_scm_msg]["PARKING_BRAKE_ON"])
 
     if self.CP.transmissionType == TransmissionType.manual:
       ret.gearShifter = GearShifter.reverse if bool(cp.vl["SCM_FEEDBACK"]["REVERSE_LIGHT"]) else GearShifter.drive
@@ -171,7 +176,7 @@ class CarState(CarStateBase):
 
     ret.brake = cp.vl["VSA_STATUS"]["USER_BRAKE"]
     ret.cruiseState.enabled = cp.vl["POWERTRAIN_DATA"]["ACC_STATUS"] != 0
-    ret.cruiseState.available = bool(cp.vl[self.main_on_sig_msg]["MAIN_ON"])
+    ret.cruiseState.available = bool(cp.vl[self.car_state_scm_msg]["MAIN_ON"])
 
     # Gets rid of Pedal Grinding noise when brake is pressed at slow speeds for some models
     if self.CP.carFingerprint in (CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE):
@@ -183,7 +188,10 @@ class CarState(CarStateBase):
       if self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:
         ret.stockAeb = (not self.CP.openpilotLongitudinalControl) and bool(cp.vl["ACC_CONTROL"]["AEB_STATUS"] and cp.vl["ACC_CONTROL"]["ACCEL_COMMAND"] < -1e-5)
     else:
-      ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE"] > 1e-5)
+      if self.CP.flags & HondaFlags.HYBRID:
+        ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE_HYBRID"] > 1e-5)
+      else:
+        ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE"] > 1e-5)
 
     self.acc_hud = False
     self.lkas_hud = False
