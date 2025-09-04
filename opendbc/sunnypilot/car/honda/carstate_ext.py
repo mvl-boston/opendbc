@@ -23,3 +23,5 @@ class CarStateExt:
     if self.CP_SP.flags & HondaFlagsSP.CLARITY:
       ret.accFaulted = bool(cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_1"] or cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_2"])
       ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE_HYBRID"] > 1e-5)
+      ret.brakeHoldActive = bool(cp.vl["BRAKE_HOLD"]["BRAKE_HOLD_ACTIVE"] == 1)
+      
