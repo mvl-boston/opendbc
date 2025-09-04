@@ -350,7 +350,10 @@ class CAR(Platforms):
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   ACURA_MDX_3G = HondaNidecPlatformConfig(
-    [], # don't add to cardocs since custom steering board # TODO: find remaining fingerprints
+    [
+      HondaCarDocs("Acura MDX 2014-16", "Advance Package"),
+      HondaCarDocs("Acura MDX 2017-20", "All"),
+    ],
     CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, centerToFrontRatio=0.428, steerRatio=15.66, tireStiffnessFactor=0.444),  # acura spec, stiff from Pilot
     radar_dbc_dict('acura_mdx_3G_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
