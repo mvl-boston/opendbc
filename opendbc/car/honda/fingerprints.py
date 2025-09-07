@@ -507,23 +507,19 @@ FW_VERSIONS = {
   },
   CAR.HONDA_ODYSSEY: {
     (Ecu.gateway, 0x18daeff1, None): [
-      b'38897-T6A-J110\x00\x00',
       b'38897-THR-A010\x00\x00',
       b'38897-THR-A020\x00\x00',
     ],
     (Ecu.eps, 0x18da30f1, None): [
-      b'39990-T6A-J420\x00\x00',
       b'39990-THR-A020\x00\x00',
       b'39990-THR-A030\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
-      b'77959-T6A-J130\x00\x00',
       b'77959-THR-A010\x00\x00',
       b'77959-THR-A110\x00\x00',
       b'77959-THR-X010\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
-      b'36161-T6A-U230\x00\x00',
       b'36161-THR-A020\x00\x00',
       b'36161-THR-A030\x00\x00',
       b'36161-THR-A110\x00\x00',
@@ -539,7 +535,6 @@ FW_VERSIONS = {
       b'28101-5NZ-A110\x00\x00',
       b'28101-5NZ-A310\x00\x00',
       b'28101-5NZ-C310\x00\x00',
-      b'28101-5X9-U010\x00\x00',
       b'28102-5MX-A001\x00\x00',
       b'28102-5MX-A600\x00\x00',
       b'28102-5MX-A610\x00\x00',
