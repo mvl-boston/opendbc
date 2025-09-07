@@ -375,7 +375,7 @@ class TestHondaNidecPcmHybridSafety(TestHondaNidecPcmAltSafety):
     values = {"COMPUTER_BRAKE_HYBRID": brake, "AEB_REQ_1": aeb_req}
     return self.packer.make_can_msg_panda("BRAKE_COMMAND", bus, values)
 
-  
+
 class TestHondaNidecRlxSafety(TestHondaNidecPcmHybridSafety):
   """
     Covers the Honda Nidec safety mode with RLX steering bus and hybrid brake signal
