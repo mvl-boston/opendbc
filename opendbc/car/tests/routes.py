@@ -28,6 +28,7 @@ non_tested_cars = [
   SUBARU.SUBARU_FORESTER_HYBRID,
 ]
 
+
 class CarTestRoute(NamedTuple):
   route: str
   car_model: Platform | None
