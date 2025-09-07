@@ -7,8 +7,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, \
-                                                 HondaFlags, CruiseButtons, CruiseSettings, GearShifter, \
-                                                 SERIAL_STEERING, HONDA_NIDEC_HYBRID, HONDA_RLX_STEER
+                                                 HondaFlags, CruiseButtons, CruiseSettings, GearShifter
 from opendbc.car.interfaces import CarStateBase
 
 TransmissionType = structs.CarParams.TransmissionType
@@ -53,7 +52,7 @@ class CarState(CarStateBase):
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
-    if self.CP.carFingerprint in HONDA_RLX_STEER:
+    if self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
       cp_rlx = can_parsers[Bus.adas]
       cp_steerstatus = cp_rlx
       cp_lkas = cp_rlx
