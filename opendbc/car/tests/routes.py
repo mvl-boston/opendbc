@@ -29,6 +29,7 @@ non_tested_cars = [
   HONDA.HONDA_ODYSSEY_5G_MMR,  # TODO: find public route
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
+  HONDA.ODYSSEY_SINGAPORE,
 ]
 
 
