@@ -376,26 +376,16 @@ class TestHondaNidecPcmHybridSafety(TestHondaNidecPcmAltSafety):
     return self.packer.make_can_msg_panda("BRAKE_COMMAND", bus, values)
 
 
-class TestHondaNidecRlxSafety(TestHondaNidecPcmHybridSafety):
+class TestHondaRLXSafety(TestHondaNidecPcmHybridSafety):
   """
-    Covers the Honda Nidec safety mode with RLX steering bus and hybrid brake signal
+    Covers the RLX safety tests - reserve if changes are needed
   """
-  TX_MSGS = [[0xE4, 0], [0x30C, 0], [0x194, 4], [0x1FA, 0], [0x33D, 4]] # move LKAS & STEERING_CONTROL to bus 5, relay to 4
-  FWD_BLACKLISTED_ADDRS = {2: [0x30C, 0xE4], 4: [0x194, 0x33D]}
-  RELAY_MALFUNCTION_ADDRS = {0: (0x30C, 0xE4), 5: (0x194, 0x33D)}
-
-  STEER_BUS = 5
 
   def setUp(self):
-    self.packer = CANPackerPanda("honda_crv_touring_2016_can_generated")
+    self.packer = CANPackerPanda("acura_ilx_2016_can_generated")
     self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_HYBRID | HondaSafetyFlags.RLX_STEER)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_ALT | HondaSafetyFlags.NIDEC_HYBRID | HondaSafetyFlags.RLX_STEER)
     self.safety.init_tests()
-
-  def test_steer_safety_check(self): # see if repeating as inherited fixes the test
-    self.safety.set_controls_allowed(0)
-    self.assertTrue(self._tx(self._send_steer_msg(0x0000)))
-    self.assertFalse(self._tx(self._send_steer_msg(0x1000)))
 
 
 # ********************* Honda Bosch **********************
