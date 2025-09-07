@@ -57,6 +57,7 @@ class HondaSafetyFlags(IntFlag):
   BOSCH_CANFD = 16
   NIDEC_HYBRID = 32
 
+
 class HondaFlags(IntFlag):
   # Detected flags
   # Bosch models with alternate set of LKAS_HUD messages
@@ -78,6 +79,7 @@ class HondaFlags(IntFlag):
   BOSCH_ALT_RADAR = 512
   ALLOW_MANUAL_TRANS = 1024
   HYBRID = 2048
+  HYBRID_ALT_BRAKEHOLD = 4096  # Some Nidec Hybrids use a different brakehold
 
 
 # Car button codes

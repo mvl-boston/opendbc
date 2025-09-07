@@ -206,6 +206,10 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
     if candidate in HONDA_BOSCH_CANFD:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_CANFD.value
+    if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID):
+      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_HYBRID.value
+    if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID) and (0x223 in fingerprint[CAN.pt]):
+      ret.flags |= HondaFlags.HYBRID_ALT_BRAKEHOLD.value
 
     if candidate in HONDA_NIDEC_HYBRID:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_HYBRID.value
