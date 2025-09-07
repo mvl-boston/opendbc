@@ -203,10 +203,6 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_HYBRID.value
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID) and (0x223 in fingerprint[CAN.pt]):
       ret.flags |= HondaFlags.HYBRID_ALT_BRAKEHOLD.value
-
-    if candidate in HONDA_NIDEC_HYBRID:
-      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_HYBRID.value
-
     if candidate == CAR.ACURA_RLX_HYBRID:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RLX_STEER.value
 
