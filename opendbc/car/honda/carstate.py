@@ -91,21 +91,21 @@ class CarState(CarStateBase):
 
     ret.seatbeltUnlatched = bool(cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LAMP"] or not cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LATCHED"])
 
+    steer_status = self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
+    ret.steerFaultPermanent = steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TMP_FAULT")
+    if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
+      # Other states cause a lockout no-steer period
+      ret.steerFaultTemporary = (steer_status != "NORMAL")
+    else:
+      # LOW_SPEED_LOCKOUT is not worth a warning
+      # NO_TORQUE_ALERT_2 can be caused by bump or steering nudge from driver
+      ret.steerFaultTemporary = steer_status not in ("NORMAL", "LOW_SPEED_LOCKOUT", "NO_TORQUE_ALERT_2")
+
     if self.CP.carFingerprint == CAR.ACURA_RLX:
       # ignore until RLX steering is fixed
       ret.steerFaultPermanent = False
       ret.steerFaultTemporary = False
-    else:
-      steer_status = self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
-      ret.steerFaultPermanent = steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TMP_FAULT")
-      if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
-        # Other states cause a lockout no-steer period
-        ret.steerFaultTemporary = (steer_status != "NORMAL")
-      else:
-        # LOW_SPEED_LOCKOUT is not worth a warning
-        # NO_TORQUE_ALERT_2 can be caused by bump or steering nudge from driver
-        ret.steerFaultTemporary = steer_status not in ("NORMAL", "LOW_SPEED_LOCKOUT", "NO_TORQUE_ALERT_2")
-
+    
     if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
     elif self.CP.openpilotLongitudinalControl and self.CP.carFingerprint in HONDA_BOSCH_CANFD:
