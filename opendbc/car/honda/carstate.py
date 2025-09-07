@@ -108,8 +108,8 @@ class CarState(CarStateBase):
     
     if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
-
-      elif self.CP.openpilotLongitudinalControl:
+    else:
+      if self.CP.openpilotLongitudinalControl:
         ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
 
       # Log non-critical stock ACC/LKAS faults if Nidec (camera) or longitudinal CANFD alt-brake
