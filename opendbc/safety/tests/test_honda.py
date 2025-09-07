@@ -376,7 +376,7 @@ class TestHondaNidecPcmHybridSafety(TestHondaNidecPcmAltSafety):
     return self.packer.make_can_msg_panda("BRAKE_COMMAND", bus, values)
 
 
-class TestHondaRLXSafety(TestHondaNidecPcmHybridSafety):
+class TestHondaNidecRLXSafety(TestHondaNidecPcmHybridSafety):
   """
     Covers the RLX safety tests - reserve if changes are needed
   """
