@@ -280,7 +280,7 @@ class CAR(Platforms):
   ACURA_INTEGRA = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura Integra 2024-25", "All")],
     CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=16.71, tireStiffnessFactor=0.82),
-    {Bus.pt: 'honda_civic_ex_2022_can_generated'},
+    {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS | HondaFlags.ALLOW_MANUAL_TRANS
   )
   HONDA_ODYSSEY_5G_MMR = HondaBoschPlatformConfig(
@@ -339,7 +339,7 @@ class CAR(Platforms):
   HONDA_ODYSSEY_SINGAPORE = HondaNidecPlatformConfig(
     [HondaCarDocs("Honda Odyssey (Singapore 2021")],
     CarSpecs(mass=1900, wheelbase=3.0, steerRatio=14.35, centerToFrontRatio=0.41, tireStiffnessFactor=0.82),
-    radar_dbc_dict('honda_crv_touring_2016_can'),
+    radar_dbc_dict('honda_crv_touring_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_RDX = HondaNidecPlatformConfig(
@@ -351,7 +351,7 @@ class CAR(Platforms):
   ACURA_MDX_3G = HondaNidecPlatformConfig(
     [], # don't add to cardocs since custom steering board # TODO: find remaining fingerprints
     CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, centerToFrontRatio=0.428, steerRatio=15.66, tireStiffnessFactor=0.444),  # acura spec, stiff from Pilot
-    radar_dbc_dict('acura_mdx_3G_generated'),
+    radar_dbc_dict('acura_ilx_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_RLX = HondaNidecPlatformConfig(
