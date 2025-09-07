@@ -515,6 +515,8 @@ FW_VERSIONS = {
     ],
     (Ecu.eps, 0x18da30f1, None): [
       b'39990-TY3-J030\x00\x00',
+    ],
+  },
   CAR.ACURA_MDX_4G_MMR: {
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'8S102-TYA-A020\x00\x00',
