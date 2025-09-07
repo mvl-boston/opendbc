@@ -78,7 +78,7 @@ class CarState(CarStateBase):
     self.is_metric = not cp.vl["CAR_SPEED"]["IMPERIAL_UNIT"]
     self.v_cruise_factor = CV.MPH_TO_MS if self.dynamic_v_cruise_units and not self.is_metric else CV.KPH_TO_MS
     if self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
-       CS.v_cruise_factor = CV.MPH_TO_MS
+       self.v_cruise_factor = CV.MPH_TO_MS
 
     # ******************* parse out can *******************
     # STANDSTILL->WHEELS_MOVING bit can be noisy around zero, so use XMISSION_SPEED
@@ -228,8 +228,8 @@ class CarState(CarStateBase):
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).camera),
     }
 
-    if CP.carFingerprint in HONDA_RLX_STEER:
-      parsers[Bus.adas] = CANParser(DBC[CP.carFingerprint][Bus.pt], lkas_messages, 6)
+    if self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
+      parsers[Bus.adas] = CANParser(DBC[CP.carFingerprint][Bus.pt], [], 6)
 
     if CP.enableBsm:
       parsers[Bus.body] = CANParser(DBC[CP.carFingerprint][Bus.body], [], CanBus(CP).radar)
