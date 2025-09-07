@@ -1,7 +1,6 @@
 #pragma once
 
 #define CANPACKET_HEAD_SIZE 6U
-
 #define CANPACKET_DATA_SIZE_MAX 64U
 
 typedef struct {
