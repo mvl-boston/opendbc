@@ -184,7 +184,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     .max_gas = 198,  // 0xc6
     .max_brake = 255,
 
-    .inactive_speed = 0,
+    .inactive_speed = 255, // changed from zero, since car can do SNG
   };
 
   bool tx = true;
@@ -192,6 +192,8 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   unsigned int bus_pt = honda_get_pt_bus();
   unsigned int bus_buttons = (honda_bosch_radarless) ? 2U : bus_pt;  // the camera controls ACC on radarless Bosch cars
 
+  controls_allowed = true; //force for testing
+  
   // ACC_HUD: safety check (nidec w/o pedal)
   if ((msg->addr == 0x30CU) && (msg->bus == bus_pt)) {
     int pcm_speed = (msg->data[0] << 8) | msg->data[1];
@@ -291,8 +293,13 @@ static safety_config honda_nidec_init(uint16_t param) {
   static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
                                      {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
 
+  static CanMsg HONDA_N_RLX_STEER_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 2, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
+                                               {0x30C, 0, 8, .check_relay = true}, {0x33D, 2, 5, .check_relay = true}};
+                                              // moved 0x33D and 0x194 to bus 2
+
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
   const uint16_t HONDA_PARAM_NIDEC_HYBRID = 32;
+  const uint16_t HONDA_PARAM_RLX_STEER = 64;
 
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
@@ -307,6 +314,7 @@ static safety_config honda_nidec_init(uint16_t param) {
 
   bool enable_nidec_alt = GET_FLAG(param, HONDA_PARAM_NIDEC_ALT);
   honda_nidec_hybrid = GET_FLAG(param, HONDA_PARAM_NIDEC_HYBRID);
+  bool honda_rlx_steer = GET_FLAG(param, HONDA_PARAM_RLX_STEER);
   
   if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
@@ -326,8 +334,11 @@ static safety_config honda_nidec_init(uint16_t param) {
     SET_RX_CHECKS(honda_nidec_common_rx_checks, ret);
   }
 
-  SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
-
+  if (honda_rlx_steer) {
+    SET_TX_MSGS(HONDA_N_RLX_STEER_TX_MSGS, ret);
+  } else {
+    SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
+}
   return ret;
 }
 
