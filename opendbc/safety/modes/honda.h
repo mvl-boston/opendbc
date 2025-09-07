@@ -184,7 +184,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     .max_gas = 198,  // 0xc6
     .max_brake = 255,
 
-    .inactive_speed = 255, // changed from zero, since car can do SNG
+    .inactive_speed = 0,
   };
 
   bool tx = true;
@@ -192,8 +192,6 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   unsigned int bus_pt = honda_get_pt_bus();
   unsigned int bus_buttons = (honda_bosch_radarless) ? 2U : bus_pt;  // the camera controls ACC on radarless Bosch cars
 
-  controls_allowed = true; //force for testing
-  
   // ACC_HUD: safety check (nidec w/o pedal)
   if ((msg->addr == 0x30CU) && (msg->bus == bus_pt)) {
     int pcm_speed = (msg->data[0] << 8) | msg->data[1];
