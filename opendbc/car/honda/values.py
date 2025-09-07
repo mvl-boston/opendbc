@@ -72,6 +72,7 @@ class HondaFlags(IntFlag):
   NIDEC = 16
   NIDEC_ALT_PCM_ACCEL = 32
   NIDEC_ALT_SCM_MESSAGES = 64
+
   BOSCH_CANFD = 128
 
   HAS_ALL_DOOR_STATES = 256  # Some Hondas have all door states, others only driver door
