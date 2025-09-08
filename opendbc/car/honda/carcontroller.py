@@ -120,11 +120,6 @@ class CarController(CarControllerBase):
 #                                      k_f=1, rate= 1 / DT_CTRL / 2)
     self.pitch = 0.0
 
-    self.steering_unpressed = 0
-    self.silent_steer_warning = True
-    self.no_steer_warning = False
-    self.CS_prev_steerFaultTemporary = False
-
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
