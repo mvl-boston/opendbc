@@ -266,18 +266,18 @@ class CarController(CarControllerBase):
     if self.frame % 10 == 0:
       if self.CP.openpilotLongitudinalControl:
         # On Nidec, this also controls longitudinal positive acceleration
-        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
-                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
+        if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)):
+          # standstill disengage
+          if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
+            pcm_speed = 25.0 / 3.6
 
-       if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)):
-        # standstill disengage
-        if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
-          pcm_speed = 25.0 / 3.6
+        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
+                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control))
 
       # dashed lines shows in Honda stock ACC when steering is required
       show_dashed_lines = (abs(apply_torque) == self.params.STEER_MAX) or (hud_control.visualAlert == VisualAlert.steerRequired) or CS.out.lowSpeedAlert
       can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, alert_steer_required, CS.lkas_hud,
-                                                show_dashed_lines, speed_control))
+                                                show_dashed_lines))
 
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
