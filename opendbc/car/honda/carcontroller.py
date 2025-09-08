@@ -157,7 +157,7 @@ class CarController(CarControllerBase):
 
     if CC.longActive:
       prior_max_torque = self.params.STEER_LOOKUP_V[-1]
-      
+
       if self.steer_stage == 0:
         self.last_time_frame = self.frame
         self.steer_stage = 1
@@ -185,7 +185,7 @@ class CarController(CarControllerBase):
                                   self.params.STEER_DELTA_UP * DT_CTRL)
       self.last_torque = self.new_torque_percent
 
-      apply_torque = - int (limited_torque * prior_max_torque)
+      apply_torque = - int(limited_torque * prior_max_torque)
     else:
       apply_torque = 0
     ##### donuts end
