@@ -171,7 +171,7 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
   return packer.make_can_msg("ACC_HUD", bus, acc_hud_values)
 
 
-def create_lkas_hud(packer, bus, CP, hud_control, alert_steer_required, lkas_hud, show_dashed_lines)::
+def create_lkas_hud(packer, bus, CP, hud_control, alert_steer_required, lkas_hud, show_dashed_lines):
   commands = []
 
   lkas_hud_values = {
