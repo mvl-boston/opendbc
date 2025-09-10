@@ -117,6 +117,7 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active):
   values = {
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
+    "CONTROL_STATE": 5 if lkas_active else 1,
   }
   return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
 
@@ -160,14 +161,16 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
   return packer.make_can_msg("ACC_HUD", bus, acc_hud_values)
 
 
-def create_lkas_hud(packer, bus, CP, hud_control, alert_steer_required, lkas_hud):
+def create_lkas_hud(packer, bus, CP, hud_control, main_on, lat_active, steering_pressed, alert_steer_required, lkas_hud):
   commands = []
 
   lkas_hud_values = {
     'LKAS_READY': 1,
+    'LKAS_PROBLEM': lat_active and steering_pressed,
     'LKAS_STATE_CHANGE': 1,
     'STEERING_REQUIRED': alert_steer_required,
-    'SOLID_LANES': hud_control.lanesVisible,
+    'SOLID_LANES': lat_active,
+    'DASHED_LANES': main_on,
     'BEEP': 0,
   }
 

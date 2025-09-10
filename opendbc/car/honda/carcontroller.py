@@ -108,6 +108,14 @@ class CarController(CarControllerBase):
     self.brake = 0.0
     self.last_torque = 0.0
 
+    ######  donuts
+    self.last_time_frame = 0
+    self.last_torque = 0.0 # last eps torque
+    self.steeringTorque_last = 0.0 # last driver torque
+    self.steer_stage = 0
+    self.new_torque_percent = 0.0
+    ###### donuts end
+
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -115,7 +123,10 @@ class CarController(CarControllerBase):
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
     if CC.longActive:
-      accel = actuators.accel
+      ##### donuts start
+      # accel = actuators.accel
+      accel = (2.2352 - CS.out.vEgo) / 3.0 # target 5mph within 3 seconds
+      ##### donuts end
       gas, brake = compute_gas_brake(actuators.accel, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
@@ -141,6 +152,41 @@ class CarController(CarControllerBase):
     # steer torque is converted back to CAN reference (positive when steering right)
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
+
+    ##### donuts start
+
+    if CC.longActive:
+      prior_max_torque = self.params.STEER_LOOKUP_V[-1]
+
+      if self.steer_stage == 0:
+        self.last_time_frame = self.frame
+        self.steer_stage = 1
+
+      if self.steer_stage == 1:
+        self.new_torque_percent = 0.3
+        if self.frame > self.last_time_frame + 1000:
+            self.last_time_frame = self.frame
+            self.steer_stage = 2
+
+      if self.steer_stage == 2:
+        self.new_torque_percent = 0.6
+        if self.frame > self.last_time_frame + 1000:
+            self.steer_stage = 3
+
+      if self.steer_stage == 3:
+        if self.frame > self.last_time_frame + 1000:
+            self.last_time_frame = self.frame
+            if self.new_torque_percent < 0.9:
+              self.new_torque_percent += 0.1
+            else:
+              self.new_torque_percent += 0.01
+
+      limited_torque = rate_limit(self.new_torque_percent, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
+                                  self.params.STEER_DELTA_UP * DT_CTRL)
+      self.last_torque = self.new_torque_percent
+
+      apply_torque = - int(limited_torque * prior_max_torque)
+    ##### donuts end
 
     # Send CAN commands
     can_sends = []
@@ -223,7 +269,8 @@ class CarController(CarControllerBase):
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
 
-      can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, alert_steer_required, CS.lkas_hud))
+      can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CS.out.cruiseState.available,
+                                                CC.latActive, CS.out.steeringPressed, alert_steer_required, CS.lkas_hud))
 
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated

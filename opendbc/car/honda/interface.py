@@ -175,6 +175,15 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]] # TODO: can probably use some tuning
 
+    elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]  # clipped by radar
+      ret.steerActuatorDelay = 0.14
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
+      if not ret.openpilotLongitudinalControl:
+        # When using stock ACC, the radar intercepts and filters steering commands the EPS would otherwise accept
+        ret.minSteerSpeed = 70. * CV.KPH_TO_MS
+
     else:
       ret.steerActuatorDelay = 0.15
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
