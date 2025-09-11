@@ -77,6 +77,8 @@ class HondaFlags(IntFlag):
   BOSCH_ALT_RADAR = 512
   ALLOW_MANUAL_TRANS = 1024
   HYBRID = 2048
+  # reserving 4096 for hybrid brakehold
+  NO_CARSPEED = 8192 # Some foreign models do not have carspeed
 
 
 # Car button codes
