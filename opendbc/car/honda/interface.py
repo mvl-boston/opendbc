@@ -192,7 +192,7 @@ class CarInterface(CarInterfaceBase):
         # When using stock ACC, the radar intercepts and filters steering commands the EPS would otherwise accept
         ret.minSteerSpeed = 70. * CV.KPH_TO_MS
 
-    else candidate == CAR.HONDA_ODYSSEY_SINGAPORE:
+    elif candidate == CAR.HONDA_ODYSSEY_SINGAPORE:
       ret.steerActuatorDelay = 0.15
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 1365], [0, 1365]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
