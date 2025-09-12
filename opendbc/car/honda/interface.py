@@ -186,8 +186,8 @@ class CarInterface(CarInterfaceBase):
       ret.steerActuatorDelay = 0.3
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 239], [0, 239]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
-      carlog.error('dashcamOnly: serial steering cars are not supported')
-      ret.dashcamOnly = True
+      # carlog.error('dashcamOnly: serial steering cars are not supported')
+      # ret.dashcamOnly = True
 
     elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
       # Stock camera sends up to 2560 during LKA operation and up to 3840 during RDM operation
