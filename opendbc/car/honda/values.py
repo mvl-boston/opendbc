@@ -319,7 +319,7 @@ class CAR(Platforms):
   )
   HONDA_ODYSSEY_SINGAPORE = HondaNidecPlatformConfig(
     [HondaCarDocs("Honda Odyssey (Singapore) 2021")],
-    CarSpecs(mass=1798, wheelbase=2.9, steerRatio=16.2, centerToFrontRatio=0.41),
+    CarSpecs(mass=1798, wheelbase=2.9, steerRatio=17.6, centerToFrontRatio=0.41),
     radar_dbc_dict('honda_odyssey_singapore_2021_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
