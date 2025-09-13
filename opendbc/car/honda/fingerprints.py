@@ -578,7 +578,7 @@ FW_VERSIONS = {
   },
   CAR.HONDA_ODYSSEY_5G_MMR: {
     (Ecu.vsa, 0x18da28f1, None): [
-      b'57114-THR-A230\x00\x00',
+      b'57114-THR-A230\x00\x00', # 2021 Touring per csouers, need dongle number to upstream
       b'57114-THR-A240\x00\x00',
       b'57114-THR-A520\x00\x00',
     ],
