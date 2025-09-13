@@ -178,7 +178,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     'LKAS_READY': 1,
     'LKAS_STATE_CHANGE': 1,
     'STEERING_REQUIRED': alert_steer_required,
-    'SOLID_LANES': hud_control.lanesVisible,
+    'SOLID_LANES': hud_control.lanesVisible and not reduced_steering,
     'DASHED_LANES': int(enabled),
     'BEEP': 0,
   }
