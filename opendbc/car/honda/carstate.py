@@ -34,6 +34,7 @@ class CarState(CarStateBase):
       self.car_state_scm_msg = "SCM_BUTTONS"
 
     self.brake_error_msg = "HYBRID_BRAKE_ERROR" if CP.flags & HondaFlags.HYBRID else "STANDSTILL"
+    self.brakehold_msg = "BRAKE_HOLD_HYBRID_ALT" if CP.flags & HondaFlags.HYBRID_ALT_BRAKEHOLD else "VSA_STATUS"
 
     self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
 
@@ -44,6 +45,8 @@ class CarState(CarStateBase):
     self.dynamic_v_cruise_units = self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_ALT_RADAR | HONDA_BOSCH_CANFD)
     self.cruise_setting = 0
     self.v_cruise_pcm_prev = 0
+    self.last_steer = 0
+    self.show_lanelines = False
 
     # When available we use cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] to populate vEgoCluster
     # However, on cars without a digital speedometer this is not always present (HRV, FIT, CRV 2016, ILX and RDX)
@@ -94,7 +97,7 @@ class CarState(CarStateBase):
 
     ret.seatbeltUnlatched = bool(cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LAMP"] or not cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LATCHED"])
 
-    steer_status = self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
+    steer_status = "Normal" if self.CP.carFingerprint == CAR.ACURA_RLX else self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
     ret.steerFaultPermanent = steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TMP_FAULT")
     if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
       # TODO: See if this logic works for all other Honda
@@ -116,17 +119,37 @@ class CarState(CarStateBase):
       self.low_speed_alert = False
     ret.lowSpeedAlert = self.low_speed_alert
 
-    if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    if self.CP.carFingerprint != CAR.ACURA_RLX:
+      # ignore until RLX steering is fixed
+      ret.steerFaultPermanent = False
+      ret.steerFaultTemporary = False
+
+    # Log non-critical stock ACC/LKAS faults if Nidec (camera) or longitudinal CANFD alt-brake
+    if self.CP.carFingerprint not in HONDA_BOSCH:
+      if self.CP.carFingerprint == CAR.ACURA_RLX:
+        ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"]) # TODO: fix LKAS_HUD bus 4 once red panda working
+      else:
+        ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
+
+    elif self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
     else:
       if self.CP.openpilotLongitudinalControl:
-        ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
-
-      # Log non-critical stock ACC/LKAS faults if Nidec (camera)
-      if self.CP.carFingerprint not in HONDA_BOSCH:
-        ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
+        if self.CP.carFingerprint in HONDA_BOSCH_CANFD and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
+          ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
+        else:
+          ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
 
     ret.espDisabled = cp.vl["VSA_STATUS"]["ESP_DISABLED"] != 0
+
+    # blend in transmission speed at low speed, since it has more low speed accuracy
+    v_wheel = sum([cp.vl["WHEEL_SPEEDS"][f"WHEEL_SPEED_{s}"] for s in ("FL", "FR", "RL", "RR")]) / 4.0 * CV.KPH_TO_MS
+    v_weight = float(np.interp(v_wheel, v_weight_bp, v_weight_v))
+    if self.CP.carFingerprint == CAR.ACURA_INTEGRA:
+        ret.vEgoRaw = (1. - v_weight) * cp.vl["CAR_SPEED"]["CAR_SPEED"] * CV.KPH_TO_MS * self.CP.wheelSpeedFactor + v_weight * v_wheel
+    else:
+        ret.vEgoRaw = (1. - v_weight) * cp.vl["ENGINE_DATA"]["XMISSION_SPEED"] * CV.KPH_TO_MS * self.CP.wheelSpeedFactor + v_weight * v_wheel
+    ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
 
     self.dash_speed_seen = self.dash_speed_seen or cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] > 1e-3
     if self.dash_speed_seen:
@@ -138,8 +161,11 @@ class CarState(CarStateBase):
 
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(
       250, cp.vl["SCM_FEEDBACK"]["LEFT_BLINKER"], cp.vl["SCM_FEEDBACK"]["RIGHT_BLINKER"])
-    ret.brakeHoldActive = cp.vl["VSA_STATUS"]["BRAKE_HOLD_ACTIVE"] == 1
+    ret.brakeHoldActive = cp.vl[self.brakehold_msg]["BRAKE_HOLD_ACTIVE"] == 1
     ret.parkingBrake = bool(cp.vl[self.car_state_scm_msg]["PARKING_BRAKE_ON"])
+
+    if (self.CP.flags & HondaFlags.NIDEC) and (self.CP.flags & HondaFlags.HYBRID):
+      ret.blockPcmEnable = ret.brakeHoldActive # Nidec Hybrids fault if resuming cruise from brake hold
 
     if self.CP.transmissionType == TransmissionType.manual:
       ret.gearShifter = GearShifter.reverse if bool(cp.vl["SCM_FEEDBACK"]["REVERSE_LIGHT"]) else GearShifter.drive
@@ -188,6 +214,11 @@ class CarState(CarStateBase):
     ret.cruiseState.enabled = cp.vl["POWERTRAIN_DATA"]["ACC_STATUS"] != 0
     ret.cruiseState.available = bool(cp.vl[self.car_state_scm_msg]["MAIN_ON"])
 
+    if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
+      self.show_lanelines = ret.cruiseState.enabled and cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"] == 1
+    else:
+      self.show_lanelines = True
+
     # Gets rid of Pedal Grinding noise when brake is pressed at slow speeds for some models
     if self.CP.carFingerprint in (CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE):
       if ret.brake > 0.1:
@@ -198,7 +229,10 @@ class CarState(CarStateBase):
       if self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:
         ret.stockAeb = (not self.CP.openpilotLongitudinalControl) and bool(cp.vl["ACC_CONTROL"]["AEB_STATUS"] and cp.vl["ACC_CONTROL"]["ACCEL_COMMAND"] < -1e-5)
     else:
-      ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE"] > 1e-5)
+      if self.CP.flags & HondaFlags.HYBRID:
+        ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE_HYBRID"] > 1e-5)
+      else:
+        ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE"] > 1e-5)
 
     self.acc_hud = False
     self.lkas_hud = False
