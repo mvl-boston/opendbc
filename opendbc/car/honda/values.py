@@ -280,10 +280,10 @@ class CAR(Platforms):
     CarSpecs(mass=4705 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=15.6, tireStiffnessFactor=0.444),  # as spec
   )
   ACURA_INTEGRA = HondaBoschPlatformConfig(
-    [HondaCarDocs("Acura Integra 2024-25", "All")],
-    CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=16.71, tireStiffnessFactor=0.82),
+    [HondaCarDocs("Acura Integra 2023-25", "All")],
+    CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=15.5,),
     {Bus.pt: 'honda_bosch_radarless_generated'},
-    flags=HondaFlags.BOSCH_RADARLESS | HondaFlags.ALLOW_MANUAL_TRANS
+    flags=HondaFlags.BOSCH_RADARLESS | HondaFlags.ALLOW_MANUAL_TRANS,
   )
 
   # Nidec Cars
