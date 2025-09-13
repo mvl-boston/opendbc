@@ -340,8 +340,8 @@ class CAR(Platforms):
   )
   ACURA_MDX_3G = HondaNidecPlatformConfig(
     [], # don't add to cardocs since custom steering board # TODO: find remaining fingerprints
-    CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, centerToFrontRatio=0.428, steerRatio=15.66, tireStiffnessFactor=0.444),  # acura spec, stiff from Pilot
-    radar_dbc_dict('acura_mdx_3G_generated'),
+    CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=17.22, centerToFrontRatio=0.428),  # as spec, learned steerRatio
+    radar_dbc_dict('acura_ilx_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_RLX = HondaNidecPlatformConfig(
