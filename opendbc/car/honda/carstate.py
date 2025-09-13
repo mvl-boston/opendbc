@@ -34,6 +34,7 @@ class CarState(CarStateBase):
       self.car_state_scm_msg = "SCM_BUTTONS"
 
     self.brake_error_msg = "HYBRID_BRAKE_ERROR" if CP.flags & HondaFlags.HYBRID else "STANDSTILL"
+    self.brakehold_msg = "BRAKE_HOLD_HYBRID_ALT" if CP.flags & HondaFlags.HYBRID_ALT_BRAKEHOLD else "VSA_STATUS"
 
     if CP.carFingerprint != CAR.ACURA_RLX:
       self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
@@ -163,8 +164,11 @@ class CarState(CarStateBase):
 
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(
       250, cp.vl["SCM_FEEDBACK"]["LEFT_BLINKER"], cp.vl["SCM_FEEDBACK"]["RIGHT_BLINKER"])
-    ret.brakeHoldActive = cp.vl["VSA_STATUS"]["BRAKE_HOLD_ACTIVE"] == 1
+    ret.brakeHoldActive = cp.vl[self.brakehold_msg]["BRAKE_HOLD_ACTIVE"] == 1
     ret.parkingBrake = bool(cp.vl[self.car_state_scm_msg]["PARKING_BRAKE_ON"])
+
+    if (self.CP.flags & HondaFlags.NIDEC) and (self.CP.flags & HondaFlags.HYBRID):
+      ret.blockPcmEnable = ret.brakeHoldActive # Nidec Hybrids fault if resuming cruise from brake hold
 
     if self.CP.transmissionType == TransmissionType.manual:
       ret.gearShifter = GearShifter.reverse if bool(cp.vl["SCM_FEEDBACK"]["REVERSE_LIGHT"]) else GearShifter.drive
