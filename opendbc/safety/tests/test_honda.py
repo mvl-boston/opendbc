@@ -376,6 +376,18 @@ class TestHondaNidecPcmHybridSafety(TestHondaNidecPcmAltSafety):
     return self.packer.make_can_msg_panda("BRAKE_COMMAND", bus, values)
 
 
+class TestHondaNidecRLXSafety(TestHondaNidecPcmHybridSafety):
+  """
+    Covers the RLX safety tests - reserve if changes are needed
+  """
+
+  def setUp(self):
+    self.packer = CANPackerPanda("acura_ilx_2016_can_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_ALT | HondaSafetyFlags.NIDEC_HYBRID | HondaSafetyFlags.RLX_STEER)
+    self.safety.init_tests()
+
+
 # ********************* Honda Bosch **********************
 
 

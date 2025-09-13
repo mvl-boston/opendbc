@@ -291,8 +291,12 @@ static safety_config honda_nidec_init(uint16_t param) {
   static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
                                      {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
 
+  static CanMsg HONDA_N_RLX_STEER_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
+                                               {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
+
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
   const uint16_t HONDA_PARAM_NIDEC_HYBRID = 32;
+  const uint16_t HONDA_PARAM_RLX_STEER = 64;
 
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
@@ -307,6 +311,7 @@ static safety_config honda_nidec_init(uint16_t param) {
 
   bool enable_nidec_alt = GET_FLAG(param, HONDA_PARAM_NIDEC_ALT);
   honda_nidec_hybrid = GET_FLAG(param, HONDA_PARAM_NIDEC_HYBRID);
+  bool honda_rlx_steer = GET_FLAG(param, HONDA_PARAM_RLX_STEER);
   
   if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
@@ -326,8 +331,11 @@ static safety_config honda_nidec_init(uint16_t param) {
     SET_RX_CHECKS(honda_nidec_common_rx_checks, ret);
   }
 
-  SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
-
+  if (honda_rlx_steer) {
+    SET_TX_MSGS(HONDA_N_RLX_STEER_TX_MSGS, ret);
+  } else {
+    SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
+}
   return ret;
 }
 
