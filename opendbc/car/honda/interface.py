@@ -77,7 +77,7 @@ class CarInterface(CarInterfaceBase):
 
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID):
       ret.stoppingDecelRate = 0.3
-    
+
     if ret.flags & HondaFlags.ALLOW_MANUAL_TRANS and all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
       # Manual transmission support for allowlisted cars only, to prevent silent fall-through on auto-detection failures
       ret.transmissionType = TransmissionType.manual
@@ -261,7 +261,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 239], [0, 239]]
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
-    
+
     else:
       raise ValueError(f"unsupported car {candidate}")
 
@@ -289,7 +289,7 @@ class CarInterface(CarInterfaceBase):
 
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_HYBRID.value
-    
+
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
     # to a negative value, so it won't matter. Otherwise, add 0.5 mph margin to not
     # conflict with PCM acc
