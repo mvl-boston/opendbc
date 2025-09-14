@@ -219,7 +219,7 @@ class CarController(CarControllerBase):
                      np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
       pcm_accel = int(1.0 * self.params.NIDEC_GAS_MAX)
-    elif (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_HYBRID, CAR.ACURA_RLX_HYBRID):
+    elif self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_HYBRID, CAR.ACURA_RLX_HYBRID):
       pcm_speed_V = [0.0,
                      np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
