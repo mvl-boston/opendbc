@@ -115,16 +115,12 @@ class CarState(CarStateBase):
     else:
 
       if self.CP.openpilotLongitudinalControl and self.CP.carFingerprint in HONDA_BOSCH_CANFD:
-        if False: # remove in case it broke something --- bool(cp_cam.vl["STEERING_CONTROL"]["STEER_TORQUE"]) == 0:
-          pass # await a steer control signal before fault detection is accurate.  TODO: see if this allows faults below to move to critical
         if self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE:
           ret.carFaultedNonCritical = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
         else:
-          ret.carFaultedNonCritical = bool(cp.vl["BRAKE_ERROR"]["BRAKE_ERROR_1"] or cp.vl["BRAKE_ERROR"]["BRAKE_ERROR_2"])
-      elif self.CP.openpilotLongitudinalControl and self.CP.carFingerprint in HONDA_NIDEC_HYBRID:
-          ret.carFaultedNonCritical = bool(cp.vl["HYBRID_STATUS"]["BRAKE_ERROR_1"] or cp.vl["HYBRID_STATUS"]["BRAKE_ERROR_2"])
+          ret.carFaultedNonCritical = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
       elif self.CP.openpilotLongitudinalControl:
-        ret.accFaulted = bool(cp.vl["STANDSTILL"]["BRAKE_ERROR_1"] or cp.vl["STANDSTILL"]["BRAKE_ERROR_2"])
+        ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
 
     ret.espDisabled = cp.vl["VSA_STATUS"]["ESP_DISABLED"] != 0
 
