@@ -47,7 +47,7 @@ class CanBus(CanBusBase):
     return self.offset
 
 
-def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_cancel_cmd, fcw, car_fingerprint, stock_brake):
+def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_cancel_cmd, fcw, CP, stock_brake):
   # TODO: do we loose pressure if we keep pump off for long?
   brakelights = apply_brake > 0
   brake_rq = apply_brake > 0
@@ -66,7 +66,7 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
     "AEB_REQ_2": 0,
     "AEB_STATUS": 0,
   }
-  if car_fingerprint in HONDA_NIDEC_HYBRID:
+  if (CP.flags & HondaFlags.HYBRID):
     values.update({
     "COMPUTER_BRAKE_HYBRID": apply_brake,
     "BRAKE_PUMP_REQUEST_HYBRID": pump_on,
