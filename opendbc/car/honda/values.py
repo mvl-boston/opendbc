@@ -397,6 +397,7 @@ STEER_THRESHOLD = {
   CAR.HONDA_PILOT_4G: 600,
   CAR.ACURA_MDX_3G: 30, # TODO: try higher number
   CAR.ACURA_MDX_3G_HYBRID: 30, # TODO: try higher number
+  CAR.HONDA_ACCORD_9G: 30,
 }
 
 
