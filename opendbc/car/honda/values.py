@@ -73,14 +73,14 @@ class HondaFlags(IntFlag):
   NIDEC_ALT_SCM_MESSAGES = 64
   
   BOSCH_CANFD = 128
-  BOSCH_ALT_RADAR = 2048
 
   HAS_ALL_DOOR_STATES = 256  # Some Hondas have all door states, others only driver door
-  HAS_EPB = 512
+  BOSCH_ALT_RADAR = 512
   ALLOW_MANUAL_TRANS = 1024
   HYBRID = 2048
   HYBRID_ALT_BRAKEHOLD = 4096  # Some Nidec Hybrids use a different brakehold
 
+  HAS_EPB = 8192
 
 # Car button codes
 class CruiseButtons:
