@@ -34,6 +34,9 @@ class CarState(CarStateBase):
     if CP.carFingerprint in HONDA_NIDEC_ALT_SCM_MESSAGES:
       self.main_on_sig_msg = "SCM_BUTTONS"
 
+    self.brake_error_msg = "HYBRID_BRAKE_ERROR" if CP.flags & HondaFlags.HYBRID else "STANDSTILL"
+    self.brakehold_msg = "BRAKE_HOLD_HYBRID_ALT" if CP.flags & HondaFlags.HYBRID_ALT_BRAKEHOLD else "VSA_STATUS"
+    
     if CP.carFingerprint != CAR.ACURA_RLX_HYBRID:
       self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
 
@@ -150,6 +153,11 @@ class CarState(CarStateBase):
     if self.CP.flags & HondaFlags.HAS_EPB:
       ret.parkingBrake = cp.vl["EPB_STATUS"]["EPB_STATE"] != 0
 
+    ret.brakeHoldActive = cp.vl[self.brakehold_msg]["BRAKE_HOLD_ACTIVE"] == 1
+
+    if (self.CP.flags & HondaFlags.NIDEC) and (self.CP.flags & HondaFlags.HYBRID):
+      ret.blockPcmEnable = ret.brakeHoldActive # Nidec Hybrids fault if resuming cruise from brake hold
+      
     if self.CP.transmissionType == TransmissionType.manual:
       ret.gearShifter = GearShifter.reverse if bool(cp.vl["SCM_FEEDBACK"]["REVERSE_LIGHT"]) else GearShifter.drive
     else:
@@ -212,7 +220,10 @@ class CarState(CarStateBase):
       if self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:
         ret.stockAeb = (not self.CP.openpilotLongitudinalControl) and bool(cp.vl["ACC_CONTROL"]["AEB_STATUS"] and cp.vl["ACC_CONTROL"]["ACCEL_COMMAND"] < -1e-5)
     else:
-      ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE"] > 1e-5)
+      if self.CP.flags & HondaFlags.HYBRID:
+        ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE_HYBRID"] > 1e-5)
+      else:
+        ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE"] > 1e-5)
 
     self.acc_hud = False
     self.lkas_hud = False
