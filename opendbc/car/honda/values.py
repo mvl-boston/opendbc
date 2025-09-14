@@ -85,6 +85,7 @@ class HondaFlags(IntFlag):
   HYBRID_ALT_BRAKEHOLD = 16384  # Some Nidec Hybrids use a different brakehold
 
 
+
 # Car button codes
 class CruiseButtons:
   RES_ACCEL = 4
