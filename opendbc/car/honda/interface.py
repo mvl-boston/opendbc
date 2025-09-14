@@ -79,7 +79,7 @@ class CarInterface(CarInterfaceBase):
 
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID):
       ret.stoppingDecelRate = 0.3
-    
+
     if ret.flags & HondaFlags.ALLOW_MANUAL_TRANS and all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
       # Manual transmission support for allowlisted cars only, to prevent silent fall-through on auto-detection failures
       ret.transmissionType = TransmissionType.manual
@@ -213,27 +213,11 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]] # TODO: can probably use some tuning
 
-    elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
-      # Stock camera sends up to 2560 during LKA operation and up to 3840 during RDM operation
-      # Steer motor torque does rise a little above 2560, but not linearly, RDM also applies one-sided brake drag
-      #ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 3072], [0, 2560, 3840]]
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
-      ret.steerActuatorDelay = 0.15
-      CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
-      if not ret.openpilotLongitudinalControl:
-        # When using stock ACC, the radar intercepts and filters steering commands the EPS would otherwise accept
-        ret.minSteerSpeed = 70. * CV.KPH_TO_MS
-
-    elif candidate in (CAR.ACURA_TLX_2G_MMR, CAR.ACURA_MDX_4G):
-      ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
-
-    elif candidate == CAR.ACURA_TLX_2G_MMR:
-      ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+    elif candidate == CAR.HONDA_ACCORD_9G:
+      ret.steerActuatorDelay = 0.3
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 239], [0, 239]]
+      ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
 
     else:
       ret.steerActuatorDelay = 0.15
