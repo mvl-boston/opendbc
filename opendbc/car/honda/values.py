@@ -82,6 +82,7 @@ class HondaFlags(IntFlag):
 
   HAS_EPB = 8192
 
+
 # Car button codes
 class CruiseButtons:
   RES_ACCEL = 4
