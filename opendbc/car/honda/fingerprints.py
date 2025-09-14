@@ -531,6 +531,9 @@ FW_VERSIONS = {
     ],
   },
   CAR.ACURA_MDX_3G: {
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'98765-ZZZ-A999\x00\x00',
+    ],
   },
   CAR.ACURA_MDX_3G_MMR: {
     (Ecu.vsa, 0x18da28f1, None): [
