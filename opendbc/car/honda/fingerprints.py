@@ -11,6 +11,22 @@ Ecu = CarParams.Ecu
 
 
 FW_VERSIONS = {
+  CAR.HONDA_ACCORD_9G: {
+    (Ecu.gateway, 0x18DAEFF1, None): [
+      b'38897-T3W-0130\x00\x00',
+    ],
+    (Ecu.vsa, 0x18DA28F1, None): [
+      b'57114-T2F-X840\x00\x00',
+    ],
+    (Ecu.fwdRadar, 0x18DAB0F1, None): [
+      b'36161-T2F-A140\x00\x00',
+      b'36161-T3Z-A830\x00\x00'
+    ],
+    (Ecu.srs, 0x18DA53F1, None): [
+      b'77959-T2F-A030\x00\x00',
+      b'77959-T3Z-A020\x00\x00',
+    ],
+  },
   CAR.HONDA_ACCORD: {
     (Ecu.shiftByWire, 0x18da0bf1, None): [
       b'54008-TVC-A910\x00\x00',
@@ -1110,16 +1126,20 @@ FW_VERSIONS = {
       b'57114-TZ6-A910\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'36161-TZ6-A730\x00\x00',
       b'36161-TZ6-A640\x00\x00',
     ],
     (Ecu.shiftByWire, 0x18da0bf1, None): [
+      b'54008-TZ5-A710\x00\x00',
       b'54008-TZ5-A910\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-TZ5-A220\x00\x00',
+      b'77959-TZ5-A110\x00\x00',
     ],
     (Ecu.transmission, 0x18da1ef1, None): [
       b'28101-5NC-A310\x00\x00',
+      b'28101-5NC-A770\x00\x00',
     ],
   },
   CAR.ACURA_MDX_3G_HYBRID: {
