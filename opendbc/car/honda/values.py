@@ -270,7 +270,7 @@ class CAR(Platforms):
   )
   HONDA_PASSPORT_4G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Passport 2026", "All")],
-    CarSpecs(mass=4705 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=15.6, tireStiffnessFactor=0.444),  # as spec
+    CarSpecs(mass=4620 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=18.5),
   )
   ACURA_MDX_4G = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura MDX 2022-24", "All"),],
@@ -454,6 +454,7 @@ STEER_THRESHOLD = {
   CAR.HONDA_CRV_EU: 400,
   CAR.HONDA_ACCORD_11G: 600,
   CAR.HONDA_PILOT_4G: 600,
+  CAR.HONDA_PASSPORT_4G: 600,
   CAR.ACURA_MDX_4G_MMR: 600,
   CAR.HONDA_CRV_6G: 600,
   CAR.HONDA_CITY_7G: 600,
