@@ -218,17 +218,10 @@ class CarController(CarControllerBase):
 
     # Send dashboard UI commands.
     if self.frame % 10 == 0:
-<<<<<<< HEAD
       if self.CP.openpilotLongitudinalControl:
         # On Nidec, this also controls longitudinal positive acceleration
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
-=======
-      hud = HUDData(int(pcm_accel), int(round(hud_v_cruise)), hud_control.leadVisible,
-                    hud_control.lanesVisible, fcw_display, acc_alert, steer_required, hud_control.leadDistanceBars)
-      can_sends.extend(hondacan.create_ui_commands(self.packer, self.CAN, self.CP, CC.enabled, pcm_speed, hud, CS.is_metric, \
-                                                   CS.acc_hud, CS.lkas_hud))
->>>>>>> 872960844 (add carstate to brake command)
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
       reduced_steering = CS.out.steeringPressed
