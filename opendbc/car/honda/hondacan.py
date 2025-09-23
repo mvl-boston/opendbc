@@ -1,8 +1,7 @@
 import numpy as np
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.values import HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD, CAR, CarControllerParams, \
-                                     HONDA_NIDEC_HYBRID
+from opendbc.car.honda.values import HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD, CAR, CarControllerParams
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -47,7 +46,7 @@ class CanBus(CanBusBase):
     return self.offset
 
 
-def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_cancel_cmd, fcw, car_fingerprint, stock_brake):
+def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_cancel_cmd, fcw, CP, stock_brake):
   # TODO: do we loose pressure if we keep pump off for long?
   brakelights = apply_brake > 0
   brake_rq = apply_brake > 0
@@ -66,10 +65,10 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
     "AEB_REQ_2": 0,
     "AEB_STATUS": 0,
   }
-  if car_fingerprint in HONDA_NIDEC_HYBRID:
+  if (CP.flags & HondaFlags.HYBRID):
     values.update({
     "COMPUTER_BRAKE_HYBRID": apply_brake,
-    "BRAKE_PUMP_REQUEST_HYBRID": pump_on,
+    "BRAKE_PUMP_REQUEST_HYBRID": (apply_brake > 0),
     })
   else:
     values.update({
@@ -166,7 +165,7 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
       acc_hud_values['ACC_ON'] = int(enabled)
       acc_hud_values['PCM_SPEED'] = pcm_speed * CV.MS_TO_KPH
       acc_hud_values['PCM_GAS'] = hud.pcm_accel
-      acc_hud_values['SET_ME_X01'] = speed_control if (CP.carFingerprint in (HONDA_NIDEC_HYBRID)) else 1
+      acc_hud_values['SET_ME_X01'] = speed_control if (CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_HYBRID, CAR.ACURA_RLX_HYBRID)) else 1
       acc_hud_values['FCM_OFF'] = acc_hud['FCM_OFF']
       acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
       acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
