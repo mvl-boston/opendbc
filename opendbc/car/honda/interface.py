@@ -75,6 +75,15 @@ class CarInterface(CarInterfaceBase):
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID) and (0x223 in fingerprint[CAN.pt]):
       ret.flags |= HondaFlags.HYBRID_ALT_BRAKEHOLD.value
 
+    if 0x184 in fingerprint[CAN.pt]:
+      ret.flags |= HondaFlags.HYBRID.value
+
+    if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID) and (0x223 in fingerprint[CAN.pt]):
+      ret.flags |= HondaFlags.HYBRID_ALT_BRAKEHOLD.value
+
+    if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID):
+      ret.stoppingDecelRate = 0.3
+
     if ret.flags & HondaFlags.ALLOW_MANUAL_TRANS and all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
       # Manual transmission support for allowlisted cars only, to prevent silent fall-through on auto-detection failures
       ret.transmissionType = TransmissionType.manual
@@ -201,11 +210,6 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.28], [0.08]]
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
 
-    elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3810], [0, 3810]]  # TODO: determine if there is a dead zone at the top end
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
-      CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
-
     elif candidate in (CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G, CAR.HONDA_PASSPORT_4G, CAR.ACURA_MDX_4G_MMR):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       # ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.38], [0.11]] replace w Marco tune below
@@ -238,12 +242,15 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]] # TODO: can probably use some tuning
 
+    elif candidate == CAR.HONDA_ACCORD_9G:
+      ret.steerActuatorDelay = 0.3
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 239], [0, 239]]
+      ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
+
     elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
-      # Stock camera sends up to 2560 during LKA operation and up to 3840 during RDM operation
-      # Steer motor torque does rise a little above 2560, but not linearly, RDM also applies one-sided brake drag
-      #ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 3072], [0, 2560, 3840]]
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3810], [0, 3810]]  # TODO: determine if there is a dead zone at the top end
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
       ret.steerActuatorDelay = 0.15
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
       if not ret.openpilotLongitudinalControl:
@@ -270,6 +277,9 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
     if candidate in HONDA_BOSCH_CANFD:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_CANFD.value
+    if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID):
+      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_HYBRID.value
+
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_HYBRID.value
 

@@ -134,11 +134,14 @@ class CarState(CarStateBase):
     elif self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
     else:
-      if self.CP.openpilotLongitudinalControl:
-        if self.CP.carFingerprint in HONDA_BOSCH_CANFD and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
-          ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
+
+      if self.CP.openpilotLongitudinalControl and self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+        if self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE:
+          ret.carFaultedNonCritical = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
         else:
-          ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
+          ret.carFaultedNonCritical = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
+      elif self.CP.openpilotLongitudinalControl:
+        ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
 
     ret.espDisabled = cp.vl["VSA_STATUS"]["ESP_DISABLED"] != 0
 
@@ -163,6 +166,11 @@ class CarState(CarStateBase):
       250, cp.vl["SCM_FEEDBACK"]["LEFT_BLINKER"], cp.vl["SCM_FEEDBACK"]["RIGHT_BLINKER"])
     ret.brakeHoldActive = cp.vl[self.brakehold_msg]["BRAKE_HOLD_ACTIVE"] == 1
     ret.parkingBrake = bool(cp.vl[self.car_state_scm_msg]["PARKING_BRAKE_ON"])
+
+    if (self.CP.flags & HondaFlags.NIDEC) and (self.CP.flags & HondaFlags.HYBRID):
+      ret.blockPcmEnable = ret.brakeHoldActive # Nidec Hybrids fault if resuming cruise from brake hold
+
+    ret.brakeHoldActive = cp.vl[self.brakehold_msg]["BRAKE_HOLD_ACTIVE"] == 1
 
     if (self.CP.flags & HondaFlags.NIDEC) and (self.CP.flags & HondaFlags.HYBRID):
       ret.blockPcmEnable = ret.brakeHoldActive # Nidec Hybrids fault if resuming cruise from brake hold
