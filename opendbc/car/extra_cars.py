@@ -32,13 +32,6 @@ class FlexRayCarDocs(ExtraCarDocs):
     self.support_link = "#flexray"
 
 
-@dataclass
-class HondaSerialSteeringCarDocs(ExtraCarDocs):
-  def init_make(self, CP: structs.CarParams):
-    self.support_type = SupportType.CUSTOM
-    self.support_link = "#custom"
-
-
 class CAR(Platforms):
   config: ExtraPlatformConfig
 
