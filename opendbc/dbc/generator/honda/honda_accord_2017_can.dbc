@@ -1,30 +1,7 @@
 CM_ "IMPORT _honda_common.dbc";
 CM_ "IMPORT _nidec_common.dbc";
+CM_ "IMPORT _lkas_hud_5byte.dbc";
 CM_ "IMPORT _nidec_scm_group_a.dbc";
 CM_ "IMPORT _steering_sensors_b.dbc";
-CM_ "IMPORT _steering_control_a.dbc";
-
-BO_ 392 GEARBOX_AUTO: 6 XXX
- SG_ CHECKSUM : 43|4@0+ (1,0) [0|15] "" XXX
- SG_ COUNTER : 45|2@0+ (1,0) [0|3] "" XXX
- SG_ GEAR_SHIFTER : 27|4@0+ (1,0) [0|15] "" EON
- SG_ GEAR : 36|5@0+ (1,0) [0|31] "" EON
-
-BO_ 400 STEER_STATUS: 5 EPS
- SG_ STEER_TORQUE_SENSOR : 0|9@1- (1,0) [-256|256] "" XXX
- SG_ LIN_INTERFACE_FATAL_ERROR : 10|1@0+ (1,0) [0|1] "" XXX
- SG_ LATE_MESSAGE : 11|1@0+ (1,0) [0|1] "" XXX
- SG_ STEER_STATUS : 12|4@1+ (1,0) [0|15] "" XXX
- SG_ CHECKSUM : 35|4@0+ (1,0) [0|3] "" EON
- SG_ COUNTER : 37|2@0+ (1,0) [0|3] "" XXX
- SG_ LKAS_ALLOWED : 9|1@0+ (1,0) [0|1] "" XXX
- SG_ STEER_APPLIED : 23|16@0- (1,0) [0|511] "" XXX
-
-CM_ SG_ 780 CRUISE_SPEED "255 = no speed";
-
-VAL_ 392 GEAR_SHIFTER 0 "S" 1 "P" 2 "R" 4 "N" 8 "D" ;
-VAL_ 392 GEAR 26 "S" 4 "D" 3 "N" 2 "R" 1 "P" ;
-VAL_ 400 STEER_STATUS 7 "permanent_fault" 6 "tmp_fault" 5 "fault_1" 4 "no_torque_alert_2" 3 "low_speed_lockout" 2 "no_torque_alert_1" 1 "driver_steering" 0 "normal" ;
-VAL_ 506 CHIME 4 "double_chime" 3 "single_chime" 2 "continuous_chime" 1 "repeating_chime" 0 "no_chime" ;
-VAL_ 506 FCW 3 "fcw" 2 "fcw" 1 "fcw" 0 "no_fcw" ;
-VAL_ 780 HUD_LEAD 3 "no_car" 2 "solid_car" 1 "dashed_car" 0 "no_car" ;
+CM_ "IMPORT _steering_control_d.dbc";
+CM_ "IMPORT _gearbox_legacy.dbc";
