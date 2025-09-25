@@ -44,14 +44,9 @@ class CAR(Platforms):
 
   EXTRA_HONDA = ExtraPlatformConfig(
     [
-      CommunityCarDocs("Acura RDX 2022-25", "All"),
       CommunityCarDocs("Acura RLX 2017", "Advance Package or Technology Package"),
-      HondaSerialSteeringCarDocs("Acura TLX 2015-17", "Advance Package"),
-      HondaSerialSteeringCarDocs("Acura TLX 2018-20", "All"),
       GMSecurityCarDocs("Acura ZDX 2024", "All"),
-      HondaSerialSteeringCarDocs("Honda Accord 2016-17", "Honda Sensing"),
       CommunityCarDocs("Honda Clarity 2018-21", "All"),
-      CommunityCarDocs("Honda Passport 2026", "All"),
       GMSecurityCarDocs("Honda Prologue 2024-25", "All"),
     ],
   )

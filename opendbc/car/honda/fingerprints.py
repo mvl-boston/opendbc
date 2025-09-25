@@ -1113,7 +1113,7 @@ FW_VERSIONS = {
       b'8S302-3D4-A050\x00\x00',
     ],
     (Ecu.fwdCamera, 0x18dab5f1, None): [
-      b'8S102-3A0-A090\x00\x00', # 2024 ICE, pending hunter311#2837 testroute
+      b'8S102-3A0-A090\x00\x00',
       b'8S102-3A0-A110\x00\x00',
       b'8S102-3C0-Q060\x00\x00',
       b'8S102-3D4-A060\x00\x00',
@@ -1141,6 +1141,22 @@ FW_VERSIONS = {
     (Ecu.transmission, 0x18da1ef1, None): [
       b'28101-63B-M420\x00\x00',
     ],
+  },
+  CAR.HONDA_PASSPORT_4G: {
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'8S302-3BM-A020\x00\x00',
+    ],
+    (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'8S102-3BM-A020\x00\x00',
+    ],
+  },
+  CAR.ACURA_TLX_2G: {
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'36802-TGV-A060\x00\x00',
+    ],
+     (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'36161-TGV-A030\x00\x00',
+      ],
   },
   CAR.ACURA_TLX_1G: {
     (Ecu.gateway, 0x18DAEFF1, None): [
