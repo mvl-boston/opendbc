@@ -392,7 +392,18 @@ class CAR(Platforms):
     radar_dbc_dict('honda_civic_touring_2016_can_generated'),
     flags=HondaFlags.HAS_ALL_DOOR_STATES
   )
-
+  ACURA_TLX_1G = HondaNidecPlatformConfig(
+    [], # don't add to cardocs since custom steering board
+    CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=15.1, centerToFrontRatio=0.40),  # as spec
+    radar_dbc_dict('acura_ilx_2016_can_generated'),
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
+  )
+  HONDA_CLARITY = HondaNidecPlatformConfig(
+    [HondaCarDocs("Honda Clarity 2018-21", min_steer_speed=12. * CV.MPH_TO_MS)],
+    CarSpecs(mass=1834, wheelbase=2.75, centerToFrontRatio=0.4, steerRatio=16.5),
+    radar_dbc_dict('honda_clarity_hybrid_2018_can_generated'),
+    flags=HondaFlags.HAS_ALL_DOOR_STATES,
+  )
 
 HONDA_NIDEC_ALT_PCM_ACCEL = CAR.with_flags(HondaFlags.NIDEC_ALT_PCM_ACCEL)
 HONDA_NIDEC_ALT_SCM_MESSAGES = CAR.with_flags(HondaFlags.NIDEC_ALT_SCM_MESSAGES)
