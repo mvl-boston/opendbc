@@ -279,9 +279,9 @@ class CarController(CarControllerBase):
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
       reduced_steering = CS.out.steeringPressed
-      steer_max = abs(apply_torque) >= self.params.STEER_MAX
+      steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
       can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
-                                                steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_max))
+                                                steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed))
 
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
