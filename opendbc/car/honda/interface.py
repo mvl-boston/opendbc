@@ -61,7 +61,7 @@ class CarInterface(CarInterfaceBase):
 
       ret.pcmCruise = True
 
-    if candidate in HONDA_NIDEC_HYBRID:
+    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX):
       ret.stoppingDecelRate = 0.3
 
     if candidate == CAR.HONDA_CRV_5G:
