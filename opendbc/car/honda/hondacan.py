@@ -171,14 +171,15 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
   return packer.make_can_msg("ACC_HUD", bus, acc_hud_values)
 
 
-def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud):
+def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_max):
   commands = []
 
   lkas_hud_values = {
     'LKAS_READY': 1,
     'LKAS_STATE_CHANGE': 1,
     'STEERING_REQUIRED': alert_steer_required,
-    'SOLID_LANES': hud_control.lanesVisible,
+    'SOLID_LANES': hud_control.lanesVisible and not steer_max,
+    'DASHED_LANES': lat_active
     'BEEP': 0,
   }
 
@@ -197,7 +198,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
 
   # New HUD concept for selected Bosch cars, overwrites some of the above
   # TODO: make global across all Honda if feedback is favorable
-  if True: # CP.carFingerprint in HONDA_BOSCH_ALT_RADAR: - try all cars
+  if CP.carFingerprint in HONDA_BOSCH: # - try all Bosch, didn't work on Nidec
     lkas_hud_values['DASHED_LANES'] = steering_available
     lkas_hud_values['SOLID_LANES'] = lat_active
     lkas_hud_values['LKAS_PROBLEM'] = lat_active and reduced_steering
