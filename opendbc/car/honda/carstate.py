@@ -159,8 +159,6 @@ class CarState(CarStateBase):
     if (self.CP.flags & HondaFlags.NIDEC) and (self.CP.flags & HondaFlags.HYBRID):
       ret.blockPcmEnable = ret.brakeHoldActive # Nidec Hybrids fault if resuming cruise from brake hold
 
-    ret.brakeHoldActive = cp.vl[self.brakehold_msg]["BRAKE_HOLD_ACTIVE"] == 1
-
     if (self.CP.flags & HondaFlags.NIDEC) and (self.CP.flags & HondaFlags.HYBRID):
       ret.blockPcmEnable = ret.brakeHoldActive # Nidec Hybrids fault if resuming cruise from brake hold
 
