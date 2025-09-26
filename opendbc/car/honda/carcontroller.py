@@ -277,9 +277,10 @@ class CarController(CarControllerBase):
         if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
           pcm_speed = 25.0 / 3.6
 
-      steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed and (abs(apply_torque) < self.params.STEER_MAX)
+      steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
       reduced_steering = CS.out.steeringPressed
-      can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
+      can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control,
+                                                CC.latActive and (abs(apply_torque) < self.params.STEER_MAX),
                                                 steering_available, reduced_steering, alert_steer_required, CS.lkas_hud))
 
       if self.CP.openpilotLongitudinalControl:
