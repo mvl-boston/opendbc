@@ -131,6 +131,18 @@ class CarController(CarControllerBase):
       self.pitch = CC.orientationNED[1]
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
+------- slowsteer start -----
+
+# latplan = lataccel plan
+# targetlataccel = min (2, 90% lataccelmax)
+# speedreduc = (targetlataccel) / latplan
+# targetspeed= max (speedreduc * myspeed, 10mph)
+# accelinplan = (targetspeed - myspeed) / timeinplan
+# accellimit = min(accelinplan for all records)
+# accel = min (actuatoraccel, accellimt)
+
+------- slowsteer end -----
+
     if CC.longActive:
       accel = actuators.accel
       if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)) and (accel > max(0, CS.out.aEgo) + 0.1):
