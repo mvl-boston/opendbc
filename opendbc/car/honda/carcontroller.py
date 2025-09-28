@@ -131,7 +131,7 @@ class CarController(CarControllerBase):
       self.pitch = CC.orientationNED[1]
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
-------- slowsteer start -----
+# ------- slowsteer start -----
 
 # latplan = lataccel plan
 # targetlataccel = min (2, 90% lataccelmax)
@@ -141,7 +141,7 @@ class CarController(CarControllerBase):
 # accellimit = min(accelinplan for all records)
 # accel = min (actuatoraccel, accellimt)
 
-------- slowsteer end -----
+# ------- slowsteer end -----
 
     if CC.longActive:
       accel = actuators.accel
