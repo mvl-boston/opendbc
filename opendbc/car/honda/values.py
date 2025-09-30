@@ -78,8 +78,9 @@ class HondaFlags(IntFlag):
   BOSCH_ALT_RADAR = 512
   ALLOW_MANUAL_TRANS = 1024
   HYBRID = 2048
-  # reserving 4096 for hybrid brakehold
-  NO_CARSPEED = 8192 # Some foreign models do not have carspeed
+  BOSCH_TJA_CONTROL = 4096
+  # reserving 8192 for hybrid brakehold
+  NO_CARSPEED = 16384 # Some foreign models do not have carspeed
 
 
 # Car button codes
@@ -368,6 +369,7 @@ HONDA_BOSCH = CAR.with_flags(HondaFlags.BOSCH)
 HONDA_BOSCH_RADARLESS = CAR.with_flags(HondaFlags.BOSCH_RADARLESS)
 HONDA_BOSCH_CANFD = CAR.with_flags(HondaFlags.BOSCH_CANFD)
 HONDA_BOSCH_ALT_RADAR = CAR.with_flags(HondaFlags.BOSCH_ALT_RADAR)
+HONDA_BOSCH_TJA_CONTROL = CAR.with_flags(HondaFlags.BOSCH_TJA_CONTROL)
 
 
 DBC = CAR.create_dbc_map()
