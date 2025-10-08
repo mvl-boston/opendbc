@@ -211,7 +211,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]] # TODO: can probably use some tuning
 
     # TODO-SP: remove when https://github.com/commaai/opendbc/pull/2687 is merged
-    elif candidate == CAR.HONDA_CLARITY:
+    elif candidate in (CAR.HONDA_CLARITY, CAR.HONDA_ACCORD_4CYL_9TH_GEN):
       pass
 
     else:
@@ -307,8 +307,8 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate == CAR.HONDA_ACCORD_4CYL_9TH_GEN:
       stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 239], [0, 239]]
-      stock_cp.lateralTuning.pid.kiBP, stock_cp.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
-      stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
+      stock_cp.lateralTuning.pid.kpBP, stock_cp.lateralTuning.pid.kpV = [[0.,20], [0.4, 0.3]]
+      stock_cp.lateralTuning.pid.kiBP, stock_cp.lateralTuning.pid.kiV = [[0.,20], [0., 0.]]
 
     return ret
 
