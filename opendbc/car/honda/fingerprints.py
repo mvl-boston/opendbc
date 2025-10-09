@@ -1187,7 +1187,6 @@ FW_VERSIONS = {
       b'77959-TZ5-A110\x00\x00', # unknown
     ],
     (Ecu.srs, 0x18da53f1, None): [
-      b'77959-TRX-A011\x00\x00',
       b'77959-TZ5-A110\x00\x00',
       b'77959-TZ5-A220\x00\x00',
     ],
