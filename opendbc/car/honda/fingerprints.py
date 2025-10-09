@@ -1175,7 +1175,6 @@ FW_VERSIONS = {
       b'57114-TZ6-A910\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
-      b'36161-TRX-A820\x00\x00', # unknown
       b'36161-TYS-A020\x00\x00', # unknown
       b'36161-TZ6-A340\x00\x00', # unknown
       b'36161-TZ6-A640\x00\x00', # unknown
@@ -1188,13 +1187,13 @@ FW_VERSIONS = {
       b'77959-TZ5-A110\x00\x00', # unknown
     ],
     (Ecu.srs, 0x18da53f1, None): [
+      b'77959-TRX-A011\x00\x00',
       b'77959-TZ5-A110\x00\x00',
       b'77959-TZ5-A220\x00\x00',
     ],
-     (Ecu.gateway, 0x18daeff1, None): [
+    (Ecu.gateway, 0x18daeff1, None): [
       b'38897-TYR-A011\x00\x00', # unknown
       b'38897-TZ5-A110\x00\x00', # unknown
-      b'38897-TRX-A220\x00\x00', # unknown
     ],
     (Ecu.transmission, 0x18da1ef1, None): [
       b'28101-5DH-A400\x00\x00', # unknown
@@ -1210,10 +1209,17 @@ FW_VERSIONS = {
       b'57114-TRX-H130\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'36161-TRX-A820\x00\x00',
       b'36161-TYT-A220\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-TRX-A011\x00\x00',
+    ],
+    (Ecu.gateway, 0x18daeff1, None): [
+      b'38897-TRX-A220\x00\x00',
+    ],
+    (Ecu.shiftByWire, 0x18da0bf1, None): [
+      b'54008-TRX-A710\x00\x00',
     ],
   },
   CAR.ACURA_RLX: {
