@@ -29,7 +29,7 @@ FW_VERSIONS = {
     ],
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'38897-TTA-J010\x00\x00',
-    ]
+    ],
   },
   CAR.HONDA_ACCORD: {
     (Ecu.shiftByWire, 0x18da0bf1, None): [
