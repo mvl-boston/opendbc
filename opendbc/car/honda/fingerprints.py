@@ -1125,7 +1125,7 @@ FW_VERSIONS = {
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'36802-TGV-A060\x00\x00',
     ],
-     (Ecu.fwdCamera, 0x18dab5f1, None): [
+    (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'36161-TGV-A030\x00\x00',
       ],
   },
