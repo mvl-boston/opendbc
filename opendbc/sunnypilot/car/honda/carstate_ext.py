@@ -25,4 +25,4 @@ class CarStateExt:
       ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE_HYBRID"] > 1e-5)
 
     if self.CP_SP.flags & HondaFlagsSP.HYBRID_ALT_BRAKEHOLD:
-      ret.brakeHoldActive = cp.vl[BRAKE_HOLD_HYBRID_ALT]["BRAKE_HOLD_ACTIVE"] == 1
+      ret.brakeHoldActive = cp.vl["BRAKE_HOLD_HYBRID_ALT"]["BRAKE_HOLD_ACTIVE"] == 1
