@@ -378,7 +378,10 @@ class CAR(Platforms):
     flags=HondaFlags.HAS_ALL_DOOR_STATES,
   )
   ACURA_MDX_3G_MMR = HondaNidecPlatformConfig(
-    [HondaCarDocs("Acura MDX 2019-20"],
+    [
+      HondaCarDocs("Acura MDX 2019-20"),
+      HondaCarDocs("Acura MDX Hybrid 2019-20"),
+    ],
     CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
     radar_dbc_dict('acura_ilx_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
