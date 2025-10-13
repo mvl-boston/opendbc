@@ -651,7 +651,7 @@ class TestHondaNidecHybridSafety(TestHondaNidecPcmSafety):
     Covers the Honda Nidec safety mode with hybrid brake
   """
 
-  BRAKE_SIG = "COMPUTER_BRAKE_ALT"
+  BRAKE_SIG = "COMPUTER_BRAKE_HYBRID"
 
   def setUp(self):
     self.packer = CANPackerPanda("honda_clarity_hybrid_2018_can_generated")
