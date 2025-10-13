@@ -10,7 +10,7 @@ from enum import IntFlag
 
 class HondaFlagsSP(IntFlag):
   NIDEC_HYBRID = 1
-  EPS_MODIFIED = 2
+  EPS_MOD = 2
   HYBRID_ALT_BRAKEHOLD = 4
 
 
