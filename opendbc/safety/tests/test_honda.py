@@ -9,8 +9,6 @@ from opendbc.car.structs import CarParams
 from opendbc.safety.tests.common import CANPackerPanda, MAX_WRONG_COUNTERS
 from opendbc.safety.tests.gas_interceptor_common import GasInterceptorSafetyTest
 
-from opendbc.sunnypilot.car.honda.values_ext import HondaSafetyFlagsSP
-
 HONDA_N_COMMON_TX_MSGS = [[0xE4, 0], [0x194, 0], [0x1FA, 0], [0x30C, 0], [0x33D, 0]]
 
 
@@ -686,7 +684,25 @@ class TestHondaBoschCANFDAltBrakeSafety(HondaPcmEnableBase, TestHondaBoschCANFDS
     self.safety.init_tests()
 
 
-class TestHondaNidecHybridSafety(TestHondaNidecPcmSafety):
+class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANFDSafetyBase):
+  """
+    Covers the Honda Bosch CANFD safety mode with longitudinal control
+  """
+
+  PT_BUS = 0
+  STEER_BUS = 0
+  BUTTONS_BUS = 0
+
+  TX_MSGS = [[0xE4, 0], [0x1DF, 0],  [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x18DAB0F1, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x1DF, 0x33D]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1DF, 0x33D)}  # STEERING_CONTROL / ACC_CONTROL / LKAS_HUD
+
+  def setUp(self):
+    super().setUp()
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG)
+
+
+ class TestHondaNidecHybridSafety(TestHondaNidecPcmSafety):
   """
     Covers the Honda Nidec safety mode with hybrid brake
   """
