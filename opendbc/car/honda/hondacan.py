@@ -69,7 +69,7 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
   }
 
   carlog.error({"cpspflags": CP_SP.flags, "flagssp_nidec_hybrid": HondaFlagsSP.NIDEC_HYBRID})
-  
+
   if (CP_SP.flags & HondaFlagsSP.NIDEC_HYBRID):
     values["COMPUTER_BRAKE_HYBRID"] = apply_brake
     values["BRAKE_PUMP_REQUEST_HYBRID"] = apply_brake > 0
