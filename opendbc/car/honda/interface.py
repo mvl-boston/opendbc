@@ -71,8 +71,8 @@ class CarInterface(CarInterfaceBase):
     if any(0x33DA in f for f in fingerprint.values()):
       ret.flags |= HondaFlags.BOSCH_EXT_HUD.value
 
-    if 0x1C2 in fingerprint[CAN.pt]:
-      ret.flags |= HondaFlags.HAS_EPB.value
+    if 0x184 in fingerprint[CAN.pt]:
+      ret.flags |= HondaFlags.HYBRID.value
 
     if 0x184 in fingerprint[CAN.pt]:
       ret.flags |= HondaFlags.HYBRID.value
@@ -102,6 +102,11 @@ class CarInterface(CarInterfaceBase):
       # default longitudinal tuning for all Nidec hondas
       ret.longitudinalTuning.kiBP = [0., 5., 35.]
       ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
+
+    # Disable control if EPS mod detected
+    for fw in car_fw:
+      if fw.ecu == "eps" and b"," in fw.fwVersion:
+        ret.dashcamOnly = True
 
     if candidate == CAR.HONDA_CIVIC:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
@@ -203,7 +208,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
 
-    elif candidate in CAR.HONDA_PILOT:
+    elif candidate == CAR.HONDA_PILOT:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       # ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.38], [0.11]] replace w Marco tune below
       ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
@@ -225,7 +230,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.38], [0.11]]
 
-    elif candidate == CAR.HONDA_INSIGHT:
+    elif candidate in (CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
 
@@ -233,8 +238,20 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]] # TODO: can probably use some tuning
 
+    elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
+      # Stock camera sends up to 2560 during LKA operation and up to 3840 during RDM operation
+      # Steer motor torque does rise a little above 2560, but not linearly, RDM also applies one-sided brake drag
+      #ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 3072], [0, 2560, 3840]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.steerActuatorDelay = 0.15
+      CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
+      if not ret.openpilotLongitudinalControl:
+        # When using stock ACC, the radar intercepts and filters steering commands the EPS would otherwise accept
+        ret.minSteerSpeed = 70. * CV.KPH_TO_MS
+
     # TODO-SP: remove when https://github.com/commaai/opendbc/pull/2687 is merged
-    elif candidate == CAR.HONDA_CLARITY:
+    elif candidate in (CAR.HONDA_CLARITY, CAR.ACURA_MDX_3G_MMR):
       pass
 
     else:
@@ -257,7 +274,6 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_ALT.value
     if ret.openpilotLongitudinalControl and candidate in HONDA_BOSCH:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_LONG.value
-
     if candidate in HONDA_BOSCH_RADARLESS:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
     if candidate in HONDA_BOSCH_CANFD:
@@ -280,16 +296,22 @@ class CarInterface(CarInterfaceBase):
   @staticmethod
   def _get_params_sp(stock_cp: structs.CarParams, ret: structs.CarParamsSP, candidate, fingerprint: dict[int, dict[int, int]],
                      car_fw: list[structs.CarParams.CarFw], alpha_long: bool, docs: bool) -> structs.CarParamsSP:
-    eps_modified = False
-    # FIXME-SP: uncomment when the sync brings in https://github.com/commaai/opendbc/pull/2672
-    # for fw in car_fw:
-    #   if fw.ecu == "eps" and b"," in fw.fwVersion:
-    #     ret.flags |= HondaFlagsSP.EPS_MOD.value
-    #     eps_modified = True
-    #     stock_cp.dashcamOnly = False
+    CAN = CanBus(stock_cp, fingerprint)
+
+    for fw in car_fw:
+      if fw.ecu == "eps" and b"," in fw.fwVersion:
+        ret.flags |= HondaFlagsSP.EPS_MODIFIED.value
+        stock_cp.dashcamOnly = False
+
+    if (stock_cp.flags & HondaFlags.NIDEC) and (stock_cp.flags & HondaFlags.HYBRID):
+      ret.flags |= HondaFlagsSP.NIDEC_HYBRID.value
+      ret.safetyParam |= HondaSafetyFlagsSP.NIDEC_HYBRID
+      # some hybrids use a different brakehold
+      if (0x223 in fingerprint[CAN.pt]):
+        ret.flags |= HondaFlagsSP.HYBRID_ALT_BRAKEHOLD.value
 
     if candidate == CAR.HONDA_CIVIC:
-      if eps_modified:
+      if ret.flags & HondaFlagsSP.EPS_MODIFIED:
         # stock request input values:     0x0000, 0x00DE, 0x014D, 0x01EF, 0x0290, 0x0377, 0x0454, 0x0610, 0x06EE
         # stock request output values:    0x0000, 0x0917, 0x0DC5, 0x1017, 0x119F, 0x140B, 0x1680, 0x1680, 0x1680
         # modified request output values: 0x0000, 0x0917, 0x0DC5, 0x1017, 0x119F, 0x140B, 0x1680, 0x2880, 0x3180
@@ -299,12 +321,22 @@ class CarInterface(CarInterfaceBase):
         stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2560, 8000], [0, 2560, 3840]]
         stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.1]]
 
+    elif candidate in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL):
+      if ret.flags & HondaFlagsSP.EPS_MODIFIED:
+        stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2564, 8000], [0, 2564, 3840]]
+        stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.09]]  # 2.5x Modded EPS
+
+    elif candidate == CAR.HONDA_CIVIC_2022:
+      if ret.flags & HondaFlagsSP.EPS_MODIFIED:
+        stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2564, 8000], [0, 2564, 3840]]
+        stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.09]]  # 2.5x Modded EPS
+
     elif candidate == CAR.HONDA_ACCORD:
-      if eps_modified:
+      if ret.flags & HondaFlagsSP.EPS_MODIFIED:
         stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.09]]
 
     elif candidate == CAR.HONDA_CRV_5G:
-      if eps_modified:
+      if ret.flags & HondaFlagsSP.EPS_MODIFIED:
         # stock request input values:     0x0000, 0x00DB, 0x01BB, 0x0296, 0x0377, 0x0454, 0x0532, 0x0610, 0x067F
         # stock request output values:    0x0000, 0x0500, 0x0A15, 0x0E6D, 0x1100, 0x1200, 0x129A, 0x134D, 0x1400
         # modified request output values: 0x0000, 0x0500, 0x0A15, 0x0E6D, 0x1100, 0x1200, 0x1ACD, 0x239A, 0x2800
@@ -312,27 +344,41 @@ class CarInterface(CarInterfaceBase):
         stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.21], [0.07]]
 
     elif candidate == CAR.HONDA_CLARITY:
-      # FIXME-SP: remove when the sync brings in https://github.com/commaai/opendbc/pull/2672
-      for fw in car_fw:
-        if fw.ecu == "eps" and b"," in fw.fwVersion:
-          ret.flags |= HondaFlagsSP.EPS_MOD.value
-          eps_modified = True
-
-      ret.safetyParam |= HondaSafetyFlagsSP.CLARITY
       stock_cp.autoResumeSng = True
       stock_cp.minEnableSpeed = -1
-      if eps_modified:
+      if ret.flags & HondaFlagsSP.EPS_MODIFIED:
         for fw in car_fw:
           if fw.ecu == "eps" and b"-" not in fw.fwVersion and b"," in fw.fwVersion:
             stock_cp.lateralTuning.pid.kf = 0.00004
-            stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2560, 15360], [0, 2560, 3840]]
+            stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 5760, 15360], [0, 2560, 3840]]
             stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.1575], [0.05175]]
           elif fw.ecu == "eps" and b"-" in fw.fwVersion and b"," in fw.fwVersion:
-            stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2560, 10240], [0, 2560, 3840]]
+            stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 5760, 10240], [0, 2560, 3840]]
             stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.1]]
       else:
         stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2560], [0, 2560]]
         stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.8], [0.24]]
+
+    elif candidate == CAR.ACURA_MDX_3G_MMR:
+      stock_cp.autoResumeSng = True
+      stock_cp.minEnableSpeed = -1
+      stock_cp.steerActuatorDelay = 0.3
+      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 239], [0, 239]]
+      stock_cp.lateralTuning.pid.kf = 0.000035
+      stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.115], [0.052]]
+
+    if candidate in HONDA_BOSCH:
+      pass
+    else:
+      ret.enableGasInterceptor = 0x201 in fingerprint[CAN.pt]
+      stock_cp.pcmCruise = not ret.enableGasInterceptor
+
+    if ret.enableGasInterceptor and candidate not in HONDA_BOSCH:
+      ret.safetyParam |= HondaSafetyFlagsSP.GAS_INTERCEPTOR
+
+    stock_cp.autoResumeSng = stock_cp.autoResumeSng or ret.enableGasInterceptor
+
+    ret.intelligentCruiseButtonManagementAvailable = candidate in HONDA_BOSCH
 
     return ret
 

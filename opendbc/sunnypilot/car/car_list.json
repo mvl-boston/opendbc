@@ -31,6 +31,17 @@
       "2025"
     ],
     "package": "All"
+  },      
+  "Acura MDX 2019-20": {
+    "platform": "ACURA_MDX_3G_MMR",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX",
+    "year": [
+      "2019",
+      "2020"
+    ],
+    "package": "All"
   },
   "Acura MDX 2025": {
     "platform": "ACURA_MDX_4G_MMR",
@@ -226,6 +237,29 @@
     ],
     "package": "2LT Trim with Adaptive Cruise Control Package"
   },
+  "Chevrolet Bolt EV Non-ACC 2017": {
+    "platform": "CHEVROLET_BOLT_NON_ACC",
+    "make": "Chevrolet",
+    "brand": "gm",
+    "model": "Bolt EV Non-ACC",
+    "year": [
+      "2017"
+    ],
+    "package": "Adaptive Cruise Control (ACC)"
+  },
+  "Chevrolet Bolt EV Non-ACC 2018-21": {
+    "platform": "CHEVROLET_BOLT_NON_ACC_1ST_GEN",
+    "make": "Chevrolet",
+    "brand": "gm",
+    "model": "Bolt EV Non-ACC",
+    "year": [
+      "2018",
+      "2019",
+      "2020",
+      "2021"
+    ],
+    "package": "Adaptive Cruise Control (ACC)"
+  },
   "Chevrolet Equinox 2019-22": {
     "platform": "CHEVROLET_EQUINOX",
     "make": "Chevrolet",
@@ -236,6 +270,23 @@
       "2020",
       "2021",
       "2022"
+    ],
+    "package": "Adaptive Cruise Control (ACC)"
+  },
+  "Chevrolet Malibu Non-ACC 2016-23": {
+    "platform": "CHEVROLET_MALIBU_NON_ACC_9TH_GEN",
+    "make": "Chevrolet",
+    "brand": "gm",
+    "model": "Malibu Non-ACC",
+    "year": [
+      "2016",
+      "2017",
+      "2018",
+      "2019",
+      "2020",
+      "2021",
+      "2022",
+      "2023"
     ],
     "package": "Adaptive Cruise Control (ACC)"
   },
@@ -995,13 +1046,14 @@
     ],
     "package": "All"
   },
-  "Honda Civic Hatchback Hybrid 2025": {
+  "Honda Civic Hatchback Hybrid 2025-26": {
     "platform": "HONDA_CIVIC_2022",
     "make": "Honda",
     "brand": "honda",
     "model": "Civic Hatchback Hybrid",
     "year": [
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1178,6 +1230,16 @@
     "make": "Honda",
     "brand": "honda",
     "model": "Inspire",
+    "year": [
+      "2018"
+    ],
+    "package": "All"
+  },
+  "Honda N-Box 2018": {
+    "platform": "HONDA_NBOX_2G",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "N-Box",
     "year": [
       "2018"
     ],
@@ -1936,6 +1998,16 @@
       "2023"
     ],
     "package": "Smart Cruise Control (SCC)"
+  },
+  "Kia Forte Non-SCC 2019": {
+    "platform": "KIA_FORTE_2019_NON_SCC",
+    "make": "Kia",
+    "brand": "hyundai",
+    "model": "Forte Non-SCC",
+    "year": [
+      "2019"
+    ],
+    "package": "No Smart Cruise Control (Non-SCC)"
   },
   "Kia K5 2021-24": {
     "platform": "KIA_K5_2021",
@@ -3079,13 +3151,14 @@
     ],
     "package": "All"
   },
-  "Tesla Model Y (with HW4) 2024": {
+  "Tesla Model Y (with HW4) 2024-25": {
     "platform": "TESLA_MODEL_Y",
     "make": "Tesla",
     "brand": "tesla",
     "model": "Model Y (with HW4)",
     "year": [
-      "2024"
+      "2024",
+      "2025"
     ],
     "package": "All"
   },
