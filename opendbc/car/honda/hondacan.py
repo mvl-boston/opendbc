@@ -3,6 +3,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_RADARLESS,
                                       HONDA_BOSCH_CANFD, CarControllerParams)
 from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
+from opendbc.car.carlog import carlog
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -67,6 +68,8 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
     "AEB_STATUS": 0,
   }
 
+  carlog.error({"cpspflags": CP_SP.flags, "flagssp_nidec_hybrid": HondaFlagsSP.NIDEC_HYBRID})
+  
   if (CP_SP.flags & HondaFlagsSP.NIDEC_HYBRID):
     values["COMPUTER_BRAKE_HYBRID"] = apply_brake
     values["BRAKE_PUMP_REQUEST_HYBRID"] = apply_brake > 0
