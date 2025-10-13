@@ -254,6 +254,7 @@ class CarInterface(CarInterfaceBase):
   @staticmethod
   def _get_params_sp(stock_cp: structs.CarParams, ret: structs.CarParamsSP, candidate, fingerprint: dict[int, dict[int, int]],
                      car_fw: list[structs.CarParams.CarFw], alpha_long: bool, docs: bool) -> structs.CarParamsSP:
+    CAN = CanBus(stock_cp, fingerprint)
     eps_modified = False
     # FIXME-SP: uncomment when the sync brings in https://github.com/commaai/opendbc/pull/2672
     # for fw in car_fw:
@@ -267,7 +268,6 @@ class CarInterface(CarInterfaceBase):
       # some hybrids use a different brakehold
       if (0x223 in fingerprint[CAN.pt]):
         ret.flags |= HondaFlagsSP.HYBRID_ALT_BRAKEHOLD.value
-      
 
     if candidate == CAR.HONDA_CIVIC:
       if eps_modified:
