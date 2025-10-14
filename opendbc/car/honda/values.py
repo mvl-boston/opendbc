@@ -56,7 +56,7 @@ class HondaSafetyFlags(IntFlag):
   NIDEC_ALT = 4
   RADARLESS = 8
   BOSCH_CANFD = 16
-  
+
 
 class HondaFlags(IntFlag):
   # Detected flags
@@ -73,7 +73,7 @@ class HondaFlags(IntFlag):
   NIDEC_ALT_SCM_MESSAGES = 64
 
   BOSCH_CANFD = 128
-  
+
   HAS_ALL_DOOR_STATES = 256  # Some Hondas have all door states, others only driver door
   BOSCH_ALT_RADAR = 512
   ALLOW_MANUAL_TRANS = 1024
@@ -342,12 +342,6 @@ class CAR(Platforms):
     CarSpecs(mass=3925 * CV.LB_TO_KG, wheelbase=2.68, steerRatio=15.0, centerToFrontRatio=0.38, tireStiffnessFactor=0.444),  # as spec
     radar_dbc_dict('acura_rdx_2018_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
-  )
-  ACURA_RDX_3G_MMR = HondaBoschPlatformConfig(
-    [HondaCarDocs("Acura RDX 2022-26", "All", min_steer_speed=45. * CV.MPH_TO_MS)],
-    CarSpecs(mass=4079 * CV.LB_TO_KG, wheelbase=2.75, steerRatio=12.0, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),  # as spec
-    {Bus.pt: 'acura_rdx_2020_can_generated'},
-    flags=HondaFlags.BOSCH_ALT_RADAR,
   )
   HONDA_PILOT = HondaNidecPlatformConfig(
     [
