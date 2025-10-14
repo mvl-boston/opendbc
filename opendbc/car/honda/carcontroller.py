@@ -121,11 +121,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.steeringTorque_last = 0.0 # last driver torque
     # try new Bosch pid
     self.gasonly_pid = PIDController(k_p=([0,], [0.5,]),
-                                     k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
+                                     k_i=([0,], [0.,]),
+                                     # k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
                                      k_f=1, rate= 1 / DT_CTRL / 2)
-#    self.gasonly_pid = PIDController (k_p=([0,], [0,]),
-#                                      k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
-#                                      k_f=1, rate= 1 / DT_CTRL / 2)
     self.pitch = 0.0
 
   def update(self, CC, CC_SP, CS, now_nanos):
@@ -144,7 +142,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     if CC.longActive:
       accel = actuators.accel
-      if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)) and (accel > max(0, CS.out.aEgo) + 0.1):
+      if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX)) and (accel > max(0, CS.out.aEgo) + 0.1):
         accel = 10000.0 # help with lagged accel until pedal tuning is inserted
       gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
@@ -184,16 +182,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
 
     # Send steering command.
-    if self.CP.carFingerprint in (HONDA_BOSCH_ALT_RADAR): # faults when steer control occurs while steeringPressed
-      # steerDisable = CC.longActive and (CS.out.steeringPressed or ( abs ( CS.out.steeringTorque - self.steeringTorque_last ) > 200 ))
-      steerDisable = False # see if pre-2025 RDX is fine without this steer disable
-      self.steeringTorque_last = CS.out.steeringTorque
-      if steerDisable:
-        self.last_torque = 0
-    else:
-      steerDisable = False
-    can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive and not steerDisable,
-                                                      self.CP.carFingerprint))
+    can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.CP.carFingerprint))
 
     # wind brake from air resistance decel at high speed
     wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
@@ -219,7 +208,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                      np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
       pcm_accel = int(1.0 * self.params.NIDEC_GAS_MAX)
-    elif (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)):
+    elif (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, AR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX)):
       pcm_speed_V = [0.0,
                      np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
@@ -288,7 +277,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     # Send dashboard UI commands.
     if self.frame % 10 == 0:
-      if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)):
+      if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX)):
         # standstill disengage
         if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
           pcm_speed = 25.0 / 3.6
@@ -300,8 +289,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
       reduced_steering = CS.out.steeringPressed
+      steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
       can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
-                                                steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, self.dashed_lanes))
+                                                steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, self.dashed_lanes,
+                                                steer_maxed))
 
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
