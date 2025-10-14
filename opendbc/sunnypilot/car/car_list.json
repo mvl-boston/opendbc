@@ -1,4 +1,15 @@
 {
+  "Acura ADX 2025-26": {
+    "platform": "ACURA_INTEGRA",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "ADX",
+    "year": [
+      "2025",
+      "2026"
+    ],
+    "package": "All"
+  },
   "Acura ILX 2016-18": {
     "platform": "ACURA_ILX",
     "make": "Acura",
@@ -11,24 +22,52 @@
     ],
     "package": "Technology Plus Package or AcuraWatch Plus"
   },
-  "Acura ILX 2019": {
+  "Acura ILX 2019-22": {
     "platform": "ACURA_ILX",
     "make": "Acura",
     "brand": "honda",
     "model": "ILX",
     "year": [
-      "2019"
+      "2019",
+      "2020",
+      "2021",
+      "2022"
     ],
     "package": "All"
   },
-  "Acura Integra 2024-25": {
+  "Acura Integra 2023-26": {
     "platform": "ACURA_INTEGRA",
     "make": "Acura",
     "brand": "honda",
     "model": "Integra",
     "year": [
+      "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
+    ],
+    "package": "All"
+  }
+  "Acura MDX 2014-16": {
+    "platform": "ACURA_MDX_3G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX",
+    "year": [
+      "2014",
+      "2015",
+      "2016"
+    ],
+    "package": "Advance Package"
+  },
+  "Acura MDX 2017-18": {
+    "platform": "ACURA_MDX_3G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX",
+    "year": [
+      "2017",
+      "2018"
     ],
     "package": "All"
   },      
@@ -43,16 +82,39 @@
     ],
     "package": "All"
   },
-  "Acura MDX 2025": {
+  "Acura MDX 2025-26": {
     "platform": "ACURA_MDX_4G_MMR",
     "make": "Acura",
     "brand": "honda",
     "model": "MDX",
     "year": [
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All except Type S"
   },
+  "Acura MDX Hybrid 2017-18": {
+    "platform": "ACURA_MDX_3G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX Hybrid",
+    "year": [
+      "2017",
+      "2018"
+    ],
+    "package": "All"
+  },
+  "Acura MDX Hybrid 2019-20": {
+    "platform": "ACURA_MDX_3G_MMR",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX Hybrid",
+    "year": [
+      "2019",
+      "2020"
+    ],
+    "package": "All"
+  }
   "Acura RDX 2016-18": {
     "platform": "ACURA_RDX",
     "make": "Acura",
@@ -77,7 +139,7 @@
     ],
     "package": "All"
   },
-  "Acura RDX 2022-25": {
+  "Acura RDX 2022-26": {
     "platform": "ACURA_RDX_3G_MMR",
     "make": "Acura",
     "brand": "honda",
@@ -85,6 +147,54 @@
     "year": [
       "2022",
       "2023",
+      "2024",
+      "2025",
+      "2026"
+    ],
+    "package": "All"
+  },
+  "Acura TLX 2015-17": {
+    "platform": "ACURA_TLX_1G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "TLX",
+    "year": [
+      "2015",
+      "2016",
+      "2017"
+    ],
+    "package": "Advance Package"
+  },
+  "Acura TLX 2018-20": {
+    "platform": "ACURA_TLX_1G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "TLX",
+    "year": [
+      "2018",
+      "2019",
+      "2020"
+    ],
+    "package": "All"
+  },
+  "Acura TLX 2021-23": {
+    "platform": "ACURA_TLX_2G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "TLX",
+    "year": [
+      "2021",
+      "2022",
+      "2023"
+    ],
+    "package": "All"
+  },
+  "Acura TLX 2024-25": {
+    "platform": "HONDA_ACCORD_11G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "TLX",
+    "year": [
       "2024",
       "2025"
     ],
