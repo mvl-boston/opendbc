@@ -47,7 +47,7 @@
       "2026"
     ],
     "package": "All"
-  }
+  },
   "Acura MDX 2014-16": {
     "platform": "ACURA_MDX_3G",
     "make": "Acura",
@@ -70,7 +70,7 @@
       "2018"
     ],
     "package": "All"
-  },      
+  },
   "Acura MDX 2019-20": {
     "platform": "ACURA_MDX_3G_MMR",
     "make": "Acura",
@@ -114,7 +114,7 @@
       "2020"
     ],
     "package": "All"
-  }
+  },
   "Acura RDX 2016-18": {
     "platform": "ACURA_RDX",
     "make": "Acura",
@@ -1413,7 +1413,7 @@
     ],
     "package": "All"
   },
-  "Honda Passport 2019-26": {
+  "Honda Passport 2019-25": {
     "platform": "HONDA_PILOT",
     "make": "Honda",
     "brand": "honda",
@@ -1425,8 +1425,7 @@
       "2022",
       "2023",
       "2024",
-      "2025",
-      "2026"
+      "2025"
     ],
     "package": "All"
   },
