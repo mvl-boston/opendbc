@@ -1469,6 +1469,16 @@
     ],
     "package": "All"
   },
+  "Honda Prelude 2026": {
+    "platform": "ACURA_INTEGRA",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Prelude",
+    "year": [
+      "2026"
+    ],
+    "package": "All"
+  },
   "Honda Ridgeline 2017-26": {
     "platform": "HONDA_RIDGELINE",
     "make": "Honda",
