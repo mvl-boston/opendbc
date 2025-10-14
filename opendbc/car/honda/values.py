@@ -295,7 +295,7 @@ class CAR(Platforms):
       HondaCarDocs("Honda Prelude 2026", "All"),
     ],
     CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=16.71, tireStiffnessFactor=0.82),
-    {Bus.pt: 'honda_civic_ex_2022_can_generated'},
+    {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS | HondaFlags.ALLOW_MANUAL_TRANS
   )
 
@@ -380,7 +380,7 @@ class CAR(Platforms):
       HondaCarDocs("Honda Accord Hybrid 2017", "All"),
     ],
     CarSpecs(mass=3343 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=17.5, centerToFrontRatio=0.37),  # as spec
-    radar_dbc_dict('honda_accord_2017_can_generated'),
+    radar_dbc_dict('honda_accord_2017_can_ext_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   HONDA_CLARITY = HondaNidecPlatformConfig(
@@ -396,7 +396,7 @@ class CAR(Platforms):
       HondaCarDocs("Acura MDX Hybrid 2017-18", "All"),
     ],
     CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
-    radar_dbc_dict('acura_mdx_2016_can_generated'),
+    radar_dbc_dict('acura_mdx_2017_can_ext_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_MDX_3G_MMR = HondaNidecPlatformConfig(
