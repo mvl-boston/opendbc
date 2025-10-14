@@ -202,7 +202,7 @@ static void honda_rx_hook(const CANPacket_t *msg) {
       if (honda_nidec_hybrid) {
         honda_stock_brake = (msg->data[6] << 2) | (msg->data[7] >> 6);
       }
-      
+
       // Forward AEB when stock braking is higher than openpilot braking
       // only stop forwarding when AEB event is over
       if (!honda_stock_aeb) {
