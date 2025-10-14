@@ -702,7 +702,7 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG)
 
 
- class TestHondaNidecHybridSafety(TestHondaNidecPcmSafety):
+class TestHondaNidecHybridSafety(TestHondaNidecPcmSafety):
   """
     Covers the Honda Nidec safety mode with hybrid brake
   """
