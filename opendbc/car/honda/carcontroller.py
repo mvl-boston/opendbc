@@ -1,5 +1,4 @@
 import numpy as np
-from collections import namedtuple
 import math
 
 from opendbc.can import CANPacker
