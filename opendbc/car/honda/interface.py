@@ -363,7 +363,7 @@ class CarInterface(CarInterfaceBase):
       stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 239], [0, 239]]
       stock_cp.lateralTuning.pid.kf = 0.000035
       stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.115], [0.052]]
-    
+
     elif candidate in (CAR.HONDA_ACCORD_9G, CAR.ACURA_TLX_1G):
       if candidate == CAR.ACURA_TLX_1G:
         stock_cp.autoResumeSng = True
@@ -372,7 +372,7 @@ class CarInterface(CarInterfaceBase):
       stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 239], [0, 239]]
       stock_cp.lateralTuning.pid.kiBP, stock_cp.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
       stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
-                       
+
     if candidate in HONDA_BOSCH:
       pass
     else:
