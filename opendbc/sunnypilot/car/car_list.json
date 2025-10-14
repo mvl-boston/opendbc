@@ -1023,6 +1023,17 @@
     ],
     "package": "Driver Alert Package II"
   },
+  "Honda Accord 2016-17": {
+    "platform": "HONDA_ACCORD_9G",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Accord",
+    "year": [
+      "2016",
+      "2017"
+    ],
+    "package": "Honda Sensing"
+  },
   "Honda Accord 2018-22": {
     "platform": "HONDA_ACCORD",
     "make": "Honda",
@@ -1037,7 +1048,7 @@
     ],
     "package": "All"
   },
-  "Honda Accord 2023-25": {
+  "Honda Accord 2023-26": {
     "platform": "HONDA_ACCORD_11G",
     "make": "Honda",
     "brand": "honda",
@@ -1045,7 +1056,18 @@
     "year": [
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
+    ],
+    "package": "All"
+  },
+  "Honda Accord Hybrid 2017": {
+    "platform": "HONDA_ACCORD_9G",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Accord Hybrid",
+    "year": [
+      "2017"
     ],
     "package": "All"
   },
@@ -1063,7 +1085,7 @@
     ],
     "package": "All"
   },
-  "Honda Accord Hybrid 2023-25": {
+  "Honda Accord Hybrid 2023-26": {
     "platform": "HONDA_ACCORD_11G",
     "make": "Honda",
     "brand": "honda",
@@ -1071,7 +1093,8 @@
     "year": [
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1109,7 +1132,7 @@
     ],
     "package": "All"
   },
-  "Honda Civic 2022-24": {
+  "Honda Civic 2022-26": {
     "platform": "HONDA_CIVIC_2022",
     "make": "Honda",
     "brand": "honda",
@@ -1117,7 +1140,9 @@
     "year": [
       "2022",
       "2023",
-      "2024"
+      "2024",
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1144,7 +1169,7 @@
     ],
     "package": "All"
   },
-  "Honda Civic Hatchback 2022-24": {
+  "Honda Civic Hatchback 2022-26": {
     "platform": "HONDA_CIVIC_2022",
     "make": "Honda",
     "brand": "honda",
@@ -1152,7 +1177,9 @@
     "year": [
       "2022",
       "2023",
-      "2024"
+      "2024",
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1177,13 +1204,14 @@
     ],
     "package": "All"
   },
-  "Honda Civic Hybrid 2025": {
+  "Honda Civic Hybrid 2025-26": {
     "platform": "HONDA_CIVIC_2022",
     "make": "Honda",
     "brand": "honda",
     "model": "Civic Hybrid",
     "year": [
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1226,7 +1254,7 @@
     ],
     "package": "Honda Sensing"
   },
-  "Honda CR-V 2023-25": {
+  "Honda CR-V 2023-26": {
     "platform": "HONDA_CRV_6G",
     "make": "Honda",
     "brand": "honda",
@@ -1234,7 +1262,8 @@
     "year": [
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1253,7 +1282,7 @@
     ],
     "package": "Honda Sensing"
   },
-  "Honda CR-V Hybrid 2023-25": {
+  "Honda CR-V Hybrid 2023-26": {
     "platform": "HONDA_CRV_6G",
     "make": "Honda",
     "brand": "honda",
@@ -1261,7 +1290,8 @@
     "year": [
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1310,7 +1340,7 @@
     ],
     "package": "Honda Sensing"
   },
-  "Honda HR-V 2023-25": {
+  "Honda HR-V 2023-26": {
     "platform": "HONDA_HRV_3G",
     "make": "Honda",
     "brand": "honda",
@@ -1318,7 +1348,8 @@
     "year": [
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1367,7 +1398,7 @@
     ],
     "package": "Honda Sensing"
   },
-  "Honda Odyssey 2021-25": {
+  "Honda Odyssey 2021-26": {
     "platform": "HONDA_ODYSSEY_5G_MMR",
     "make": "Honda",
     "brand": "honda",
@@ -1377,11 +1408,12 @@
       "2022",
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
-  "Honda Passport 2019-25": {
+  "Honda Passport 2019-26": {
     "platform": "HONDA_PILOT",
     "make": "Honda",
     "brand": "honda",
@@ -1393,7 +1425,8 @@
       "2022",
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1423,7 +1456,7 @@
     ],
     "package": "Honda Sensing"
   },
-  "Honda Pilot 2023-25": {
+  "Honda Pilot 2023-26": {
     "platform": "HONDA_PILOT_4G",
     "make": "Honda",
     "brand": "honda",
@@ -1431,11 +1464,12 @@
     "year": [
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
-  "Honda Ridgeline 2017-25": {
+  "Honda Ridgeline 2017-26": {
     "platform": "HONDA_RIDGELINE",
     "make": "Honda",
     "brand": "honda",
@@ -1449,7 +1483,8 @@
       "2022",
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "Honda Sensing"
   },
