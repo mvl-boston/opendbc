@@ -292,6 +292,7 @@ class CAR(Platforms):
     [
       HondaCarDocs("Acura ADX 2025-26", "All"),
       HondaCarDocs("Acura Integra 2023-26", "All"),
+      HondaCarDocs("Honda Prelude 2026", "All"),
     ],
     CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=16.71, tireStiffnessFactor=0.82),
     {Bus.pt: 'honda_civic_ex_2022_can_generated'},
