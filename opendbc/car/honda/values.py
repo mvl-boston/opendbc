@@ -412,7 +412,6 @@ class CAR(Platforms):
     radar_dbc_dict('acura_ilx_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
-  )
   ACURA_TLX_1G = HondaNidecPlatformConfig(
     [
       HondaCarDocs("Acura TLX 2015-17", "Advance Package"),
