@@ -670,12 +670,27 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
   BUTTONS_BUS = 0
 
   TX_MSGS = [[0xE4, 0], [0x1DF, 0],  [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x18DAB0F1, 0]]
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x1DF, 0x33D]}
-  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1DF, 0x33D)}  # STEERING_CONTROL / ACC_CONTROL / LKAS_HUD
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D)}  # STEERING_CONTROL / LKAS_HUD
 
   def setUp(self):
     super().setUp()
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG)
+    self.safety.init_tests()
+
+
+class TestHondaNidecHybridSafety(TestHondaNidecPcmSafety):
+  """
+    Covers the Honda Nidec safety mode with hybrid brake
+  """
+
+  BRAKE_SIG = "COMPUTER_BRAKE_HYBRID"
+
+  def setUp(self):
+    self.packer = CANPackerPanda("honda_clarity_hybrid_2018_can_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_current_safety_param_sp(HondaSafetyFlagsSP.NIDEC_HYBRID)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, 0)
     self.safety.init_tests()
 
 
