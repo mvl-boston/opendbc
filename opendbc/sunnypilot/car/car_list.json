@@ -1,4 +1,15 @@
 {
+  "Acura ADX 2025-26": {
+    "platform": "ACURA_INTEGRA",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "ADX",
+    "year": [
+      "2025",
+      "2026"
+    ],
+    "package": "All"
+  },
   "Acura ILX 2016-18": {
     "platform": "ACURA_ILX",
     "make": "Acura",
@@ -11,36 +22,98 @@
     ],
     "package": "Technology Plus Package or AcuraWatch Plus"
   },
-  "Acura ILX 2019": {
+  "Acura ILX 2019-22": {
     "platform": "ACURA_ILX",
     "make": "Acura",
     "brand": "honda",
     "model": "ILX",
     "year": [
-      "2019"
+      "2019",
+      "2020",
+      "2021",
+      "2022"
     ],
     "package": "All"
   },
-  "Acura Integra 2024-25": {
+  "Acura Integra 2023-26": {
     "platform": "ACURA_INTEGRA",
     "make": "Acura",
     "brand": "honda",
     "model": "Integra",
     "year": [
+      "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
-  "Acura MDX 2025": {
+  "Acura MDX 2014-16": {
+    "platform": "ACURA_MDX_3G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX",
+    "year": [
+      "2014",
+      "2015",
+      "2016"
+    ],
+    "package": "Advance Package"
+  },
+  "Acura MDX 2017-18": {
+    "platform": "ACURA_MDX_3G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX",
+    "year": [
+      "2017",
+      "2018"
+    ],
+    "package": "All"
+  },
+  "Acura MDX 2019-20": {
+    "platform": "ACURA_MDX_3G_MMR",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX",
+    "year": [
+      "2019",
+      "2020"
+    ],
+    "package": "All"
+  },
+  "Acura MDX 2025-26": {
     "platform": "ACURA_MDX_4G_MMR",
     "make": "Acura",
     "brand": "honda",
     "model": "MDX",
     "year": [
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All except Type S"
+  },
+  "Acura MDX Hybrid 2017-18": {
+    "platform": "ACURA_MDX_3G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX Hybrid",
+    "year": [
+      "2017",
+      "2018"
+    ],
+    "package": "All"
+  },
+  "Acura MDX Hybrid 2019-20": {
+    "platform": "ACURA_MDX_3G_MMR",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX Hybrid",
+    "year": [
+      "2019",
+      "2020"
+    ],
+    "package": "All"
   },
   "Acura RDX 2016-18": {
     "platform": "ACURA_RDX",
@@ -66,7 +139,7 @@
     ],
     "package": "All"
   },
-  "Acura RDX 2022-25": {
+  "Acura RDX 2022-26": {
     "platform": "ACURA_RDX_3G_MMR",
     "make": "Acura",
     "brand": "honda",
@@ -74,6 +147,54 @@
     "year": [
       "2022",
       "2023",
+      "2024",
+      "2025",
+      "2026"
+    ],
+    "package": "All"
+  },
+  "Acura TLX 2015-17": {
+    "platform": "ACURA_TLX_1G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "TLX",
+    "year": [
+      "2015",
+      "2016",
+      "2017"
+    ],
+    "package": "Advance Package"
+  },
+  "Acura TLX 2018-20": {
+    "platform": "ACURA_TLX_1G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "TLX",
+    "year": [
+      "2018",
+      "2019",
+      "2020"
+    ],
+    "package": "All"
+  },
+  "Acura TLX 2021-23": {
+    "platform": "ACURA_TLX_2G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "TLX",
+    "year": [
+      "2021",
+      "2022",
+      "2023"
+    ],
+    "package": "All"
+  },
+  "Acura TLX 2024-25": {
+    "platform": "HONDA_ACCORD_11G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "TLX",
+    "year": [
       "2024",
       "2025"
     ],
@@ -862,6 +983,17 @@
     ],
     "package": "Driver Alert Package II"
   },
+  "Honda Accord 2016-17": {
+    "platform": "HONDA_ACCORD_9G",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Accord",
+    "year": [
+      "2016",
+      "2017"
+    ],
+    "package": "Honda Sensing"
+  },
   "Honda Accord 2018-22": {
     "platform": "HONDA_ACCORD",
     "make": "Honda",
@@ -876,7 +1008,7 @@
     ],
     "package": "All"
   },
-  "Honda Accord 2023-25": {
+  "Honda Accord 2023-26": {
     "platform": "HONDA_ACCORD_11G",
     "make": "Honda",
     "brand": "honda",
@@ -884,7 +1016,18 @@
     "year": [
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
+    ],
+    "package": "All"
+  },
+  "Honda Accord Hybrid 2017": {
+    "platform": "HONDA_ACCORD_9G",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Accord Hybrid",
+    "year": [
+      "2017"
     ],
     "package": "All"
   },
@@ -902,7 +1045,7 @@
     ],
     "package": "All"
   },
-  "Honda Accord Hybrid 2023-25": {
+  "Honda Accord Hybrid 2023-26": {
     "platform": "HONDA_ACCORD_11G",
     "make": "Honda",
     "brand": "honda",
@@ -910,7 +1053,8 @@
     "year": [
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -948,7 +1092,7 @@
     ],
     "package": "All"
   },
-  "Honda Civic 2022-24": {
+  "Honda Civic 2022-26": {
     "platform": "HONDA_CIVIC_2022",
     "make": "Honda",
     "brand": "honda",
@@ -956,7 +1100,9 @@
     "year": [
       "2022",
       "2023",
-      "2024"
+      "2024",
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -983,7 +1129,7 @@
     ],
     "package": "All"
   },
-  "Honda Civic Hatchback 2022-24": {
+  "Honda Civic Hatchback 2022-26": {
     "platform": "HONDA_CIVIC_2022",
     "make": "Honda",
     "brand": "honda",
@@ -991,17 +1137,20 @@
     "year": [
       "2022",
       "2023",
-      "2024"
+      "2024",
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
-  "Honda Civic Hatchback Hybrid 2025": {
+  "Honda Civic Hatchback Hybrid 2025-26": {
     "platform": "HONDA_CIVIC_2022",
     "make": "Honda",
     "brand": "honda",
     "model": "Civic Hatchback Hybrid",
     "year": [
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1015,13 +1164,14 @@
     ],
     "package": "All"
   },
-  "Honda Civic Hybrid 2025": {
+  "Honda Civic Hybrid 2025-26": {
     "platform": "HONDA_CIVIC_2022",
     "make": "Honda",
     "brand": "honda",
     "model": "Civic Hybrid",
     "year": [
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1064,7 +1214,7 @@
     ],
     "package": "Honda Sensing"
   },
-  "Honda CR-V 2023-25": {
+  "Honda CR-V 2023-26": {
     "platform": "HONDA_CRV_6G",
     "make": "Honda",
     "brand": "honda",
@@ -1072,7 +1222,8 @@
     "year": [
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1091,7 +1242,7 @@
     ],
     "package": "Honda Sensing"
   },
-  "Honda CR-V Hybrid 2023-25": {
+  "Honda CR-V Hybrid 2023-26": {
     "platform": "HONDA_CRV_6G",
     "make": "Honda",
     "brand": "honda",
@@ -1099,7 +1250,8 @@
     "year": [
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1148,7 +1300,7 @@
     ],
     "package": "Honda Sensing"
   },
-  "Honda HR-V 2023-25": {
+  "Honda HR-V 2023-26": {
     "platform": "HONDA_HRV_3G",
     "make": "Honda",
     "brand": "honda",
@@ -1156,7 +1308,8 @@
     "year": [
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1183,6 +1336,16 @@
     ],
     "package": "All"
   },
+  "Honda N-Box 2018": {
+    "platform": "HONDA_NBOX_2G",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "N-Box",
+    "year": [
+      "2018"
+    ],
+    "package": "All"
+  },
   "Honda Odyssey 2018-20": {
     "platform": "HONDA_ODYSSEY",
     "make": "Honda",
@@ -1195,7 +1358,7 @@
     ],
     "package": "Honda Sensing"
   },
-  "Honda Odyssey 2021-25": {
+  "Honda Odyssey 2021-26": {
     "platform": "HONDA_ODYSSEY_5G_MMR",
     "make": "Honda",
     "brand": "honda",
@@ -1205,7 +1368,8 @@
       "2022",
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
@@ -1251,7 +1415,7 @@
     ],
     "package": "Honda Sensing"
   },
-  "Honda Pilot 2023-25": {
+  "Honda Pilot 2023-26": {
     "platform": "HONDA_PILOT_4G",
     "make": "Honda",
     "brand": "honda",
@@ -1259,11 +1423,22 @@
     "year": [
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
-  "Honda Ridgeline 2017-25": {
+  "Honda Prelude 2026": {
+    "platform": "ACURA_INTEGRA",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Prelude",
+    "year": [
+      "2026"
+    ],
+    "package": "All"
+  },
+  "Honda Ridgeline 2017-26": {
     "platform": "HONDA_RIDGELINE",
     "make": "Honda",
     "brand": "honda",
@@ -1277,7 +1452,8 @@
       "2022",
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
     ],
     "package": "Honda Sensing"
   },
