@@ -2,7 +2,7 @@
 from opendbc.car.structs import CarParams
 from opendbc.car.honda.values import CAR
 
-from opendbc.sunnypilot.car.fw_versions_ext import merge_fw_versions
+from opendbc.sunnypilot.car.fingerprints_ext import merge_fw_versions
 from opendbc.sunnypilot.car.honda.fingerprints_ext import FW_VERSIONS_EXT
 
 Ecu = CarParams.Ecu
@@ -14,6 +14,23 @@ Ecu = CarParams.Ecu
 
 
 FW_VERSIONS = {
+  CAR.HONDA_NBOX_2G: {
+    (Ecu.vsa, 0x18da28f1, None): [
+      b'57114-TTA-J030\x00\x00',
+    ],
+    (Ecu.eps, 0x18da30f1, None): [
+      b'39990-TTA-J040\x00\x00',
+    ],
+    (Ecu.srs, 0x18da53f1, None): [
+      b'77959-TTA-N930\x00\x00',
+    ],
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'36802-TTA-J070\x00\x00',
+    ],
+    (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'38897-TTA-J010\x00\x00',
+    ]
+  },
   CAR.HONDA_ACCORD: {
     (Ecu.shiftByWire, 0x18da0bf1, None): [
       b'54008-TVC-A910\x00\x00',
@@ -317,6 +334,7 @@ FW_VERSIONS = {
     (Ecu.vsa, 0x18da28f1, None): [
       b'57114-T1W-A230\x00\x00',
       b'57114-T1W-A240\x00\x00',
+      b'57114-TFF-A930\x00\x00',
       b'57114-TFF-A940\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
@@ -562,10 +580,9 @@ FW_VERSIONS = {
       b'54008-THR-A020\x00\x00',
     ],
   },
-  # mid-model refresh
   CAR.HONDA_ODYSSEY_5G_MMR: {
     (Ecu.vsa, 0x18da28f1, None): [
-      b'57114-THR-A230\x00\x00',
+      b'57114-THR-A230\x00\x00', # 2021 Touring per csouers, need dongle number to upstream
       b'57114-THR-A240\x00\x00',
       b'57114-THR-A520\x00\x00',
     ],
@@ -626,6 +643,7 @@ FW_VERSIONS = {
       b'28101-5EZ-A600\x00\x00',
       b'28101-5EZ-A700\x00\x00',
       b'28103-5EY-A110\x00\x00',
+      b'28103-5EZ-A010\x00\x00',
     ],
     (Ecu.gateway, 0x18daeff1, None): [
       b'38897-TG7-A030\x00\x00',
@@ -905,6 +923,7 @@ FW_VERSIONS = {
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'36161-TV9-A140\x00\x00',
+      b'36161-TV9-C140\x00\x00',
       b'36161-TX6-A030\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
@@ -1010,14 +1029,6 @@ FW_VERSIONS = {
       b'28101-65J-N010\x00\x00',
     ],
   },
-  CAR.HONDA_PASSPORT_4G: {
-    (Ecu.fwdCamera, 0x18dab5f1, None): [
-      b'8S102-3BM-A020\x00\x00',
-    ],
-    (Ecu.fwdRadar, 0x18dab0f1, None): [
-      b'8S302-3BM-A020\x00\x00',
-    ],
-  },
   CAR.HONDA_PILOT_4G: {
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'8S102-T90-A050\x00\x00',
@@ -1035,6 +1046,22 @@ FW_VERSIONS = {
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'8S102-30A-A050\x00\x00',
       b'8S102-30A-A060\x00\x00',
+      b'8S102-30A-A070\x00\x00',
+    ],
+    (Ecu.gateway, 0x18daeff1, None): [
+      b'5J802-30B-AB20\x00\x00',
+    ],
+    (Ecu.eps, 0x18da30f1, None): [
+      b'39991-30B-D010\x00\x00',
+    ],
+    (Ecu.srs, 0x18da53f1, None): [
+      b'77959-30B-A750\x00\x00',
+    ],
+    (Ecu.hud, 0x18da61f1, None): [
+      b'78209-30A-A010\x00\x00',
+    ],
+    (Ecu.vsa, 0x18da28f1, None): [
+      b'57114-30B-A030\x00\x00',
     ],
   },
   CAR.HONDA_CRV_6G: {
@@ -1045,6 +1072,7 @@ FW_VERSIONS = {
     ],
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'8S102-3A0-A090\x00\x00',
+      b'8S102-3A0-A110\x00\x00',
       b'8S102-3C0-Q060\x00\x00',
       b'8S102-3D4-A060\x00\x00',
       b'8S102-3D4-A070\x00\x00',
@@ -1070,6 +1098,22 @@ FW_VERSIONS = {
     ],
     (Ecu.transmission, 0x18da1ef1, None): [
       b'28101-63B-M420\x00\x00',
+    ],
+  },
+  CAR.HONDA_PASSPORT_4G: {
+    (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'8S102-3BM-A020\x00\x00',
+    ],
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'8S302-3BM-A020\x00\x00',
+    ],
+  },
+  CAR.ACURA_TLX_2G: {
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'36802-TGV-A060\x00\x00',
+    ],
+    (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'36161-TGV-A030\x00\x00',
     ],
   },
   CAR.ACURA_INTEGRA: {
@@ -1106,54 +1150,12 @@ FW_VERSIONS = {
       b'39494-T20-A010\x00\x00',
     ],
   },
-  CAR.ACURA_MDX_3G: {
-    (Ecu.vsa, 0x18da28f1, None): [
-      b'57114-TRX-H130\x00\x00',
-      b'57114-TZ6-A810\x00\x00',
-      b'57114-TZ6-A910\x00\x00',
+  CAR.ACURA_MDX_4G_MMR: {
+    (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'8S102-TYA-A020\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
-      b'36161-TRX-A820\x00\x00',
-      b'36161-TYT-A220\x00\x00',
-      b'36161-TZ6-A340\x00\x00',
-      b'36161-TZ6-A640\x00\x00',
-    ],
-    (Ecu.shiftByWire, 0x18da0bf1, None): [
-      b'54008-TZ5-A911\x00\x00',
-      b'54008-TZ5-A910\x00\x00',
-      b'77959-TZ5-A110\x00\x00',
-    ],
-    (Ecu.srs, 0x18da53f1, None): [
-      b'77959-TRX-A011\x00\x00',
-      b'77959-TZ5-A220\x00\x00',
-    ],
-     (Ecu.gateway, 0x18daeff1, None): [
-      b'38897-TYR-A011\x00\x00',
-      b'38897-TZ5-A110\x00\x00',
-      b'38897-TRX-A220\x00\x00',
-    ],
-    (Ecu.transmission, 0x18da1ef1, None): [
-      b'28101-5NC-A310\x00\x00',
-    ],
-  },
-  CAR.ACURA_RLX: {
-    (Ecu.fwdRadar, 0x18dab0f1, None): [
-      b'36161-TY3-A030\x00\x00',
-    ],
-    (Ecu.shiftByWire, 0x18da0bf1, None): [
-      b'54008-TY3-J010\x00\x00',
-    ],
-    (Ecu.srs, 0x18da53f1, None): [
-      b'77959-TY3-L130\x00\x00',
-    ],
-     (Ecu.gateway, 0x18daeff1, None): [
-      b'38897-TY3-A020\x00\x00',
-    ],
-     (Ecu.hud, 0x18da61f1, None): [
-      b'78209-TY3-A110\x00\x00',
-    ],
-    (Ecu.eps, 0x18da30f1, None): [
-      b'39990-TY3-J030\x00\x00',
+      b'8S302-TYA-A020\x00\x00',
     ],
   },
 }
