@@ -326,13 +326,10 @@ class CAR(Platforms):
     radar_dbc_dict('honda_clarity_hybrid_2018_can_generated'),
     flags=HondaFlags.HAS_ALL_DOOR_STATES,
   )
-  HONDA_ACCORD_9G = HondaNidecPlatformConfig(
-    [
-      HondaCarDocs("Honda Accord 2016-17")
-      HondaCarDocs("Honda Accord Hybrid 2017", "All")
-    ],
+  HONDA_ACCORD_4CYL_9TH_GEN = HondaNidecPlatformConfig(
+    [HondaCarDocs("Honda Accord 4-Cylinder 2016-17")],
     CarSpecs(mass=1487, wheelbase=2.75, centerToFrontRatio=0.39, steerRatio=13.66, tireStiffnessFactor=0.8467),  # 13.37 is end-to-end spec
-    radar_dbc_dict('honda_accord_2017_can_ext_generated'),
+    radar_dbc_dict('honda_accord_touring_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
 
@@ -353,8 +350,7 @@ STEER_THRESHOLD = {
   CAR.HONDA_CRV_EU: 400,
   CAR.HONDA_ACCORD_11G: 600,
   # port extensions
-  CAR.HONDA_ACCORD_9G: 30,
-}
+  CAR.HONDA_ACCORD_4CYL_9TH_GEN: 30,
 
 
 HONDA_ALT_VERSION_REQUEST = bytes([uds.SERVICE_TYPE.READ_DATA_BY_IDENTIFIER]) + \
