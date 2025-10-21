@@ -161,6 +161,82 @@ class CarController(CarControllerBase):
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
+# ----------------- test forced accel start -------------------
+      accel = 0.0
+      # plan: +0.5 / -0.5 / -2 / +1 / -1 / -2
+
+      if self.man_step == 0:
+        if CS.out.vEgo > 0.0:
+          accel = -1.0 # -0.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 1
+
+      if self.man_step == 1:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = -2.0
+        else:
+          self.man_step = 2
+
+      if self.man_step == 2:
+        if CS.out.vEgo < 4.47: # 10 mph
+          accel = 0.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 3
+
+      if self.man_step == 3:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = 0.0
+        else:
+          self.man_step = 4
+
+      if self.man_step == 4:
+        if CS.out.vEgo > 0.0:
+          accel = -0.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 5
+
+      if self.man_step == 5:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = -2.0
+        else:
+          self.man_step = 6
+
+      if self.man_step == 6:
+        if CS.out.vEgo < 4.47: # 10 mph
+          accel = 1.0
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 7
+
+      if self.man_step == 7:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = 0.0
+        else:
+          self.man_step = 8
+
+      if self.man_step == 8:
+        if CS.out.vEgo > 0.0:
+          accel = -1.0
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 9
+
+      if self.man_step == 9:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = -2.0
+        else:
+          self.man_step = 0
+
+    else:
+      accel = 0.0
+      self.calc_accel = 0.0
+      self.man_step = 0
+      self.last_time_frame = 0
+# ----------------- test forced accel end -------------------
+
     speed_control = 1 if ((accel <= 0.0) and (CS.out.vEgo == 0)) else 0
 
     # Send CAN commands
