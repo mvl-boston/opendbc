@@ -133,33 +133,6 @@ class CarController(CarControllerBase):
 
     if CC.longActive:
       accel = actuators.accel
-      if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)) and (accel > max(0, CS.out.aEgo) + 0.1):
-        accel = 10000.0 # help with lagged accel until pedal tuning is inserted
-      gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
-    else:
-      accel = 0.0
-      gas, brake = 0.0, 0.0
-
-    # *** rate limit steer ***
-    limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
-                                self.params.STEER_DELTA_UP * DT_CTRL)
-    self.last_torque = limited_torque
-
-    # *** apply brake hysteresis ***
-    pre_limit_brake, self.braking, self.brake_steady = actuator_hysteresis(brake, self.braking, self.brake_steady,
-                                                                           CS.out.vEgo, self.CP.carFingerprint)
-
-    # *** rate limit after the enable check ***
-    self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., DT_CTRL)
-
-    # vehicle hud display, wait for one update from 10Hz 0x304 msg
-    alert_fcw, alert_steer_required = process_hud_alert(hud_control.visualAlert)
-
-    # **** process the car messages ****
-
-    # steer torque is converted back to CAN reference (positive when steering right)
-    apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
-                                 self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
 # ----------------- test forced accel start -------------------
       accel = 0.0
@@ -236,6 +209,34 @@ class CarController(CarControllerBase):
       self.man_step = 0
       self.last_time_frame = 0
 # ----------------- test forced accel end -------------------
+
+      if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)) and (accel > max(0, CS.out.aEgo) + 0.1):
+        accel = 10000.0 # help with lagged accel until pedal tuning is inserted
+      gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
+    else:
+      accel = 0.0
+      gas, brake = 0.0, 0.0
+
+    # *** rate limit steer ***
+    limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
+                                self.params.STEER_DELTA_UP * DT_CTRL)
+    self.last_torque = limited_torque
+
+    # *** apply brake hysteresis ***
+    pre_limit_brake, self.braking, self.brake_steady = actuator_hysteresis(brake, self.braking, self.brake_steady,
+                                                                           CS.out.vEgo, self.CP.carFingerprint)
+
+    # *** rate limit after the enable check ***
+    self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., DT_CTRL)
+
+    # vehicle hud display, wait for one update from 10Hz 0x304 msg
+    alert_fcw, alert_steer_required = process_hud_alert(hud_control.visualAlert)
+
+    # **** process the car messages ****
+
+    # steer torque is converted back to CAN reference (positive when steering right)
+    apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
+                                 self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
     speed_control = 1 if ((accel <= 0.0) and (CS.out.vEgo == 0)) else 0
 
