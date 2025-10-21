@@ -216,7 +216,7 @@ class CarController(CarControllerBase):
       self.man_step = 0
       self.last_time_frame = 0
 # ---------------- forced accel end clearout -------------
-    
+
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
