@@ -219,7 +219,7 @@ class CarInterface(CarInterfaceBase):
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
       if not ret.openpilotLongitudinalControl:
         # When using stock ACC, the radar intercepts and filters steering commands the EPS would otherwise accept
-        ret.minSteerSpeed = 70. * CV.KPH_TO_MS
+        # ret.minSteerSpeed = 70. * CV.KPH_TO_MS - removing - new CI failure
 
     elif candidate in (CAR.HONDA_ACCORD_9G, CAR.ACURA_TLX_1G): # source mlocoteta
       ret.steerActuatorDelay = 0.3
