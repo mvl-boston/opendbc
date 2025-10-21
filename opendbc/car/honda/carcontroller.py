@@ -203,11 +203,6 @@ class CarController(CarControllerBase):
         else:
           self.man_step = 0
 
-    else:
-      accel = 0.0
-      self.calc_accel = 0.0
-      self.man_step = 0
-      self.last_time_frame = 0
 # ----------------- test forced accel end -------------------
 
       if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)) and (accel > max(0, CS.out.aEgo) + 0.1):
@@ -217,6 +212,11 @@ class CarController(CarControllerBase):
       accel = 0.0
       gas, brake = 0.0, 0.0
 
+# --------------- forced accel start clearout -------------
+      self.man_step = 0
+      self.last_time_frame = 0
+# ---------------- forced accel end clearout -------------
+    
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
