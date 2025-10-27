@@ -27,6 +27,7 @@ non_tested_cars = [
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
   HONDA.ACURA_TLX_2G_MMR,
+  HONDA.ACURA_TLX_2G,  # FIXME: replace expired route
 
   # port extensions
   HYUNDAI.KIA_CEED_PHEV_2022_NON_SCC,
@@ -52,9 +53,6 @@ non_tested_cars = [
   GM.CHEVROLET_TRAILBLAZER_NON_ACC_2ND_GEN,
   GM.CHEVROLET_MALIBU_NON_ACC_9TH_GEN,
   GM.CADILLAC_XT5_NON_ACC_1ST_GEN,
-
-  # Azure log exclusions
-  HONDA.ACURA_TLX_2G,
 ]
 
 
@@ -148,7 +146,6 @@ routes = [
   CarTestRoute("ad9840558640c31d/0000001a--d6cd4871c2", HONDA.ACURA_MDX_4G_MMR),  # 2025 MDX
   CarTestRoute("2dc4489d7e1410ca/00000001--bbec3f5117", HONDA.HONDA_CRV_6G),
   CarTestRoute("a703d058f4e05aeb/00000008--f169423024", HONDA.HONDA_PASSPORT_4G),
-  # CarTestRoute("58c4a49c7e193080/00000008--aed64b5ba8", HONDA.ACURA_TLX_2G),
   CarTestRoute("56b2cf1dacdcd033/00000017--d24ffdb376", HONDA.HONDA_CITY_7G),  # Brazilian model
   CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA),
   CarTestRoute("ad9840558640c31d/00000026--538590661c", HONDA.ACURA_ADX),
