@@ -365,8 +365,8 @@ class CAR(Platforms):
   ACURA_RLX = HondaNidecPlatformConfig(
     [], # 2017 RLX, don't add to cardocs since custom panda
     CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.39, steerRatio=13.9, tireStiffnessFactor=0.8467),  #spec, stiff/ctf from Accord
-#    {Bus.pt: 'acura_rlx_2017_can_generated', Bus.lkas: 'acura_rlx_2017_can_generated', Bus.radar: 'acura_ilx_2016_can_generated'},
-    {Bus.pt: 'acura_rlx_2017_can_generated', Bus.lkas: 'acura_rlx_2017_can_generated'}, #try no radar
+#    {Bus.pt: 'acura_rlx_2017_can_generated', Bus.alt: 'acura_rlx_2017_can_generated', Bus.radar: 'acura_ilx_2016_can_generated'},
+    {Bus.pt: 'acura_rlx_2017_can_generated', Bus.alt: 'acura_rlx_2017_can_generated'}, #try no radar
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   HONDA_PILOT = HondaNidecPlatformConfig(
