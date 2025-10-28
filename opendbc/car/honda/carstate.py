@@ -69,7 +69,7 @@ class CarState(CarStateBase):
     self.cruise_buttons = cp.vl["SCM_BUTTONS"]["CRUISE_BUTTONS"]
 
     # used for car hud message
-    self.is_metric = true if (self.CP.carFingerprint == CAR.ACURA_RLX) else (not cp.vl["CAR_SPEED"]["IMPERIAL_UNIT"])
+    self.is_metric = True if (self.CP.carFingerprint == CAR.ACURA_RLX) else (not cp.vl["CAR_SPEED"]["IMPERIAL_UNIT"])
     self.v_cruise_factor = CV.MPH_TO_MS if self.dynamic_v_cruise_units and not self.is_metric else CV.KPH_TO_MS
 
     # ******************* parse out can *******************
