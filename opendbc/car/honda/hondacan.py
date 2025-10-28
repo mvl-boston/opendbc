@@ -23,7 +23,7 @@ class CanBus(CanBusBase):
       # when radar is disabled, steering commands are sent directly to powertrain bus
       self._lkas = self._pt if CP.openpilotLongitudinalControl else self._radar
     elif CP.carFingerprint == CAR.ACURA_RLX:
-      self._pt, self._lkas = self.offset, self.offset + 1   
+      self._pt, self._lkas = self.offset, self.offset + 1
     else:
       self._pt, self._radar, self._lkas = self.offset, self.offset + 1, self.offset
 
