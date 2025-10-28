@@ -126,7 +126,7 @@ class CarState(CarStateBase):
     # Log non-critical stock ACC/LKAS faults if Nidec (camera) or longitudinal CANFD alt-brake
     if self.CP.carFingerprint not in HONDA_BOSCH:
       if self.CP.carFingerprint == CAR.ACURA_RLX:
-        ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"]) or cp_lkas.vl["LKAS_HUD"]["LKAS_PROBLEM"])
+        ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_lkas.vl["LKAS_HUD"]["LKAS_PROBLEM"])
       else:
         ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
 
