@@ -123,7 +123,8 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active):
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
   }
-  return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
+#  return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
+  return packer.make_can_msg("STEERING_CONTROL", 0, values)
 
 
 def create_bosch_supplemental_1(packer, CAN):
@@ -190,7 +191,7 @@ def create_ui_commands(packer, CAN, CP, enabled, pcm_speed, hud, is_metric, acc_
     commands.append(packer.make_can_msg('LKAS_HUD_A', CAN.lkas, lkas_hud_values))
     commands.append(packer.make_can_msg('LKAS_HUD_B', CAN.lkas, lkas_hud_values))
   else:
-    commands.append(packer.make_can_msg('LKAS_HUD', CAN.lkas, lkas_hud_values))
+    commands.append(packer.make_can_msg('LKAS_HUD', 0, lkas_hud_values))
 
   if radar_disabled:
     radar_hud_values = {

@@ -55,10 +55,15 @@ class CarInterface(CarInterfaceBase):
       ret.openpilotLongitudinalControl = alpha_long
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
-      ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
+      # ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
+      cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
       ret.openpilotLongitudinalControl = True
       ret.stoppingDecelRate = 0.3
       ret.pcmCruise = True
+      if candidate == CAR.ACURA_RLX_HYBRID:
+        cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.allOutput))
+        # ret.radarUnavailable = True
+      ret.safetyConfigs = cfgs
 
     if candidate == CAR.HONDA_CRV_5G:
       ret.enableBsm = 0x12f8bfa7 in fingerprint[CAN.radar]
@@ -186,6 +191,7 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate == CAR.ACURA_RLX_HYBRID: # copying MDX
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 239], [0, 239]]
+      # ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2047], [0, 2047]]
       ret.lateralTuning.pid.kf = 0.000035
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
