@@ -59,7 +59,8 @@ class CarInterface(CarInterfaceBase):
       ret.openpilotLongitudinalControl = True
       ret.stoppingDecelRate = 0.3
       ret.pcmCruise = True
-      # if candidate == CAR.ACURA_RLX_HYBRID:
+      if candidate == CAR.ACURA_RLX_HYBRID:
+        cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.hondaNidec))
       #   ret.radarUnavailable = True
 
     if candidate == CAR.HONDA_CRV_5G:
