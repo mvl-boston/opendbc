@@ -55,13 +55,15 @@ class CarInterface(CarInterfaceBase):
       ret.openpilotLongitudinalControl = alpha_long
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
-      ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
+      # ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
+      cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
       ret.openpilotLongitudinalControl = True
       ret.stoppingDecelRate = 0.3
       ret.pcmCruise = True
       if candidate == CAR.ACURA_RLX_HYBRID:
         cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.hondaNidec))
-      #   ret.radarUnavailable = True
+        # ret.radarUnavailable = True
+      ret.safetyConfigs = cfgs
 
     if candidate == CAR.HONDA_CRV_5G:
       ret.enableBsm = 0x12f8bfa7 in fingerprint[CAN.radar]
