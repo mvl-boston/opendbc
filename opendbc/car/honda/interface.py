@@ -61,7 +61,7 @@ class CarInterface(CarInterfaceBase):
       ret.stoppingDecelRate = 0.3
       ret.pcmCruise = True
       if candidate == CAR.ACURA_RLX_HYBRID:
-        cfgs.insert(0, get_safety_config(structs.CarParams.SafetyModel.hondaNidec))
+        cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.allOutput))
         # ret.radarUnavailable = True
       ret.safetyConfigs = cfgs
 
