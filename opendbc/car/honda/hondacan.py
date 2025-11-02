@@ -117,8 +117,17 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
         'BOH_3': CS.voacc_camera['BOH_3'],
         'BOH_4': CS.voacc_camera['BOH_4'],
       }
-    else:
-      voacc_camera_values = CS.voacc_camera
+    else: # try clean pass through
+      voacc_camera_values = {
+        'LEAD_DISTANCE_OBSERVED': CS.voacc_camera['LEAD_DISTANCE_OBSERVED'],
+        'LEAD_DISTANCE_TARGET': CS.voacc_camera['LEAD_DISTANCE_TARGET'],
+        'SET_ME_X01': CS.voacc_camera['SET_ME_X01'],
+        'SET_ME_X01_2': CS.voacc_camera['SET_ME_X01_2'],
+        'BOH': CS.voacc_camera['BOH'],
+        'BOH_2': CS.voacc_camera['BOH_2'],
+        'BOH_3': CS.voacc_camera['BOH_3'],
+        'BOH_4': CS.voacc_camera['BOH_4'],
+      }
     commands.append(packer.make_can_msg("VOACC_CAMERA", CAN.pt, voacc_camera_values))
 
   else:
