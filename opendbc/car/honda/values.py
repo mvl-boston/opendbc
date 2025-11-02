@@ -6,8 +6,6 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column, Device
 from opendbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries, p16
 
-from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
-
 Ecu = structs.CarParams.Ecu
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 GearShifter = structs.CarState.GearShifter
@@ -355,7 +353,15 @@ class CAR(Platforms):
     CarSpecs(mass=1834, wheelbase=2.75, centerToFrontRatio=0.4, steerRatio=16.5),
     radar_dbc_dict('honda_clarity_hybrid_2018_can_generated'),
     flags=HondaFlags.HAS_ALL_DOOR_STATES,
-    sp_flags=HondaFlagsSP.CLARITY,
+  )
+  ACURA_TLX_1G = HondaNidecPlatformConfig(
+    [
+      HondaCarDocs("Acura TLX 2015-17", "Advance Package"),
+      HondaCarDocs("Acura TLX 2018-20", "All"),
+    ],
+    CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=15.1, centerToFrontRatio=0.40),  # as spec
+    radar_dbc_dict('acura_mdx_2017_can_ext_generated'),
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
 
 
@@ -380,6 +386,8 @@ STEER_THRESHOLD = {
   CAR.HONDA_CRV_6G: 600,
   CAR.HONDA_CITY_7G: 600,
   CAR.HONDA_NBOX_2G: 600,
+  # port extensions
+  CAR.ACURA_TLX_1G: 30,
 }
 
 
