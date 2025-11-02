@@ -39,7 +39,6 @@ non_tested_cars = [
   HYUNDAI.KIA_SELTOS_2023_NON_SCC,
   HYUNDAI.GENESIS_G70_2021_NON_SCC,
   HONDA.HONDA_CLARITY,
-  TOYOTA.TOYOTA_WILDLANDER,
   GM.CHEVROLET_BOLT_NON_ACC,
   GM.CHEVROLET_BOLT_NON_ACC_1ST_GEN,
   GM.CHEVROLET_BOLT_NON_ACC_2ND_GEN,
@@ -353,4 +352,7 @@ routes = [
   # Segments that test specific issues
   # Controls mismatch due to standstill threshold
   CarTestRoute("bec2dcfde6a64235/2022-04-08--14-21-32", HONDA.HONDA_CRV_HYBRID, segment=22),
+
+  # port extensions
+    CarTestRoute("21ea2d289932890b/00000001--8bffd57376", HONDA.HONDA_ACCORD_9G),  # with pedal interceptor
 ]
