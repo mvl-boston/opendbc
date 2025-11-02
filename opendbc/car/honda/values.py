@@ -55,6 +55,7 @@ class HondaSafetyFlags(IntFlag):
   NIDEC_ALT = 4
   RADARLESS = 8
   BOSCH_CANFD = 16
+  NIDEC_HYBRID = 32
 
 
 class HondaFlags(IntFlag):
@@ -76,6 +77,7 @@ class HondaFlags(IntFlag):
   HAS_ALL_DOOR_STATES = 256  # Some Hondas have all door states, others only driver door
   HAS_EPB = 512
   ALLOW_MANUAL_TRANS = 1024
+  HYBRID = 2048
 
 
 # Car button codes
@@ -294,6 +296,12 @@ class CAR(Platforms):
     radar_dbc_dict('honda_fit_ex_2018_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
+  ACURA_RLX_HYBRID = HondaNidecPlatformConfig(
+    [], # 2017 RLX Hybrid, don't add to cardocs since custom panda
+    CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.39, steerRatio=13.9, tireStiffnessFactor=0.8467),  #spec, stiff/ctf from Accord
+    radar_dbc_dict('acura_rlx_2017_can_generated'),
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
+  )
   HONDA_ODYSSEY = HondaNidecPlatformConfig(
     [HondaCarDocs("Honda Odyssey 2018-20")],
     CarSpecs(mass=1900, wheelbase=3.0, steerRatio=14.35, centerToFrontRatio=0.41, tireStiffnessFactor=0.82),
@@ -391,9 +399,9 @@ FW_QUERY_CONFIG = FwQueryConfig(
   # Note that we still attempt to match with them when they are present
   # This is or'd with (ALL_ECUS - ESSENTIAL_ECUS) from fw_versions.py
   non_essential_ecus={
-    Ecu.eps: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC_2022, CAR.HONDA_E, CAR.HONDA_HRV_3G, *HONDA_BOSCH_CANFD],
+    Ecu.eps: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC_2022, CAR.HONDA_E, CAR.HONDA_HRV_3G, *HONDA_BOSCH_CANFD, CAR.ACURA_RLX_HYBRID],
     Ecu.vsa: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_2022, CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID,
-              CAR.HONDA_E, CAR.HONDA_HRV_3G, CAR.HONDA_INSIGHT, *HONDA_BOSCH_CANFD],
+              CAR.HONDA_E, CAR.HONDA_HRV_3G, CAR.HONDA_INSIGHT, *HONDA_BOSCH_CANFD, CAR.ACURA_RLX_HYBRID],
   },
   extra_ecus=[
     (Ecu.combinationMeter, 0x18da60f1, None),
