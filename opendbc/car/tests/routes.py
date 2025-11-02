@@ -24,6 +24,7 @@ non_tested_cars = [
   GM.HOLDEN_ASTRA,
   GM.CHEVROLET_MALIBU,
   HONDA.HONDA_ACCORD_9G,
+  HONDA.ACURA_MDX_3G, # testroute expired, will ask new one nearer to upstream
   HONDA.ACURA_TLX_1G,
   HYUNDAI.GENESIS_G90,
   HONDA.ACURA_RLX, # TODO: get route once tuning done
@@ -123,7 +124,7 @@ routes = [
   CarTestRoute("2dc4489d7e1410ca/00000001--bbec3f5117", HONDA.HONDA_CRV_6G),
   CarTestRoute("a703d058f4e05aeb/00000008--f169423024", HONDA.HONDA_PASSPORT_4G),
   CarTestRoute("58c4a49c7e193080/00000008--aed64b5ba8", HONDA.ACURA_TLX_2G),
-  CarTestRoute("ad9840558640c31d/00000018--6d4b733a6a", HONDA.ACURA_MDX_3G),
+  # CarTestRoute("ad9840558640c31d/00000018--6d4b733a6a", HONDA.ACURA_MDX_3G), expired - need new route
   CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA),
   CarTestRoute("21ea2d289932890b/00000134--3862dfe91d", HONDA.HONDA_ACCORD_9G), # serial steering - dashcam in upstream
   CarTestRoute("ad9840558640c31d/0000003d--a35002b59f", HONDA.ACURA_MDX_3G_MMR), # Hybrid
