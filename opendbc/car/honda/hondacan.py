@@ -1,7 +1,7 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_RADARLESS,
-                                      HONDA_BOSCH_CANFD, CarControllerParams)
+                                      HONDA_BOSCH_CANFD, CarControllerParams, CAR)
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -48,25 +48,44 @@ class CanBus(CanBusBase):
 
 def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_cancel_cmd, fcw, car_fingerprint, stock_brake):
   # TODO: do we loose pressure if we keep pump off for long?
+  if car_fingerprint == CAR.HONDA_CLARITY:
+    pump_on = apply_brake > 0
   brakelights = apply_brake > 0
   brake_rq = apply_brake > 0
   pcm_fault_cmd = False
 
-  values = {
-    "COMPUTER_BRAKE": apply_brake,
-    "BRAKE_PUMP_REQUEST": pump_on,
-    "CRUISE_OVERRIDE": pcm_override,
-    "CRUISE_FAULT_CMD": pcm_fault_cmd,
-    "CRUISE_CANCEL_CMD": pcm_cancel_cmd,
-    "COMPUTER_BRAKE_REQUEST": brake_rq,
-    "SET_ME_1": 1,
-    "BRAKE_LIGHTS": brakelights,
-    "CHIME": stock_brake["CHIME"] if fcw else 0,  # send the chime for stock fcw
-    "FCW": fcw << 1,  # TODO: Why are there two bits for fcw?
-    "AEB_REQ_1": 0,
-    "AEB_REQ_2": 0,
-    "AEB_STATUS": 0,
-  }
+  if car_fingerprint == CAR.HONDA_CLARITY:
+    values = {
+      "COMPUTER_BRAKE_HYBRID": apply_brake,
+      "BRAKE_PUMP_REQUEST_HYBRID": pump_on,
+      "CRUISE_OVERRIDE": pcm_override,
+      "CRUISE_FAULT_CMD": pcm_fault_cmd,
+      "CRUISE_CANCEL_CMD": pcm_cancel_cmd,
+      "COMPUTER_BRAKE_REQUEST": brake_rq,
+      "SET_ME_1": 1,
+      "BRAKE_LIGHTS": brakelights,
+      "CHIME": stock_brake["CHIME"] if fcw else 0,  # send the chime for stock fcw
+      "FCW": fcw << 1,  # TODO: Why are there two bits for fcw?
+      "AEB_REQ_1": 0,
+      "AEB_REQ_2": 0,
+      "AEB_STATUS": 0,
+    }
+  else:
+    values = {
+      "COMPUTER_BRAKE": apply_brake,
+      "BRAKE_PUMP_REQUEST": pump_on,
+      "CRUISE_OVERRIDE": pcm_override,
+      "CRUISE_FAULT_CMD": pcm_fault_cmd,
+      "CRUISE_CANCEL_CMD": pcm_cancel_cmd,
+      "COMPUTER_BRAKE_REQUEST": brake_rq,
+      "SET_ME_1": 1,
+      "BRAKE_LIGHTS": brakelights,
+      "CHIME": stock_brake["CHIME"] if fcw else 0,  # send the chime for stock fcw
+      "FCW": fcw << 1,  # TODO: Why are there two bits for fcw?
+      "AEB_REQ_1": 0,
+      "AEB_REQ_2": 0,
+      "AEB_STATUS": 0,
+    }
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
