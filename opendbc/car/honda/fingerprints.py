@@ -1191,6 +1191,11 @@ FW_VERSIONS = {
       b'77959-3BH-A830\x00\x00',
     ],
   },
+  CAR.ACURA_ADX: {
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'8S102-3BH-A020\x00\x00',
+    ],
+  },
 }
 
 FW_VERSIONS = merge_fw_versions(FW_VERSIONS, FW_VERSIONS_EXT)
