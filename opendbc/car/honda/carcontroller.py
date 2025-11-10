@@ -245,9 +245,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           elif (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
             # perform a gas-only pid
             gas_error = self.accel - CS.out.aEgo
-            self.gasonly_pid.neg_limit = self.params.BOSCH_ACCEL_MIN
-            self.gasonly_pid.pos_limit = self.params.BOSCH_ACCEL_MAX
-            gas_pedal_force = self.gasonly_pid.update(gas_error, speed=CS.out.vEgo, feedforward=self.accel)
+            gas_pedal_force = self.accel + self.gasonly_pid.update(gas_error, speed=CS.out.vEgo, feedforward=self.accel)
             gas_pedal_force += wind_brake_ms2 + hill_brake
           else:
             gas_pedal_force = self.accel
