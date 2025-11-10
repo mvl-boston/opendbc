@@ -290,7 +290,6 @@ class CAR(Platforms):
   )
   ACURA_INTEGRA = HondaBoschPlatformConfig(
     [
-      HondaCarDocs("Acura ADX 2025-26", "All"),
       HondaCarDocs("Acura Integra 2023-26", "All"),
       HondaCarDocs("Honda Prelude 2026", "All"),
     ],
