@@ -1118,7 +1118,6 @@ FW_VERSIONS = {
       b'36161-TGV-A030\x00\x00',
     ],
   },
-<<<<<<< HEAD
   CAR.ACURA_INTEGRA: {
     (Ecu.eps, 0x18da30f1, None): [
       b'39990-T38-A040\x00\x00',
