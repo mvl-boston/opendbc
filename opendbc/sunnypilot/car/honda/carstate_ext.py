@@ -12,6 +12,7 @@ from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.carlog import carlog
 
+
 class CarStateExt:
   def __init__(self, CP, CP_SP):
     self.CP = CP
