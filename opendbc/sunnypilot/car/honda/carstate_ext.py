@@ -10,7 +10,7 @@ from opendbc.car import Bus, structs
 from opendbc.can.parser import CANParser
 from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
 from opendbc.car.common.conversions import Conversions as CV
-
+from opendbc.car.carlog import carlog
 
 class CarStateExt:
   def __init__(self, CP, CP_SP):
@@ -23,6 +23,8 @@ class CarStateExt:
 
     speed_limit = cp_cam.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"]
     ret_sp.speedlimit = (speed_limit - 96) * 5 * CV.MPH_TO_MS if (speed_limit > 96 and speed_limit < 125) else 0
+
+    carlog.error({"speed_limit": speed_limit, "speedlimit": ret_sp.speedlimit})
 
     if self.CP_SP.flags & HondaFlagsSP.HYBRID_ALT_BRAKEHOLD:
       ret.brakeHoldActive = cp.vl["BRAKE_HOLD_HYBRID_ALT"]["BRAKE_HOLD_ACTIVE"] == 1
