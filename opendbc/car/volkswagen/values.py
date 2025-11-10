@@ -2,8 +2,8 @@ from collections import defaultdict, namedtuple
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag, StrEnum
 
-from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, structs, uds
-from opendbc.can.can_define import CANDefine
+from opendbc.car import Bus, CanBusBase, CarSpecs, DbcDict, PlatformConfig, Platforms, structs, uds
+from opendbc.can import CANDefine
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column, \
                                                      Device
@@ -15,6 +15,36 @@ NetworkLocation = structs.CarParams.NetworkLocation
 TransmissionType = structs.CarParams.TransmissionType
 GearShifter = structs.CarState.GearShifter
 Button = namedtuple('Button', ['event_type', 'can_addr', 'can_msg', 'values'])
+
+
+class CanBus(CanBusBase):
+  def __init__(self, CP=None, fingerprint=None) -> None:
+    super().__init__(CP, fingerprint)
+
+    self._ext = self.offset
+    if CP is not None:
+      self._ext = self.offset + 2 if CP.networkLocation == NetworkLocation.gateway else self.offset
+
+  @property
+  def pt(self) -> int:
+    # ADAS / Extended CAN, gateway side of the relay
+    return self.offset
+
+  @property
+  def aux(self) -> int:
+    # NetworkLocation.fwdCamera: radar-camera object fusion CAN
+    # NetworkLocation.gateway: powertrain CAN
+    return self.offset + 1
+
+  @property
+  def cam(self) -> int:
+    # ADAS / Extended CAN, camera side of the relay
+    return self.offset + 2
+
+  @property
+  def ext(self) -> int:
+    # ADAS / Extended CAN, side of the relay with the ACC radar
+    return self._ext
 
 
 class CarControllerParams:
@@ -51,7 +81,7 @@ class CarControllerParams:
       self.STEER_DELTA_DOWN = 10          # Min HCA reached in 0.60s (STEER_MAX / (50Hz * 0.60))
 
       if CP.transmissionType == TransmissionType.automatic:
-        self.shifter_values = can_define.dv["Getriebe_1"]["Waehlhebelposition__Getriebe_1_"]
+        self.shifter_values = can_define.dv["Getriebe_1"]["GE1_Wahl_Pos"]
       self.hca_status_values = can_define.dv["Lenkhilfe_2"]["LH2_Sta_HCA"]
 
       self.BUTTONS = [
@@ -60,7 +90,7 @@ class CarControllerParams:
         Button(structs.CarState.ButtonEvent.Type.accelCruise, "GRA_Neu", "GRA_Up_kurz", [1]),
         Button(structs.CarState.ButtonEvent.Type.decelCruise, "GRA_Neu", "GRA_Down_kurz", [1]),
         Button(structs.CarState.ButtonEvent.Type.cancel, "GRA_Neu", "GRA_Abbrechen", [1]),
-        Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "GRA_Neu", "GRA_Zeitluecke", [1]),
+        Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "GRA_Neu", "GRA_Zeitluecke", [3]),
       ]
 
       self.LDW_MESSAGES = {
@@ -75,24 +105,43 @@ class CarControllerParams:
     else:
       self.LDW_STEP = 10                  # LDW_02 message frequency 10Hz
       self.ACC_HUD_STEP = 6               # ACC_02 message frequency 16Hz
-      self.STEER_DRIVER_ALLOWANCE = 80    # Driver intervention threshold 0.8 Nm
-      self.STEER_DELTA_UP = 4             # Max HCA reached in 1.50s (STEER_MAX / (50Hz * 1.50))
-      self.STEER_DELTA_DOWN = 10          # Min HCA reached in 0.60s (STEER_MAX / (50Hz * 0.60))
 
-      if CP.transmissionType == TransmissionType.automatic:
-        self.shifter_values = can_define.dv["Gateway_73"]["GE_Fahrstufe"]
-      elif CP.transmissionType == TransmissionType.direct:
-        self.shifter_values = can_define.dv["Motor_EV_01"]["MO_Waehlpos"]
       self.hca_status_values = can_define.dv["LH_EPS_03"]["EPS_HCA_Status"]
 
-      self.BUTTONS = [
-        Button(structs.CarState.ButtonEvent.Type.setCruise, "GRA_ACC_01", "GRA_Tip_Setzen", [1]),
-        Button(structs.CarState.ButtonEvent.Type.resumeCruise, "GRA_ACC_01", "GRA_Tip_Wiederaufnahme", [1]),
-        Button(structs.CarState.ButtonEvent.Type.accelCruise, "GRA_ACC_01", "GRA_Tip_Hoch", [1]),
-        Button(structs.CarState.ButtonEvent.Type.decelCruise, "GRA_ACC_01", "GRA_Tip_Runter", [1]),
-        Button(structs.CarState.ButtonEvent.Type.cancel, "GRA_ACC_01", "GRA_Abbrechen", [1]),
-        Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "GRA_ACC_01", "GRA_Verstellung_Zeitluecke", [1]),
-      ]
+      if CP.flags & VolkswagenFlags.MLB:
+        self.STEER_DRIVER_ALLOWANCE = 60  # Driver intervention threshold 0.6 Nm
+        self.STEER_DELTA_UP = 9  # Max HCA reached in 0.66s (STEER_MAX / (50Hz * 0.66))
+        self.STEER_DELTA_DOWN = 10  # Min HCA reached in 0.60s (STEER_MAX / (50Hz * 0.60))
+
+        self.shifter_values = can_define.dv["Getriebe_03"]["GE_Waehlhebel"]
+
+        self.BUTTONS = [
+          Button(structs.CarState.ButtonEvent.Type.setCruise, "LS_01", "LS_Tip_Setzen", [1]),
+          Button(structs.CarState.ButtonEvent.Type.resumeCruise, "LS_01", "LS_Tip_Wiederaufnahme", [1]),
+          Button(structs.CarState.ButtonEvent.Type.accelCruise, "LS_01", "LS_Tip_Hoch", [1]),
+          Button(structs.CarState.ButtonEvent.Type.decelCruise, "LS_01", "LS_Tip_Runter", [1]),
+          Button(structs.CarState.ButtonEvent.Type.cancel, "LS_01", "LS_Abbrechen", [1]),
+          Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "LS_01", "LS_Verstellung_Zeitluecke", [1]),
+        ]
+
+      else:
+        self.STEER_DRIVER_ALLOWANCE = 80    # Driver intervention threshold 0.8 Nm
+        self.STEER_DELTA_UP = 4             # Max HCA reached in 1.50s (STEER_MAX / (50Hz * 1.50))
+        self.STEER_DELTA_DOWN = 10          # Min HCA reached in 0.60s (STEER_MAX / (50Hz * 0.60))
+
+        if CP.transmissionType == TransmissionType.automatic:
+          self.shifter_values = can_define.dv["Gateway_73"]["GE_Fahrstufe"]
+        elif CP.transmissionType == TransmissionType.direct:
+          self.shifter_values = can_define.dv["Motor_EV_01"]["MO_Waehlpos"]
+
+        self.BUTTONS = [
+          Button(structs.CarState.ButtonEvent.Type.setCruise, "GRA_ACC_01", "GRA_Tip_Setzen", [1]),
+          Button(structs.CarState.ButtonEvent.Type.resumeCruise, "GRA_ACC_01", "GRA_Tip_Wiederaufnahme", [1]),
+          Button(structs.CarState.ButtonEvent.Type.accelCruise, "GRA_ACC_01", "GRA_Tip_Hoch", [1]),
+          Button(structs.CarState.ButtonEvent.Type.decelCruise, "GRA_ACC_01", "GRA_Tip_Runter", [1]),
+          Button(structs.CarState.ButtonEvent.Type.cancel, "GRA_ACC_01", "GRA_Abbrechen", [1]),
+          Button(structs.CarState.ButtonEvent.Type.gapAdjustCruise, "GRA_ACC_01", "GRA_Verstellung_Zeitluecke", [1]),
+        ]
 
       self.LDW_MESSAGES = {
         "none": 0,                            # Nothing to display
@@ -105,11 +154,6 @@ class CarControllerParams:
         "emergencyAssistChangingLanes": 9,    # "Emergency Assist: Changing lanes..." with urgent beep
         "laneAssistDeactivated": 10,          # "Lane Assist deactivated." silent with persistent icon afterward
       }
-
-
-class CANBUS:
-  pt = 0
-  cam = 2
 
 
 class WMI(StrEnum):
@@ -125,6 +169,7 @@ class WMI(StrEnum):
   AUDI_EUROPE_MPV = "WA1"
   AUDI_GERMANY_CAR = "WAU"
   MAN = "WMA"
+  PORSCHE_SUV = "WP1"
   AUDI_SPORT = "WUA"
   VOLKSWAGEN_COMMERCIAL = "WV1"
   VOLKSWAGEN_COMMERCIAL_BUS_VAN = "WV2"
@@ -140,9 +185,21 @@ class VolkswagenSafetyFlags(IntFlag):
 class VolkswagenFlags(IntFlag):
   # Detected flags
   STOCK_HCA_PRESENT = 1
+  KOMBI_PRESENT = 4
 
   # Static flags
   PQ = 2
+  MLB = 8
+
+
+@dataclass
+class VolkswagenMLBPlatformConfig(PlatformConfig):
+  dbc_dict: DbcDict = field(default_factory=lambda: {Bus.pt: 'vw_mlb'})
+  chassis_codes: set[str] = field(default_factory=set)
+  wmis: set[WMI] = field(default_factory=set)
+
+  def init(self):
+    self.flags |= VolkswagenFlags.MLB
 
 
 @dataclass
@@ -324,7 +381,7 @@ class CAR(Platforms):
     wmis={WMI.VOLKSWAGEN_EUROPE_CAR},
   )
   VOLKSWAGEN_TAOS_MK1 = VolkswagenMQBPlatformConfig(
-    [VWCarDocs("Volkswagen Taos 2022-23")],
+    [VWCarDocs("Volkswagen Taos 2022-24")],
     VolkswagenCarSpecs(mass=1498, wheelbase=2.69),
     chassis_codes={"B2"},
     wmis={WMI.VOLKSWAGEN_MEXICO_SUV, WMI.VOLKSWAGEN_ARGENTINA},
@@ -337,7 +394,7 @@ class CAR(Platforms):
   )
   VOLKSWAGEN_TIGUAN_MK2 = VolkswagenMQBPlatformConfig(
     [
-      VWCarDocs("Volkswagen Tiguan 2018-23"),
+      VWCarDocs("Volkswagen Tiguan 2018-24"),
       VWCarDocs("Volkswagen Tiguan eHybrid 2021-23"),
     ],
     VolkswagenCarSpecs(mass=1715, wheelbase=2.74),
@@ -383,10 +440,16 @@ class CAR(Platforms):
     wmis={WMI.AUDI_GERMANY_CAR},
   )
   AUDI_Q3_MK2 = VolkswagenMQBPlatformConfig(
-    [VWCarDocs("Audi Q3 2019-23")],
+    [VWCarDocs("Audi Q3 2019-24")],
     VolkswagenCarSpecs(mass=1623, wheelbase=2.68),
     chassis_codes={"8U", "F3", "FS"},
     wmis={WMI.AUDI_EUROPE_MPV, WMI.AUDI_GERMANY_CAR},
+  )
+  PORSCHE_MACAN_MK1 = VolkswagenMLBPlatformConfig(
+    [VWCarDocs("Porsche Macan 2017-24")],
+    VolkswagenCarSpecs(mass=1895, wheelbase=2.81, steerRatio=16.2),
+    chassis_codes={"95", "A5"},
+    wmis={WMI.PORSCHE_SUV},
   )
   SEAT_ATECA_MK1 = VolkswagenMQBPlatformConfig(
     [
