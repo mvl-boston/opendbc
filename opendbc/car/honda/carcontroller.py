@@ -128,7 +128,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
   def update(self, CC, CC_SP, CS, now_nanos):
     pid_output = 0.0
     gas_pedal_force = 0.0
-    
+
     MadsCarController.update(self, self.CP, CC, CC_SP)
     actuators = CC.actuators
     hud_control = CC.hudControl
