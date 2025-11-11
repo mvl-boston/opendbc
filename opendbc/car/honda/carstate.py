@@ -240,7 +240,7 @@ class CarState(CarStateBase, CarStateExt):
 
     CarStateExt.update(self, ret, ret_sp, can_parsers)
 
-    carlog.error({"return_speed_limit": ret_sp.speedlimit})
+    carlog.error({"return_speed_limit": ret_sp.speedLimit})
 
     return ret, ret_sp
 
