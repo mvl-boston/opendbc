@@ -23,9 +23,9 @@ class CarStateExt:
     cp_cam = can_parsers[Bus.cam]
 
     speed_limit = cp_cam.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"]
-    ret_sp.speedlimit = (speed_limit - 96.0) * 5.0 * CV.MPH_TO_MS if (speed_limit > 96 and speed_limit < 125) else 0.0
+    ret_sp.speedLimit = (speed_limit - 96.0) * 5.0 * CV.MPH_TO_MS if (speed_limit > 96 and speed_limit < 125) else 0.0
 
-    carlog.error({"speed_limit": speed_limit, "speedlimit": ret_sp.speedlimit})
+    carlog.error({"speed_limit": speed_limit, "speedlimit": ret_sp.speedLimit})
 
     if self.CP_SP.flags & HondaFlagsSP.HYBRID_ALT_BRAKEHOLD:
       ret.brakeHoldActive = cp.vl["BRAKE_HOLD_HYBRID_ALT"]["BRAKE_HOLD_ACTIVE"] == 1
