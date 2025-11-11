@@ -245,7 +245,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           elif (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
             # perform a gas-only pid
             gas_error = self.accel - CS.out.aEgo
-            gas_pedal_force = self.accel + self.gasonly_pid.update(gas_error, speed=CS.out.vEgo, feedforward=self.accel)
+            pid_output = self.gasonly_pid.update(gas_error, speed=CS.out.vEgo, feedforward=self.accel)
+            gas_pedal_force = self.accel + pid_output
             gas_pedal_force += wind_brake_ms2 + hill_brake
           else:
             gas_pedal_force = self.accel
@@ -308,8 +309,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     new_actuators = actuators.as_builder()
     new_actuators.speed = self.speed
     new_actuators.accel = self.accel
-    new_actuators.gas = self.gas
-    new_actuators.brake = self.brake
+    new_actuators.gas = pid_output
+    new_actuators.brake = gas_pedal_force
     new_actuators.torque = self.last_torque
     new_actuators.torqueOutputCan = apply_torque
 
