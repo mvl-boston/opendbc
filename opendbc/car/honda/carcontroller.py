@@ -7,7 +7,7 @@ from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
-from opendbc.car.common.pid import PIDController
+# from opendbc.car.common.pid import PIDController
 from opendbc.car.common.conversions import Conversions as CV
 
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
@@ -119,10 +119,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.last_torque = 0.0 # last eps torque
     self.steeringTorque_last = 0.0 # last driver torque
     # try new Bosch pid
-    self.gasonly_pid = PIDController(k_p=([0,], [0.5,]),
-                                     k_i=([0,], [0.,]),
+    #self.gasonly_pid = PIDController(k_p=([0,], [0.5,]),
+                                     #k_i=([0,], [0.,]),
                                      # k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
-                                     k_f=1, rate= 1 / DT_CTRL / 2)
+                                     #k_f=1, rate= 1 / DT_CTRL / 2)
+    self.gasfactor = 1.0
+    self.windfactor = 1.0
     self.pitch = 0.0
 
   def update(self, CC, CC_SP, CS, now_nanos):
@@ -247,15 +249,19 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             gas_pedal_force = self.accel # radarless does not need a pid
           elif (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
             # perform a gas-only pid
+            # pid_output = self.gasonly_pid.update(gas_error, speed=CS.out.vEgo, feedforward=self.accel)
+            #gas_pedal_force = self.accel + pid_output
+            gas_pedal_force = self.accel
+            gas_pedal_force += wind_brake_ms2 * self.windfactor + hill_brake
             gas_error = self.accel - CS.out.aEgo
-            pid_output = self.gasonly_pid.update(gas_error, speed=CS.out.vEgo, feedforward=self.accel)
-            gas_pedal_force = self.accel + pid_output
-            gas_pedal_force += wind_brake_ms2 + hill_brake
+            if gas_error != 0.0 and gas_pedal_force > 0.0:
+              self.windfactor *= 1.002 if (gas_error > 0) else 1.0/1.002 # doubling in 10 sec if always in same direction
+              self.gasfactor += gas_error / 50 / gas_pedal_force # correct over 1 sec at 50 fps            
           else:
             gas_pedal_force = self.accel
-            self.gasonly_pid.reset()
+            # self.gasonly_pid.reset()
             gas_pedal_force += wind_brake_ms2 + hill_brake
-          self.gas = float(np.interp(gas_pedal_force, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+          self.gas = float(np.interp(gas_pedal_force * self.gasfactor, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
