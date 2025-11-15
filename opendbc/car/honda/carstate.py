@@ -33,7 +33,8 @@ class CarState(CarStateBase):
     if CP.carFingerprint in HONDA_NIDEC_ALT_SCM_MESSAGES:
       self.car_state_scm_msg = "SCM_BUTTONS"
 
-    self.brake_error_msg = "HYBRID_BRAKE_ERROR" if CP.flags & HondaFlags.HYBRID else "STANDSTILL"
+    self.brake_error_msg = "STANDSTILL"
+    # self.brake_error_msg = "HYBRID_BRAKE_ERROR" if CP.flags & HondaFlags.HYBRID else "STANDSTILL"
 
     self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
 
@@ -156,7 +157,7 @@ class CarState(CarStateBase):
 
     ret.gasPressed = cp.vl["POWERTRAIN_DATA"]["PEDAL_GAS"] > 1e-5
 
-    if self.CP.carFingerprint != CAR.ACURA_RLX_HYBRID:
+    if False # self.CP.carFingerprint != CAR.ACURA_RLX_HYBRID:
       ret.steeringTorque = cp.vl["STEER_MOTOR_TORQUE"]["MOTOR_TORQUE"]
     else:
       ret.steeringTorque = cp.vl["STEER_STATUS"]["STEER_TORQUE_SENSOR"]
