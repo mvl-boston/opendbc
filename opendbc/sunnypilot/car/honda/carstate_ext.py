@@ -8,6 +8,7 @@ from enum import StrEnum
 
 from opendbc.car import Bus, structs
 from opendbc.can.parser import CANParser
+from opendbc.car.honda.values import (HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD, CarControllerParams)
 from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
 from opendbc.car.common.conversions import Conversions as CV
 
