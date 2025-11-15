@@ -189,12 +189,12 @@ class CarController(CarControllerBase):
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
-        # can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
+        pass # can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
       # If using stock ACC, spam cancel command to kill gas when OP disengages.
       if pcm_cancel_cmd:
-        # can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.CANCEL, self.CP.carFingerprint))
+        pass # can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.CANCEL, self.CP.carFingerprint))
       elif CC.cruiseControl.resume:
-        # can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
+        pass # can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
 
     else:
       # Send gas and brake commands.
@@ -225,7 +225,7 @@ class CarController(CarControllerBase):
     if self.frame % 10 == 0:
       if self.CP.openpilotLongitudinalControl:
         # On Nidec, this also controls longitudinal positive acceleration
-        # can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
+        pass # can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
         #                                         hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
@@ -236,9 +236,9 @@ class CarController(CarControllerBase):
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
         if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS):
-          # can_sends.append(hondacan.create_radar_hud(self.packer, self.CAN.pt))
+          pass # can_sends.append(hondacan.create_radar_hud(self.packer, self.CAN.pt))
         if self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH:
-          # can_sends.append(hondacan.create_legacy_brake_command(self.packer, self.CAN.pt))
+          pass # can_sends.append(hondacan.create_legacy_brake_command(self.packer, self.CAN.pt))
         if self.CP.carFingerprint not in HONDA_BOSCH:
           self.speed = pcm_speed
           self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
