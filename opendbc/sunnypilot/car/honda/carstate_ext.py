@@ -22,8 +22,14 @@ class CarStateExt:
     cp_cam = can_parsers[Bus.cam]
 
     if self.CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
-      speed_limit = cp_cam.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"]
-      ret_sp.speedLimit = (speed_limit - 96.0) * 5.0 * CV.MPH_TO_MS if (speed_limit > 96 and speed_limit < 125) else 0.0
+      speed_bus = cp if (CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD)) else cp_cam
+      speed_limit_raw = speed_bus.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"]
+      if (speed_limit_raw >= 97 and speed_limit_raw <= 113):
+        ret_sp.speedLimit = (speed_limit_raw - 96.0) * 5.0 * CV.MPH_TO_MS
+      elif (speed_limit_raw >= 193 and speed_limit_raw <= 209):
+        ret_sp.speedLimit = (speed_limit_raw - 192.0) * 5.0 * CV.MPH_TO_MS
+      else:
+        ret_sp.speedLimit = 0.0
 
     if self.CP_SP.flags & HondaFlagsSP.HYBRID_ALT_BRAKEHOLD:
       ret.brakeHoldActive = cp.vl["BRAKE_HOLD_HYBRID_ALT"]["BRAKE_HOLD_ACTIVE"] == 1
