@@ -21,8 +21,13 @@ BUTTONS = {
 
 
 class IntelligentCruiseButtonManagementInterface(IntelligentCruiseButtonManagementInterfaceBase):
+  BUTTON_SEND_DURATION = 12  # frames to send button
+  BUTTON_PAUSE_DURATION = 12  # frames to pause between sends
+
   def __init__(self, CP, CP_SP):
     super().__init__(CP, CP_SP)
+    self.current_button = SendButtonState.none
+    self.button_send_frame = 0
 
   def update(self, CC_SP, packer, frame, last_button_frame, CAN) -> list[CanData]:
     can_sends = []
@@ -31,9 +36,20 @@ class IntelligentCruiseButtonManagementInterface(IntelligentCruiseButtonManageme
     self.frame = frame
     self.last_button_frame = last_button_frame
 
-    if self.ICBM.sendButton != SendButtonState.none:
-      send_button = BUTTONS[self.ICBM.sendButton]
+    frames_elapsed = frame - self.button_send_frame
+    total_cycle = self.BUTTON_SEND_DURATION + self.BUTTON_PAUSE_DURATION
+
+    # Reset to pause state after send duration
+    if frames_elapsed >= self.BUTTON_SEND_DURATION and self.current_button != SendButtonState.none:
+      self.current_button = SendButtonState.none
+    # Start new tap if button requested and cycle complete
+    if self.ICBM.sendButton != SendButtonState.none and self.current_button == SendButtonState.none and frames_elapsed >= total_cycle:
+      self.current_button = self.ICBM.sendButton
+      self.button_send_frame = frame
+
+    # Send button if currently in send phase
+    if self.current_button != SendButtonState.none and (frame - self.button_send_frame) < self.BUTTON_SEND_DURATION:
+      send_button = BUTTONS[self.current_button]
       can_sends.append(hondacan.spam_buttons_command(packer, CAN, send_button, self.CP.carFingerprint))
-      self.last_button_frame = self.frame
 
     return can_sends
