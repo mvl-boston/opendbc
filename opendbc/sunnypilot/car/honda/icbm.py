@@ -21,8 +21,8 @@ BUTTONS = {
 
 
 class IntelligentCruiseButtonManagementInterface(IntelligentCruiseButtonManagementInterfaceBase):
-  BUTTON_SEND_DURATION = 12  # frames to send button
-  BUTTON_PAUSE_DURATION = 12  # frames to pause between sends
+  BUTTON_SEND_DURATION = 4  # frames to send button
+  BUTTON_PAUSE_DURATION = 20  # frames to pause between sends
 
   def __init__(self, CP, CP_SP):
     super().__init__(CP, CP_SP)
