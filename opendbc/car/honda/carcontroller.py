@@ -236,17 +236,17 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       elif CC.cruiseControl.resume:
         cruise_button = CruiseButtons.RES_ACCEL
 
-      # ACC distance shortcut for a 0 -> 1 toggle.
+      # ACC distance shortcut for a 1 <-> 2 toggle.
       # Triggers only after the driver presses the distance button and the car lands on
-      # distance 3 or 2. Distance button automatically pressed until distance 1 is reached.
+      # distance 4 or 3. Distance button automatically pressed until distance 2 is reached.
 
       # Track the frame of the last time the driver released the distance button
       if any(be.type == ButtonType.gapAdjustCruise and not be.pressed for be in CS.out.buttonEvents):
         self.last_driver_distance_button_frame = self.frame
 
-      # Start a new 4-frame button press sequence for HUD distance 2 or 3
+      # Start a new 4-frame button press sequence for HUD distance 0 or 3 (0 represents 4 bars)
       if (CC.enabled and
-          CS.hudDistance in (2, 3) and
+          CS.hudDistance in (0, 3) and
           self.distance_button_send_remaining == 0 and
           # Recent button release by driver
           self.frame <= self.last_driver_distance_button_frame + 100 and
