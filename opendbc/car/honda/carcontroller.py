@@ -127,6 +127,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.last_distance_button_frame = 0
     self.last_driver_distance_button_frame = 0
     self.distance_button_send_remaining = 0
+    self.last_lkas_button_frame = 0
+    self.lkas_button_send_remaining = 0
+    self.lkas_button_send_count = 0
 
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
@@ -335,6 +338,25 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.speed = pcm_speed
           if not self.CP_SP.enableGasInterceptor:
             self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
+
+    if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      if CS.lkas_ready:
+        self.lkas_button_send_remaining = 0
+
+      # Start a new 4-frame button press to toggle LKAS when it's not ready. This gets the
+      # LKAS camera to output moving lane lines for the HUD.
+      if (not CS.lkas_ready and
+          self.lkas_button_send_remaining == 0 and
+          self.frame >= self.last_lkas_button_frame + 100 and # Wait 100 frames for HUD to update
+          self.lkas_button_send_count < 5): # Cap total attempts to 5 for now
+        self.lkas_button_send_remaining = 4
+        self.lkas_button_send_count += 1
+        self.last_lkas_button_frame = self.frame
+
+      if self.lkas_button_send_remaining > 0:
+        self.last_lkas_button_frame = self.frame
+        self.lkas_button_send_remaining -= 1
+        can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, 0, CruiseSettings.LKAS, self.CP.carFingerprint))
 
     # Intelligent Cruise Button Management
     can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CC_SP, self.packer, self.frame,

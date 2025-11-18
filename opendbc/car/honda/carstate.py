@@ -78,6 +78,9 @@ class CarState(CarStateBase, CarStateExt):
 
     # ******************* parse out can *******************
 
+    if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      self.lkas_ready = cp_cam.vl["LKAS_HUD"]["LKAS_READY"]
+
     # blend in transmission speed at low speed, since it has more low speed accuracy
     # STANDSTILL->WHEELS_MOVING bit can be noisy around zero, so use XMISSION_SPEED
     lowspeed_source = cp.vl["CAR_SPEED"]["CAR_SPEED"] if self.CP.carFingerprint == CAR.ACURA_INTEGRA else cp.vl["ENGINE_DATA"]["XMISSION_SPEED"]
