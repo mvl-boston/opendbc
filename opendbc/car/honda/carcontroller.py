@@ -345,13 +345,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
       # Start a new 4-frame button press to toggle LKAS when it's not ready. This gets the
       # LKAS camera to output moving lane lines for the HUD.
-      if (not CS.lkas_ready and
+      if (CC.enabled and
+          not CS.lkas_ready and
           self.lkas_button_send_remaining == 0 and
           self.frame >= self.last_lkas_button_frame + 100 and # Wait 100 frames for HUD to update
           self.lkas_button_send_count < 5): # Cap total attempts to 5 for now
         self.lkas_button_send_remaining = 4
         self.lkas_button_send_count += 1
-        self.last_lkas_button_frame = self.frame
 
       if self.lkas_button_send_remaining > 0:
         self.last_lkas_button_frame = self.frame
