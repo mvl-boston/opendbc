@@ -74,6 +74,7 @@ class CarState(CarStateBase, CarStateExt):
     # used for car hud message
     self.is_metric = not cp.vl["CAR_SPEED"]["IMPERIAL_UNIT"]
     self.v_cruise_factor = CV.MPH_TO_MS if self.dynamic_v_cruise_units and not self.is_metric else CV.KPH_TO_MS
+    self.hudDistance = cp_cam.vl["ACC_HUD"]["HUD_DISTANCE"]
 
     # ******************* parse out can *******************
 
@@ -85,7 +86,6 @@ class CarState(CarStateBase, CarStateExt):
     ret.vEgoRaw = (1. - v_weight) * lowspeed_source * CV.KPH_TO_MS * self.CP.wheelSpeedFactor + v_weight * v_wheel
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
     ret.standstill = lowspeed_source < 1e-5
-    ret.hudDistance = cp_cam.vl["ACC_HUD"]["HUD_DISTANCE"]
 
     # doorOpen is true if we can find any door open, but signal locations vary, and we may only see the driver's door
     # TODO: Test the eight Nidec cars without SCM signals for driver's door state, may be able to consolidate further

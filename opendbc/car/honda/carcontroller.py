@@ -246,7 +246,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
       # Start a new 4-frame button press sequence for HUD distance 2 or 3
       if (CC.enabled and
-          CS.out.hudDistance in (2, 3) and
+          CS.hudDistance in (2, 3) and
           self.distance_button_send_remaining == 0 and
           # Recent button release by driver
           self.frame <= self.last_driver_distance_button_frame + 100 and
