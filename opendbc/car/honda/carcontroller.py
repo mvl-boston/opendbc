@@ -4,7 +4,7 @@ import math
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
-from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
+from opendbc.car.honda.values import CAR, CruiseButtons, CruiseSettings, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
@@ -16,7 +16,7 @@ from opendbc.sunnypilot.car.honda.icbm import IntelligentCruiseButtonManagementI
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
-
+ButtonType = structs.CarState.ButtonEvent.Type
 
 def compute_gb_honda_bosch(accel, speed):
   # TODO returns 0s, is unused
@@ -124,6 +124,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                      # k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
                                      k_f=1, rate= 1 / DT_CTRL / 2)
     self.pitch = 0.0
+    self.last_distance_button_frame = 0
+    self.last_driver_distance_button_frame = 0
+    self.distance_button_send_remaining = 0
 
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
@@ -227,10 +230,40 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
       # If using stock ACC, spam cancel command to kill gas when OP disengages.
+      cruise_button = 0
       if pcm_cancel_cmd:
-        can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.CANCEL, self.CP.carFingerprint))
+        cruise_button = CruiseButtons.CANCEL
       elif CC.cruiseControl.resume:
-        can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, self.CP.carFingerprint))
+        cruise_button = CruiseButtons.RES_ACCEL
+
+      # ACC distance shortcut for a 0 -> 1 toggle.
+      # Triggers only after the driver presses the distance button and the car lands on
+      # distance 3 or 2. Distance button automatically pressed until distance 1 is reached.
+
+      # Track the frame of the last time the driver released the distance button
+      if any(be.type == ButtonType.gapAdjustCruise and not be.pressed for be in CS.out.buttonEvents):
+        self.last_driver_distance_button_frame = self.frame
+
+      # Start a new 4-frame button press sequence for HUD distance 2 or 3
+      if (CC.enabled and
+          CS.out.hudDistance in (2, 3) and
+          self.distance_button_send_remaining == 0 and
+          # Recent button release by driver
+          self.frame <= self.last_driver_distance_button_frame + 100 and
+          # Wait 25 frames for HUD to update after last driver or OP button press
+          self.frame >= self.last_driver_distance_button_frame + 25 and
+          self.frame >= self.last_distance_button_frame + 25):
+        self.distance_button_send_remaining = 4
+
+      # Send the button command
+      cruise_setting = 0
+      if self.distance_button_send_remaining > 0:
+        cruise_setting = CruiseSettings.DISTANCE
+        self.last_distance_button_frame = self.frame
+        self.distance_button_send_remaining -= 1
+
+      if cruise_button != 0 or cruise_setting != 0:
+        can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, cruise_button, cruise_setting, self.CP.carFingerprint))
 
     else:
       # Send gas and brake commands.

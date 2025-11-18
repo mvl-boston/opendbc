@@ -50,6 +50,6 @@ class IntelligentCruiseButtonManagementInterface(IntelligentCruiseButtonManageme
     # Send button if currently in send phase
     if self.current_button != SendButtonState.none and (frame - self.button_send_frame) < self.BUTTON_SEND_DURATION:
       send_button = BUTTONS[self.current_button]
-      can_sends.append(hondacan.spam_buttons_command(packer, CAN, send_button, self.CP.carFingerprint))
+      can_sends.append(hondacan.spam_buttons_command(packer, CAN, send_button, 0, self.CP.carFingerprint))
 
     return can_sends
