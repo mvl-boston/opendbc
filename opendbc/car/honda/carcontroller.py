@@ -247,7 +247,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       if any(be.type == ButtonType.gapAdjustCruise and not be.pressed for be in CS.out.buttonEvents):
         self.last_driver_distance_button_frame = self.frame
 
-      # Start a new 4-frame button press sequence for HUD distance 0 or 3 (0 represents 4 bars)
+      # Start a new 5-frame button press sequence for HUD distance 0 or 3 (0 represents 4 bars)
       if (CC.enabled and
           CS.hudDistance in (0, 3) and
           self.distance_button_send_remaining == 0 and
@@ -256,7 +256,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           # Wait 25 frames for HUD to update after last driver or OP button press
           self.frame >= self.last_driver_distance_button_frame + 25 and
           self.frame >= self.last_distance_button_frame + 25):
-        self.distance_button_send_remaining = 4
+        self.distance_button_send_remaining = 5
 
       # Send the button command
       cruise_setting = 0
