@@ -110,7 +110,7 @@ class HondaCarDocs(CarDocs):
     else:
       harness = CarHarness.nidec
 
-    if CP.carFingerprint in (CAR.HONDA_PILOT_4G, CAR.HONDA_PASSPORT_4G,):
+    if CP.carFingerprint in (CAR.HONDA_PILOT_4G, CAR.HONDA_PASSPORT_4G):
       self.car_parts = CarParts([Device.threex_angled_mount, harness])
     else:
       self.car_parts = CarParts.common([harness])
@@ -171,6 +171,7 @@ class CAR(Platforms):
     # steerRatio: 11.82 is spec end-to-end
     CarSpecs(mass=3279 * CV.LB_TO_KG, wheelbase=2.83, steerRatio=16.33, centerToFrontRatio=0.39, tireStiffnessFactor=0.8467),
     {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated'},
+    flags=HondaFlags.ALLOW_MANUAL_TRANS,
   )
   HONDA_ACCORD_11G = HondaBoschCANFDPlatformConfig(
     [
@@ -274,7 +275,7 @@ class CAR(Platforms):
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.2),
   )
   HONDA_ODYSSEY_5G_MMR = HondaBoschPlatformConfig(
-    [HondaCarDocs("Honda Odyssey 2021-25", "All", min_steer_speed=70. * CV.KPH_TO_MS)],
+    [HondaCarDocs("Honda Odyssey 2021-26", "All", min_steer_speed=70. * CV.KPH_TO_MS)],
     CarSpecs(mass=4590 * CV.LB_TO_KG, wheelbase=3.00, steerRatio=19.4, centerToFrontRatio=0.41),
     {Bus.pt: 'acura_rdx_2020_can_generated'},
     flags=HondaFlags.BOSCH_ALT_BRAKE | HondaFlags.BOSCH_ALT_RADAR,
@@ -398,7 +399,7 @@ class CAR(Platforms):
   ACURA_TLX_1G = HondaNidecPlatformConfig(
     [], # don't add to cardocs since custom steering board
     CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=15.1, centerToFrontRatio=0.40),  # as spec
-    radar_dbc_dict('acura_mdx_2016_can_generated'),
+    radar_dbc_dict('acura_ilx_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   HONDA_CLARITY = HondaNidecPlatformConfig(
