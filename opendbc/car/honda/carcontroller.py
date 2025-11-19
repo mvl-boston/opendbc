@@ -129,7 +129,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.distance_button_send_remaining = 0
     self.last_lkas_button_frame = 0
     self.lkas_button_send_remaining = 0
-    self.lkas_button_send_count = 0
 
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
@@ -343,15 +342,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       if CS.lkas_ready:
         self.lkas_button_send_remaining = 0
 
-      # Start a new 4-frame button press to toggle LKAS when it's not ready. This gets the
-      # LKAS camera to output moving lane lines for the HUD.
+      # Start a 5-frame button press to toggle LKAS when it's not in ready state.
+      # This activates the LKAS camera to output moving lane lines for the HUD.
       if (CC.enabled and
           not CS.lkas_ready and
           self.lkas_button_send_remaining == 0 and
-          self.frame >= self.last_lkas_button_frame + 100 and # Wait 100 frames for HUD to update
-          self.lkas_button_send_count < 5): # Cap total attempts to 5 for now
-        self.lkas_button_send_remaining = 4
-        self.lkas_button_send_count += 1
+          self.frame >= self.last_lkas_button_frame + 100): # Wait 100 frames for HUD to update
+        self.lkas_button_send_remaining = 5
 
       if self.lkas_button_send_remaining > 0:
         self.last_lkas_button_frame = self.frame
