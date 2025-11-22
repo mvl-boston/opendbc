@@ -257,7 +257,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             if gas_error != 0.0 and gas_pedal_force > 0.0:
               wind_adjust = 1 + wind_brake_ms2 / 10
               self.windfactor *= (wind_adjust if (gas_error > 0) else 1.0/wind_adjust)
-              self.gasfactor = np.clip(self.gasfactor + gas_error / 50 / gas_pedal_force, 1.0/3.0, 3.0) # correct over 1 sec at 50 fps
+              self.gasfactor = np.clip(self.gasfactor + gas_error / 50 / gas_pedal_force, 0.001, 3.0) # correct over 1 sec at 50 fps
           else:
             gas_pedal_force = self.accel
             # self.gasonly_pid.reset()
