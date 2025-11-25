@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from opendbc.car import structs, rate_limit, DT_CTRL
 from opendbc.car.vehicle_model import VehicleModel
 
-FRICTION_THRESHOLD = 0.3
+FRICTION_THRESHOLD = 0.2
 
 # ISO 11270
 ISO_LATERAL_ACCEL = 3.0  # m/s^2
@@ -160,9 +160,10 @@ def apply_center_deadzone(error, deadzone):
 
 def get_friction(lateral_accel_error: float, lateral_accel_deadzone: float, friction_threshold: float,
                  torque_params: structs.CarParams.LateralTorqueTuning) -> float:
+  # TODO torque params' friction should be in lataxel space, not torque space
   friction_interp = np.interp(
     apply_center_deadzone(lateral_accel_error, lateral_accel_deadzone),
     [-friction_threshold, friction_threshold],
-    [-torque_params.friction, torque_params.friction]
+    [-torque_params.friction * torque_params.latAccelFactor, torque_params.friction * torque_params.latAccelFactor]
   )
   return float(friction_interp)
