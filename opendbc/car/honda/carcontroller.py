@@ -125,6 +125,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     #                                 #k_f=1, rate= 1 / DT_CTRL / 2)
     self.gasfactor = 1.0
     self.windfactor = 1.0
+    self.windfactor_before_brake = 0.0
     self.pitch = 0.0
 
   def update(self, CC, CC_SP, CS, now_nanos):
@@ -259,6 +260,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
               wind_adjust = 1 + wind_brake_ms2 / 10
               self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.001, 3.0)
+            if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
+              self.windfactor = max(self.windfactor, self.windfactor_before_brake)
+            else:
+                self.windfactor_before_brake = self.windfactor
           else:
             gas_pedal_force = self.accel
             # self.gasonly_pid.reset()
