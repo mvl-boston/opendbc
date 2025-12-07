@@ -21,6 +21,7 @@ SETTINGS_BUTTONS_DICT = {CruiseSettings.DISTANCE: ButtonType.gapAdjustCruise, Cr
 class CarState(CarStateBase):
   def __init__(self, CP):
     super().__init__(CP)
+    # force difference
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
 
     if CP.transmissionType != TransmissionType.manual:
