@@ -35,6 +35,7 @@ non_tested_cars = [
   HONDA.HONDA_NBOX_2G,
   HONDA.ACURA_MDX_4G_MMR,
   HONDA.HONDA_CITY_7G,
+  HONDA.HONDA_CRV_SA, # temporary, awaiting testroute
 
   # port extensions
   HYUNDAI.KIA_CEED_PHEV_2022_NON_SCC,
