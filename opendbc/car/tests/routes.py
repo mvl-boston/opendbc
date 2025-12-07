@@ -45,6 +45,7 @@ non_tested_cars = [
   # TOYOTA.LEXUS_ES  # hybrid
   TOYOTA.TOYOTA_COROLLA,
   TOYOTA.TOYOTA_RAV4H,
+  HONDA.HONDA_CRV_SA, # temporary, awaiting testroute
 
 ]
 
