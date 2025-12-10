@@ -8,7 +8,6 @@ from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSC
                                      HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
-from opendbc.car.common.conversions import Conversions as CV
 
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
 from opendbc.sunnypilot.car.honda.gas_interceptor import GasInterceptorCarController
