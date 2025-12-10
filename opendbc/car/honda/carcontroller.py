@@ -139,8 +139,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     if CC.longActive:
       accel = actuators.accel
-      if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX)) and (accel > max(0, CS.out.aEgo) + 0.1):
-        accel = 10000.0 # help with lagged accel until pedal tuning is inserted
       gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
