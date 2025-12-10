@@ -133,6 +133,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
     self.last_torque = limited_torque
+    # force a change
 
     # *** apply brake hysteresis ***
     pre_limit_brake, self.braking, self.brake_steady = actuator_hysteresis(brake, self.braking, self.brake_steady,
