@@ -288,7 +288,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
           gas_error = self.accel - CS.out.aEgo
           if gas_error != 0.0 and gas > 0.0:
-              self.gasfactor = np.clip(self.gasfactor + gas_error / 50 / (gas * 4.4), 0.1, 3.0)
+              self.gasfactor = np.clip(self.gasfactor + gas_error / 50 / (gas * 4.8), 0.1, 3.0)
           can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake, self.packer, self.frame))
 
     # Send dashboard UI commands.
