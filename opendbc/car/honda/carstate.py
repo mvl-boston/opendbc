@@ -117,7 +117,7 @@ class CarState(CarStateBase):
       self.low_speed_alert = False
     ret.lowSpeedAlert = self.low_speed_alert
 
-    if self.CP.carFingerprint != CAR.ACURA_RLX:
+    if self.CP.carFingerprint == CAR.ACURA_RLX:
       # ignore until RLX steering is fixed
       ret.steerFaultPermanent = False
       ret.steerFaultTemporary = False
