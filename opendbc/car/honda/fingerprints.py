@@ -29,7 +29,7 @@ FW_VERSIONS = {
     ],
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'38897-TTA-J010\x00\x00',
-    ]
+    ],
   },
   CAR.HONDA_ACCORD: {
     (Ecu.shiftByWire, 0x18da0bf1, None): [
@@ -922,11 +922,13 @@ FW_VERSIONS = {
       b'38897-TX6-A010\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'36161-TV9-A040\x00\x00',
       b'36161-TV9-A140\x00\x00',
       b'36161-TV9-C140\x00\x00',
       b'36161-TX6-A030\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
+      b'77959-TX6-A210\x00\x00',
       b'77959-TX6-A230\x00\x00',
       b'77959-TX6-C210\x00\x00',
     ],
@@ -1008,6 +1010,7 @@ FW_VERSIONS = {
       b'8S102-T47-AA20\x00\x00',
       b'8S102-T50-EA10\x00\x00',
       b'8S102-T56-A060\x00\x00',
+      b'8S102-T56-A070\x00\x00',
       b'8S102-T60-AA10\x00\x00',
       b'8S102-T64-A040\x00\x00',
     ],
@@ -1103,11 +1106,11 @@ FW_VERSIONS = {
     ],
   },
   CAR.HONDA_PASSPORT_4G: {
-    (Ecu.fwdCamera, 0x18dab5f1, None): [
-      b'8S102-3BM-A020\x00\x00',
-    ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'8S302-3BM-A020\x00\x00',
+    ],
+    (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'8S102-3BM-A020\x00\x00',
     ],
   },
   CAR.ACURA_TLX_2G: {
