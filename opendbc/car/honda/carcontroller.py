@@ -286,7 +286,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
-          can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas, brake, wind_brake, self.packer, self.frame))
+          gas_error = self.accel - CS.out.aEgo
+          if gas_error != 0.0 and gas > 0.0:
+              self.gasfactor = np.clip(self.gasfactor + gas_error / 50 / (gas * 4.4), 0.1, 3.0)
+          can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake, self.packer, self.frame))
 
     # Send dashboard UI commands.
     if self.frame % 10 == 0:
@@ -297,6 +300,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
       if self.CP.openpilotLongitudinalControl:
         # On Nidec, this also controls longitudinal positive acceleration
+        if pcm_accel > 0:
+          pcm_accel *= self.gasfactor
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control))
 
