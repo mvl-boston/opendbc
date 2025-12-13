@@ -79,7 +79,7 @@ class CarState(CarStateBase, CarStateExt):
 
     # blend in transmission speed at low speed, since it has more low speed accuracy
     # STANDSTILL->WHEELS_MOVING bit can be noisy around zero, so use XMISSION_SPEED
-    lowspeed_source = cp.vl["ENGINE_DATA"]["XMISSION_SPEED"]
+    lowspeed_source = cp.vl["CAR_SPEED"]["CAR_SPEED"] if self.CP.carFingerprint == CAR.ACURA_INTEGRA else cp.vl["ENGINE_DATA"]["XMISSION_SPEED"]
     v_wheel = sum([cp.vl["WHEEL_SPEEDS"][f"WHEEL_SPEED_{s}"] for s in ("FL", "FR", "RL", "RR")]) / 4.0 * CV.KPH_TO_MS
     v_weight = float(np.interp(v_wheel, v_weight_bp, v_weight_v))
     ret.vEgoRaw = (1. - v_weight) * lowspeed_source * CV.KPH_TO_MS * self.CP.wheelSpeedFactor + v_weight * v_wheel
@@ -98,7 +98,7 @@ class CarState(CarStateBase, CarStateExt):
 
     ret.seatbeltUnlatched = bool(cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LAMP"] or not cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LATCHED"])
 
-    steer_status = self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
+    steer_status = "Normal" if self.CP.carFingerprint == CAR.ACURA_RLX else self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
     ret.steerFaultPermanent = steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TMP_FAULT")
     if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
       # TODO: See if this logic works for all other Honda
@@ -120,14 +120,14 @@ class CarState(CarStateBase, CarStateExt):
       self.low_speed_alert = False
     ret.lowSpeedAlert = self.low_speed_alert
 
-    if False: #self.CP.carFingerprint != CAR.ACURA_RLX:
+    if self.CP.carFingerprint != CAR.ACURA_RLX:
       # ignore until RLX steering is fixed
       ret.steerFaultPermanent = False
       ret.steerFaultTemporary = False
 
     # Log non-critical stock ACC/LKAS faults if Nidec (camera) or longitudinal CANFD alt-brake
     if self.CP.carFingerprint not in HONDA_BOSCH:
-      if False: # self.CP.carFingerprint == CAR.ACURA_RLX:
+      if self.CP.carFingerprint == CAR.ACURA_RLX:
         ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"]) # TODO: fix LKAS_HUD bus 4 once red panda working
       else:
         ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
@@ -236,7 +236,7 @@ class CarState(CarStateBase, CarStateExt):
       *create_button_events(self.cruise_setting, prev_cruise_setting, SETTINGS_BUTTONS_DICT),
     ]
 
-    CarStateExt.update(self, ret, can_parsers)
+    CarStateExt.update(self, ret, ret_sp, can_parsers)
 
     return ret, ret_sp
 
