@@ -299,7 +299,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             else:
               self.windfactor_before_brake = self.windfactor
 
-          can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake, self.packer, self.frame))
+          can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake * 4 / 3,
+                                                              self.packer, self.frame))
 
     # Send dashboard UI commands.
     if self.frame % 10 == 0:
