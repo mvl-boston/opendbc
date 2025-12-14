@@ -194,7 +194,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     # all of this is only relevant for HONDA NIDEC
     speed_control = 0
-    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) # not in m/s2 units
+    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
     # TODO this 1.44 is just to maintain previous behavior
     pcm_speed_BP = [-wind_brake,
@@ -288,7 +288,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
           gas_error = actuators.accel - CS.out.aEgo
-          if not CS.out.gasPressed:
+          if not CS.out.gasPressed and self.CP_SP.enableGasInterceptor:
             if gas_error != 0.0 and gas > 0.0:
               self.gasfactor = np.clip(self.gasfactor + gas_error / 50 * (gas * 4.8), 0.1, 3.0)
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
@@ -299,8 +299,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             else:
               self.windfactor_before_brake = self.windfactor
 
-          can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake * self.windfactor,
-                                                              self.packer, self.frame))
+          can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake, self.packer, self.frame))
 
     # Send dashboard UI commands.
     if self.frame % 10 == 0:
