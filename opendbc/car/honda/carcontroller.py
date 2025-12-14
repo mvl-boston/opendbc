@@ -288,7 +288,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
           gas_error = actuators.accel - CS.out.aEgo
-          if not CS.out.gasPressed and self.CP_SP.enableGasInterceptor:
+          if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and self.CP_SP.enableGasInterceptor:
             if gas_error != 0.0 and gas > 0.0:
               self.gasfactor = np.clip(self.gasfactor + gas_error / 50 * (gas * 4.8), 0.1, 3.0)
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
