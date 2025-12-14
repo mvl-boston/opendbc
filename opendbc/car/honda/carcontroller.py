@@ -298,7 +298,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
               self.windfactor = max(self.windfactor, self.windfactor_before_brake)
             else:
               self.windfactor_before_brake = self.windfactor
-              
+
           can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake * self.windfactor,
                                                               self.packer, self.frame))
 
