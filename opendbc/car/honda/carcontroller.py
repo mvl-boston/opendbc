@@ -164,7 +164,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                                            CS.out.vEgo, self.CP.carFingerprint)
 
     # *** rate limit after the enable check ***
-    self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., DT_CTRL)
+    self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., 3 * DT_CTRL)
 
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
     alert_fcw, alert_steer_required = process_hud_alert(hud_control.visualAlert)
@@ -193,7 +193,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     # all of this is only relevant for HONDA NIDEC
     speed_control = 0
-    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) # not in m/s2 units
+    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
     # TODO this 1.44 is just to maintain previous behavior
     pcm_speed_BP = [-wind_brake,
@@ -287,8 +287,17 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
           gas_error = actuators.accel - CS.out.aEgo
-          if gas_error != 0.0 and gas > 0.0:
+          if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and self.CP_SP.enableGasInterceptor:
+            if gas_error != 0.0 and gas > 0.0:
               self.gasfactor = np.clip(self.gasfactor + gas_error / 50 * (gas * 4.8), 0.1, 3.0)
+            if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
+              wind_adjust = 1 + (wind_brake * 4.8) / 1000
+              self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
+            if gas <= 0.0: # don't reduce windfactor while braking, allow increases
+              self.windfactor = max(self.windfactor, self.windfactor_before_brake)
+            else:
+              self.windfactor_before_brake = self.windfactor
+
           can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake, self.packer, self.frame))
 
     # Send dashboard UI commands.
