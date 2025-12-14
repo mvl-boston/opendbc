@@ -165,7 +165,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                                            CS.out.vEgo, self.CP.carFingerprint)
 
     # *** rate limit after the enable check ***
-    self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., DT_CTRL)
+    self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., 3 * DT_CTRL)
 
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
     alert_fcw, alert_steer_required = process_hud_alert(hud_control.visualAlert)
