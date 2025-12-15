@@ -114,7 +114,6 @@ class CarController(CarControllerBase):
     self.windfactor = 1.0
     self.windfactor_before_brake = 0.0
 
-
     # try new Bosch pid
     self.gasonly_pid = PIDController(k_p=([0,], [0.5,]),
                                      k_i=([0,], [0.,]),
