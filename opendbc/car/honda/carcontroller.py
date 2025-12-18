@@ -8,6 +8,7 @@ from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
+from opendbc.car.common.conversions import Conversions as CV
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -110,9 +111,14 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+
+    self.gasfactor = 1.0
+    self.windfactor = 1.0
+    self.windfactor_before_brake = 0.0
     self.pitch = 0.0
 
   def update(self, CC, CS, now_nanos):
+    gas_pedal_force = 0.0
     actuators = CC.actuators
     hud_control = CC.hudControl
     hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
@@ -138,7 +144,7 @@ class CarController(CarControllerBase):
                                                                            CS.out.vEgo, self.CP.carFingerprint)
 
     # *** rate limit after the enable check ***
-    self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., DT_CTRL)
+    self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., 3 * DT_CTRL)
 
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
     alert_fcw, alert_steer_required = process_hud_alert(hud_control.visualAlert)
@@ -164,6 +170,8 @@ class CarController(CarControllerBase):
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15])
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
     # all of this is only relevant for HONDA NIDEC
+    speed_control = 0
+    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
     # TODO this 1.44 is just to maintain previous behavior
     pcm_speed_BP = [-wind_brake,
@@ -206,7 +214,25 @@ class CarController(CarControllerBase):
 
         if self.CP.carFingerprint in HONDA_BOSCH:
           self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
-          self.gas = float(np.interp(accel + wind_brake + hill_brake, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+
+          if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+            gas_pedal_force = self.accel # radarless does not need a pid
+          elif (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
+            gas_pedal_force = self.accel + wind_brake_ms2 * self.windfactor + hill_brake
+            gas_error = self.accel - CS.out.aEgo
+            if gas_error != 0.0 and gas_pedal_force > 0.0:
+              self.gasfactor = np.clip(self.gasfactor + gas_error / 50 * gas_pedal_force, 0.1, 3.0)
+            if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
+              wind_adjust = 1 + wind_brake_ms2 / 1000
+              self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
+            if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
+              self.windfactor = max(self.windfactor, self.windfactor_before_brake)
+            else:
+                self.windfactor_before_brake = self.windfactor
+          else:
+            gas_pedal_force = self.accel
+            gas_pedal_force += wind_brake_ms2 + hill_brake
+          self.gas = float(np.interp(gas_pedal_force * self.gasfactor, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
@@ -255,8 +281,8 @@ class CarController(CarControllerBase):
     new_actuators = actuators.as_builder()
     new_actuators.speed = self.speed
     new_actuators.accel = self.accel
-    new_actuators.gas = self.gas
-    new_actuators.brake = self.brake
+    new_actuators.gas = float(self.gasfactor)
+    new_actuators.brake = float(self.windfactor)
     new_actuators.torque = self.last_torque
     new_actuators.torqueOutputCan = apply_torque
 
