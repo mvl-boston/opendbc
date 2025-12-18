@@ -6,7 +6,7 @@ from opendbc.car import Bus, create_button_events, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_CANFD, \
-                                                 HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, BOSCH_TJA_CONTROL, \
+                                                 HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_TJA_CONTROL, \
                                                  HondaFlags, CruiseButtons, CruiseSettings, GearShifter, CarControllerParams
 from opendbc.car.interfaces import CarStateBase
 
@@ -136,7 +136,7 @@ class CarState(CarStateBase):
     else:
 
       if self.CP.openpilotLongitudinalControl:
-        if self.CP.carFingerprint in (HONDA_BOSCH_CANFD | BOSCH_TJA_CONTROL) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
+        if self.CP.carFingerprint in (HONDA_BOSCH_CANFD | HONDA_BOSCH_TJA_CONTROL) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
           ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
         else:
           ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
