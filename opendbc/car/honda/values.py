@@ -78,6 +78,7 @@ class HondaFlags(IntFlag):
   BOSCH_ALT_RADAR = 512
   ALLOW_MANUAL_TRANS = 1024
   HYBRID = 2048
+  BOSCH_TJA_CONTROL = 4096
 
 
 # Car button codes
