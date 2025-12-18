@@ -7,7 +7,6 @@ from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
-# from opendbc.car.common.pid import PIDController
 from opendbc.car.common.conversions import Conversions as CV
 
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
@@ -117,13 +116,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.speed = 0.0
     self.gas = 0.0
     self.brake = 0.0
-    self.last_torque = 0.0 # last eps torque
-    self.steeringTorque_last = 0.0 # last driver torque
-    # try new Bosch pid
-    #self.gasonly_pid = PIDController(k_p=([0,], [0.5,]),
-    #                                 #k_i=([0,], [0.,]),
-    #                                 # k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
-    #                                 #k_f=1, rate= 1 / DT_CTRL / 2)
+    self.last_torque = 0.0
+
     self.gasfactor = 1.0
     self.windfactor = 1.0
     self.windfactor_before_brake = 0.0
@@ -134,6 +128,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     gas_pedal_force = 0.0
 
     MadsCarController.update(self, self.CP, CC, CC_SP)
+    gas_pedal_force = 0.0
     actuators = CC.actuators
     hud_control = CC.hudControl
 
@@ -165,7 +160,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                                            CS.out.vEgo, self.CP.carFingerprint)
 
     # *** rate limit after the enable check ***
-    self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., DT_CTRL)
+    self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., 3 * DT_CTRL)
 
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
     alert_fcw, alert_steer_required = process_hud_alert(hud_control.visualAlert)
@@ -194,7 +189,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     # all of this is only relevant for HONDA NIDEC
     speed_control = 0
-    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) # not in m/s2 units
+    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
     # TODO this 1.44 is just to maintain previous behavior
     pcm_speed_BP = [-wind_brake,
@@ -250,11 +245,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
             gas_pedal_force = self.accel # radarless does not need a pid
           elif (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
-            # perform a gas-only pid
-            # pid_output = self.gasonly_pid.update(gas_error, speed=CS.out.vEgo, feedforward=self.accel)
-            #gas_pedal_force = self.accel + pid_output
-            gas_pedal_force = self.accel
-            gas_pedal_force += wind_brake_ms2 * self.windfactor + hill_brake
+            gas_pedal_force = self.accel + wind_brake_ms2 * self.windfactor + hill_brake
             gas_error = self.accel - CS.out.aEgo
             if gas_error != 0.0 and gas_pedal_force > 0.0:
               self.gasfactor = np.clip(self.gasfactor + gas_error / 50 * gas_pedal_force, 0.1, 3.0)
@@ -267,7 +258,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                 self.windfactor_before_brake = self.windfactor
           else:
             gas_pedal_force = self.accel
-            # self.gasonly_pid.reset()
             gas_pedal_force += wind_brake_ms2 + hill_brake
           self.gas = float(np.interp(gas_pedal_force * self.gasfactor, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
