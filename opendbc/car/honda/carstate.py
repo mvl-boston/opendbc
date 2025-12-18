@@ -204,6 +204,15 @@ class CarState(CarStateBase, CarStateExt):
     ret.cruiseState.enabled = cp.vl["POWERTRAIN_DATA"]["ACC_STATUS"] != 0
     ret.cruiseState.available = bool(cp.vl[self.car_state_scm_msg]["MAIN_ON"])
 
+    # Bosch cars take a few minutes after startup to clear prior faults
+    if ret.accFaulted:
+      if (self.CP.carFingerprint in HONDA_BOSCH) and not self.initial_accFault_cleared:
+        # block via cruiseState since accFaulted is not reversible until offroad
+        ret.accFaulted = False
+        ret.cruiseState.available = False
+    else:
+      self.initial_accFault_cleared = True
+
     # Gets rid of Pedal Grinding noise when brake is pressed at slow speeds for some models
     if self.CP.carFingerprint in (CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE):
       if ret.brake > 0.1:
