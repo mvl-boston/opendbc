@@ -207,8 +207,8 @@ class CarState(CarStateBase):
     ret.cruiseState.available = bool(cp.vl[self.car_state_scm_msg]["MAIN_ON"])
 
     # Bosch cars take a few minutes after startup to clear prior faults
-    if (self.CP.carFingerprint in HONDA_BOSCH) and ret.accFaulted:
-      if not self.initial_accFault_cleared:
+    if ret.accFaulted:
+      if (self.CP.carFingerprint in HONDA_BOSCH) and not self.initial_accFault_cleared:
         # block via cruiseState since accFaulted is not reversible until offroad
         ret.accFaulted = False
         ret.cruiseState.available = False
