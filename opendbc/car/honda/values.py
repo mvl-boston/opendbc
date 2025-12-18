@@ -79,7 +79,8 @@ class HondaFlags(IntFlag):
   BOSCH_ALT_RADAR = 512
   ALLOW_MANUAL_TRANS = 1024
   HYBRID = 2048
-  HYBRID_ALT_BRAKEHOLD = 4096  # Some Nidec Hybrids use a different brakehold
+  BOSCH_TJA_CONTROL = 4096
+  HYBRID_ALT_BRAKEHOLD = 8192  # Some Nidec Hybrids use a different brakehold
 
 
 # Car button codes
