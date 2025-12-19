@@ -75,8 +75,7 @@ class CarState(CarStateBase):
 
     # Honda: LKAS button can cause delayed immediate disable #36015
     if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
-      ...
-    self.lkas_ready = bool(cp_cam.vl["LKAS_HUD"]["LKAS_READY"])
+      self.lkas_ready = bool(cp_cam.vl["LKAS_HUD"]["LKAS_READY"])
 
     # blend in transmission speed at low speed, since it has more low speed accuracy
     # STANDSTILL->WHEELS_MOVING bit can be noisy around zero, so use XMISSION_SPEED
