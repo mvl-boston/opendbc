@@ -265,8 +265,7 @@ class CarController(CarControllerBase):
       if self.lkas_button_send_remaining > 0:
         self.last_lkas_button_frame = self.frame
         self.lkas_button_send_remaining -= 1
-        # can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, 0, CruiseSettings.LKAS, self.CP.carFingerprint))
-        can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, 0, self.CP.carFingerprint))
+        can_sends.append(hondacan.spam_buttons_command_lkas(self.packer, self.CAN, 0, CruiseSettings.LKAS, self.CP.carFingerprint))
 
 
     ############################################################################################################################
