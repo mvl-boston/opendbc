@@ -113,6 +113,8 @@ class CarController(CarControllerBase):
     self.gasfactor = 1.0
     self.windfactor = 1.0
     self.windfactor_before_brake = 0.0
+    self.gasfactor_before_max = 0.0
+    self.windfactor_before_max = 0.0
 
     # try new Bosch pid
     self.gasonly_pid = PIDController(k_p=([0,], [0.5,]),
@@ -218,6 +220,13 @@ class CarController(CarControllerBase):
           self.windfactor_before_brake = self.windfactor
 
       pcm_accel = int(np.clip((accel / 1.44) / max_accel * self.gasfactor, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+
+      if pcm_accel >= self.params.NIDEC_GAS_MAX: # don't increase gas & wind factor while gas is already maxed, allow decreases
+          self.gasfactor = min(self.gasfactor, self.gasfactor_before_max)
+          self.windfactor = min(self.windfactor, self.windfactor_before_max)
+        else:
+          self.gasfactor_before_max = self.gasfactor
+          self.windfactor_before_max = self.windfactor
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
