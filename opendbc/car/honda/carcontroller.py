@@ -239,12 +239,7 @@ class CarController(CarControllerBase):
           self.speed = pcm_speed
           self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
-
-
     ############################################################################################################################
-    ############################################################################################################################
-    ############################################################################################################################
-
 
     # Honda: LKAS button can cause delayed immediate disable #36015
     # From: Commit 5d89541,  remove lkas button cap, cleanup.
@@ -267,12 +262,7 @@ class CarController(CarControllerBase):
         self.lkas_button_send_remaining -= 1
         can_sends.append(hondacan.spam_buttons_command_lkas(self.packer, self.CAN, 0, CruiseSettings.LKAS, self.CP.carFingerprint))
 
-
     ############################################################################################################################
-    ############################################################################################################################
-    ############################################################################################################################
-
-
 
     new_actuators = actuators.as_builder()
     new_actuators.speed = self.speed
