@@ -109,6 +109,8 @@ class CarController(CarControllerBase):
     self.brake = 0.0
     self.last_torque = 0.0
 
+    self.last_lkas_button_frame = self.frame
+
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
