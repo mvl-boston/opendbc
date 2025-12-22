@@ -142,9 +142,8 @@ class CarState(CarStateBase, CarStateExt):
         if self.CP.carFingerprint in (HONDA_BOSCH_CANFD | HONDA_BOSCH_TJA_CONTROL) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
           ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
         else:
-          ret.carFaultedNonCritical = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
-      elif self.CP.openpilotLongitudinalControl:
-        ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
+          ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
+
     ret.espDisabled = cp.vl["VSA_STATUS"]["ESP_DISABLED"] != 0
 
     self.dash_speed_seen = self.dash_speed_seen or cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] > 1e-3
@@ -206,6 +205,15 @@ class CarState(CarStateBase, CarStateExt):
     ret.brake = cp.vl["VSA_STATUS"]["USER_BRAKE"]
     ret.cruiseState.enabled = cp.vl["POWERTRAIN_DATA"]["ACC_STATUS"] != 0
     ret.cruiseState.available = bool(cp.vl[self.car_state_scm_msg]["MAIN_ON"])
+
+    # Bosch cars take a few minutes after startup to clear prior faults
+    if ret.accFaulted:
+      if (self.CP.carFingerprint in HONDA_BOSCH) and not self.initial_accFault_cleared:
+        # block via cruiseState since accFaulted is not reversible until offroad
+        ret.accFaulted = False
+        ret.cruiseState.available = False
+    else:
+      self.initial_accFault_cleared = True
 
     # Gets rid of Pedal Grinding noise when brake is pressed at slow speeds for some models
     if self.CP.carFingerprint in (CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE):
