@@ -158,8 +158,8 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
 
   if CP.carFingerprint in HONDA_BOSCH:
     acc_hud_values['ACC_ON'] = int(enabled)
-    acc_hud_values['FCM_OFF'] = 1 if enabled else 0,
-    acc_hud_values['FCM_OFF_2'] = 1 if enabled else 0,
+    acc_hud_values['FCM_OFF'] = 1 if enabled else 0
+    acc_hud_values['FCM_OFF_2'] = 1 if enabled else 0
   else:
     # Shows the distance bars, TODO: stock camera shows updates temporarily while disabled
     acc_hud_values['ACC_ON'] = int(enabled)
