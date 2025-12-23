@@ -94,8 +94,8 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   # common ACC_CONTROL values
   acc_control_values = {
     'ACCEL_COMMAND': accel_command,
-    'STANDSTILL': standstill,
-    'BRAKE_REQUEST': braking,
+    'STANDSTILL': standstill if enabled else 0,
+    'BRAKE_REQUEST': braking if enabled else 0,
   }
 
   if car_fingerprint in HONDA_BOSCH_RADARLESS:
@@ -108,7 +108,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
       "CONTROL_ON": control_on,
       "GAS_COMMAND": gas_command,  # used for gas
       "BRAKE_LIGHTS": braking,
-      "STANDSTILL_RELEASE": standstill_release,
+      "STANDSTILL_RELEASE": standstill_release if enabled else 0,
     })
     acc_control_on_values = {
       "SET_TO_3": 0x03,
@@ -153,13 +153,13 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     'HUD_DISTANCE': hud_control.leadDistanceBars,  # wraps to 0 at 4 bars
     'IMPERIAL_UNIT': 0 if (CP.carFingerprint == CAR.ACURA_RLX) else int(not is_metric),
     'HUD_LEAD': 2 if enabled and hud_control.leadVisible else 1 if enabled else 0,
-    'SET_ME_X01_2': 1,
+    'SET_ME_X01_2': 1 if enabled else 0,
   }
 
   if CP.carFingerprint in HONDA_BOSCH:
     acc_hud_values['ACC_ON'] = int(enabled)
-    acc_hud_values['FCM_OFF'] = 1
-    acc_hud_values['FCM_OFF_2'] = 1
+    acc_hud_values['FCM_OFF'] = 1 if enabled else 0,
+    acc_hud_values['FCM_OFF_2'] = 1 if enabled else 0,
   else:
     # Shows the distance bars, TODO: stock camera shows updates temporarily while disabled
     acc_hud_values['ACC_ON'] = int(enabled)
@@ -179,8 +179,8 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
   commands = []
 
   lkas_hud_values = {
-    'LKAS_READY': 1,
-    'LKAS_STATE_CHANGE': 1,
+    'LKAS_READY': 1 if lat_active else 0,
+    'LKAS_STATE_CHANGE': 1 if lat_active else 0,
     'STEERING_REQUIRED': alert_steer_required,
     'SOLID_LANES': lat_active,
     'DASHED_LANES': dashed_lanes,
@@ -188,7 +188,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
   }
 
   if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
-    lkas_hud_values['LANE_LINES'] = 3
+    lkas_hud_values['LANE_LINES'] = 3 if lat_active else 0
     lkas_hud_values['DASHED_LANES'] = lat_active
 
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
