@@ -48,6 +48,8 @@ class CarState(CarStateBase):
     # When available we use cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] to populate vEgoCluster
     # However, on cars without a digital speedometer this is not always present (HRV, FIT, CRV 2016, ILX and RDX)
     self.dash_speed_seen = False
+    self.is_metric = False
+    self.v_cruise_factor = 1.
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -123,7 +125,9 @@ class CarState(CarStateBase):
 
     ret.espDisabled = cp.vl["VSA_STATUS"]["ESP_DISABLED"] != 0
 
-    if self.CP.carFingerprint not in (CAR.HONDA_ODYSSEY_TWN):
+    if self.CP.carFingerprint in (CAR.HONDA_ODYSSEY_TWN):
+      self.is_metric = True
+    else:
       # used for car hud message
       self.is_metric = not cp.vl["CAR_SPEED"]["IMPERIAL_UNIT"]
       self.v_cruise_factor = CV.MPH_TO_MS if self.dynamic_v_cruise_units and not self.is_metric else CV.KPH_TO_MS
