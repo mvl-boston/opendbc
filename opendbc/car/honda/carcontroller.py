@@ -218,7 +218,7 @@ class CarController(CarControllerBase):
         else:
           self.windfactor_before_brake = self.windfactor
         if (0.001 <= brake < 1.0) and (gas <= 0.0) and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
-          self.brakefactor = np.clip(self.brakefactor - gas_error / 50 * (brake * 4.8), 1.0, 3.0)
+          self.brakefactor = np.clip(self.brakefactor - gas_error / 150 * (brake * 4.8), 1.0, 3.0) # 50 after integral fix
 
       pcm_accel = int(np.clip((accel / 1.44) / max_accel * self.gasfactor, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
