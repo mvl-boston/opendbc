@@ -328,7 +328,7 @@ class CAR(Platforms):
     [], # Don't show in Docs
     HONDA_ODYSSEY.specs,
     radar_dbc_dict('honda_odyssey_twn_2018_generated'),
-    flags=HondaFlags.NIDEC_ALT_PCM_ACCEL | HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
+    flags=HondaFlags.NIDEC_ALT_PCM_ACCEL | HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_RDX = HondaNidecPlatformConfig(
     [HondaCarDocs("Acura RDX 2016-18", "AcuraWatch Plus or Advance Package", min_steer_speed=12. * CV.MPH_TO_MS)],
