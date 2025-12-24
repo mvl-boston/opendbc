@@ -325,6 +325,7 @@ class CAR(Platforms):
     flags=HondaFlags.NIDEC_ALT_PCM_ACCEL | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   HONDA_ODYSSEY_TWN = HondaNidecPlatformConfig(
+    []
     HONDA_ODYSSEY.specs,
     radar_dbc_dict('honda_odyssey_twn_2018_generated'),
     flags=HondaFlags.NIDEC_ALT_PCM_ACCEL | HondaFlags.NIDEC_ALT_SCM_MESSAGES,
