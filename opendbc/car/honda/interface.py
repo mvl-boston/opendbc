@@ -289,6 +289,8 @@ class CarInterface(CarInterfaceBase):
     # conflict with PCM acc
     if (ret.transmissionType == TransmissionType.manual) and (not ret.openpilotLongitudinalControl):
       ret.autoResumeSng = False
+    else:
+      ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC})
     ret.minEnableSpeed = -1. if ret.autoResumeSng else 25.51 * CV.MPH_TO_MS
 
     ret.steerLimitTimer = 0.8
