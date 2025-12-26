@@ -5,7 +5,7 @@ from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
-                                     HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
+                                     HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.conversions import Conversions as CV
 
@@ -96,6 +96,7 @@ class CarController(CarControllerBase):
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.params = CarControllerParams(CP)
     self.CAN = hondacan.CanBus(CP)
+    self.tja_control = CP.carFingerprint in HONDA_BOSCH_TJA_CONTROL
 
     self.braking = False
     self.brake_steady = 0.
@@ -109,6 +110,12 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.gasfactor = 1.0
+    self.windfactor = 1.0
+    self.brakefactor = 1.0
+    self.windfactor_before_brake = 0.0
+    self.gasfactor_before_max = 0.0
+    self.windfactor_before_max = 0.0
 
     self.gasfactor = 1.0
     self.windfactor = 1.0
@@ -131,8 +138,6 @@ class CarController(CarControllerBase):
 
     if CC.longActive:
       accel = actuators.accel
-      if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)) and (accel > max(0, CS.out.aEgo) + 0.1):
-        accel = 10000.0 # help with lagged accel until pedal tuning is inserted
       gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
@@ -159,8 +164,6 @@ class CarController(CarControllerBase):
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
-    speed_control = 1 if ((accel <= 0.0) and (CS.out.vEgo == 0)) else 0
-
     # Send CAN commands
     can_sends = []
 
@@ -171,21 +174,19 @@ class CarController(CarControllerBase):
         can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
 
     # Send steering command.
-    if self.CP.carFingerprint != CAR.ACURA_RLX:
-      can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive))
+    can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
 
     # wind brake from air resistance decel at high speed
     wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
 
     # all of this is only relevant for HONDA NIDEC
-    speed_control = 0
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
     # TODO this 1.44 is just to maintain previous behavior
     pcm_speed_BP = [-wind_brake,
                     -wind_brake * (3 / 4),
                     0.0,
-                    0.5]
+                    1.0]
     # The Honda ODYSSEY seems to have different PCM_ACCEL
     # msgs, is it other cars too?
     if not CC.longActive:
@@ -198,22 +199,35 @@ class CarController(CarControllerBase):
                      np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
       pcm_accel = int(1.0 * self.params.NIDEC_GAS_MAX)
-    elif (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)):
+    else:
       pcm_speed_V = [0.0,
                      np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 20.0, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
-      pcm_accel = int(np.clip((accel / 1.44) / max_accel, 10.0 / self.params.NIDEC_GAS_MAX, 1.0) * self.params.NIDEC_GAS_MAX)
-      if speed_control == 1 and CC.longActive:
-        pcm_accel = 198
-    else:
-      pcm_speed_V = [0.0,
-                     np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
-      pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
-      pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+
+      gas_error = actuators.accel - CS.out.aEgo
+      if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid):
+        if gas_error != 0.0 and gas > 0.0:
+          self.gasfactor = np.clip(self.gasfactor + gas_error / 100 * (gas * 4.8), 0.1, 3.0)
+        if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
+          wind_adjust = 1 + (wind_brake * 4.8) / 1000
+          self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
+        if gas <= 0.0: # don't reduce windfactor while braking, allow increases
+          self.windfactor = max(self.windfactor, self.windfactor_before_brake)
+        else:
+          self.windfactor_before_brake = self.windfactor
+        if (0.001 <= brake < 1.0) and (gas <= 0.0) and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
+          self.brakefactor = np.clip(self.brakefactor - gas_error / 150 * (brake * 4.8), 1.0, 3.0) # 50 after integral fix
+
+      pcm_accel = int(np.clip((accel / 1.44) / max_accel * self.gasfactor, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+
+      if pcm_accel >= self.params.NIDEC_GAS_MAX: # don't increase gas & wind factor while gas is already maxed, allow decreases
+        self.gasfactor = min(self.gasfactor, self.gasfactor_before_max)
+        self.windfactor = min(self.windfactor, self.windfactor_before_max)
+      else:
+        self.gasfactor_before_max = self.gasfactor
+        self.windfactor_before_max = self.windfactor
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
@@ -257,7 +271,7 @@ class CarController(CarControllerBase):
                                                         self.stopping_counter, self.CP.carFingerprint, gas_pedal_force, CS.out.vEgo))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
-          apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
+          apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX * self.brakefactor, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
           pcm_override = True
@@ -272,12 +286,7 @@ class CarController(CarControllerBase):
       if self.CP.openpilotLongitudinalControl:
         # On Nidec, this also controls longitudinal positive acceleration
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
-                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control))
-
-      if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)):
-        # standstill disengage
-        if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
-          pcm_speed = 25.0 / 3.6
+                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
       reduced_steering = CS.out.steeringPressed
@@ -300,7 +309,7 @@ class CarController(CarControllerBase):
     new_actuators.accel = self.accel
     new_actuators.gas = float(self.gasfactor)
     new_actuators.brake = float(self.windfactor)
-    new_actuators.torque = self.last_torque
+    new_actuators.torque = float(self.brakefactor)
     new_actuators.torqueOutputCan = apply_torque
 
     self.frame += 1
