@@ -3,7 +3,7 @@ from enum import Enum, IntFlag
 
 from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, structs, uds
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column, Device
+from opendbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column
 from opendbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries, p16
 
 Ecu = structs.CarParams.Ecu
@@ -111,10 +111,7 @@ class HondaCarDocs(CarDocs):
     else:
       harness = CarHarness.nidec
 
-    if CP.carFingerprint in (CAR.HONDA_PILOT_4G, CAR.HONDA_PASSPORT_4G):
-      self.car_parts = CarParts([Device.threex_angled_mount, harness])
-    else:
-      self.car_parts = CarParts.common([harness])
+    self.car_parts = CarParts.common([harness])
 
 
 class Footnote(Enum):
@@ -190,6 +187,7 @@ class CAR(Platforms):
     ],
     CarSpecs(mass=1326, wheelbase=2.7, steerRatio=15.38, centerToFrontRatio=0.4),  # steerRatio: 10.93 is end-to-end spec
     {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated'},
+    flags=HondaFlags.ALLOW_MANUAL_TRANS,
   )
   HONDA_CIVIC_BOSCH_DIESEL = HondaBoschPlatformConfig(
     [],  # don't show in docs

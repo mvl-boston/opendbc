@@ -15,6 +15,7 @@ from opendbc.car.toyota.values import CAR as TOYOTA
 from opendbc.car.values import Platform
 from opendbc.car.volkswagen.values import CAR as VOLKSWAGEN
 from opendbc.car.body.values import CAR as COMMA
+from opendbc.car.psa.values import CAR as PSA
 
 # FIXME: add routes for these cars
 non_tested_cars = [
@@ -30,7 +31,20 @@ non_tested_cars = [
   HONDA.HONDA_CLARITY, # TODO: get route once testing is done
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
-  HONDA.ACURA_TLX_2G,  # FIXME: replace expired route
+  VOLKSWAGEN.PORSCHE_MACAN_MK1,
+  # Honda/Acura test routes below expired, replace when CI bucket sync is fixed
+  HONDA.ACURA_TLX_2G,
+  HONDA.HONDA_NBOX_2G,
+  HONDA.ACURA_MDX_4G_MMR,
+  HONDA.HONDA_CITY_7G,
+  HONDA.ACURA_RDX_3G_MMR,
+  HONDA.ACURA_INTEGRA,
+
+  # These had their DSUs unplugged, need new routes
+  # TOYOTA.LEXUS_ES  # hybrid
+  TOYOTA.TOYOTA_COROLLA,
+  TOYOTA.TOYOTA_RAV4H,
+
 ]
 
 
@@ -111,7 +125,7 @@ routes = [
   CarTestRoute("684e8f96bd491a0e/2021-11-03--11-08-42", HONDA.HONDA_PILOT),  # Passport
   CarTestRoute("0a78dfbacc8504ef/2020-03-04--13-29-55", HONDA.HONDA_CIVIC_BOSCH),
   CarTestRoute("f34a60d68d83b1e5/2020-10-06--14-35-55", HONDA.ACURA_RDX),
-  CarTestRoute("0416c2843c0bfc91/0000001d--59c7744d87", HONDA.ACURA_RDX_3G_MMR),
+  # CarTestRoute("0416c2843c0bfc91/0000001d--59c7744d87", HONDA.ACURA_RDX_3G_MMR), # Azure route bug
   CarTestRoute("54fd8451b3974762/2021-04-01--14-50-10", HONDA.HONDA_RIDGELINE),
   CarTestRoute("2d5808fae0b38ac6/2021-09-01--17-14-11", HONDA.HONDA_E),
   CarTestRoute("f44aa96ace22f34a/2021-12-22--06-22-31", HONDA.HONDA_CIVIC_2022),
@@ -119,12 +133,11 @@ routes = [
   CarTestRoute("b1c832ad56b6bc9d/00000010--debfcf5867", HONDA.HONDA_CIVIC_2022),  # 2025 Civic Hatch Hybrid with new eCVT transmission
   CarTestRoute("f9c43864cf057d05/2024-01-15--23-01-20", HONDA.HONDA_PILOT_4G),  # TODO: Replace with a newer route
   CarTestRoute("f39cf149898833ff/0000002b--54f3fae045", HONDA.HONDA_ACCORD_11G),
-  CarTestRoute("ad9840558640c31d/0000001a--d6cd4871c2", HONDA.ACURA_MDX_4G_MMR),  # 2025 MDX
-  CarTestRoute("56b2cf1dacdcd033/00000017--d24ffdb376", HONDA.HONDA_CITY_7G),  # Brazilian model
+  # CarTestRoute("56b2cf1dacdcd033/00000017--d24ffdb376", HONDA.HONDA_CITY_7G),  # Brazilian model
   CarTestRoute("2dc4489d7e1410ca/00000001--bbec3f5117", HONDA.HONDA_CRV_6G),
   CarTestRoute("a703d058f4e05aeb/00000008--f169423024", HONDA.HONDA_PASSPORT_4G),
   # CarTestRoute("ad9840558640c31d/00000018--6d4b733a6a", HONDA.ACURA_MDX_3G), expired - need new route
-  CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA),
+  # CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA), # Azure route bug
   CarTestRoute("21ea2d289932890b/00000134--3862dfe91d", HONDA.HONDA_ACCORD_9G), # serial steering - dashcam in upstream
   CarTestRoute("ad9840558640c31d/0000003d--a35002b59f", HONDA.ACURA_MDX_3G_MMR), # Hybrid
   CarTestRoute("ad9840558640c31d/00000026--538590661c", HONDA.ACURA_ADX),
@@ -223,22 +236,23 @@ routes = [
   CarTestRoute("54034823d30962f5/2021-05-24--06-37-34", TOYOTA.TOYOTA_CAMRY),  # hybrid
   CarTestRoute("3456ad0cd7281b24/2020-12-13--17-45-56", TOYOTA.TOYOTA_CAMRY_TSS2),
   CarTestRoute("ffccc77938ddbc44/2021-01-04--16-55-41", TOYOTA.TOYOTA_CAMRY_TSS2),  # hybrid
-  CarTestRoute("4e45c89c38e8ec4d/2021-05-02--02-49-28", TOYOTA.TOYOTA_COROLLA),
+  # CarTestRoute("4e45c89c38e8ec4d/2021-05-02--02-49-28", TOYOTA.TOYOTA_COROLLA),
   CarTestRoute("5f5afb36036506e4/2019-05-14--02-09-54", TOYOTA.TOYOTA_COROLLA_TSS2),
   CarTestRoute("5ceff72287a5c86c/2019-10-19--10-59-02", TOYOTA.TOYOTA_COROLLA_TSS2),  # hybrid
   CarTestRoute("d2525c22173da58b/2021-04-25--16-47-04", TOYOTA.TOYOTA_PRIUS),
   CarTestRoute("b14c5b4742e6fc85/2020-07-28--19-50-11", TOYOTA.TOYOTA_RAV4),
-  CarTestRoute("32a7df20486b0f70/2020-02-06--16-06-50", TOYOTA.TOYOTA_RAV4H),
+  # CarTestRoute("32a7df20486b0f70/2020-02-06--16-06-50", TOYOTA.TOYOTA_RAV4H),
   CarTestRoute("cdf2f7de565d40ae/2019-04-25--03-53-41", TOYOTA.TOYOTA_RAV4_TSS2),
   CarTestRoute("a5c341bb250ca2f0/2022-05-18--16-05-17", TOYOTA.TOYOTA_RAV4_TSS2_2022),
   CarTestRoute("ad5a3fa719bc2f83/2023-10-17--19-48-42", TOYOTA.TOYOTA_RAV4_TSS2_2023),
   CarTestRoute("7e34a988419b5307/2019-12-18--19-13-30", TOYOTA.TOYOTA_RAV4_TSS2),  # hybrid
   CarTestRoute("2475fb3eb2ffcc2e/2022-04-29--12-46-23", TOYOTA.TOYOTA_RAV4_TSS2_2022),  # hybrid
   CarTestRoute("20ba9ade056a8c7b/2021-02-08--21-57-35", TOYOTA.TOYOTA_RAV4_PRIME),  # SecOC
+  CarTestRoute("41ba5b181f29435d/00000001--e3ae76382f", TOYOTA.TOYOTA_RAV4_PRIME),  # SecOC longitudinal
   CarTestRoute("8bfb000e03b2a257/00000004--f9eee5f52e", TOYOTA.TOYOTA_SIENNA_4TH_GEN),  # SecOC
   CarTestRoute("0b54d0594d924cd9/00000057--b6206a3205", TOYOTA.TOYOTA_YARIS),  # SecOC
   CarTestRoute("7a31f030957b9c85/2023-04-01--14-12-51", TOYOTA.LEXUS_ES),
-  CarTestRoute("37041c500fd30100/2020-12-30--12-17-24", TOYOTA.LEXUS_ES),  # hybrid
+  # CarTestRoute("37041c500fd30100/2020-12-30--12-17-24", TOYOTA.LEXUS_ES),  # hybrid
   CarTestRoute("e6a24be49a6cd46e/2019-10-29--10-52-42", TOYOTA.LEXUS_ES_TSS2),
   CarTestRoute("f49e8041283f2939/2019-05-30--11-51-51", TOYOTA.LEXUS_ES_TSS2),  # hybrid
   CarTestRoute("da23c367491f53e2/2021-05-21--09-09-11", TOYOTA.LEXUS_CTH, segment=3),
@@ -330,6 +344,8 @@ routes = [
   CarTestRoute("fb53c640f499b73d/2021-06-01--04-17-56", MAZDA.MAZDA_6),
   CarTestRoute("f6d5b1a9d7a1c92e/2021-07-08--06-56-59", MAZDA.MAZDA_CX9_2021),
   CarTestRoute("a4af1602d8e668ac/2022-02-03--12-17-07", MAZDA.MAZDA_CX5_2022),
+
+  CarTestRoute("6a7075a4fdd765ee/0000004e--1f612006dd", PSA.PSA_PEUGEOT_208),
 
   CarTestRoute("bc095dc92e101734/000000db--ee9fe46e57", RIVIAN.RIVIAN_R1_GEN1),
 
