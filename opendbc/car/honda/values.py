@@ -361,6 +361,11 @@ class CAR(Platforms):
     radar_dbc_dict('honda_odyssey_exl_2018_generated'),
     flags=HondaFlags.NIDEC_ALT_PCM_ACCEL | HondaFlags.HAS_ALL_DOOR_STATES,
   )
+  HONDA_ODYSSEY_TWN = HondaNidecPlatformConfig(
+    [],
+    CarSpecs(mass=1865, wheelbase=2.9, steerRatio=14.35, centerToFrontRatio=0.44, tireStiffnessFactor=0.82),
+    radar_dbc_dict('honda_odyssey_singapore_2021_can_generated'),
+  )
   HONDA_ODYSSEY_SINGAPORE = HondaNidecPlatformConfig(
     [HondaCarDocs("Honda Odyssey (Singapore) 2021")],
     CarSpecs(mass=1798, wheelbase=2.9, steerRatio=17.6, centerToFrontRatio=0.41),
