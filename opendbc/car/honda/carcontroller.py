@@ -205,7 +205,7 @@ class CarController(CarControllerBase):
                      np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 10.0 * self.speedfactor, 0.0, 100.0)]
-      pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
+      pcm_speed = float(np.interp(gas + wind_brake - brake, pcm_speed_BP, pcm_speed_V))
 
       gas_error = actuators.accel - CS.out.aEgo
       if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid):
