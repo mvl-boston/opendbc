@@ -217,8 +217,6 @@ class CarController(CarControllerBase):
           self.windfactor = max(self.windfactor, self.windfactor_before_brake)
         else:
           self.windfactor_before_brake = self.windfactor
-        if (0.001 <= brake < 1.0) and (gas <= 0.0) and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
-          self.brakefactor = np.clip(self.brakefactor - gas_error / 150 * (brake * 4.8), 1.0, 3.0) # 50 after integral fix
 
       pcm_accel = int(np.clip((accel / 1.44) / max_accel * self.gasfactor, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
@@ -271,6 +269,11 @@ class CarController(CarControllerBase):
                                                         self.stopping_counter, self.CP.carFingerprint, gas_pedal_force, CS.out.vEgo))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
+
+          if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and \
+             (0.001 <= apply_brake < 1.0) and (gas <= 0.0) and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
+            self.brakefactor = np.clip(self.brakefactor - gas_error / 75 * (apply_brake * 4.8), 1.0, 3.0) # 25 after integral fix
+
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX * self.brakefactor, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
