@@ -211,7 +211,8 @@ class CarController(CarControllerBase):
       if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid):
         if gas_error != 0.0 and gas > 0.0:
           self.gasfactor = np.clip(self.gasfactor + gas_error / 100 * (gas * 4.8), 0.1, 6.0)
-          self.speedfactor = np.clip(self.speedfactor + gas_error / 100 * (gas * 4.8 * 10 ), 0.1, 6.0)
+      if gas_error != 0.0 and (gas - brake) > 0.0:
+          self.speedfactor = np.clip(self.speedfactor + gas_error / 100 * ((gas - brake) * 4.8 * 10 ), 0.1, 6.0)
         if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
           wind_adjust = 1 + (wind_brake * 4.8) / 1000
           self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
@@ -310,7 +311,7 @@ class CarController(CarControllerBase):
           self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
     new_actuators = actuators.as_builder()
-    new_actuators.speed = self.speed
+    new_actuators.speed = float(self.speedfactor)
     new_actuators.accel = self.accel
     new_actuators.gas = float(self.gasfactor)
     new_actuators.brake = float(self.windfactor)
