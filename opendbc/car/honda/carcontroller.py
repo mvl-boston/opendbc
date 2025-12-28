@@ -113,6 +113,7 @@ class CarController(CarControllerBase):
     self.gasfactor = 1.0
     self.windfactor = 1.0
     self.brakefactor = 1.0
+    self.speedfactor = 1.0
     self.windfactor_before_brake = 0.0
     self.gasfactor_before_max = 0.0
     self.windfactor_before_max = 0.0
@@ -186,7 +187,7 @@ class CarController(CarControllerBase):
     pcm_speed_BP = [-wind_brake,
                     -wind_brake * (3 / 4),
                     0.0,
-                    1.0]
+                    self.params.NIDEC_ACCEL_MAX]
     # The Honda ODYSSEY seems to have different PCM_ACCEL
     # msgs, is it other cars too?
     if not CC.longActive:
@@ -203,13 +204,14 @@ class CarController(CarControllerBase):
       pcm_speed_V = [0.0,
                      np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo + 20.0, 0.0, 100.0)]
+                     np.clip(CS.out.vEgo + 10.0 * self.speedfactor, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
 
       gas_error = actuators.accel - CS.out.aEgo
       if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid):
         if gas_error != 0.0 and gas > 0.0:
           self.gasfactor = np.clip(self.gasfactor + gas_error / 100 * (gas * 4.8), 0.1, 6.0)
+          self.speedfactor = np.clip(self.speedfactor + gas_error / 100 * (gas * 4.8 * 10 ), 0.1, 6.0)
         if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
           wind_adjust = 1 + (wind_brake * 4.8) / 1000
           self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
