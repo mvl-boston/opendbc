@@ -72,6 +72,9 @@ class CarInterface(CarInterfaceBase):
     if 0x184 in fingerprint[CAN.pt]:
       ret.flags |= HondaFlags.HYBRID.value
 
+    if 0x309 not in fingerprint[CAN.pt]:
+      ret.flags |= HondaFlags.NO_CARSPEED.value
+
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID) and (0x223 in fingerprint[CAN.pt]):
       ret.flags |= HondaFlags.HYBRID_ALT_BRAKEHOLD.value
 
@@ -113,16 +116,16 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[1.1], [0.33]]
 
-    elif candidate == CAR.HONDA_CIVIC_2022:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
-      ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
-      ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
-
     elif candidate in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.ACURA_INTEGRA):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
       if candidate == CAR.HONDA_CIVIC_BOSCH:
           CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 750]
+
+    elif candidate == CAR.HONDA_CIVIC_2022:
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
+      ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
+      ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
     elif candidate == CAR.HONDA_ACCORD:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
@@ -191,6 +194,19 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.HONDA_ODYSSEY:
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.28], [0.08]]
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
+
+    elif candidate == CAR.HONDA_ODYSSEY_TWN:
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.28], [0.08]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 32767], [0, 32767]]  # TODO: determine if there is a dead zone at the top end
+      ret.longitudinalTuning.kpBP = [0., 5., 35.]
+      ret.longitudinalTuning.kpV = [1.2, 0.8, 0.5]
+      ret.longitudinalTuning.kiBP = [0., 35.]
+      ret.longitudinalTuning.kiV = [0.18, 0.12]
+
+    elif candidate == CAR.HONDA_ODYSSEY_SINGAPORE:
+      ret.steerActuatorDelay = 0.15
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 1365], [0, 1365]]
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate in (CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G, CAR.HONDA_PASSPORT_4G, CAR.ACURA_MDX_4G_MMR):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
@@ -279,7 +295,7 @@ class CarInterface(CarInterfaceBase):
     else:
       ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX,
                                                        CAR.ACURA_TLX_1G, CAR.HONDA_CLARITY})
-    ret.minEnableSpeed = -1. if ret.autoResumeSng else 25.51 * CV.MPH_TO_MS
+    ret.minEnableSpeed = -1. if ret.autoResumeSng else (19. if candidate == CAR.HONDA_ODYSSEY_TWN else 25.51) * CV.MPH_TO_MS
 
     ret.steerLimitTimer = 0.8
     ret.radarDelay = 0.1
