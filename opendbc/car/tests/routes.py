@@ -135,6 +135,7 @@ routes = [
   # CarTestRoute("56b2cf1dacdcd033/00000017--d24ffdb376", HONDA.HONDA_CITY_7G),  # Brazilian model
   CarTestRoute("2dc4489d7e1410ca/00000001--bbec3f5117", HONDA.HONDA_CRV_6G),
   CarTestRoute("a703d058f4e05aeb/00000008--f169423024", HONDA.HONDA_PASSPORT_4G),
+  CarTestRoute("5bd1fcb9a66f60e1/0000000e--3d8b5fbed4", HONDA.HONDA_ODYSSEY_SINGAPORE),
   # CarTestRoute("ad9840558640c31d/00000018--6d4b733a6a", HONDA.ACURA_MDX_3G), expired - need new route
   # CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA), # Azure route bug
   CarTestRoute("21ea2d289932890b/00000134--3862dfe91d", HONDA.HONDA_ACCORD_9G), # serial steering - dashcam in upstream
