@@ -273,7 +273,7 @@ class CarController(CarControllerBase):
              (0.001 <= apply_brake < 1.0) and (gas <= 0.0) and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
             self.brakefactor = np.clip(self.brakefactor - gas_error / 75 * (apply_brake * 4.8), 1.0, 3.0) # 25 after integral fix
 
-          if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and (apply_brake > 0.001) and 
+          if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and (apply_brake > 0.001) and \
              (not CS.out.brakePressed) and (CS.out.vEgo > 0.0): # don't reduce windfactor while braking, allow increases
             self.windfactor = max(self.windfactor, self.windfactor_before_brake)
           else:
