@@ -204,7 +204,7 @@ class CarController(CarControllerBase):
       pcm_speed_V = [0.0,
                      np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo + 10.0 * self.speedfactor, 0.0, 100.0)]
+                     np.clip(CS.out.vEgo + 50.0 * self.speedfactor, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas + wind_brake - brake, pcm_speed_BP, pcm_speed_V))
 
       gas_error = actuators.accel - CS.out.aEgo
@@ -215,7 +215,7 @@ class CarController(CarControllerBase):
           self.speedfactor = np.clip(self.speedfactor + gas_error / 100 * ((gas - brake) * 4.8 * 10), 0.1, 6.0)
         if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
           wind_adjust = 1 + (wind_brake * 4.8) / 1000
-          self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
+          self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 15.0)
         if gas <= 0.0: # don't reduce windfactor while braking, allow increases
           self.windfactor = max(self.windfactor, self.windfactor_before_brake)
         else:
