@@ -257,10 +257,6 @@ class CarController(CarControllerBase):
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
               wind_adjust = 1 + wind_brake_ms2 / 1000
               self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
-            if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
-              self.windfactor = max(self.windfactor, self.windfactor_before_brake)
-            else:
-                self.windfactor_before_brake = self.windfactor
           else:
             gas_pedal_force = self.accel
             gas_pedal_force += wind_brake_ms2 + hill_brake
@@ -276,6 +272,12 @@ class CarController(CarControllerBase):
           if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and \
              (0.001 <= apply_brake < 1.0) and (gas <= 0.0) and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
             self.brakefactor = np.clip(self.brakefactor - gas_error / 75 * (apply_brake * 4.8), 1.0, 3.0) # 25 after integral fix
+
+          if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and (apply_brake > 0.001) and 
+             (not CS.out.brakePressed) and (CS.out.vEgo > 0.0): # don't reduce windfactor while braking, allow increases
+            self.windfactor = max(self.windfactor, self.windfactor_before_brake)
+          else:
+            self.windfactor_before_brake = self.windfactor
 
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX * self.brakefactor, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
