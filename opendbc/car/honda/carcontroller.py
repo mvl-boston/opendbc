@@ -225,10 +225,10 @@ class CarController(CarControllerBase):
 
       if pcm_accel >= self.params.NIDEC_GAS_MAX: # don't increase gas & wind factor while gas is already maxed, allow decreases
         self.gasfactor = min(self.gasfactor, self.gasfactor_before_max)
-        self.windfactor = min(self.windfactor, self.windfactor_before_max)
+#        self.windfactor = min(self.windfactor, self.windfactor_before_max)
       else:
         self.gasfactor_before_max = self.gasfactor
-        self.windfactor_before_max = self.windfactor
+#        self.windfactor_before_max = self.windfactor
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
