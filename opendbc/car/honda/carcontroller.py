@@ -138,8 +138,9 @@ class CarController(CarControllerBase):
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
     if CC.longActive:
-      accel = actuators.accel
-      gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
+      stopaccel = -0.2 if ((actuators.longControlState == LongCtrlState.stopping) and (actuators.accel >= -0.2)) else actuators.accel
+      accel = stopaccel
+      gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
       gas, brake = 0.0, 0.0
@@ -207,7 +208,7 @@ class CarController(CarControllerBase):
                      np.clip(CS.out.vEgo + 50.0 * self.speedfactor, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas + wind_brake - brake, pcm_speed_BP, pcm_speed_V))
 
-      gas_error = actuators.accel - CS.out.aEgo
+      gas_error = stopaccel - CS.out.aEgo
       if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid):
         if gas_error != 0.0 and gas > 0.0:
           self.gasfactor = np.clip(self.gasfactor + gas_error / 100 * (gas * 4.8), 0.1, 6.0)
