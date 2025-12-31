@@ -3,7 +3,7 @@ from enum import Enum, IntFlag
 
 from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, structs, uds
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column, Device
+from opendbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column
 from opendbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries, p16
 
 Ecu = structs.CarParams.Ecu
@@ -81,6 +81,7 @@ class HondaFlags(IntFlag):
   HYBRID = 2048
   BOSCH_TJA_CONTROL = 4096
   HYBRID_ALT_BRAKEHOLD = 8192  # Some Nidec Hybrids use a different brakehold
+  NO_CARSPEED = 16384 # Some foreign models do not have carspeed
 
 
 # Car button codes
@@ -111,10 +112,7 @@ class HondaCarDocs(CarDocs):
     else:
       harness = CarHarness.nidec
 
-    if CP.carFingerprint in (CAR.HONDA_PILOT_4G, CAR.HONDA_PASSPORT_4G):
-      self.car_parts = CarParts([Device.threex_angled_mount, harness])
-    else:
-      self.car_parts = CarParts.common([harness])
+    self.car_parts = CarParts.common([harness])
 
 
 class Footnote(Enum):
@@ -362,6 +360,18 @@ class CAR(Platforms):
     CarSpecs(mass=1900, wheelbase=3.0, steerRatio=14.35, centerToFrontRatio=0.41, tireStiffnessFactor=0.82),
     radar_dbc_dict('honda_odyssey_exl_2018_generated'),
     flags=HondaFlags.NIDEC_ALT_PCM_ACCEL | HondaFlags.HAS_ALL_DOOR_STATES,
+  )
+  HONDA_ODYSSEY_TWN = HondaNidecPlatformConfig(
+    [],
+    CarSpecs(mass=1900, wheelbase=3.0, steerRatio=14.35, centerToFrontRatio=0.41, tireStiffnessFactor=0.82),
+    radar_dbc_dict('honda_odyssey_taiwan_2019_can_generated'),
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
+  )
+  HONDA_ODYSSEY_SINGAPORE = HondaNidecPlatformConfig(
+    [HondaCarDocs("Honda Odyssey (Singapore) 2021")],
+    CarSpecs(mass=1798, wheelbase=2.9, steerRatio=17.6, centerToFrontRatio=0.41),
+    radar_dbc_dict('honda_odyssey_singapore_2021_can_generated'),
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_RDX = HondaNidecPlatformConfig(
     [HondaCarDocs("Acura RDX 2016-18", "AcuraWatch Plus or Advance Package", min_steer_speed=12. * CV.MPH_TO_MS)],
