@@ -363,7 +363,7 @@ class CAR(Platforms):
   )
   HONDA_ODYSSEY_TWN = HondaNidecPlatformConfig(
     [],
-    CarSpecs(mass=1865, wheelbase=2.9, steerRatio=18.3, centerToFrontRatio=0.44, tireStiffnessFactor=1.01),
+    CarSpecs(mass=1865, wheelbase=2.9, steerRatio=17.6, centerToFrontRatio=0.44),
     radar_dbc_dict('honda_odyssey_singapore_2021_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
