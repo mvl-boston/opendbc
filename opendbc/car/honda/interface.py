@@ -200,7 +200,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 1365], [0, 1365]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
-    elif candidate == CAR.HONDA_ODYSSEY_TWN):
+    elif candidate == CAR.HONDA_ODYSSEY_TWN:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 1365], [0, 1365]] # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
       ret.steerActuatorDelay = 0.15
