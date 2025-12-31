@@ -364,7 +364,7 @@ class CAR(Platforms):
   HONDA_ODYSSEY_TWN = HondaNidecPlatformConfig(
     [],
     CarSpecs(mass=1900, wheelbase=3.0, steerRatio=14.35, centerToFrontRatio=0.41, tireStiffnessFactor=0.82),
-    radar_dbc_dict('honda_odyssey_taiwan_2019_can'),
+    radar_dbc_dict('honda_odyssey_taiwan_2019_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   HONDA_ODYSSEY_SINGAPORE = HondaNidecPlatformConfig(
