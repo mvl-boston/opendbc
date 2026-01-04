@@ -186,9 +186,10 @@ class CarController(CarControllerBase):
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
     # TODO this 1.44 is just to maintain previous behavior
+#    pcm_speed_BP = [-wind_brake,
+#                    -wind_brake * (3 / 4),
     pcm_speed_BP = [-wind_brake,
-                    -wind_brake * (3 / 4),
-                    0.0,
+                    0,
                     self.params.NIDEC_ACCEL_MAX]
     # The Honda ODYSSEY seems to have different PCM_ACCEL
     # msgs, is it other cars too?
@@ -204,8 +205,9 @@ class CarController(CarControllerBase):
       pcm_accel = int(1.0 * self.params.NIDEC_GAS_MAX)
     else:
       pcm_speed_V = [0.0,
-                     np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
+#                     np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
+#                     np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
+                     np.clip(CS.out.vEgo, 0.0, 100.0),                     
                      np.clip(CS.out.vEgo + (self.speed_addon + 50.0) * self.speedfactor, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas + wind_brake - brake, pcm_speed_BP, pcm_speed_V))
 
