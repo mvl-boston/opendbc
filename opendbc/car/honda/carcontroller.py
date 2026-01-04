@@ -112,15 +112,15 @@ class CarController(CarControllerBase):
     self.last_torque = 0.0
     self.gasfactor = 1.0
     self.windfactor = 1.0
-    self.brakefactor = 1.0
-    self.speedfactor = 1.0
+    self.brakefactor = 1.5
+    self.speedfactor = 6.0
     self.windfactor_before_brake = 0.0
     self.gasfactor_before_max = 0.0
     self.windfactor_before_max = 0.0
-    self.speed_addon = 0.0
+    self.speed_addon = 70.0
 
-    self.gasfactor = 1.0
-    self.windfactor = 1.0
+    self.gasfactor = 1.9
+    self.windfactor = 1.5
     self.windfactor_before_brake = 0.0
     self.pitch = 0.0
 
@@ -214,7 +214,7 @@ class CarController(CarControllerBase):
         if gas_error != 0.0 and gas > 0.0:
           self.gasfactor = np.clip(self.gasfactor + gas_error / 1000 * (gas * 4.8), 0.1, 6.0)
         if gas_error != 0.0 and (gas - brake) > 0.0:
-          self.speedfactor = np.clip(self.speedfactor + gas_error / 600 * ((gas - brake) * 4.8 * 10), 0.1, 6.0)
+          self.speedfactor = np.clip(self.speedfactor + gas_error / 600 * ((gas - brake) * 4.8 * 10), 0.1, 7.0)
           self.speed_addon = np.clip(self.speed_addon + gas_error / 120 * ((gas - brake) * 4.8 * self.speedfactor), 0.0, 99.0)
         if gas_error != 0.0 and (not CS.out.brakePressed) and (not CS.out.gasPressed) and (CS.out.vEgo > 0.0):
           wind_adjust = 1 + (wind_brake * 4.8) / 1000
