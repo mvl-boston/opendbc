@@ -186,10 +186,9 @@ class CarController(CarControllerBase):
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
     # TODO this 1.44 is just to maintain previous behavior
-#    pcm_speed_BP = [-wind_brake,
-#                    -wind_brake * (3 / 4),
     pcm_speed_BP = [-wind_brake,
-                    0,
+                    -wind_brake * (3 / 4),
+                    0.0,
                     self.params.NIDEC_ACCEL_MAX]
     # The Honda ODYSSEY seems to have different PCM_ACCEL
     # msgs, is it other cars too?
@@ -205,10 +204,9 @@ class CarController(CarControllerBase):
       pcm_accel = int(1.0 * self.params.NIDEC_GAS_MAX)
     else:
       pcm_speed_V = [0.0,
-#                     np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
-#                     np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo, 0.0, 100.0),                     
-                     np.clip(CS.out.vEgo + (self.speed_addon + 50.0) * self.speedfactor, 0.0, 100.0)]
+                     np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
+                     np.clip(CS.out.vEgo + self.speed_addon, 0.0, 100.0),
+                     np.clip(CS.out.vEgo + self.speed_addon + self.speedfactor, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas + wind_brake - brake, pcm_speed_BP, pcm_speed_V))
 
       gas_error = stopaccel - CS.out.aEgo
@@ -216,8 +214,8 @@ class CarController(CarControllerBase):
         if gas_error != 0.0 and gas > 0.0:
           self.gasfactor = np.clip(self.gasfactor + gas_error / 1000 * (gas * 4.8), 0.1, 6.0)
         if gas_error != 0.0 and (gas - brake) > 0.0:
-          self.speedfactor = np.clip(self.speedfactor + gas_error / 600 * ((gas - brake) * 4.8 * 10), 0.1, 7.0)
-          self.speed_addon = np.clip(self.speed_addon + gas_error / 120 * ((gas - brake) * 4.8 * self.speedfactor), 0.0, 99.0)
+          self.speedfactor = np.clip(self.speedfactor + gas_error / 60 * (gas + wind_brake - brake) * 4.8, 0.1, 7.0)
+          self.speed_addon = np.clip(self.speed_addon + gas_error / 120 * (gas + wind_brake - brake) * 4.8, 0.0, 99.0)
         if gas_error != 0.0 and (not CS.out.brakePressed) and (not CS.out.gasPressed) and (CS.out.vEgo > 0.0):
           wind_adjust = 1 + (wind_brake * 4.8) / 1000
           self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 1.5)
