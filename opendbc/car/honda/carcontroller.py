@@ -119,7 +119,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.last_torque = 0.0
 
     self.gasfactor = 1.0
+    self.gasfactor_before_maxgas = 1.0
     self.windfactor = 1.0
+    self.windfactor_before_maxgas = 1.0
     self.windfactor_before_brake = 0.0
     self.pitch = 0.0
 
@@ -252,6 +254,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
               self.windfactor = max(self.windfactor, self.windfactor_before_brake)
             else:
               self.windfactor_before_brake = self.windfactor
+            if gas_pedal_force >= self.params.BOSCH_ACCEL_MAX): # don't increase gasfactor nor windfactor at accel max, allow decreases
+              self.gasfactor = min(self.gasfactor, self.gasfactor_before_gasmax)
+              self.windfactor = min(self.windfactor, self.windfactor_before_gasmax)
+            else:
+              self.gasfactor_before_gasmax = self.gasfactor
+              self.windfactor_before_gasmax = self.windfactor
           self.gas = float(np.interp(gas_pedal_force * self.gasfactor, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
           stopping = actuators.longControlState == LongCtrlState.stopping
