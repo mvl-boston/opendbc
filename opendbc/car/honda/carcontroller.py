@@ -147,14 +147,11 @@ class CarController(CarControllerBase):
     self.last_torque = 0.0
     self.bosch_last_gas = 0
 
-    self.lkas_button_send_remaining = 0
-    self.last_lkas_button_frame = 0
-    self.radar_disable_counter = 0
-
-    self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
-    self.gasfactor_before_gasmax = self.gasfactor
-    self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
-    self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
+    self.gasfactor = 1.0
+    self.gasfactor_before_maxgas = 1.0
+    self.windfactor = 1.0
+    self.windfactor_before_maxgas = 1.0
+    self.windfactor_before_brake = 0.0
     self.pitch = 0.0
     self.radar_mux = 0
     # stock RADAR_HUD_CANFD raises its CMBS bit only for a short burst after ACC engages (see
@@ -393,19 +390,13 @@ class CarController(CarControllerBase):
               self.windfactor = max(self.windfactor, self.windfactor_before_brake)
             else:
               self.windfactor_before_brake = self.windfactor
-            if gas_pedal_force >= self.params.BOSCH_ACCEL_MAX: # don't increase gasfactor nor windfactor at accel max, allow decreases
+            if gas_pedal_force >= self.params.BOSCH_ACCEL_MAX): # don't increase gasfactor nor windfactor at accel max, allow decreases
               self.gasfactor = min(self.gasfactor, self.gasfactor_before_gasmax)
               self.windfactor = min(self.windfactor, self.windfactor_before_gasmax)
             else:
               self.gasfactor_before_gasmax = self.gasfactor
               self.windfactor_before_gasmax = self.windfactor
-          self.gas = float(np.interp((gas_pedal_force - min_gas) * self.gasfactor + min_gas,
-                                     self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
-
-          # limit gas ramp to 60 units per frame, matches stock.  Higher sometimes causes powertrain to ignore gas command.
-          max_gas = max(60, self.bosch_last_gas + 60)
-          self.gas = min(self.gas, max_gas)
-          self.bosch_last_gas = self.gas
+          self.gas = float(np.interp(gas_pedal_force * self.gasfactor, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
