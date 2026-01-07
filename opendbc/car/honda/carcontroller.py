@@ -1,4 +1,5 @@
 import numpy as np
+import math
 
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
@@ -123,7 +124,6 @@ class CarController(CarControllerBase):
     self.pitch = 0.0
 
   def update(self, CC, CS, now_nanos):
-    gas_pedal_force = 0.0
     actuators = CC.actuators
     hud_control = CC.hudControl
     hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
