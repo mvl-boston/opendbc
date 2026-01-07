@@ -168,6 +168,10 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
     acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
     acc_hud_values['ICONS'] = acc_hud['ICONS']
+  if CP.carFingerprint == HONDA_BOSCH_CANFD:  
+    acc_hud_values['ACC_PROBLEM'] = acc_hud['ACC_PROBLEM']
+    acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
+    acc_hud_values['BRAKE_SYSTEM_ICON'] = acc_hud['BRAKE_SYSTEM_ICON']
 
   return packer.make_can_msg("ACC_HUD", bus, acc_hud_values)
 
@@ -190,9 +194,11 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
 
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
     # TODO: needed for Bosch CAN FD?
-    if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    if CP.carFingerprint in  (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
-
+    if CP.carFingerprint == HONDA_BOSCH_CANFD:
+      lkas_hud_values['RDM_PROBLEM'] = lkas_hud['RDM_PROBLEM']
+  
   if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
     lkas_hud_values['RDM_OFF'] = 1
     lkas_hud_values['LANE_ASSIST_BEEP_OFF'] = 1
