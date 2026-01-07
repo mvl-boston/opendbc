@@ -244,6 +244,9 @@ class CarState(CarStateBase):
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
     if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
+    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      self.lkas_hud = cp_cam.vl["LKAS_HUD"]
+      self.acc_hud = cp_cam.vl["ACC_HUD"]
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
