@@ -29,7 +29,7 @@ class CarControllerParams:
   NIDEC_GAS_MAX = 198  # 0xc6
   NIDEC_BRAKE_MAX = 1024 // 4
 
-  BOSCH_ACCEL_MIN = -3.5  # m/s^2
+  BOSCH_ACCEL_MIN = -7.8  # m/s^2 - Honda AEB max of 0.8G
   BOSCH_ACCEL_MAX = 2.0  # m/s^2
 
   BOSCH_GAS_LOOKUP_BP = [0.0, 2.0]  # 2m/s^2
