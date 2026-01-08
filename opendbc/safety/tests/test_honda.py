@@ -466,7 +466,7 @@ class TestHondaBoschLongSafety(HondaButtonEnableBase, TestHondaBoschSafetyBase):
   NO_GAS = -30000
   MAX_GAS = 2000
   MAX_ACCEL = 2.0  # accel is used for brakes, but openpilot can set positive values
-  MIN_ACCEL = -3.5
+  MIN_ACCEL = -7.8 # alpha long mimcs factory AEB max of 0.8G
 
   STEER_BUS = 1
   TX_MSGS = [[0xE4, 1], [0x1DF, 1], [0x1EF, 1], [0x1FA, 1], [0x30C, 1], [0x33D, 1], [0x33DA, 1], [0x33DB, 1], [0x39F, 1], [0x18DAB0F1, 1]]
