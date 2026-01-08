@@ -78,7 +78,7 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
-def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint, gas_force):
+def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint, gas_force, vEgo):
   commands = []
   min_gas_accel = CarControllerParams.BOSCH_GAS_LOOKUP_BP[0]
 
@@ -88,12 +88,15 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   braking = 1 if active and gas_force < min_gas_accel else 0
   standstill = 1 if active and stopping_counter > 0 else 0
   standstill_release = 1 if active and stopping_counter == 0 else 0
+  # aeb_braking = 1 if accel_command < float(np.interp(vEgo, [5.0, 20.0], [-5.0, -3.5])) # acc ISO limits
+  aeb_braking = 1 if accel_command < float(np.interp(vEgo, [5.0, 20.0], [-1.0, -0.5])) # fake limit for testing
 
   # common ACC_CONTROL values
   acc_control_values = {
     'ACCEL_COMMAND': accel_command,
     'STANDSTILL': standstill,
     'BRAKE_REQUEST': braking,
+    'AEB_PREPARE': aeb_braking, # blinks the FCW lights
   }
 
   if car_fingerprint in HONDA_BOSCH_RADARLESS:
