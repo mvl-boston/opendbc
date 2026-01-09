@@ -90,7 +90,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   standstill = 1 if active and stopping_counter > 0 else 0
   standstill_release = 1 if active and stopping_counter == 0 else 0
   # aeb_braking = 1 if accel_command < float(np.interp(vEgo, [5.0, 20.0], [-5.0, -3.5])) else 0 # acc ISO limits
-  aeb_braking = 1 if accel_command < -0.1 float(np.interp(vEgo, [5.0, 20.0], [-0.1, -0.1])) else 0 # fake limit for testing
+  aeb_braking = 1 if accel_command < float(np.interp(vEgo, [5.0, 20.0], [-0.1, -0.1])) else 0 # fake limit for testing
 
   # common ACC_CONTROL values
   acc_control_values = {
