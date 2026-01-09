@@ -123,8 +123,8 @@ class CarController(CarControllerBase):
     self.windfactor = 1.5
     self.windfactor_before_brake = 0.0
     self.pitch = 0.0
-    self.steer_stage = 0
-    self.new_torque_percent = 0.0
+    self.steer_stage = 3
+    self.new_torque_percent = 1.16
 
   def update(self, CC, CS, now_nanos):
     gas_pedal_force = 0.0
