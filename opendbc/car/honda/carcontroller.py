@@ -142,7 +142,10 @@ class CarController(CarControllerBase):
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
     if CC.longActive:
-      stopaccel = (2.2352 - CS.out.vEgo) / 3.0 # target 5mph within 3 seconds
+      if CS.steerFaultTemporary:
+        stopaccel = -0.5
+      else:
+        stopaccel = (2.2352 - CS.out.vEgo) / 3.0 # target 5mph within 3 seconds
       # stopaccel = -0.2 if ((actuators.longControlState == LongCtrlState.stopping) and (actuators.accel >= -0.2)) else actuators.accel
       accel = stopaccel
       gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
@@ -176,8 +179,8 @@ class CarController(CarControllerBase):
     if CC.longActive:
 
       self.steer_stage = 3
-      if self.new_torque_percent < 1.16:
-        self.new_torque_percent = 1.16
+      if self.new_torque_percent < 1.48:
+        self.new_torque_percent = 1.48
 
       if self.steer_stage == 0:
         self.last_time_frame = self.frame
