@@ -117,7 +117,7 @@ class CarController(CarControllerBase):
     self.windfactor_before_brake = 0.0
     self.gasfactor_before_max = 0.0
     self.windfactor_before_max = 0.0
-    self.speed_addon = 70.0
+    self.speed_addon = 0 if self.CP.carFingerprint == CAR.HONDA_ODYSSEY_TWN: else 70.0
 
     self.gasfactor = 1.9
     self.windfactor = 1.5
