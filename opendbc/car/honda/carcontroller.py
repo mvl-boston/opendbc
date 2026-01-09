@@ -138,6 +138,7 @@ class CarController(CarControllerBase):
       self.pitch = CC.orientationNED[1]
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
+    stopaccel = 0.0
     if CC.longActive:
       stopaccel = -0.2 if ((actuators.longControlState == LongCtrlState.stopping) and (actuators.accel >= -0.2)) else actuators.accel
       accel = stopaccel
