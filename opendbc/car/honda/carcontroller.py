@@ -142,7 +142,7 @@ class CarController(CarControllerBase):
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
     if CC.longActive:
-      if CS.steerFaultTemporary:
+      if CS.out.steerFaultTemporary:
         stopaccel = -0.5
       else:
         stopaccel = (2.2352 - CS.out.vEgo) / 3.0 # target 5mph within 3 seconds
