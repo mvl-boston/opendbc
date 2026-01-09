@@ -90,14 +90,14 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   standstill = 1 if active and stopping_counter > 0 else 0
   standstill_release = 1 if active and stopping_counter == 0 else 0
   # aeb_braking = 1 if accel_command < float(np.interp(vEgo, [5.0, 20.0], [-5.0, -3.5])) else 0 # acc ISO limits
-  aeb_prepare = 1 if accel_command < float(np.interp(vEgo, [5.0, 20.0], [-0.2, -0.1])) else 0 # fake limit for testing
+  aeb_braking = 1 if accel_command < float(np.interp(vEgo, [5.0, 20.0], [-0.2, -0.1])) else 0 # fake limit for testing
 
   # common ACC_CONTROL values
   acc_control_values = {
     'ACCEL_COMMAND': accel_command,
     'STANDSTILL': standstill,
     'BRAKE_REQUEST': braking,
-    'AEB_PREPARE': aeb_braking, # blinks the FCW lights
+    'AEB_BRAKING': aeb_braking, # blinks the FCW lights
   }
 
   if car_fingerprint in HONDA_BOSCH_RADARLESS:
