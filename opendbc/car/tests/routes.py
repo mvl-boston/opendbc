@@ -32,7 +32,6 @@ non_tested_cars = [
   HONDA.HONDA_NBOX_2G,
   HONDA.ACURA_MDX_4G_MMR,
   HONDA.HONDA_CITY_7G,
-  HONDA.HONDA_CRV_SA, # temporary, awaiting testroute
 
   # port extensions
   HYUNDAI.KIA_CEED_PHEV_2022_NON_SCC,
@@ -158,6 +157,7 @@ routes = [
   # port extensions
   CarTestRoute("ad9840558640c31d/0000003d--a35002b59f", HONDA.ACURA_MDX_3G_MMR),
   CarTestRoute("21ea2d289932890b/00000134--3862dfe91d", HONDA.HONDA_ACCORD_9G),
+  CarTestRoute("4991f6e1afbe5adb/00000005--713a39aaee", HONDA.HONDA.HONDA_CRV_SA), # South Africa model
 
   CarTestRoute("87d7f06ade479c2e/2023-09-11--23-30-11", HYUNDAI.HYUNDAI_AZERA_6TH_GEN),
   CarTestRoute("66189dd8ec7b50e6/2023-09-20--07-02-12", HYUNDAI.HYUNDAI_AZERA_HEV_6TH_GEN),
