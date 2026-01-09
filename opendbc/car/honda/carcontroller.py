@@ -123,8 +123,8 @@ class CarController(CarControllerBase):
     self.windfactor = 1.5
     self.windfactor_before_brake = 0.0
     self.pitch = 0.0
-    self.steer_stage = 3
-    self.new_torque_percent = 1.16
+    self.steer_stage = 0
+    self.new_torque_percent = 0.0
 
   def update(self, CC, CS, now_nanos):
     gas_pedal_force = 0.0
@@ -173,6 +173,11 @@ class CarController(CarControllerBase):
     prior_max_torque = self.params.STEER_LOOKUP_V[-1]
 
     if CC.longActive:
+
+      self.steer_stage = 3
+      if self.new_torque_percent < 1.16:
+        self.new_torque_percent = 1.16
+
       if self.steer_stage == 0:
         self.last_time_frame = self.frame
         self.steer_stage = 1
