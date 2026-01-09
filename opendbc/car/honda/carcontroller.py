@@ -125,6 +125,7 @@ class CarController(CarControllerBase):
     self.pitch = 0.0
     self.steer_stage = 0
     self.new_torque_percent = 0.0
+    self.last_time_frame = self.frame
 
   def update(self, CC, CS, now_nanos):
     gas_pedal_force = 0.0
