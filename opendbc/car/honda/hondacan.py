@@ -90,7 +90,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   standstill = 1 if active and stopping_counter > 0 else 0
   standstill_release = 1 if active and stopping_counter == 0 else 0
   # aeb_braking = 1 if accel_command < float(np.interp(vEgo, [5.0, 20.0], [-5.0, -3.5])) else 0 # acc ISO limits
-  aeb_braking = 1 if accel_command < float(np.interp(vEgo, [5.0, 20.0], [-0.2, -0.1])) else 0 # fake limit for testing
+  aeb_braking = 1 if accel_command < -0.1 float(np.interp(vEgo, [5.0, 20.0], [-0.1, -0.1])) else 0 # fake limit for testing
 
   # common ACC_CONTROL values
   acc_control_values = {
@@ -218,10 +218,13 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
   return commands
 
 
-def create_radar_hud(packer, bus):
+def create_radar_hud(packer, bus, accel):
   radar_hud_values = {
-    'CMBS_OFF': 0x01,
-    'SET_TO_1': 0x01,
+    'CMBS_OFF': 0 if accel < -0.1 else 0x01,
+    'SET_TO_1': 0 if accel < -0.1 else 0x01,
+    'LEAD_DISTANCE': 17 if accel < -0.1 else 0,
+    'ZEROES_BOH': 68 if accel < -0.1 else 0,
+    'HUD_LEAD': 1 if accel < -0.1 else 0,
   }
 
   return packer.make_can_msg('RADAR_HUD', bus, radar_hud_values)
