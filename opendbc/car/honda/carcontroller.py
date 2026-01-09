@@ -207,7 +207,7 @@ class CarController(CarControllerBase):
 
       # limited_torque = self.new_torque_percent
 
-      apply_torque = - int (limited_torque * prior_max_torque)
+      apply_torque = - int(limited_torque * prior_max_torque)
     else:
       apply_torque = 0
 
