@@ -147,8 +147,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           targetspeed = 5 + 1
         if self.CP.carFingerprint in (CAR.HONDA_CITY_7G):
           targetspeed = 6.4 + 1
-        if targetspeed < CP.minEnableSpeed + 1:
-          targetspeed = CP.minEnableSpeed + 1
+        if targetspeed < self.CP.minEnableSpeed + 1:
+          targetspeed = self.CP.minEnableSpeed + 1
         stopaccel = (targetspeed - CS.out.vEgo) / 3.0
       accel = stopaccel
       gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
