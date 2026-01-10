@@ -142,7 +142,14 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       if CS.out.steerFaultTemporary:
         stopaccel = -0.5
       else:
-        stopaccel = (2.2352 - CS.out.vEgo) / 3.0 # target 5mph within 3 seconds
+        targetspeed = 2.2352 # target 5mph within 3 seconds
+        if self.CP.carFingerprint in (CAR.HONDA_NBOX_2G):
+          targetspeed = 5 + 1
+        if self.CP.carFingerprint in (CAR.HONDA_CITY_7G):
+          targetspeed = 6.4 + 1
+        if self.CP.carFingerprint not in (HONDA_BOSCH):
+          targetspeed = 11.2 + 1 # 25 mph is nidec ACC cutoff, plus add 1 m/s
+        stopaccel = (targetspeed - CS.out.vEgo) / 3.0
       accel = stopaccel
       gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
