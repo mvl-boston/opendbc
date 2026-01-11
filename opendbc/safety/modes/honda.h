@@ -183,7 +183,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
 
   const LongitudinalLimits HONDA_NIDEC_LONG_LIMITS = {
     .max_gas = 198,  // 0xc6
-    .max_brake = 255,
+    .max_brake = 1023,
 
     .inactive_speed = 0,
   };
