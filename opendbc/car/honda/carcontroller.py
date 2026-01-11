@@ -141,8 +141,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
     if CC.longActive:
-      if not CS.out.steerControlOn:
-        self.steerstatus_counter -=1
+      if CS.steerControlOn:
+        self.steerstatus_counter = 10
+      else:
+        self.steerstatus_counter -= 1
       if CS.out.steerFaultTemporary or self.steerstatus_counter <=0:
         test_on = False
       if not test_on:
