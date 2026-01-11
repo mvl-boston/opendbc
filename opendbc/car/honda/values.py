@@ -17,7 +17,7 @@ class CarControllerParams:
   # to apply some more braking if we're on a downhill slope.
   # Our controller should still keep the 2 second average above
   # -3.5 m/s^2 as per planner limits
-  NIDEC_ACCEL_MIN = -4.0  # m/s^2
+  NIDEC_ACCEL_MIN = -7.8  # m/s^2 - Honda AEB max of 0.8G
   NIDEC_ACCEL_MAX = 2.0  # try 2.0
 
   NIDEC_ACCEL_LOOKUP_BP = [-1., 0., .6]
@@ -29,7 +29,7 @@ class CarControllerParams:
   NIDEC_GAS_MAX = 198  # 0xc6
   NIDEC_BRAKE_MAX = 1024 // 4
 
-  BOSCH_ACCEL_MIN = -7.8  # m/s^2 - Honda AEB max of 0.8G
+  BOSCH_ACCEL_MIN = -3.5
   BOSCH_ACCEL_MAX = 2.0  # m/s^2
 
   BOSCH_GAS_LOOKUP_BP = [0.0, 2.0]  # 2m/s^2
