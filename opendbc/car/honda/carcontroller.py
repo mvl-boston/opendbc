@@ -146,8 +146,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       else:
         self.steerstatus_counter -= 1
       if CS.out.steerFaultTemporary or self.steerstatus_counter <=0:
-        test_on = False
-      if not test_on:
+        self.test_on = False
+      if not self.test_on:
         stopaccel = -0.5
       else:
         targetspeed = 2.2352 # target 5mph within 3 seconds
