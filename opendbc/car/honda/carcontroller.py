@@ -119,6 +119,8 @@ class CarController(CarControllerBase):
     self.steer_stage = 0
     self.new_torque_percent = 0.0
     self.last_time_frame = self.frame
+    self.test_on = True
+    self.steerstatus_counter = 10
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -134,7 +136,11 @@ class CarController(CarControllerBase):
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
     if CC.longActive:
-      if CS.out.steerFaultTemporary:
+      if not CS.out.steerControlOn:
+        self.steerstatus_counter -=1
+      if CS.out.steerFaultTemporary or self.steerstatus_counter <=0:
+        test_on = False
+      if not test_on:
         stopaccel = -0.5
       else:
         targetspeed = 2.2352 # target 5mph within 3 seconds
@@ -150,6 +156,8 @@ class CarController(CarControllerBase):
     else:
       accel = 0.0
       gas, brake = 0.0, 0.0
+      self.test_on = True
+      self.steerstatus_counter = 10
 
     # *** rate limit steer ***
     # limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
