@@ -48,8 +48,9 @@ class CarInterface(CarInterfaceBase):
       # Disable the radar and let openpilot control longitudinal
       # WARNING: THIS DISABLES AEB!
       # If Bosch radarless, this blocks ACC messages from the camera
-      ret.alphaLongitudinalAvailable = True
-      ret.openpilotLongitudinalControl = alpha_long
+      # TODO: get radar disable working on Bosch CANFD
+      # ret.alphaLongitudinalAvailable = True
+      ret.openpilotLongitudinalControl = True
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
       cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
@@ -125,7 +126,7 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate == CAR.HONDA_ACCORD_11G:
       ret.steerActuatorDelay = 0.22
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5160], [0, 5160]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.18]]
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 1060]
 
@@ -187,7 +188,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
 
     elif candidate == CAR.ACURA_RDX_3G:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4055], [0, 4055]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
 
     elif candidate == CAR.ACURA_RDX_3G_MMR:
