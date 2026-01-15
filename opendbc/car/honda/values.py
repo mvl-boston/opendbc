@@ -296,6 +296,11 @@ class CAR(Platforms):
     {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated'},
     flags=HondaFlags.BOSCH_ALT_RADAR,
   )
+  # mid-model refresh
+  ACURA_TLX_2G_MMR = HondaBoschCANFDPlatformConfig(
+    [HondaCarDocs("Acura TLX 2025", "All")],
+    CarSpecs(mass=3990 * CV.LB_TO_KG, wheelbase=2.87, centerToFrontRatio=0.43, steerRatio=12.35),
+  )
   ACURA_INTEGRA = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura Integra 2023-25", "All")],
     CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=15.5,),
