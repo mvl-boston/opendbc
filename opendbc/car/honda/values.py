@@ -32,7 +32,7 @@ class CarControllerParams:
   BOSCH_ACCEL_MIN = -3.5  # m/s^2
   BOSCH_ACCEL_MAX = 2.0  # m/s^2
 
-  BOSCH_GAS_LOOKUP_BP = [-0.2, 2.0]  # 2m/s^2
+  BOSCH_GAS_LOOKUP_BP = [0.0, 2.0]  # 2m/s^2
   BOSCH_GAS_LOOKUP_V = [0, 1600]
 
   STEER_STEP = 1  # 100 Hz
@@ -276,6 +276,11 @@ class CAR(Platforms):
     CarSpecs(mass=3982 * CV.LB_TO_KG, wheelbase=2.87, steerRatio=14.0, centerToFrontRatio=0.43),
     {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated'},
     flags=HondaFlags.BOSCH_ALT_RADAR,
+  )
+  # mid-model refresh
+  ACURA_TLX_2G_MMR = HondaBoschCANFDPlatformConfig(
+    [HondaCarDocs("Acura TLX 2025", "All")],
+    CarSpecs(mass=3990 * CV.LB_TO_KG, wheelbase=2.87, centerToFrontRatio=0.43, steerRatio=14.2),
   )
 
   # Nidec Cars
