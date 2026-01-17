@@ -366,7 +366,7 @@ class CarController(CarControllerBase):
     new_actuators.gas = float(self.gasfactor)
     new_actuators.brake = float(self.windfactor)
     new_actuators.torque = self.last_torque
-    new_actuators.torqueOutputCan = apply_torque
+    new_actuators.torqueOutputCan = apply_torque # force new CI
 
     if self.frame % 6000 == 0:
       self.param_writer.put_many({
