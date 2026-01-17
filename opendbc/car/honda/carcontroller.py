@@ -332,7 +332,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     new_actuators.gas = float(self.gasfactor)
     new_actuators.brake = float(self.windfactor)
     new_actuators.torque = self.last_torque
-    new_actuators.torqueOutputCan = apply_torque
+    new_actuators.torqueOutputCan = apply_torque # force new CI
 
     self.frame += 1
     return new_actuators, can_sends
