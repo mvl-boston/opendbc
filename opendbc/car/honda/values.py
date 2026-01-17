@@ -180,7 +180,6 @@ class CAR(Platforms):
     [
       HondaCarDocs("Honda Accord 2023-26", "All"),
       HondaCarDocs("Honda Accord Hybrid 2023-26", "All"),
-      HondaCarDocs("Acura TLX 2024-25", "All"),
   ],
     CarSpecs(mass=3477 * CV.LB_TO_KG, wheelbase=2.83, steerRatio=16.0, centerToFrontRatio=0.39),
   )
@@ -299,7 +298,7 @@ class CAR(Platforms):
   )
   # mid-model refresh
   ACURA_TLX_2G_MMR = HondaBoschCANFDPlatformConfig(
-    [HondaCarDocs("Acura TLX 2025", "All")],
+    [HondaCarDocs("Acura TLX 2024-25", "All")],
     CarSpecs(mass=3990 * CV.LB_TO_KG, wheelbase=2.87, centerToFrontRatio=0.43, steerRatio=13.7),
   )
   ACURA_INTEGRA = HondaBoschPlatformConfig(
