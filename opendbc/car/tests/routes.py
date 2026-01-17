@@ -31,7 +31,6 @@ non_tested_cars = [
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
   HONDA.ACURA_TLX_2G,  # FIXME: replace expired route
-  VOLKSWAGEN.PORSCHE_MACAN_MK1,
   # Honda/Acura test routes below expired, replace when CI bucket sync is fixed
   HONDA.ACURA_TLX_2G,
   HONDA.ACURA_TLX_2G_MMR,
