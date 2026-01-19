@@ -205,7 +205,7 @@ class CarController(CarControllerBase):
           self.steer_stage += 1
 
       if not self.snapback:
-        self.new_torque_percent = (self.steer_stage + 1) * 0.1
+        self.new_torque_percent = (10 - self.steer_stage) * 0.1
 
       limited_torque = rate_limit(self.new_torque_percent, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                   self.params.STEER_DELTA_UP * DT_CTRL)
