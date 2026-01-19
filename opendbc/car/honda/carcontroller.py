@@ -117,8 +117,10 @@ class CarController(CarControllerBase):
     self.pitch = 0.0
 
     self.steer_stage = 0
-    self.new_torque_percent = 0.0
+    self.max_lataccel = 0.0
     self.last_time_frame = self.frame
+    self.new_torque_percent = 0.0
+    self.snapback = False
     self.test_on = True
     self.steerstatus_counter = 10
 
@@ -140,7 +142,7 @@ class CarController(CarControllerBase):
         self.steerstatus_counter = 10
       else:
         self.steerstatus_counter -= 1
-      if CS.out.steerFaultTemporary or self.steerstatus_counter <=0:
+      if CS.out.steerFaultTemporary or self.steerstatus_counter <=0 or self.steer_stage == 10:
         self.test_on = False
       if not self.test_on:
         stopaccel = -0.5
@@ -185,32 +187,25 @@ class CarController(CarControllerBase):
     prior_max_torque = self.params.STEER_LOOKUP_V[-1]
 
     if CC.longActive:
-      self.steer_stage = 3
-      if self.new_torque_percent < 0.98:
-        self.new_torque_percent = 0.98
+      if self.snapback:
+        if abs(CS.out.steeringAngleDeg) > (self.max_lataccel * 0.5):
+          self.new_torque_percent = -1.0
+        else:
+          self.snapback = False
+          self.last_time_frame = self.frame
+          self.max_lataccel = 0.0
 
-      if self.steer_stage == 0:
-        self.last_time_frame = self.frame
-        self.steer_stage = 1
+      if not self.snapback:
+        if abs(CS.out.steeringAngleDeg) > self.max_lataccel:
+          self.last_time_frame = self.frame
+          self.max_lataccel == abs(CS.out.steeringAngleDeg)
+        if self.frame > self.last_time_frame + 200: # 2 sec at max lat accel
+          self.snapback = True
+          self.new_torque_percent = -1.0
+          self.steer_stage += 1
 
-      if self.steer_stage == 1:
-        self.new_torque_percent = 0.3
-        if self.frame > self.last_time_frame + 1000:
-            self.last_time_frame = self.frame
-            self.steer_stage = 2
-
-      if self.steer_stage == 2:
-        self.new_torque_percent = 0.6
-        if self.frame > self.last_time_frame + 1000:
-            self.steer_stage = 3
-
-      if self.steer_stage == 3:
-        if self.frame > self.last_time_frame + 1000:
-            self.last_time_frame = self.frame
-            if self.new_torque_percent < 0.9:
-              self.new_torque_percent += 0.1
-            else:
-              self.new_torque_percent += 0.01
+      if not self.snapback:
+        self.new_torque_percent = (self.steer_stage + 1) * 0.1
 
       limited_torque = rate_limit(self.new_torque_percent, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                   self.params.STEER_DELTA_UP * DT_CTRL)
