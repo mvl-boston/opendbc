@@ -216,7 +216,7 @@ class CarController(CarControllerBase):
           self.gasfactor = np.clip(self.gasfactor + gas_error / 1000 * (gas * 4.8), 0.1, 6.0)
         if gas_error != 0.0 and (gas - brake) > 0.0:
           self.speedfactor = np.clip(self.speedfactor + gas_error / 60 * (gas + wind_brake - brake) * 4.8, 0.1, 7.0)
-          if self.frame > self.last_brake_frame + 200 # only adjust if 2 seconds since last braking
+          if self.frame > self.last_brake_frame + 200: # only adjust if 2 seconds since last braking
             self.speed_addon = np.clip(self.speed_addon + gas_error / 120 * (gas + wind_brake - brake) * 4.8, 0.0, 99.0)
         if gas_error != 0.0 and (not CS.out.brakePressed) and (not CS.out.gasPressed) and (CS.out.vEgo > 0.0):
           wind_adjust = 1 + (wind_brake * 4.8) / 1000
