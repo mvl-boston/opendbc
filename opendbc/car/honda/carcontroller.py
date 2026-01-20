@@ -147,7 +147,7 @@ class CarController(CarControllerBase):
       if not self.test_on:
         stopaccel = -0.5
       else:
-        targetspeed = 2.2352 # target 5mph within 3 seconds
+        targetspeed = 3.12928 # target 7mph within 3 seconds
         if self.CP.carFingerprint in (CAR.HONDA_NBOX_2G):
           targetspeed = 5 + 1
         if self.CP.carFingerprint in (CAR.HONDA_CITY_7G):
