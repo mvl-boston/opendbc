@@ -154,7 +154,7 @@ class CarController(CarControllerBase):
           targetspeed = 6.4 + 1
         if targetspeed < self.CP.minEnableSpeed + 1:
           targetspeed = self.CP.minEnableSpeed + 1
-        stopaccel = (targetspeed - CS.out.vEgo) / 3.0
+        stopaccel = (targetspeed - CS.out.vEgo) / (3.0 if targetspeed > CS.out.vEgo else 0.5)
       accel = stopaccel
       gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
