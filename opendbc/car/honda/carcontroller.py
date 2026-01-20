@@ -118,6 +118,7 @@ class CarController(CarControllerBase):
     self.gasfactor_before_max = 0.0
     self.windfactor_before_max = 0.0
     self.speed_addon = 0 if self.CP.carFingerprint == CAR.HONDA_ODYSSEY_TWN else 70.0
+    self.last_brake_frame = self.frame
 
     self.gasfactor = 1.9
     self.windfactor = 1.5
@@ -215,7 +216,8 @@ class CarController(CarControllerBase):
           self.gasfactor = np.clip(self.gasfactor + gas_error / 1000 * (gas * 4.8), 0.1, 6.0)
         if gas_error != 0.0 and (gas - brake) > 0.0:
           self.speedfactor = np.clip(self.speedfactor + gas_error / 60 * (gas + wind_brake - brake) * 4.8, 0.1, 7.0)
-          self.speed_addon = np.clip(self.speed_addon + gas_error / 120 * (gas + wind_brake - brake) * 4.8, 0.0, 99.0)
+          if self.frame > self.last_brake_frame + 200 # only adjust if 2 seconds since last braking
+            self.speed_addon = np.clip(self.speed_addon + gas_error / 120 * (gas + wind_brake - brake) * 4.8, 0.0, 99.0)
         if gas_error != 0.0 and (not CS.out.brakePressed) and (not CS.out.gasPressed) and (CS.out.vEgo > 0.0):
           wind_adjust = 1 + (wind_brake * 4.8) / 1000
           self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 1.5)
@@ -276,6 +278,9 @@ class CarController(CarControllerBase):
 
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX * self.brakefactor, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
+
+          if apply_brake > 0:
+            self.last_brake_frame = self.frame
 
           pcm_override = True
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
