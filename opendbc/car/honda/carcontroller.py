@@ -137,10 +137,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
     if CC.longActive:
-      accel = actuators.accel
+      stopaccel = -0.2 if ((actuators.longControlState == LongCtrlState.stopping) and (actuators.accel >= -0.2)) else actuators.accel
+      accel = stopaccel
+      gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
       if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX)) and (accel > max(0, CS.out.aEgo) + 0.1):
         accel = 10000.0 # help with lagged accel until pedal tuning is inserted
-      gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
+      gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
       gas, brake = 0.0, 0.0
@@ -268,7 +270,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
-          gas_error = actuators.accel - CS.out.aEgo
+          gas_error = stopaccel - CS.out.aEgo
           if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and self.CP_SP.enableGasInterceptor:
             if gas_error != 0.0 and gas > 0.0:
               self.gasfactor = np.clip(self.gasfactor + gas_error / 50 * (gas * 4.8), 0.1, 3.0)
