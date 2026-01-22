@@ -151,7 +151,7 @@ class CarInterface(CarInterfaceBase):
     elif candidate in (CAR.HONDA_CRV_6G):
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 1460]
       ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5000], [0, 5000]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5100], [0, 5100]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
 
     elif candidate == CAR.HONDA_FIT:
