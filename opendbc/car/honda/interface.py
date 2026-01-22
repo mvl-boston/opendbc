@@ -130,7 +130,7 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate == CAR.HONDA_ACCORD_11G:
       ret.steerActuatorDelay = 0.22
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 6966], [0, 6966]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.18]]
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 1060]
 
