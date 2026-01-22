@@ -117,13 +117,15 @@ class CarController(CarControllerBase):
     self.windfactor_before_brake = 0.0
     self.gasfactor_before_max = 0.0
     self.windfactor_before_max = 0.0
-    self.speed_addon = 0 if self.CP.carFingerprint == CAR.HONDA_ODYSSEY_TWN else 70.0
+    self.speed_addon = 0 # if self.CP.carFingerprint == CAR.HONDA_ODYSSEY_TWN else 70.0
     self.last_brake_frame = self.frame
 
     self.gasfactor = 1.9
     self.windfactor = 1.5
     self.windfactor_before_brake = 0.0
     self.pitch = 0.0
+    self.accel_last = 0.0
+    self.boost_counter = 0
 
   def update(self, CC, CS, now_nanos):
     gas_pedal_force = 0.0
@@ -233,6 +235,11 @@ class CarController(CarControllerBase):
       else:
         self.gasfactor_before_max = self.gasfactor
 
+      if accel > self.accel_last:
+        self.boost_counter = 30
+      elif self.boost_counter > 0:
+        self.boost_counter -= 1
+
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
@@ -294,7 +301,7 @@ class CarController(CarControllerBase):
       if self.CP.openpilotLongitudinalControl:
         # On Nidec, this also controls longitudinal positive acceleration
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
-                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
+                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, self.boost_counter > 0))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
       reduced_steering = CS.out.steeringPressed
