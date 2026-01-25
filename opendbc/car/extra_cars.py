@@ -39,7 +39,8 @@ class CAR(Platforms):
     [
       CommunityCarDocs("Acura Integra 2023-25"),
       CommunityCarDocs("Acura MDX 2015-16", "Advance Package"),
-      CommunityCarDocs("Acura MDX 2017-20"),
+      CommunityCarDocs("Acura MDX 2017-19"),
+      CommunityCarDocs("Acura MDX Hybrid 2017-19"),
       CommunityCarDocs("Acura MDX 2022-24"),
       CommunityCarDocs("Acura RDX 2022-25"),
       CommunityCarDocs("Acura RLX 2017", "Advance Package or Technology Package"),
@@ -55,8 +56,8 @@ class CAR(Platforms):
 
   EXTRA_HYUNDAI = ExtraPlatformConfig(
     [
-      CommunityCarDocs("Hyundai Palisade 2023-24", package="HDA2"),
-      CommunityCarDocs("Kia Telluride 2023-24", package="HDA2"),
+      CommunityCarDocs("Hyundai Palisade 2023-24", "Highway Driving Assist II"),
+      CommunityCarDocs("Kia Telluride 2023-24", "Highway Driving Assist II"),
     ],
   )
 
