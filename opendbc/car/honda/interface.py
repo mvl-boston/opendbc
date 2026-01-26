@@ -372,10 +372,10 @@ class CarInterface(CarInterfaceBase):
         stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.8], [0.24]]
 
     elif candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX): # source mlocoteta
-      ret.steerActuatorDelay = 0.3
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 433], [0, 433]]
-      ret.lateralTuning.pid.kf = 0.000035
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
+      stock_cp.steerActuatorDelay = 0.3
+      stock_cp.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 433], [0, 433]]
+      stock_cp.lateralTuning.pid.kf = 0.000035
+      stock_cp.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     elif candidate in (CAR.HONDA_ACCORD_9G, CAR.ACURA_TLX_1G):
       if candidate == CAR.ACURA_TLX_1G:
