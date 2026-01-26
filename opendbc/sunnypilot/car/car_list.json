@@ -2615,6 +2615,16 @@
     ],
     "package": "All"
   },
+  "Lexus LS 2018": {
+    "platform": "LEXUS_LS",
+    "make": "Lexus",
+    "brand": "toyota",
+    "model": "LS",
+    "year": [
+      "2018"
+    ],
+    "package": "All except Lexus Safety System+ A"
+  },
   "Lexus NX 2018-19": {
     "platform": "LEXUS_NX",
     "make": "Lexus",
@@ -3837,18 +3847,6 @@
     ],
     "package": "All"
   },
-  "Toyota RAV4 Prime 2021-23": {
-    "platform": "TOYOTA_RAV4_PRIME",
-    "make": "Toyota",
-    "brand": "toyota",
-    "model": "RAV4 Prime",
-    "year": [
-      "2021",
-      "2022",
-      "2023"
-    ],
-    "package": "All"
-  },
   "Toyota Sienna 2018-20": {
     "platform": "TOYOTA_SIENNA",
     "make": "Toyota",
@@ -3858,29 +3856,6 @@
       "2018",
       "2019",
       "2020"
-    ],
-    "package": "All"
-  },
-  "Toyota Sienna 2021-23": {
-    "platform": "TOYOTA_SIENNA_4TH_GEN",
-    "make": "Toyota",
-    "brand": "toyota",
-    "model": "Sienna",
-    "year": [
-      "2021",
-      "2022",
-      "2023"
-    ],
-    "package": "All"
-  },
-  "Toyota Yaris (Non-US only) 2020, 2023": {
-    "platform": "TOYOTA_YARIS",
-    "make": "Toyota",
-    "brand": "toyota",
-    "model": "Yaris (Non-US only)",
-    "year": [
-      "2020",
-      "2023"
     ],
     "package": "All"
   },
@@ -4169,13 +4144,12 @@
     ],
     "package": "Adaptive Cruise Control (ACC) & Lane Assist"
   },
-  "Volkswagen Jetta 2018-23": {
+  "Volkswagen Jetta 2019-23": {
     "platform": "VOLKSWAGEN_JETTA_MK7",
     "make": "Volkswagen",
     "brand": "volkswagen",
     "model": "Jetta",
     "year": [
-      "2018",
       "2019",
       "2020",
       "2021",
