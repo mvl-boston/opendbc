@@ -91,7 +91,11 @@ legend = ["LAT_ACCEL_FACTOR", "MAX_LAT_ACCEL_MEASURED", "FRICTION"]
 "HONDA_ODYSSEY_5G_MMR" = [0.9, 0.9, 0.2]
 "HONDA_NBOX_2G" = [1.2, 1.2, 0.2]
 "ACURA_TLX_2G" = [1.2, 1.2, 0.15]
+"ACURA_TLX_2G_MMR" = [1.7, 1.7, 0.16]
+"ACURA_INTEGRA" = [2.0, 2.0, 0.25]
+"ACURA_ADX" = [2.9, 2.9, 0.30]
 "PORSCHE_MACAN_MK1" = [2.0, 2.0, 0.2]
+"ACURA_MDX_4G" = [1.05, 1.05, 0.2]
 
 # Dashcam or fallback configured as ideal car
 "MOCK" = [10.0, 10, 0.0]
@@ -103,3 +107,5 @@ legend = ["LAT_ACCEL_FACTOR", "MAX_LAT_ACCEL_MEASURED", "FRICTION"]
 # port extensions
 "HONDA_CLARITY" = [0.96, 0.4018518740819229, 0.19]
 "CHEVROLET_MALIBU_NON_ACC_9TH_GEN" = [1.85, 1.85, 0.075]
+"ACURA_MDX_3G" = [1.8, 1.8, 0.19]
+"HONDA_ACCORD_9G" = [2.1, 2.1, 0.19]
