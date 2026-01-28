@@ -81,7 +81,6 @@ class HondaFlags(IntFlag):
   HYBRID = 2048
   BOSCH_TJA_CONTROL = 4096
   HYBRID_ALT_BRAKEHOLD = 8192  # Some Nidec Hybrids use a different brakehold
-  NO_CARSPEED = 16384 # Some foreign models do not have carspeed
 
 
 # Car button codes
@@ -367,15 +366,9 @@ class CAR(Platforms):
     flags=HondaFlags.NIDEC_ALT_PCM_ACCEL | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   HONDA_ODYSSEY_TWN = HondaNidecPlatformConfig(
-    [],
-    CarSpecs(mass=1865, wheelbase=2.9, steerRatio=18.3, centerToFrontRatio=0.44, tireStiffnessFactor=1.01),
-    radar_dbc_dict('honda_odyssey_singapore_2021_can_generated'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
-  )
-  HONDA_ODYSSEY_SINGAPORE = HondaNidecPlatformConfig(
-    [HondaCarDocs("Honda Odyssey (Singapore) 2021")],
-    CarSpecs(mass=1798, wheelbase=2.9, steerRatio=17.6, centerToFrontRatio=0.41),
-    radar_dbc_dict('honda_odyssey_singapore_2021_can_generated'),
+    [HondaCarDocs("Honda Odyssey (Taiwan) 2018-19")],
+    CarSpecs(mass=1865, wheelbase=2.9, steerRatio=14.35, centerToFrontRatio=0.44, tireStiffnessFactor=0.82),
+    radar_dbc_dict('honda_odyssey_twn_2018_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_RDX = HondaNidecPlatformConfig(
