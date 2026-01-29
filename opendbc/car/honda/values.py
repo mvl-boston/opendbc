@@ -261,6 +261,16 @@ class CAR(Platforms):
     [HondaCarDocs("Honda Passport 2026", "All")],
     CarSpecs(mass=4620 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=18.5),
   )
+  ACURA_MDX_4G = HondaBoschPlatformConfig(
+    [
+      HondaCarDocs("Acura MDX 2022", "All"),
+      # todo: find 2023 fingerprints
+      HondaCarDocs("Acura MDX 2024", "All"),
+    ],
+    CarSpecs(mass=4788 * CV.LB_TO_KG, wheelbase=2.89, steerRatio=16.3, centerToFrontRatio=0.428),  # as spec
+    {Bus.pt: 'acura_mdx_2022_can_generated'},
+    flags=HondaFlags.BOSCH_TJA_CONTROL,
+  )
   # mid-model refresh
   ACURA_MDX_4G_MMR = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Acura MDX 2025-26", "All except Type S")],
@@ -329,6 +339,12 @@ class CAR(Platforms):
     CarSpecs(mass=1900, wheelbase=3.0, steerRatio=14.35, centerToFrontRatio=0.41, tireStiffnessFactor=0.82),
     radar_dbc_dict('honda_odyssey_exl_2018_generated'),
     flags=HondaFlags.NIDEC_ALT_PCM_ACCEL | HondaFlags.HAS_ALL_DOOR_STATES,
+  )
+  HONDA_ODYSSEY_TWN = HondaNidecPlatformConfig(
+    [HondaCarDocs("Honda Odyssey (Taiwan) 2018-19")],
+    CarSpecs(mass=1865, wheelbase=2.9, steerRatio=14.35, centerToFrontRatio=0.44, tireStiffnessFactor=0.82),
+    radar_dbc_dict('honda_odyssey_twn_2018_generated'),
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_RDX = HondaNidecPlatformConfig(
     [HondaCarDocs("Acura RDX 2016-18", "AcuraWatch Plus or Advance Package", min_steer_speed=12. * CV.MPH_TO_MS)],
