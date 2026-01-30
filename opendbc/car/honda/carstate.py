@@ -2,7 +2,7 @@ import numpy as np
 from collections import defaultdict
 
 from opendbc.can import CANDefine, CANParser
-from opendbc.car import Bus, create_button_events, structs
+from opendbc.car import Bus, create_button_events, structs, DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_CANFD, \
@@ -48,6 +48,11 @@ class CarState(CarStateBase):
     # When available we use cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] to populate vEgoCluster
     # However, on cars without a digital speedometer this is not always present (HRV, FIT, CRV 2016, ILX and RDX)
     self.dash_speed_seen = False
+    self.is_metric = False
+    self.v_cruise_factor = 1.
+
+    self.initial_accFault_cleared = False
+    self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -68,7 +73,8 @@ class CarState(CarStateBase):
     self.cruise_buttons = cp.vl["SCM_BUTTONS"]["CRUISE_BUTTONS"]
 
     # used for car hud message
-    self.is_metric = not cp.vl["CAR_SPEED"]["IMPERIAL_UNIT"]
+    # TODO: find CAR_SPEED for HONDA_ODYSSEY_TWN or use ACC_HUD w/ detection
+    self.is_metric = self.CP.carFingerprint in (CAR.HONDA_ODYSSEY_TWN,) or not cp.vl["CAR_SPEED"]["IMPERIAL_UNIT"]
     self.v_cruise_factor = CV.MPH_TO_MS if self.dynamic_v_cruise_units and not self.is_metric else CV.KPH_TO_MS
 
     # ******************* parse out can *******************
@@ -127,10 +133,11 @@ class CarState(CarStateBase):
 
     ret.espDisabled = cp.vl["VSA_STATUS"]["ESP_DISABLED"] != 0
 
-    self.dash_speed_seen = self.dash_speed_seen or cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] > 1e-3
-    if self.dash_speed_seen:
-      conversion = CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS
-      ret.vEgoCluster = cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] * conversion
+    if self.CP.carFingerprint not in (CAR.HONDA_ODYSSEY_TWN,):
+      self.dash_speed_seen = self.dash_speed_seen or cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] > 1e-3
+      if self.dash_speed_seen:
+        conversion = CV.KPH_TO_MS if self.is_metric else CV.MPH_TO_MS
+        ret.vEgoCluster = cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] * conversion
 
     ret.steeringAngleDeg = cp.vl["STEERING_SENSORS"]["STEER_ANGLE"]
     ret.steeringRateDeg = cp.vl["STEERING_SENSORS"]["STEER_ANGLE_RATE"]
@@ -186,6 +193,18 @@ class CarState(CarStateBase):
     ret.brake = cp.vl["VSA_STATUS"]["USER_BRAKE"]
     ret.cruiseState.enabled = cp.vl["POWERTRAIN_DATA"]["ACC_STATUS"] != 0
     ret.cruiseState.available = bool(cp.vl[self.car_state_scm_msg]["MAIN_ON"])
+
+    # Bosch cars take a few minutes after startup to clear prior faults
+    if ret.accFaulted:
+      if (self.CP.carFingerprint in HONDA_BOSCH) and not self.initial_accFault_cleared:
+        # block via cruiseState since accFaulted is not reversible until offroad
+        ret.accFaulted = False
+        ret.cruiseState.available = False
+    elif self.initial_accFault_cleared_timer == 0:
+      self.initial_accFault_cleared = True
+
+    if self.initial_accFault_cleared_timer > 0:
+      self.initial_accFault_cleared_timer -= 1
 
     # Gets rid of Pedal Grinding noise when brake is pressed at slow speeds for some models
     if self.CP.carFingerprint in (CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE):
