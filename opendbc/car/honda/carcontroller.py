@@ -239,6 +239,7 @@ class CarController(CarControllerBase):
         self.boost_counter = 30
       elif self.boost_counter > 0:
         self.boost_counter -= 1
+      self.accel_last = accel
 
       if (gas_error >= 0.2) and (pcm_accel > 0): # try forcing max accel
         pcm_accel = self.params.NIDEC_GAS_MAX
