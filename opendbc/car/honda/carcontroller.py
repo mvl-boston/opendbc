@@ -214,6 +214,39 @@ class CarController(CarControllerBase):
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
       pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
+      gas_error = stopaccel - CS.out.aEgo
+      if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid):
+        if gas_error != 0.0 and gas > 0.0:
+          self.gasfactor = np.clip(self.gasfactor + gas_error / 1000 * (gas * 4.8), 0.1, 6.0)
+        if gas_error != 0.0 and (gas - brake) > 0.0:
+          self.speedfactor = np.clip(self.speedfactor + gas_error / 60 * (gas + wind_brake - brake) * 4.8, 0.1, 50.0)
+          if self.frame > self.last_brake_frame + 200: # only adjust if 2 seconds since last braking
+            self.speed_addon = np.clip(self.speed_addon + gas_error / 120 * (gas + wind_brake - brake) * 4.8, 0.0, 0.0) # was 99max
+        if gas_error != 0.0 and (not CS.out.brakePressed) and (not CS.out.gasPressed) and (CS.out.vEgo > 0.0):
+          wind_adjust = 1 + (wind_brake * 4.8) / 1000
+          self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 1.5)
+        if gas <= 0.0 and self.CP.carFingerprint in HONDA_BOSCH: # don't reduce windfactor while braking, allow increases
+          self.windfactor = max(self.windfactor, self.windfactor_before_brake)
+        else:
+          self.windfactor_before_brake = self.windfactor
+
+      pcm_accel = int(np.clip((accel / 1.44) / max_accel * self.gasfactor, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+
+      if pcm_accel >= self.params.NIDEC_GAS_MAX: # don't increase gas factor while gas is already maxed, allow decreases
+        self.gasfactor = min(self.gasfactor, self.gasfactor_before_max)
+      else:
+        self.gasfactor_before_max = self.gasfactor
+
+      if (self.accel_last <= 0) and (accel > 0):
+        self.boost_counter = 30
+      elif self.boost_counter > 0:
+        self.boost_counter -= 1
+      self.accel_last = accel
+
+      if (gas_error >= 0.2) and (pcm_accel > 0): # try forcing max accel
+        pcm_accel = self.params.NIDEC_GAS_MAX
+        pcm_speed = 100.0
+
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
