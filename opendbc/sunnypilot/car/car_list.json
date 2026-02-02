@@ -1385,6 +1385,27 @@
     ],
     "package": "All"
   },
+  "Honda Odyssey (Singapore) 2021": {
+    "platform": "HONDA_ODYSSEY_TWN",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Odyssey (Singapore)",
+    "year": [
+      "2021"
+    ],
+    "package": "Honda Sensing"
+  },
+  "Honda Odyssey (Taiwan) 2018-19": {
+    "platform": "HONDA_ODYSSEY_TWN",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Odyssey (Taiwan)",
+    "year": [
+      "2018",
+      "2019"
+    ],
+    "package": "Honda Sensing"
+  },
   "Honda Passport 2019-25": {
     "platform": "HONDA_PILOT",
     "make": "Honda",
