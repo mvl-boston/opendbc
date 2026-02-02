@@ -235,7 +235,7 @@ class CarController(CarControllerBase):
       else:
         self.gasfactor_before_max = self.gasfactor
 
-      if accel > self.accel_last:
+      if (self.accel_last <= 0) and (accel > 0):
         self.boost_counter = 30
       elif self.boost_counter > 0:
         self.boost_counter -= 1
