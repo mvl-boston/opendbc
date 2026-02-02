@@ -260,6 +260,7 @@ class CarController(CarControllerBase):
         ts = self.frame * DT_CTRL
 
         if self.CP.carFingerprint in HONDA_BOSCH:
+          apply_brake = 0
           self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
 
           if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
