@@ -244,7 +244,7 @@ class CarController(CarControllerBase):
       if (gas_error >= 0.2) and (pcm_accel > 0): # try forcing max accel
         pcm_accel = self.params.NIDEC_GAS_MAX
         pcm_speed = 100.0
-    
+
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
