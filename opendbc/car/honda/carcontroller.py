@@ -235,7 +235,7 @@ class CarController(CarControllerBase):
       else:
         self.gasfactor_before_max = self.gasfactor
 
-      if accel > self.accel_last:
+      if (self.accel_last <= 0) and (accel > 0):
         self.boost_counter = 30
       elif self.boost_counter > 0:
         self.boost_counter -= 1
@@ -244,7 +244,7 @@ class CarController(CarControllerBase):
       if (gas_error >= 0.2) and (pcm_accel > 0): # try forcing max accel
         pcm_accel = self.params.NIDEC_GAS_MAX
         pcm_speed = 100.0
-    
+
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
@@ -260,6 +260,7 @@ class CarController(CarControllerBase):
         ts = self.frame * DT_CTRL
 
         if self.CP.carFingerprint in HONDA_BOSCH:
+          apply_brake = 0
           self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
 
           if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
