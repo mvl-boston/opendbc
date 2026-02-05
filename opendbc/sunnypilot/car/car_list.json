@@ -212,16 +212,6 @@
     ],
     "package": "All"
   },
-  "Acura TLX 2025": {
-    "platform": "ACURA_TLX_2G_MMR",
-    "make": "Acura",
-    "brand": "honda",
-    "model": "TLX",
-    "year": [
-      "2025"
-    ],
-    "package": "All"
-  },
   "Audi A3 2014-19": {
     "platform": "AUDI_A3_MK3",
     "make": "Audi",
