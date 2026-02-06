@@ -286,7 +286,7 @@ class CAR(Platforms):
   )
   HONDA_FIT_4G = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda Fit (Taiwan) 2025", "All")],
-    CarSpecs(mass=1229, wheelbase=2.53, steerRatio=18.1, centerToFrontRatio=0.39, minSteerSpeed=20. * CV.KPH_TO_MS),
+    CarSpecs(mass=1229, wheelbase=2.53, steerRatio=18.1, centerToFrontRatio=0.39, minSteerSpeed=23. * CV.KPH_TO_MS),
     {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS | HondaFlags.MINSPEED_CUTOFF
   )
