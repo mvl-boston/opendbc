@@ -92,6 +92,10 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kiBP = [0., 5., 35.]
       ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
 
+    if candidate in (CAR.HONDA_FIT_4G, CAR.HONDA_CITY_7G):
+      ret.vEgoStopping = 2.0
+      ret.stoppingDecelRate = 0.3
+      
     # Disable control if EPS mod detected
     for fw in car_fw:
       if fw.ecu == "eps" and b"," in fw.fwVersion:
