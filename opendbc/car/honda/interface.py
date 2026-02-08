@@ -241,6 +241,11 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
+    elif candidate in CAR.HONDA_FIT_4G:
+      ret.steerActuatorDelay = 0.15
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+
     # TODO-SP: remove when https://github.com/commaai/opendbc/pull/2687 is merged
     elif candidate in (
         CAR.HONDA_CLARITY,
