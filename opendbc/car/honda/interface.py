@@ -107,6 +107,7 @@ class CarInterface(CarInterfaceBase):
 
     if candidate == CAR.HONDA_CITY_7G:
       ret.vEgoStopping = 2.0
+      ret.vEgoStarting = ret.vEgoStopping
       ret.stoppingDecelRate = 0.3
     else:
       ret.vEgoStopping = 0.5
