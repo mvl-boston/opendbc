@@ -167,7 +167,7 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     acc_hud_values['ACC_ON'] = int(enabled)
     acc_hud_values['PCM_SPEED'] = pcm_speed * CV.MS_TO_KPH
     acc_hud_values['PCM_GAS'] = pcm_accel
-    acc_hud_values['SET_ME_X01'] = 0 if CP.carFingerprint == CAR.HONDA_ODYSSEY_TWN and pcm_accel > 0 else boost
+    acc_hud_values['SET_ME_X01'] = 1 if (pcm_accel == 198) else boost
     acc_hud_values['FCM_OFF'] = acc_hud['FCM_OFF']
     acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
     acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
