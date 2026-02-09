@@ -588,6 +588,21 @@ FW_VERSIONS = {
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-TZA-F120\x00\x00',
     ],
+    (Ecu.transmission, 0x18da1ef1, None): [
+      b'28101-60E-F010\x00\x00',
+    ],
+    (Ecu.gateway, 0x18daeff1, None): [
+      b'38897-TZA-Q010\x00\x00',
+    ],
+    (Ecu.eps, 0x18da30f1, None): [
+      b'39990-TZA-E910\x00\x00',
+    ],
+    (Ecu.vsa, 0x18da28f1, None): [
+      b'57114-TZK-F010\x00\x00',
+    ],
+    (Ecu.srs, 0x18da53f1, None): [
+      b'77959-TZA-F120\x00\x00',
+    ],
   },
   CAR.HONDA_FREED: {
     (Ecu.gateway, 0x18daeff1, None): [
