@@ -95,7 +95,7 @@ legend = ["LAT_ACCEL_FACTOR", "MAX_LAT_ACCEL_MEASURED", "FRICTION"]
 "ACURA_INTEGRA" = [2.0, 2.0, 0.25]
 "ACURA_ADX" = [2.9, 2.9, 0.30]
 "ACURA_MDX_4G" = [1.7, 1.7, 0.2]
-"HONDA_FIT_4G" = [1.1, 1.1, 0.21]
+"HONDA_FIT_4G" = [1.3, 1.3, 0.22]
 
 # Dashcam or fallback configured as ideal car
 "MOCK" = [10.0, 10, 0.0]
