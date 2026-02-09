@@ -1329,6 +1329,16 @@
     ],
     "package": "Honda Sensing"
   },
+  "Honda Fit (Taiwan) 2025": {
+    "platform": "HONDA_FIT_4G",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Fit (Taiwan)",
+    "year": [
+      "2025"
+    ],
+    "package": "All"
+  },
   "Honda Freed 2020": {
     "platform": "HONDA_FREED",
     "make": "Honda",
