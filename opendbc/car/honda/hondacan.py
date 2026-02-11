@@ -174,7 +174,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     'STEERING_REQUIRED': alert_steer_required,
     'SOLID_LANES': hud_control.lanesVisible,
     'BEEP': 0,
-  }  
+  }
   lkas_hud_values['DASHED_LANES'] = lkas_hud_values['SOLID_LANES'] and not steering_available
 
   # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
