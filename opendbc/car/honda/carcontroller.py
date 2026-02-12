@@ -130,12 +130,89 @@ class CarController(CarControllerBase):
 
     if CC.longActive:
       accel = actuators.accel
+
+# ----------------- test forced accel start -------------------
+      accel = 0.0
+      # plan: +0.5 / -0.5 / -2 / +1 / -1 / -2
+
+      if self.man_step == 0:
+        if CS.out.vEgo > 0.0:
+          accel = -1.0 # -0.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 1
+
+      if self.man_step == 1:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = -2.0
+        else:
+          self.man_step = 2
+
+      if self.man_step == 2:
+        if CS.out.vEgo < 4.47: # 10 mph
+          accel = 0.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 3
+
+      if self.man_step == 3:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = 0.0
+        else:
+          self.man_step = 4
+
+      if self.man_step == 4:
+        if CS.out.vEgo > 0.0:
+          accel = -0.5
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 5
+
+      if self.man_step == 5:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = -2.0
+        else:
+          self.man_step = 6
+
+      if self.man_step == 6:
+        if CS.out.vEgo < 4.47: # 10 mph
+          accel = 1.0
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 7
+
+      if self.man_step == 7:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = 0.0
+        else:
+          self.man_step = 8
+
+      if self.man_step == 8:
+        if CS.out.vEgo > 0.0:
+          accel = -1.0
+        else:
+          self.last_time_frame = self.frame
+          self.man_step = 9
+
+      if self.man_step == 9:
+        if self.frame < self.last_time_frame + 300: # 3 seconds
+          accel = -2.0
+        else:
+          self.man_step = 0
+
+# ----------------- test forced accel end -------------------
+
       if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)) and (accel > max(0, CS.out.aEgo) + 0.1):
         accel = 10000.0 # help with lagged accel until pedal tuning is inserted
       gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
       gas, brake = 0.0, 0.0
+
+# --------------- forced accel start clearout -------------
+      self.man_step = 0
+      self.last_time_frame = 0
+# ---------------- forced accel end clearout -------------
 
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
