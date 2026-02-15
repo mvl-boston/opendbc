@@ -1,6 +1,6 @@
 #pragma once
 
-#include "opendbc/safety/safety_declarations.h"
+#include "opendbc/safety/declarations.h"
 
 // All common address checks except SCM_BUTTONS which isn't on one Nidec safety configuration
 #define HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(pt_bus)                                                                                      \
@@ -23,9 +23,11 @@
 #define HONDA_N_COMMON_TX_MSGS \
   {0xE4,  0, 5, .check_relay = true},   \
   {0x194, 0, 4, .check_relay = true},   \
+  {0x33D, 0, 5, .check_relay = true},   \
+
+#define HONDA_N_COMMON_LONG_TX_MSGS \
   {0x1FA, 0, 8, .check_relay = false},  \
   {0x30C, 0, 8, .check_relay = true},   \
-  {0x33D, 0, 5, .check_relay = true},   \
 
 enum {
   HONDA_BTN_NONE = 0,
@@ -42,7 +44,7 @@ static bool honda_fwd_brake = false;
 static bool honda_bosch_long = false;
 static bool honda_bosch_radarless = false;
 static bool honda_bosch_canfd = false;
-static bool honda_clarity = false;
+static bool honda_nidec_hybrid = false;
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
 static HondaHw honda_hw = HONDA_NIDEC;
 
@@ -198,7 +200,7 @@ static void honda_rx_hook(const CANPacket_t *msg) {
       bool honda_stock_aeb = GET_BIT(msg, 29U);
       int honda_stock_brake = (msg->data[0] << 2) | (msg->data[1] >> 6);
 
-      if (honda_clarity) {
+      if (honda_nidec_hybrid) {
         honda_stock_brake = (msg->data[6] << 2) | (msg->data[7] >> 6);
       }
 
@@ -254,7 +256,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   if ((msg->addr == 0x1FAU) && (msg->bus == bus_pt)) {
     honda_brake = (msg->data[0] << 2) + ((msg->data[1] >> 6) & 0x3U);
 
-    if (honda_clarity) {
+    if (honda_nidec_hybrid) {
       honda_brake = (msg->data[6] << 2) + ((msg->data[7] >> 6) & 0x3U);
     }
 
@@ -341,17 +343,26 @@ static safety_config honda_nidec_init(uint16_t param) {
   // 0x1FA is dynamically forwarded based on stock AEB
   // 0xE4 is steering on all cars except CRV and RDX, 0x194 for CRV and RDX,
   // 0x1FA is brake control, 0x30C is acc hud, 0x33D is lkas hud
-  static CanMsg HONDA_N_TX_MSGS[] = {HONDA_N_COMMON_TX_MSGS};
+  static CanMsg HONDA_N_TX_MSGS[] = {
+    HONDA_N_COMMON_TX_MSGS
+    HONDA_N_COMMON_LONG_TX_MSGS
+  };
+
+  static CanMsg HONDA_N_STOCK_LONGITUDINAL_TX_MSGS[] = {
+    HONDA_N_COMMON_TX_MSGS
+  };
 
   static CanMsg HONDA_N_INTERCEPTOR_TX_MSGS[] = {
     HONDA_N_COMMON_TX_MSGS
+    HONDA_N_COMMON_LONG_TX_MSGS
     {0x200, 0, 6, .check_relay = false},
   };
 
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
 
-  const uint16_t HONDA_PARAM_SP_CLARITY = 1;
+  const uint16_t HONDA_PARAM_SP_NIDEC_HYBRID = 1;
   const uint16_t HONDA_PARAM_GAS_INTERCEPTOR = 2;
+  const uint16_t HONDA_PARAM_STOCK_LONGITUDINAL = 4;
 
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
@@ -361,13 +372,15 @@ static safety_config honda_nidec_init(uint16_t param) {
   honda_bosch_long = false;
   honda_bosch_radarless = false;
   honda_bosch_canfd = false;
+  bool honda_stock_longitudinal = false;
 
   safety_config ret;
 
   bool enable_nidec_alt = GET_FLAG(param, HONDA_PARAM_NIDEC_ALT);
 
-  honda_clarity = GET_FLAG(current_safety_param_sp, HONDA_PARAM_SP_CLARITY);
+  honda_nidec_hybrid = GET_FLAG(current_safety_param_sp, HONDA_PARAM_SP_NIDEC_HYBRID);
   enable_gas_interceptor = GET_FLAG(current_safety_param_sp, HONDA_PARAM_GAS_INTERCEPTOR);
+  honda_stock_longitudinal = GET_FLAG(current_safety_param_sp, HONDA_PARAM_STOCK_LONGITUDINAL);
 
   if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
@@ -387,7 +400,11 @@ static safety_config honda_nidec_init(uint16_t param) {
     SET_RX_CHECKS(honda_nidec_common_rx_checks, ret);
   }
 
-  SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
+  if (honda_stock_longitudinal) {
+    SET_TX_MSGS(HONDA_N_STOCK_LONGITUDINAL_TX_MSGS, ret);
+  } else {
+    SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
+  }
 
   if (enable_gas_interceptor) {
     if (enable_nidec_alt) {
