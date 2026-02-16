@@ -110,10 +110,10 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
-    self.gasfactor = 1.0
-    self.windfactor = 1.0
-    self.brakefactor = 1.5
-    self.speedfactor = 6.0
+    self.gasfactor = 2.5
+    self.windfactor = 1.3
+    self.brakefactor = 1.2
+    self.speedfactor = 49.0
     self.windfactor_before_brake = 0.0
     self.gasfactor_before_max = 0.0
     self.windfactor_before_max = 0.0
