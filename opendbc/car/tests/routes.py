@@ -160,6 +160,7 @@ routes = [
   CarTestRoute("a703d058f4e05aeb/00000008--f169423024", HONDA.HONDA_PASSPORT_4G),
   CarTestRoute("c45f8d145722812e/0000001b--37a99319c3", HONDA.ACURA_MDX_4G),
   # CarTestRoute("ad9840558640c31d/000001f2--026c4f6275", HONDA.ACURA_TLX_2G_MMR), # canbus (single TX failure??) breaking CI
+  CarTestRoute("4991f6e1afbe5adb/00000005--713a39aaee", HONDA.HONDA_CRV_SA), # South Africa model
   CarTestRoute("0b3cfa082cbbe54e/0000000c--5218004ec8", HONDA.HONDA_FIT_4G),
   # port extensions
   CarTestRoute("ad9840558640c31d/0000003d--a35002b59f", HONDA.ACURA_MDX_3G_MMR),
