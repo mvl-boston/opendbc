@@ -2,8 +2,10 @@ from opendbc.car import Bus, get_safety_config, structs
 from opendbc.car.interfaces import CarInterfaceBase
 from opendbc.car.tesla.carcontroller import CarController
 from opendbc.car.tesla.carstate import CarState
-from opendbc.car.tesla.values import TeslaSafetyFlags, TeslaFlags, CAR, DBC, FSD_14_FW, Ecu
+from opendbc.car.tesla.values import TeslaSafetyFlags, TeslaFlags, CANBUS, CAR, DBC, FSD_14_FW, Ecu
 from opendbc.car.tesla.radar_interface import RadarInterface, RADAR_START_ADDR
+
+from opendbc.sunnypilot.car.tesla.values import TeslaFlagsSP, TeslaSafetyFlagsSP
 
 
 class CarInterface(CarInterfaceBase):
@@ -22,6 +24,10 @@ class CarInterface(CarInterfaceBase):
     ret.steerAtStandstill = True
 
     ret.steerControlType = structs.CarParams.SteerControlType.angle
+
+    # Model X and HW 2.5 vehicles are missing DAS_settings
+    if 0x293 not in fingerprint[CANBUS.autopilot_party]:
+      ret.flags |= TeslaFlags.MISSING_DAS_SETTINGS.value
 
     # Radar support is intended to work for:
     # - Tesla Model 3 vehicles built approximately mid-2017 through early-2021
@@ -45,5 +51,20 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[0].safetyParam |= TeslaSafetyFlags.FSD_14.value
 
     ret.dashcamOnly = candidate in (CAR.TESLA_MODEL_X,)  # dashcam only, pending find invalidLkasSetting signal
+
+    return ret
+
+  @staticmethod
+  def _get_params_sp(stock_cp: structs.CarParams, ret: structs.CarParamsSP, candidate, fingerprint: dict[int, dict[int, int]],
+                     car_fw: list[structs.CarParams.CarFw], alpha_long: bool, is_release_sp: bool, docs: bool) -> structs.CarParamsSP:
+
+    stock_cp.enableBsm = True
+
+    if candidate == CAR.TESLA_MODEL_X:
+      stock_cp.dashcamOnly = False
+
+    if 0x3DF in fingerprint[1]:
+      ret.flags |= TeslaFlagsSP.HAS_VEHICLE_BUS.value
+      ret.safetyParam |= TeslaSafetyFlagsSP.HAS_VEHICLE_BUS
 
     return ret

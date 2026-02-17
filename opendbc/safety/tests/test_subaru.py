@@ -25,9 +25,9 @@ class SubaruMsg(enum.IntEnum):
   ES_LKAS_State     = 0x322
   ES_Infotainment   = 0x323
   ES_UDS_Request    = 0x787
-  ES_HighBeamAssist = 0x121
-  ES_STATIC_1       = 0x22a
-  ES_STATIC_2       = 0x325
+  ES_HighBeamAssist = 0x22A
+  ES_STATIC_1       = 0x325
+  ES_STATIC_2       = 0x121
 
 
 SUBARU_MAIN_BUS = 0
@@ -95,10 +95,6 @@ class TestSubaruSafetyBase(common.CarSafetyTest):
     values = {s: speed for s in ["FR", "FL", "RR", "RL"]}
     return self.packer.make_can_msg_safety("Wheel_Speeds", self.ALT_MAIN_BUS, values)
 
-  def _angle_meas_msg(self, angle):
-    values = {"Steering_Angle": angle}
-    return self.packer.make_can_msg_safety("Steering_Torque", 0, values)
-
   def _user_brake_msg(self, brake):
     values = {"Brake": brake}
     return self.packer.make_can_msg_safety("Brake_Status", self.ALT_MAIN_BUS, values)
@@ -110,6 +106,21 @@ class TestSubaruSafetyBase(common.CarSafetyTest):
   def _pcm_status_msg(self, enable):
     values = {"Cruise_Activated": enable}
     return self.packer.make_can_msg_safety("CruiseControl", self.ALT_MAIN_BUS, values)
+
+  def _lkas_button_msg(self, lkas_pressed=False, lkas_hud=0):
+    values = {"LKAS_Dash_State": 2 if lkas_pressed else lkas_hud}
+    return self.packer.make_can_msg_safety("ES_LKAS_State", SUBARU_CAM_BUS, values)
+
+  def test_enable_control_allowed_with_mads_button(self):
+    for enable_mads in (True, False):
+      with self.subTest("enable_mads", mads_enabled=enable_mads):
+        for mads_button_press in range(4):
+          with self.subTest("mads_button_press", button_state=mads_button_press):
+            self.safety.set_mads_params(enable_mads, False, False)
+
+            self._rx(self._lkas_button_msg(False, mads_button_press))
+            self.assertEqual(enable_mads and mads_button_press in range(1, 4),
+                             self.safety.get_controls_allowed_lat())
 
 
 class TestSubaruStockLongitudinalSafetyBase(TestSubaruSafetyBase):
@@ -181,9 +192,9 @@ class TestSubaruGen2TorqueSafetyBase(TestSubaruTorqueSafetyBase):
   ALT_MAIN_BUS = SUBARU_ALT_BUS
   ALT_CAM_BUS = SUBARU_ALT_BUS
 
-  MAX_RATE_UP = 40
-  MAX_RATE_DOWN = 40
-  MAX_TORQUE_LOOKUP = [0], [1000]
+  MAX_RATE_UP = 35
+  MAX_RATE_DOWN = 50
+  MAX_TORQUE_LOOKUP = [0], [1500]
 
 
 class TestSubaruGen2TorqueStockLongitudinalSafety(TestSubaruStockLongitudinalSafetyBase, TestSubaruGen2TorqueSafetyBase):

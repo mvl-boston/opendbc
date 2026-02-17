@@ -76,7 +76,7 @@ class ToyotaFlags(IntFlag):
   SECOC = 2048
 
   # deprecated flags
-  # these cars are speculated to allow stop and go when the DSU is unplugged
+  # these cars are speculated to allow stop and go when the DSU is unplugged or disabled with sDSU
   SNG_WITHOUT_DSU_DEPRECATED = 512
 
 
