@@ -231,10 +231,11 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
 
     elif candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR):
-      ret.steerActuatorDelay = 0.3
+#      ret.steerActuatorDelay = 0.3
 #      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 433], [0, 433]]
 #      ret.lateralTuning.pid.kf = 0.000035
 #      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
+      ret.steerActuatorDelay = 0.15
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 502], [0, 502]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
