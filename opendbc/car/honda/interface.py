@@ -224,13 +224,13 @@ class CarInterface(CarInterfaceBase):
         # When using stock ACC, the radar intercepts and filters steering commands the EPS would otherwise accept
         ret.minSteerSpeed = 70. * CV.KPH_TO_MS
 
-    elif candidate in (CAR.HONDA_ACCORD_9G, CAR.ACURA_TLX_1G): # source mlocoteta
+    elif candidate == CAR.HONDA_ACCORD_9G: # source mlocoteta
       ret.steerActuatorDelay = 0.3
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 239], [0, 239]]
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
 
-    elif candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR):
+    elif candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_TLX_1G):
       ret.steerActuatorDelay = 0.3
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 433], [0, 433]]
       ret.lateralTuning.pid.kf = 0.000035
