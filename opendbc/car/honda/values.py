@@ -29,7 +29,7 @@ class CarControllerParams:
   NIDEC_GAS_MAX = 198  # 0xc6
   NIDEC_BRAKE_MAX = 1024 // 4
 
-  BOSCH_ACCEL_MIN = -7.8  # m/s^2 - Honda AEB max of 0.8G
+  BOSCH_ACCEL_MIN = -3.5  # m/s^2
   BOSCH_ACCEL_MAX = 2.0  # m/s^2
 
   BOSCH_GAS_LOOKUP_BP = [0.0, 2.0]  # 2m/s^2
@@ -38,8 +38,8 @@ class CarControllerParams:
   STEER_STEP = 1  # 100 Hz
 #  STEER_DELTA_UP = 3  # min/max in 0.33s for all Honda
 #  STEER_DELTA_DOWN = 3
-  STEER_DELTA_UP = 10  # try faster steer react
-  STEER_DELTA_DOWN = 10
+  STEER_DELTA_UP = 8  # try faster steer react
+  STEER_DELTA_DOWN = 8
   STEER_GLOBAL_MIN_SPEED = 3 * CV.MPH_TO_MS
 
   def __init__(self, CP):
@@ -83,7 +83,6 @@ class HondaFlags(IntFlag):
   HYBRID = 2048
   BOSCH_TJA_CONTROL = 4096
   HYBRID_ALT_BRAKEHOLD = 8192  # Some Nidec Hybrids use a different brakehold
-  NO_CARSPEED = 16384 # Some foreign models do not have carspeed
 
 
 # Car button codes
@@ -364,15 +363,12 @@ class CAR(Platforms):
     flags=HondaFlags.NIDEC_ALT_PCM_ACCEL | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   HONDA_ODYSSEY_TWN = HondaNidecPlatformConfig(
-    [],
-    CarSpecs(mass=1865, wheelbase=2.9, steerRatio=17.6, centerToFrontRatio=0.44),
-    radar_dbc_dict('honda_odyssey_taiwan_2019_can_generated'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
-  )
-  HONDA_ODYSSEY_SINGAPORE = HondaNidecPlatformConfig(
-    [HondaCarDocs("Honda Odyssey (Singapore) 2021")],
-    CarSpecs(mass=1798, wheelbase=2.9, steerRatio=17.6, centerToFrontRatio=0.41),
-    radar_dbc_dict('honda_odyssey_singapore_2021_can_generated'),
+    [
+      HondaCarDocs("Honda Odyssey (Taiwan) 2018-19"),
+      HondaCarDocs("Honda Odyssey (Singapore) 2021")
+    ],
+    CarSpecs(mass=1865, wheelbase=2.9, steerRatio=14.35, centerToFrontRatio=0.44, tireStiffnessFactor=0.82),
+    radar_dbc_dict('honda_odyssey_twn_2018_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_RDX = HondaNidecPlatformConfig(
@@ -383,13 +379,13 @@ class CAR(Platforms):
   )
   ACURA_MDX_3G = HondaNidecPlatformConfig(
     [], # don't add to cardocs since custom steering board # TODO: find remaining fingerprints
-    CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
+    CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=19.3, centerToFrontRatio=0.428),  # as spec, learned steerRatio
     radar_dbc_dict('acura_mdx_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_MDX_3G_MMR = HondaNidecPlatformConfig(
     [], # don't add to cardocs since custom steering board
-    CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
+    CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=19.3, centerToFrontRatio=0.428),  # as spec, learned steerRatio
     radar_dbc_dict('acura_ilx_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
@@ -423,8 +419,8 @@ class CAR(Platforms):
   ACURA_TLX_1G = HondaNidecPlatformConfig(
     [], # don't add to cardocs since custom steering board
     CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=15.1, centerToFrontRatio=0.40),  # as spec
-    radar_dbc_dict('acura_ilx_2016_can_generated'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
+    radar_dbc_dict('acura_mdx_2016_can_generated'),
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   HONDA_CLARITY = HondaNidecPlatformConfig(
     [HondaCarDocs("Honda Clarity 2018-21", min_steer_speed=12. * CV.MPH_TO_MS)],
@@ -458,10 +454,10 @@ STEER_THRESHOLD = {
   CAR.HONDA_CITY_7G: 600,
   CAR.HONDA_NBOX_2G: 600,
   CAR.HONDA_PASSPORT_4G: 600,
-  CAR.HONDA_ACCORD_9G: 30,
-  CAR.ACURA_MDX_3G: 30,
-  CAR.ACURA_MDX_3G_MMR: 30,
-  CAR.ACURA_TLX_1G: 30,
+  CAR.HONDA_ACCORD_9G: 600,
+  CAR.ACURA_MDX_3G: 900,
+  CAR.ACURA_MDX_3G_MMR: 900,
+  CAR.ACURA_TLX_1G: 600,
 }
 
 

@@ -637,26 +637,18 @@ FW_VERSIONS = {
   CAR.HONDA_ODYSSEY_TWN: {
     (Ecu.eps, 0x18da30f1, None): [
       b'39990-T6A-J210\x00\x00',
-    ],
-    (Ecu.srs, 0x18da53f1, None): [
-      b'77959-T6A-P110\x00\x00',
-    ],
-    (Ecu.fwdRadar, 0x18dab0f1, None): [
-      b'36161-T6A-P040\x00\x00',
-    ],
-  },
-  CAR.HONDA_ODYSSEY_SINGAPORE: {
-    (Ecu.gateway, 0x18daeff1, None): [
-      b'38897-T6A-J110\x00\x00',
-    ],
-    (Ecu.eps, 0x18da30f1, None): [
       b'39990-T6A-J420\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-T6A-J130\x00\x00',
+      b'77959-T6A-P110\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'36161-T6A-P040\x00\x00',
       b'36161-T6A-U230\x00\x00',
+    ],
+    (Ecu.gateway, 0x18daeff1, None): [
+      b'38897-T6A-J110\x00\x00',
     ],
     (Ecu.transmission, 0x18da1ef1, None): [
       b'28101-5X9-U010\x00\x00',
@@ -1216,17 +1208,22 @@ FW_VERSIONS = {
     (Ecu.fwdRadar, 0x18DAB0F1, None): [
       b'36161-TZ4-A120\x00\x00',
       b'36161-TZ7-A520\x00\x00',
+      b'36161-TZ7-A710\x00\x00',
     ],
     (Ecu.vsa, 0x18DA28F1, None): [
       b'57114-TZ4-A510\x00\x00',
+      b'57114-TZ7-A730\x00\x00',
     ],
     (Ecu.transmission, 0x18DA1EF1, None): [
+      b'28101-5L9-A410\x00\x00',
       b'28101-5L9-A690\x00\x00',
     ],
     (Ecu.shiftByWire, 0x18DA0BF1, None): [
       b'54008-TZ3-A820\x00\x00',
+      b'54008-TZ3-A830\x00\x00',
     ],
     (Ecu.srs, 0x18DA53F1, None): [
+      b'77959-TZ3-A510\x00\x00',
       b'77959-TZ4-A510\x00\x00',
       b'77959-TZ7-A020\x00\x00',
     ],

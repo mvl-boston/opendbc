@@ -58,7 +58,7 @@ class CarInterface(CarInterfaceBase):
 
       ret.pcmCruise = True
 
-    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX):
+    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX, CAR.ACURA_TLX_1G):
       ret.stoppingDecelRate = 0.3
 
     if candidate == CAR.HONDA_CRV_5G:
@@ -70,9 +70,6 @@ class CarInterface(CarInterfaceBase):
 
     if 0x184 in fingerprint[CAN.pt]:
       ret.flags |= HondaFlags.HYBRID.value
-
-    if 0x309 not in fingerprint[CAN.pt]:
-      ret.flags |= HondaFlags.NO_CARSPEED.value
 
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID) and (0x223 in fingerprint[CAN.pt]):
       ret.flags |= HondaFlags.HYBRID_ALT_BRAKEHOLD.value
@@ -194,16 +191,9 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.28], [0.08]]
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
 
-    elif candidate == CAR.HONDA_ODYSSEY_SINGAPORE:
-      ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 1365], [0, 1365]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
-
     elif candidate == CAR.HONDA_ODYSSEY_TWN:
-      ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 32767], [0, 32767]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
-      CarControllerParams.NIDEC_ACCEL_MAX = 1.0
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.28], [0.08]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 32767], [0, 32767]]  # TODO: determine if there is a dead zone at the top end
 
     elif candidate in (CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G, CAR.HONDA_PASSPORT_4G, CAR.ACURA_MDX_4G_MMR):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 8600], [0, 8600]]  # TODO: determine if there is a dead zone at the top end
@@ -234,17 +224,20 @@ class CarInterface(CarInterfaceBase):
         # When using stock ACC, the radar intercepts and filters steering commands the EPS would otherwise accept
         ret.minSteerSpeed = 70. * CV.KPH_TO_MS
 
-    elif candidate in (CAR.HONDA_ACCORD_9G, CAR.ACURA_TLX_1G): # source mlocoteta
+    elif candidate == CAR.HONDA_ACCORD_9G: # source mlocoteta
       ret.steerActuatorDelay = 0.3
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 239], [0, 239]]
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
 
-    elif candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR): # source mlocoteta
+    elif candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_TLX_1G):
       ret.steerActuatorDelay = 0.3
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 433], [0, 433]]
       ret.lateralTuning.pid.kf = 0.000035
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
+#      ret.steerActuatorDelay = 0.15
+#      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 502], [0, 502]]
+#      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.ACURA_RLX: # source mlocoteta
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 32767], [0, 32676]]
@@ -292,7 +285,12 @@ class CarInterface(CarInterfaceBase):
     else:
       ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX,
                                                        CAR.ACURA_TLX_1G, CAR.HONDA_CLARITY})
-    ret.minEnableSpeed = -1. if ret.autoResumeSng else (19. if candidate == CAR.HONDA_ODYSSEY_TWN else 25.51) * CV.MPH_TO_MS
+    if ret.autoResumeSng:
+      ret.minEnableSpeed = -1.
+    elif candidate == CAR.HONDA_ODYSSEY_TWN:
+      ret.minEnableSpeed = 19. * CV.MPH_TO_MS
+    else:
+      ret.minEnableSpeed = 25.51 * CV.MPH_TO_MS
 
     ret.steerLimitTimer = 0.8
     ret.radarDelay = 0.1
