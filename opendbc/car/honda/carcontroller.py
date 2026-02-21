@@ -119,9 +119,16 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.last_torque = 0.0
 
     self.gasfactor = 1.0
-    self.gasfactor_before_maxgas = 1.0
     self.windfactor = 1.0
-    self.windfactor_before_maxgas = 1.0
+    self.brakefactor = 1.5
+    self.speedfactor = 6.0
+    self.windfactor_before_brake = 0.0
+    self.gasfactor_before_max = 0.0
+    self.windfactor_before_max = 0.0
+    self.speed_addon = 70.0
+
+    self.gasfactor = 1.9
+    self.windfactor = 1.5
     self.windfactor_before_brake = 0.0
     self.pitch = 0.0
 
