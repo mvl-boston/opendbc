@@ -195,8 +195,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                     -wind_brake * (3 / 4),
                     0.0,
                     self.params.NIDEC_ACCEL_MAX]
-     # The Honda ODYSSEY seems to have different PCM_ACCEL
-     # msgs, is it other cars too?
+    # The Honda ODYSSEY seems to have different PCM_ACCEL
+    # msgs, is it other cars too?
     if self.CP_SP.enableGasInterceptor or not CC.longActive:
       pcm_speed = 0.0
       pcm_accel = int(0.0)
