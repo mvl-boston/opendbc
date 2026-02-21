@@ -138,8 +138,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     actuators = CC.actuators
     hud_control = CC.hudControl
 
-    if self.CP.carFingerprint == CAR.ACURA_RLX:
-      CS.v_cruise_factor = CV.MPH_TO_MS
     hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
