@@ -187,18 +187,16 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     # wind brake from air resistance decel at high speed
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
-    wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
 
     # all of this is only relevant for HONDA NIDEC
-    speed_control = 0
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
     # TODO this 1.44 is just to maintain previous behavior
     pcm_speed_BP = [-wind_brake,
                     -wind_brake * (3 / 4),
                     0.0,
-                    0.5]
-    # The Honda ODYSSEY seems to have different PCM_ACCEL
-    # msgs, is it other cars too?
+                    self.params.NIDEC_ACCEL_MAX]
+     # The Honda ODYSSEY seems to have different PCM_ACCEL
+     # msgs, is it other cars too?
     if self.CP_SP.enableGasInterceptor or not CC.longActive:
       pcm_speed = 0.0
       pcm_accel = int(0.0)
