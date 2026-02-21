@@ -63,6 +63,9 @@ class CarState(CarStateBase, CarStateExt):
     cp_cam = can_parsers[Bus.cam]
     if self.CP.enableBsm:
       cp_body = can_parsers[Bus.body]
+    if self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
+      cp_steer = can_parsers[Bus.alt]
+      cp_steer_cam = can_parsers[Bus.adas]
 
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
@@ -79,7 +82,8 @@ class CarState(CarStateBase, CarStateExt):
 
     # used for car hud message
     # TODO: find CAR_SPEED for HONDA_ODYSSEY_TWN or use ACC_HUD w/ detection
-    self.is_metric = self.CP.carFingerprint in (CAR.HONDA_ODYSSEY_TWN,) or not cp.vl["CAR_SPEED"]["IMPERIAL_UNIT"]
+    car_speed_source = cp_steer.vl["CAR_SPEED"] if (self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID) else cp.vl["CAR_SPEED"]
+    self.is_metric = self.CP.carFingerprint in (CAR.HONDA_ODYSSEY_TWN,) or not car_speed_source["IMPERIAL_UNIT"]
     self.v_cruise_factor = CV.MPH_TO_MS if self.dynamic_v_cruise_units and not self.is_metric else CV.KPH_TO_MS
 
     # ******************* parse out can *******************
@@ -105,7 +109,10 @@ class CarState(CarStateBase, CarStateExt):
 
     ret.seatbeltUnlatched = bool(cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LAMP"] or not cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LATCHED"])
 
-    steer_status = "Normal" if self.CP.carFingerprint == CAR.ACURA_RLX else self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
+    if self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
+      steer_status = self.steer_status_values[cp_steer.vl["STEER_STATUS"]["STEER_STATUS"]]
+    else:
+      steer_status = self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
     ret.steerFaultPermanent = steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TJA_LOW_SPEED_LOCKOUT",
                                                    "TMP_FAULT")
     if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
@@ -127,11 +134,6 @@ class CarState(CarStateBase, CarStateExt):
       # TODO: better handle delayed steering enablement on ALT_RADAR cars
       self.low_speed_alert = False
     ret.lowSpeedAlert = self.low_speed_alert
-
-    if self.CP.carFingerprint == CAR.ACURA_RLX:
-      # ignore until RLX steering is fixed
-      ret.steerFaultPermanent = False
-      ret.steerFaultTemporary = False
 
     # Log non-critical stock ACC/LKAS faults if Nidec (camera) or longitudinal CANFD alt-brake
     if self.CP.carFingerprint not in HONDA_BOSCH:
