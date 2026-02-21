@@ -25,7 +25,7 @@
   {0xE4,  0, 5, .check_relay = true},   \
   {0x194, 0, 4, .check_relay = true},   \
   {0x1FA, 0, 8, .check_relay = false},  \
-  {0x30C, 0, 8, .check_relay = true},   \
+  {0x30C, 0, 8, .check_relay = fakse},   \ // 0x30C was true
   {0x33D, 0, 5, .check_relay = true},   \
 
 enum {
@@ -296,7 +296,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   }
 
   // STEER: safety check
-  if ((msg->addr == 0xE4U) || (msg->addr == 0x194U)) {
+  if ((msg->addr == 0xE4U)) {
     if (!(controls_allowed || mads_is_lateral_control_allowed_by_mads())) {
       bool steer_applied = msg->data[0] | msg->data[1];
       if (steer_applied) {
@@ -333,6 +333,10 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     if (longitudinal_interceptor_checks(msg)) {
       tx = false;
     }
+  }
+
+  if ((msg->addr == 0x30CU)) {
+    tx = true;
   }
 
   return tx;
@@ -515,6 +519,12 @@ static bool honda_nidec_fwd_hook(int bus_num, int addr) {
     // forwarded if stock AEB is active
     bool is_brake_msg = addr == 0x1FA;
     block_msg = is_brake_msg && !honda_fwd_brake;
+  }
+
+  // Block ACC_HUD signals - something wrong with double send with TX override above
+  if (((bus_num == 0) || (bus_num == 2)) &&
+      ((addr == 0x30C)) && (honda_hw == HONDA_NIDEC)) {
+    block_msg = true;
   }
 
   return block_msg;
