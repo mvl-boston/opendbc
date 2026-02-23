@@ -80,7 +80,7 @@ class CarInterface(CarInterfaceBase):
     if ret.flags & HondaFlags.ALLOW_MANUAL_TRANS and all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
       # Manual transmission support for allowlisted cars only, to prevent silent fall-through on auto-detection failures
       ret.transmissionType = TransmissionType.manual
-    elif 0x191 in fingerprint[CAN.pt] and candidate not in (CAR.ACURA_RDX, CAR.ACURA_RLX):
+    elif 0x191 in fingerprint[CAN.pt] and candidate not in (CAR.ACURA_RDX):
       # Traditional CVTs, gearshift position in GEARBOX_CVT
       ret.transmissionType = TransmissionType.cvt
     else:
@@ -310,6 +310,10 @@ class CarInterface(CarInterfaceBase):
     else:
       ret.minEnableSpeed = 25.51 * CV.MPH_TO_MS
 
+    if candidate == CAR.ACURA_RLX:
+      ret.autoResumeSng = True
+      ret.minEnableSpeed = -1
+
     ret.steerLimitTimer = 0.8
     ret.radarDelay = 0.1
 
@@ -395,6 +399,7 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.ACURA_RLX:
       stock_cp.autoResumeSng = True
       stock_cp.minEnableSpeed = -1
+      stock_cp.steerActuatorDelay = 0.3
       stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2047], [0, -2047]] # RLX steering is negative from other Hondas
       stock_cp.lateralTuning.pid.kf = 0.000035
       stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.115], [0.052]]
