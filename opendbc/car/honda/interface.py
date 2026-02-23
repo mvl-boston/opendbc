@@ -395,9 +395,9 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.ACURA_RLX:
       stock_cp.autoResumeSng = True
       stock_cp.minEnableSpeed = -1
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2047], [0, -2047]] # RLX steering is negative from other Hondas
-      ret.lateralTuning.pid.kf = 0.000035
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
+      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2047], [0, -2047]] # RLX steering is negative from other Hondas
+      stock_cp.lateralTuning.pid.kf = 0.000035
+      stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     elif candidate in (CAR.HONDA_ACCORD_9G, CAR.ACURA_TLX_1G):
       if candidate == CAR.ACURA_TLX_1G:
