@@ -188,7 +188,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
   }
 
   lkas_hud_values['DASHED_LANES'] = lkas_hud_values['SOLID_LANES'] and hud_control.lanesVisible and steering_available and not steer_maxed
-  
+
   if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
     lkas_hud_values['LANE_LINES'] = 3
     lkas_hud_values['DASHED_LANES'] = hud_control.lanesVisible
