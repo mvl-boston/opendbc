@@ -187,7 +187,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, enabled, steering_
     'BEEP': 0,
   }
 
-  lkas_hud_values['DASHED_LANES'] = lkas_hud_values['SOLID_LANES'] and
+  lkas_hud_values['DASHED_LANES'] = lkas_hud_values['SOLID_LANES'] and \
     ((not hud_control.lanesVisible) or (not steering_available) or (not lat_active) or steer_maxed)
     
 
