@@ -176,22 +176,24 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
   return packer.make_can_msg("ACC_HUD", bus, acc_hud_values)
 
 
-def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed):
+def create_lkas_hud(packer, bus, CP, hud_control, lat_active, enabled, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed):
   commands = []
 
   lkas_hud_values = {
     'LKAS_READY': 1,
     'LKAS_STATE_CHANGE': 1,
     'STEERING_REQUIRED': alert_steer_required,
-    'SOLID_LANES': lat_active,
+    'SOLID_LANES': lat_active or enabled,
     'BEEP': 0,
   }
 
-  lkas_hud_values['DASHED_LANES'] = lkas_hud_values['SOLID_LANES'] and hud_control.lanesVisible and steering_available and not steer_maxed
+  lkas_hud_values['DASHED_LANES'] = lkas_hud_values['SOLID_LANES'] and
+    ((not hud_control.lanesVisible) or (not steering_available) or (not lat_active) or steer_maxed)
+    
 
   if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
     lkas_hud_values['LANE_LINES'] = 3
-    lkas_hud_values['DASHED_LANES'] = hud_control.lanesVisible
+    # lkas_hud_values['DASHED_LANES'] = hud_control.lanesVisible
 
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
     # TODO: needed for Bosch CAN FD?
