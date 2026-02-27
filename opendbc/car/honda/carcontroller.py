@@ -148,7 +148,7 @@ class CarController(CarControllerBase):
         targetspeed = 2.2352 # target 5mph within 3 seconds
         if self.CP.carFingerprint in (CAR.HONDA_NBOX_2G):
           targetspeed = 5 + 1
-        if self.CP.carFingerprint in (CAR.HONDA_CITY_7G, CAR.HONDA_FIT_4G):
+        if self.CP.carFingerprint in (CAR.HONDA_CITY_7G, CAR.HONDA_FIT_4G, CAR.HONDA_CRV_5G):
           targetspeed = 6.4 + 1
         if self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR):
           targetspeed = 5 # more speed to overcome bad lowspeed control
