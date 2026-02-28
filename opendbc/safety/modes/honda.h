@@ -262,7 +262,9 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     if (longitudinal_brake_checks(honda_brake, HONDA_NIDEC_LONG_LIMITS)) {
       tx = false;
     }
-    tx = true;
+    if (tx == false) {
+      tx = true;
+    }
     if (honda_fwd_brake) {
       tx = false;
     }
