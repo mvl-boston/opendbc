@@ -400,7 +400,7 @@ class CarInterface(CarInterfaceBase):
       stock_cp.autoResumeSng = True
       stock_cp.minEnableSpeed = -1
       stock_cp.steerActuatorDelay = 0.3
-      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2047], [0, -2047]] # RLX steering is negative from other Hondas
+      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 32767], [0, 32767]]
       stock_cp.lateralTuning.pid.kf = 0.000035
       stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
