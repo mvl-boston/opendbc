@@ -1232,7 +1232,7 @@ FW_VERSIONS = {
     ],
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'36161-TGV-A030\x00\x00',
-      ],
+    ],
   },
   CAR.ACURA_TLX_1G: {
     (Ecu.gateway, 0x18DAEFF1, None): [
