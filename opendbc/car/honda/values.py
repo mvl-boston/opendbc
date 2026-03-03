@@ -449,7 +449,7 @@ class CAR(Platforms):
   )
   ACURA_RLX = HondaNidecPlatformConfig(
     [], # 2017 RLX, don't add to cardocs since custom panda not working yet
-    CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.39, steerRatio=19.3, tireStiffnessFactor=0.8467), # stiff/ctf from Accord
+    CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, steerRatio=18.7, centerToFrontRatio=0.39),
     radar_dbc_dict('acura_rlx_2017_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
