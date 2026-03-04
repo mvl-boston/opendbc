@@ -338,10 +338,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                                        self.last_button_frame, self.CAN))
 
     new_actuators = actuators.as_builder()
-    new_actuators.speed = self.speed
+    new_actuators.speed = float(self.windfactor)
     new_actuators.accel = self.accel
     new_actuators.gas = float(self.gasfactor)
-    new_actuators.brake = float(self.windfactor)
+    new_actuators.brake = float(self.brakefactor)
     new_actuators.torque = self.last_torque
     new_actuators.torqueOutputCan = apply_torque
 
