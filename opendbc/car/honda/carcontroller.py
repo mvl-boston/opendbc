@@ -150,7 +150,7 @@ class CarController(CarControllerBase):
           targetspeed = 5 + 1
         if self.CP.carFingerprint in (CAR.HONDA_CITY_7G, CAR.HONDA_FIT_4G, CAR.HONDA_CRV_5G):
           targetspeed = 6.4 + 1
-        if self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR):
+        if self.CP.carFingerprint not in HONDA_BOSCH:
           targetspeed = 5 # more speed to overcome bad lowspeed control
         if targetspeed < self.CP.minEnableSpeed + 1:
           targetspeed = self.CP.minEnableSpeed + 1
