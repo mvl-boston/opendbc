@@ -1240,18 +1240,25 @@ FW_VERSIONS = {
     ],
     (Ecu.fwdRadar, 0x18DAB0F1, None): [
       b'36161-TZ4-A120\x00\x00',
+      b'36161-TZ4-A210\x00\x00',
       b'36161-TZ7-A520\x00\x00',
+      b'36161-TZ7-A710\x00\x00',
     ],
     (Ecu.vsa, 0x18DA28F1, None): [
       b'57114-TZ4-A510\x00\x00',
+      b'57114-TZ4-A530\x00\x00',
+      b'57114-TZ7-A730\x00\x00',
     ],
     (Ecu.transmission, 0x18DA1EF1, None): [
+      b'28101-5L9-A410\x00\x00',
       b'28101-5L9-A690\x00\x00',
     ],
     (Ecu.shiftByWire, 0x18DA0BF1, None): [
       b'54008-TZ3-A820\x00\x00',
+      b'54008-TZ3-A830\x00\x00',
     ],
     (Ecu.srs, 0x18DA53F1, None): [
+      b'77959-TZ3-A510\x00\x00',
       b'77959-TZ4-A510\x00\x00',
       b'77959-TZ7-A020\x00\x00',
     ],
@@ -1407,14 +1414,6 @@ FW_VERSIONS = {
     ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-3BH-A830\x00\x00',
-    ],
-  },
-  CAR.ACURA_TLX_2G_MMR: {
-    (Ecu.fwdRadar, 0x18dab0f1, None): [
-      b'8S302-TGV-A030\x00\x00',
-    ],
-    (Ecu.fwdCamera, 0x18dab5f1, None): [
-      b'8S102-TGV-A030\x00\x00',
     ],
   },
   CAR.ACURA_TLX_2G_MMR: {
