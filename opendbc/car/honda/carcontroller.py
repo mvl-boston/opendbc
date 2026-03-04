@@ -268,10 +268,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           calc_accel = self.accel
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed) and (CS.out.vEgo > 0.0):
             brake_error = CS.out.aEgo - self.accel
-            if self.accel < 0.0 and (gas_pedal_force == 0.0 or self.CP.carFingerprint in HONDA_BOSCH_RADARLESS):
+            if (self.params.BOSCH_ACCEL_MIN < self.accel < 0.0) and (gas_pedal_force == 0.0 or self.CP.carFingerprint in HONDA_BOSCH_RADARLESS):
               min_brake_factor = 0.7 if (self.CP.carFingerprint == CAR.HONDA_INSIGHT) else 1.0
               self.brakefactor = np.clip(self.brakefactor + brake_error / 50.0, min_brake_factor, 3.0)
-              calc_accel = self.accel * self.brakefactor
+              calc_accel = max (self.params.BOSCH_ACCEL_MIN, self.accel * self.brakefactor)
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
