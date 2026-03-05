@@ -1,5 +1,5 @@
 import numpy as np
-import math # rerun CI
+import math
 
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
