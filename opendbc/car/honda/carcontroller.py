@@ -124,6 +124,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.windfactor_before_maxgas = 1.0
     self.windfactor_before_brake = 0.0
     self.pitch = 0.0
+    self.brakefactor = 1.0
 
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
@@ -263,9 +264,18 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
               self.windfactor_before_gasmax = self.windfactor
           self.gas = float(np.interp(gas_pedal_force * self.gasfactor, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
+          # live-learn brake pedal adjustments when openpilot is controlling brake
+          calc_accel = self.accel
+          if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed) and (CS.out.vEgo > 0.0):
+            brake_error = CS.out.aEgo - self.accel
+            if (self.params.BOSCH_ACCEL_MIN < self.accel < 0.0) and (gas_pedal_force == 0.0 or self.CP.carFingerprint in HONDA_BOSCH_RADARLESS):
+              min_brake_factor = 0.7 if (self.CP.carFingerprint == CAR.HONDA_INSIGHT) else 1.0
+              self.brakefactor = np.clip(self.brakefactor + brake_error / 50.0, min_brake_factor, 3.0)
+              calc_accel = max(self.params.BOSCH_ACCEL_MIN, self.accel * self.brakefactor)
+
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
-          can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
+          can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, calc_accel, self.gas,
                                                         self.stopping_counter, self.CP.carFingerprint, gas_pedal_force))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
@@ -328,10 +338,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                                        self.last_button_frame, self.CAN))
 
     new_actuators = actuators.as_builder()
-    new_actuators.speed = self.speed
+    new_actuators.speed = float(self.windfactor)
     new_actuators.accel = self.accel
     new_actuators.gas = float(self.gasfactor)
-    new_actuators.brake = float(self.windfactor)
+    new_actuators.brake = float(self.brakefactor)
     new_actuators.torque = self.last_torque
     new_actuators.torqueOutputCan = apply_torque
 
