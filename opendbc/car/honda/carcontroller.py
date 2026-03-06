@@ -110,10 +110,10 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
-    self.gasfactor = 1.0
-    self.windfactor = 1.0
-    self.brakefactor = 1.5
-    self.speedfactor = 6.0
+    self.gasfactor = 2.5
+    self.windfactor = 1.3
+    self.brakefactor = 1.2
+    self.speedfactor = 49.0
     self.windfactor_before_brake = 0.0
     self.gasfactor_before_max = 0.0
     self.windfactor_before_max = 0.0
@@ -153,7 +153,7 @@ class CarController(CarControllerBase):
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
-    self.last_torque = limited_torque
+    self.last_torque = limited_torque if CC.latActive else 0
 
     # *** apply brake hysteresis ***
     pre_limit_brake, self.braking, self.brake_steady = actuator_hysteresis(brake, self.braking, self.brake_steady,
@@ -235,7 +235,7 @@ class CarController(CarControllerBase):
       else:
         self.gasfactor_before_max = self.gasfactor
 
-      if accel > self.accel_last:
+      if (self.accel_last <= 0) and (accel > 0):
         self.boost_counter = 30
       elif self.boost_counter > 0:
         self.boost_counter -= 1
@@ -244,7 +244,11 @@ class CarController(CarControllerBase):
       if (gas_error >= 0.2) and (pcm_accel > 0): # try forcing max accel
         pcm_accel = self.params.NIDEC_GAS_MAX
         pcm_speed = 100.0
-    
+
+      if (self.frame <= self.last_brake_frame + 1): # no gas while braking
+        pcm_speed = 0
+        pcm_accel = 0
+
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
@@ -260,6 +264,7 @@ class CarController(CarControllerBase):
         ts = self.frame * DT_CTRL
 
         if self.CP.carFingerprint in HONDA_BOSCH:
+          apply_brake = 0
           self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
 
           if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
@@ -312,7 +317,7 @@ class CarController(CarControllerBase):
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
       reduced_steering = CS.out.steeringPressed
       steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
-      can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
+      can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive, CC.enabled,
                                                 steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed))
 
       if self.CP.openpilotLongitudinalControl:
@@ -330,8 +335,8 @@ class CarController(CarControllerBase):
     new_actuators.accel = self.accel
     new_actuators.gas = float(self.gasfactor)
     new_actuators.brake = float(self.windfactor)
-    new_actuators.torque = float(self.brakefactor)
-    new_actuators.torqueOutputCan = float(self.speed_addon)
+    new_actuators.torque = self.last_torque
+    new_actuators.torqueOutputCan = float(self.brakefactor)
 
     self.frame += 1
     return new_actuators, can_sends
