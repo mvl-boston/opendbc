@@ -110,6 +110,7 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.last_brake_frame = self.frame
 
     self.gasfactor = 1.0
     self.windfactor = 1.0
@@ -322,6 +323,9 @@ class CarController(CarControllerBase):
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
+
+          if apply_brake > 0:
+            self.last_brake_frame = self.frame
 
           pcm_override = True
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
