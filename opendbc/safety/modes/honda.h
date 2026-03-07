@@ -21,7 +21,7 @@
   {.msg = {{0x201, 0, 6, 50U, .max_counter = 15U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}}, \
 
 #define HONDA_N_COMMON_TX_MSGS \
-  {0xE4,  0, 5, .check_relay = true},   \
+  {0xE4,  0, 5, .check_relay = false},   \
   {0x194, 0, 4, .check_relay = true},   \
   {0x33D, 0, 5, .check_relay = true},   \
 
