@@ -23,7 +23,7 @@
 #define HONDA_N_COMMON_TX_MSGS \
   {0xE4,  0, 5, .check_relay = false},   \
   {0x194, 0, 4, .check_relay = true},   \
-  {0x33D, 0, 5, .check_relay = true},   \
+  {0x33D, 0, 5, .check_relay = false},   \
 
 #define HONDA_N_COMMON_LONG_TX_MSGS \
   {0x1FA, 0, 8, .check_relay = false},  \
@@ -346,7 +346,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
 static safety_config honda_nidec_init(uint16_t param) {
   // 0x1FA is dynamically forwarded based on stock AEB
   // 0xE4 is steering on all cars except CRV and RDX, 0x194 for CRV and RDX,
-  // 0x1FA is brake control, 0x30C is acc hud, 0x33D is lkas hud
+  // 0x1FA is brake control, 0x30C is acc hud, 0x is lkas hud
   static CanMsg HONDA_N_TX_MSGS[] = {
     HONDA_N_COMMON_TX_MSGS
     HONDA_N_COMMON_LONG_TX_MSGS
