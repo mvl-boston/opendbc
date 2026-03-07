@@ -305,7 +305,9 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
         tx = false;
       }
     }
-    tx = true; // force allow steer to see if this works
+    if (tx == false) {
+      tx = true; // force allow steer to see if this works
+    }
   }
 
   // Bosch supplemental control check
