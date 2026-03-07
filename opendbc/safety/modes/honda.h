@@ -23,7 +23,7 @@
 #define HONDA_N_COMMON_TX_MSGS \
   {0xE4,  0, 5, .check_relay = false},   \
   {0x194, 0, 4, .check_relay = true},   \
-  {0x33D, 0, 5, .check_relay = false},   \
+  {0x33D, 0, 5, .check_relay = true},   \
 
 #define HONDA_N_COMMON_LONG_TX_MSGS \
   {0x1FA, 0, 8, .check_relay = false},  \
