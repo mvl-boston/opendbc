@@ -245,10 +245,6 @@ class CarController(CarControllerBase):
         pcm_accel = self.params.NIDEC_GAS_MAX
         pcm_speed = 100.0
 
-      if (self.frame <= self.last_brake_frame + 1): # no gas while braking
-        pcm_speed = 0
-        pcm_accel = 0
-
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
@@ -309,6 +305,11 @@ class CarController(CarControllerBase):
     # Send dashboard UI commands.
     if self.frame % 10 == 0:
       if self.CP.openpilotLongitudinalControl:
+
+        if (self.frame <= self.last_brake_frame + 10): # no gas while braking
+          pcm_speed = 0
+          pcm_accel = 0
+
         # On Nidec, this also controls longitudinal positive acceleration
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud,
