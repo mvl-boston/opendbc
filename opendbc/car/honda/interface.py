@@ -399,9 +399,9 @@ class CarInterface(CarInterfaceBase):
       stock_cp.autoResumeSng = True
       stock_cp.minEnableSpeed = -1
       stock_cp.steerActuatorDelay = 0.3
-      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 519], [0, 519]]
-      stock_cp.lateralTuning.pid.kiBP, stock_cp.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
-      stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
+      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 830], [0, 830]]
+      stock_cp.lateralTuning.pid.kf = 0.000035
+      stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     elif candidate == CAR.HONDA_ACCORD_9G:
       stock_cp.steerActuatorDelay = 0.3
