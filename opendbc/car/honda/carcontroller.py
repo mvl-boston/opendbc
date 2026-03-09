@@ -235,8 +235,10 @@ class CarController(CarControllerBase):
       else:
         self.gasfactor_before_max = self.gasfactor
 
-      if (self.accel_last <= 0) and (accel > 0):
-        self.boost_counter = 30
+#      if (self.accel_last <= 0) and (accel > 0):
+#        self.boost_counter = 30
+      if accel > 0.2:
+        self.boost_counter = 20
       elif self.boost_counter > 0:
         self.boost_counter -= 1
       self.accel_last = accel
@@ -299,6 +301,11 @@ class CarController(CarControllerBase):
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
                                                          pcm_override, pcm_cancel_cmd, alert_fcw,
                                                          self.CP, CS.stock_brake))
+          if (apply_brake > 0) and (self.apply_brake_last == 0):
+            self.boost_counter == 20
+          if (apply_brake > 0) and (accel > 0):
+            self.boost_counter == 20
+
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
@@ -313,7 +320,7 @@ class CarController(CarControllerBase):
         # On Nidec, this also controls longitudinal positive acceleration
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud,
-                                                 (self.boost_counter > 0) or (apply_brake > 0)))
+                                                 self.boost_counter > 0))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
       reduced_steering = CS.out.steeringPressed
