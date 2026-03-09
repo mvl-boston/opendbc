@@ -267,7 +267,7 @@ class CAR(Platforms):
   HONDA_E_ADVANCE = HondaBoschPlatformConfig(
     [],  # don't show in docs, base trim already in docs
     CarSpecs(mass=1527, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=16.71, tireStiffnessFactor=0.82),
-    {Bus.pt: 'honda_e_advance_2020_can_generated'}, # 8 bit LKAS_HUD in Advance trim
+    {Bus.pt: 'honda_e_eu_can_generated'}, # 8 bit LKAS_HUD in Advance trim
   )
   HONDA_PILOT_4G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Pilot 2023-25", "All")],
@@ -525,9 +525,10 @@ FW_QUERY_CONFIG = FwQueryConfig(
   # This is or'd with (ALL_ECUS - ESSENTIAL_ECUS) from fw_versions.py
   non_essential_ecus={
     Ecu.eps: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_E, CAR.HONDA_CRV_SA, CAR.ACURA_MDX_3G, CAR.ACURA_RLX, CAR.HONDA_ACCORD_9G,
-              CAR.ACURA_MDX_4G, *HONDA_BOSCH_ALT_RADAR, *HONDA_BOSCH_RADARLESS, *HONDA_BOSCH_CANFD],
+              CAR.HONDA_E_ADVANCE, CAR.ACURA_MDX_4G, *HONDA_BOSCH_ALT_RADAR, *HONDA_BOSCH_RADARLESS, *HONDA_BOSCH_CANFD],
     Ecu.vsa: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_ACCORD_9G, CAR.HONDA_CIVIC, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID,
-              CAR.HONDA_E, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G, CAR.ACURA_MDX_4G, *HONDA_BOSCH_ALT_RADAR, *HONDA_BOSCH_RADARLESS, *HONDA_BOSCH_CANFD],
+              CAR.HONDA_E, CAR.HONDA_E_ADVANCE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G, CAR.ACURA_MDX_4G,
+              *HONDA_BOSCH_ALT_RADAR, *HONDA_BOSCH_RADARLESS, *HONDA_BOSCH_CANFD],
   },
   extra_ecus=[
     (Ecu.combinationMeter, 0x18da60f1, None),
