@@ -270,7 +270,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             brake_error = self.accel - CS.out.aEgo
             if (self.params.BOSCH_ACCEL_MIN < self.accel < 0.0) and (gas_pedal_force == 0.0 or self.CP.carFingerprint in HONDA_BOSCH_RADARLESS):
               max_brake_factor = 0.3 if (self.CP.carFingerprint == CAR.HONDA_INSIGHT) else 0.0
-              self.brakefactor = np.clip(self.brakefactor + brake_error / 25.0, self.params.BOSCH_ACCEL_MIN, max_brake_factor)
+              self.brakefactor = float(np.clip(self.brakefactor + brake_error / 25.0, self.params.BOSCH_ACCEL_MIN, max_brake_factor))
               calc_accel = max(self.params.BOSCH_ACCEL_MIN, self.accel + self.brakefactor)
             if self.accel >= 0.0:
               self.brakefactor = 1.0
