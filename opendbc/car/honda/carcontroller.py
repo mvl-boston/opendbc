@@ -342,9 +342,9 @@ class CarController(CarControllerBase):
     new_actuators.speed = float(self.speedfactor)
     new_actuators.accel = self.accel
     new_actuators.gas = float(self.gasfactor)
-    new_actuators.brake = float(self.windfactor)
+    new_actuators.brake = float(self.brakefactor)
     new_actuators.torque = self.last_torque
-    new_actuators.torqueOutputCan = float(self.brakefactor)
+    new_actuators.torqueOutputCan = float(self.boost_counter)
 
     self.frame += 1
     return new_actuators, can_sends
