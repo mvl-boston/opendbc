@@ -303,6 +303,8 @@ class CarController(CarControllerBase):
                                                          self.CP, CS.stock_brake))
           if (apply_brake > 0) and (self.apply_brake_last == 0):
             self.boost_counter == 20
+          if apply_brake < self.apply_brake_last:
+            self.boost_counter == 20
           if (apply_brake > 0) and (accel > 0):
             self.boost_counter == 20
 
