@@ -273,7 +273,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
               self.brakefactor = np.clip(self.brakefactor + brake_error / 25.0, self.params.BOSCH_ACCEL_MIN, max_brake_factor)
               calc_accel = max(self.params.BOSCH_ACCEL_MIN, self.accel + self.brakefactor)
             if self.accel >= 0.0:
-              self.brakefactor = 1
+              self.brakefactor = 1.0
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
