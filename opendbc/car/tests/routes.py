@@ -117,7 +117,8 @@ routes = [
   CarTestRoute("f29e2b57a55e7ad5/2021-03-24--20-52-38", HONDA.HONDA_ACCORD),  # hybrid, 2021 with new style HUD msgs
   CarTestRoute("1ad763dd22ef1a0e/2020-02-29--18-37-03", HONDA.HONDA_CRV_5G),
   CarTestRoute("0a96f86fcfe35964/2020-02-05--07-25-51", HONDA.HONDA_ODYSSEY),
-  CarTestRoute("7817fe954aff07b8/00000001--fdaaf36c4f", HONDA.HONDA_ODYSSEY_TWN),
+  CarTestRoute("7817fe954aff07b8/00000001--fdaaf36c4f", HONDA.HONDA_ODYSSEY_TWN), # Taiwan
+  CarTestRoute("5bd1fcb9a66f60e1/000001d6--f1bff3e876", HONDA.HONDA_ODYSSEY_TWN), # Singapore
   CarTestRoute("d7233a428eb7d0b5/00000001--9b99b04d43", HONDA.HONDA_ODYSSEY_5G_MMR),
   CarTestRoute("d83f36766f8012a5/2020-02-05--18-42-21", HONDA.HONDA_CIVIC_BOSCH_DIESEL),
   CarTestRoute("f0890d16a07a236b/2021-05-25--17-27-22", HONDA.HONDA_INSIGHT),
@@ -136,7 +137,6 @@ routes = [
   # CarTestRoute("56b2cf1dacdcd033/00000017--d24ffdb376", HONDA.HONDA_CITY_7G),  # Brazilian model
   CarTestRoute("2dc4489d7e1410ca/00000001--bbec3f5117", HONDA.HONDA_CRV_6G),
   CarTestRoute("a703d058f4e05aeb/00000008--f169423024", HONDA.HONDA_PASSPORT_4G),
-  CarTestRoute("5bd1fcb9a66f60e1/0000000e--3d8b5fbed4", HONDA.HONDA_ODYSSEY_SINGAPORE),
   # CarTestRoute("ad9840558640c31d/00000018--6d4b733a6a", HONDA.ACURA_MDX_3G), expired - need new route
   # CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA), # Azure route bug
   CarTestRoute("21ea2d289932890b/00000134--3862dfe91d", HONDA.HONDA_ACCORD_9G), # serial steering - dashcam in upstream
