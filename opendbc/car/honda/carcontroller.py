@@ -268,6 +268,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
           # live-learn brake pedal adjustments when openpilot is controlling brake
           calc_accel = float(self.accel)
+          carlog.error('outstats: ' + CS.out.brakePressed + ' ' + CS.out.gasPressed + ' ' + CS.out.vEgo > 0.0 + ' ' + float(gas_pedal_force))
           if (not CS.out.brakePressed) and (not CS.out.gasPressed) and (CS.out.vEgo > 0.0):
             brake_error = calc_accel - float(CS.out.aEgo)
             if (self.params.BOSCH_ACCEL_MIN < calc_accel < 0.0) and (float(gas_pedal_force) == 0.0 or self.CP.carFingerprint in HONDA_BOSCH_RADARLESS):
