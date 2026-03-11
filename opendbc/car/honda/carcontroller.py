@@ -270,6 +270,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           calc_accel = float(self.accel)
           carlog.error('outstats: ' + ('bpTrue' if CS.out.brakePressed else 'bpFalse') + ' ' + ('gpTrue' if CS.out.gasPressed else 'gpFalse') + ' '
                        + str(float(CS.out.vEgo)) + ' ' + str(float(self.accel)) + ' ' + str(float(gas_pedal_force)))
+          carlog.error('stat' + CS.out.brakePressed)
           if (not CS.out.brakePressed) and (not CS.out.gasPressed) and (float(CS.out.vEgo) > 0.0):
             brake_error = calc_accel - float(CS.out.aEgo)
             carlog.error('stat' + CS.out.brakePressed)
