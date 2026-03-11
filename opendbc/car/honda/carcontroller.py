@@ -268,7 +268,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
           # live-learn brake pedal adjustments when openpilot is controlling brake
           calc_accel = float(self.accel)
-          carlog.error('outstats: ' + ('bpTrue' if CS.out.brakePressed else 'bpFalse') + ' ' + ('gpTrue' if CS.out.gasPressed else 'gpFalse') + ' ' \
+          carlog.error('outstats: ' + ('bpTrue' if CS.out.brakePressed else 'bpFalse') + ' ' + ('gpTrue' if CS.out.gasPressed else 'gpFalse') + ' '
                        + CS.out.vEgo + ' ' + float(self.accel) + ' ' + float(gas_pedal_force))
           if (not CS.out.brakePressed) and (not CS.out.gasPressed) and (CS.out.vEgo > 0.0):
             brake_error = calc_accel - float(CS.out.aEgo)
