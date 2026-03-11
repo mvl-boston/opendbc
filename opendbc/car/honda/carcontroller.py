@@ -265,14 +265,14 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.gas = float(np.interp(gas_pedal_force * self.gasfactor, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
           # live-learn brake pedal adjustments when openpilot is controlling brake
-          calc_accel = self.accel
-          if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed) and (CS.out.vEgo > 0.0):
-            brake_error = self.accel - CS.out.aEgo
-            if (self.params.BOSCH_ACCEL_MIN < self.accel < 0.0) and (gas_pedal_force == 0.0 or self.CP.carFingerprint in HONDA_BOSCH_RADARLESS):
+          calc_accel = float(self.accel)
+          if (not CS.out.brakePressed) and (not CS.out.gasPressed) and (CS.out.vEgo > 0.0):
+            brake_error = calc_accel - float(CS.out.aEgo)
+            if (self.params.BOSCH_ACCEL_MIN < calc_accel < 0.0) and (float(gas_pedal_force) == 0.0 or self.CP.carFingerprint in HONDA_BOSCH_RADARLESS):
               max_brake_factor = 0.3 if (self.CP.carFingerprint == CAR.HONDA_INSIGHT) else 0.1
               self.brakefactor = float(np.clip(self.brakefactor + brake_error / 25.0, self.params.BOSCH_ACCEL_MIN, max_brake_factor))
-              calc_accel = max(self.params.BOSCH_ACCEL_MIN, self.accel + self.brakefactor)
-            if self.accel >= 0.0:
+              calc_accel = max(self.params.BOSCH_ACCEL_MIN, calc_accel + self.brakefactor)
+            if float(self.accel) >= 0.0:
               self.brakefactor = 0.0
 
           stopping = actuators.longControlState == LongCtrlState.stopping
