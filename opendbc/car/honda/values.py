@@ -458,7 +458,7 @@ class CAR(Platforms):
       HondaCarDocs("Acura TLX 2015-17", "Advance Package"),
       HondaCarDocs("Acura TLX 2018-20", "All"),
     ],
-    CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=15.1, centerToFrontRatio=0.40),  # as spec
+    CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=17.0, centerToFrontRatio=0.40, tireStiffnessFactor=0.18),
     radar_dbc_dict('acura_mdx_2017_can_ext_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
