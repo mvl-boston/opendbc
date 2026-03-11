@@ -1,6 +1,8 @@
 import numpy as np
 import math
 
+from opendbc.car.carlog import carlog
+
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
@@ -271,6 +273,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             if (self.params.BOSCH_ACCEL_MIN < calc_accel < 0.0) and (float(gas_pedal_force) == 0.0 or self.CP.carFingerprint in HONDA_BOSCH_RADARLESS):
               max_brake_factor = 0.3 if (self.CP.carFingerprint == CAR.HONDA_INSIGHT) else 0.1
               self.brakefactor = float(np.clip(self.brakefactor + brake_error / 25.0, self.params.BOSCH_ACCEL_MIN, max_brake_factor))
+              carlog.error(brake_error + ' ' + 'max_brake_factor + ' ' + calc_accel)
               calc_accel = max(self.params.BOSCH_ACCEL_MIN, calc_accel + self.brakefactor)
             if float(self.accel) >= 0.0:
               self.brakefactor = 0.0
