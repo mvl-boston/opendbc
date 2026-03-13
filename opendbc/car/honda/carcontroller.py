@@ -1,6 +1,8 @@
 import numpy as np
 import math
 
+from opendbc.car.carlog import carlog
+
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
@@ -124,6 +126,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.windfactor_before_maxgas = 1.0
     self.windfactor_before_brake = 0.0
     self.pitch = 0.0
+    self.brakefactor = 0.0
 
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
@@ -244,6 +247,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
           # live-learn gas pedal adjustments when openpilot is controlling gas
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
+            carlog.error('stat' + CS.out.brakePressed)
             gas_error = self.accel - CS.out.aEgo
             if gas_error != 0.0 and gas_pedal_force > 0.0:
               learn_speed = 150 if (self.CP.carFingerprint == CAR.HONDA_INSIGHT) else 50 # Insight gas pedal reacts too slowly
@@ -263,9 +267,24 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
               self.windfactor_before_gasmax = self.windfactor
           self.gas = float(np.interp(gas_pedal_force * self.gasfactor, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
+          # live-learn brake pedal adjustments when openpilot is controlling brake
+          calc_accel = float(self.accel)
+          carlog.error('outstats: ' + ('bpTrue' if CS.out.brakePressed else 'bpFalse') + ' ' + ('gpTrue' if CS.out.gasPressed else 'gpFalse') + ' '
+                       + str(float(CS.out.vEgo)) + ' ' + str(float(self.accel)) + ' ' + str(float(gas_pedal_force)))
+          if True: (actuators.longControlState == LongCtrlState.pid) and (not CS.out.brakePressed) and (not CS.out.gasPressed):
+            brake_error = calc_accel - float(CS.out.aEgo)
+            if (self.params.BOSCH_ACCEL_MIN < calc_accel < 0.0) and (float(gas_pedal_force) == 0.0 or self.CP.carFingerprint in HONDA_BOSCH_RADARLESS):
+              max_brake_factor = 0.3 if (self.CP.carFingerprint == CAR.HONDA_INSIGHT) else 0.1
+              self.brakefactor = float(np.clip(self.brakefactor + brake_error / 25.0, self.params.BOSCH_ACCEL_MIN, max_brake_factor))
+              carlog.error('stat' + CS.out.brakePressed)
+              carlog.error(brake_error + ' ' + max_brake_factor + ' ' + calc_accel)
+              calc_accel = max(self.params.BOSCH_ACCEL_MIN, calc_accel + self.brakefactor)
+            if float(self.accel) >= 0.0:
+              self.brakefactor = 0.0
+
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
-          can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
+          can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, calc_accel, self.gas,
                                                         self.stopping_counter, self.CP.carFingerprint, gas_pedal_force))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
@@ -328,10 +347,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                                        self.last_button_frame, self.CAN))
 
     new_actuators = actuators.as_builder()
-    new_actuators.speed = self.speed
+    new_actuators.speed = float(self.windfactor)
     new_actuators.accel = self.accel
     new_actuators.gas = float(self.gasfactor)
-    new_actuators.brake = float(self.windfactor)
+    new_actuators.brake = float(self.brakefactor)
     new_actuators.torque = self.last_torque
     new_actuators.torqueOutputCan = apply_torque
 
