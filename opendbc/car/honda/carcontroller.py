@@ -270,7 +270,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           calc_accel = float(self.accel)
           carlog.error('outstats: ' + ('bpTrue' if CS.out.brakePressed else 'bpFalse') + ' ' + ('gpTrue' if CS.out.gasPressed else 'gpFalse') + ' '
                        + str(float(CS.out.vEgo)) + ' ' + str(float(self.accel)) + ' ' + str(float(gas_pedal_force)))
-          if (not CS.out.brakePressed) and (not CS.out.gasPressed) and (float(CS.out.vEgo) > 0.0):
+          if (not CS.out.brakePressed) and (not CS.out.gasPressed): # and (float(CS.out.vEgo) > 0.0):
             carlog.error('stat' + CS.out.brakePressed)
             brake_error = calc_accel - float(CS.out.aEgo)
             if (self.params.BOSCH_ACCEL_MIN < calc_accel < 0.0) and (float(gas_pedal_force) == 0.0 or self.CP.carFingerprint in HONDA_BOSCH_RADARLESS):
