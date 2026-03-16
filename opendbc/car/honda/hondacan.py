@@ -150,7 +150,7 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     'ENABLE_MINI_CAR': 1 if enabled else 0,
     # only moves the lead car without ACC_ON
     'HUD_DISTANCE': hud_control.leadDistanceBars,  # wraps to 0 at 4 bars
-    'IMPERIAL_UNIT': 0 if (CP.carFingerprint == CAR.ACURA_RLX) else int(not is_metric),
+    'IMPERIAL_UNIT': int(not is_metric),
     'HUD_LEAD': 2 if enabled and hud_control.leadVisible else 1 if enabled else 0,
     'SET_ME_X01_2': 1,
   }
