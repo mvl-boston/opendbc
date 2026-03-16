@@ -27,7 +27,6 @@ non_tested_cars = [
   HONDA.ACURA_MDX_3G, # testroute expired, will ask new one nearer to upstream
   HONDA.ACURA_TLX_1G,
   HYUNDAI.GENESIS_G90,
-  HONDA.ACURA_RLX, # TODO: get route once tuning done
   HONDA.HONDA_CLARITY, # TODO: get route once testing is done
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
