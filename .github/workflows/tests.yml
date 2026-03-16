@@ -122,8 +122,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: opendbc_repo
-    - uses: ./.github/workflows/setup-with-retry
-      id: setup-step
+    - run: ./tools/op.sh setup
     - name: Cache test routes
       id: routes-cache
       uses: actions/cache@v4
