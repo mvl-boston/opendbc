@@ -53,15 +53,12 @@ class CarInterface(CarInterfaceBase):
       ret.openpilotLongitudinalControl = alpha_long
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
-      cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
-      if candidate == CAR.ACURA_RLX:
-        cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.noOutput))
-      ret.safetyConfigs = cfgs
+      ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
       ret.openpilotLongitudinalControl = True
 
       ret.pcmCruise = True
 
-    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX):
+    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR):
       ret.stoppingDecelRate = 0.3
 
     if candidate == CAR.HONDA_CRV_5G:
@@ -302,7 +299,7 @@ class CarInterface(CarInterfaceBase):
     elif (ret.transmissionType == TransmissionType.manual) and (not ret.openpilotLongitudinalControl):
       ret.autoResumeSng = False
     else:
-      ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX,
+      ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR
                                                        CAR.ACURA_TLX_1G, CAR.HONDA_CLARITY})
     if ret.autoResumeSng:
       ret.minEnableSpeed = -1.
