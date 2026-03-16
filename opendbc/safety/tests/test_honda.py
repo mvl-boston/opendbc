@@ -588,7 +588,7 @@ class TestHondaBoschCANFDSafetyBase(TestHondaBoschSafetyBase):
   RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D)}
 
   def setUp(self):
-    self.packer = CANPackerPanda("honda_common_canfd_generated")
+    self.packer = CANPackerSafety("honda_common_canfd_generated")
     self.safety = libsafety_py.libsafety
 
 

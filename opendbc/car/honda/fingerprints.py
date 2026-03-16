@@ -11,6 +11,22 @@ Ecu = CarParams.Ecu
 
 
 FW_VERSIONS = {
+  CAR.HONDA_ACCORD_9G: {
+    (Ecu.gateway, 0x18DAEFF1, None): [
+      b'38897-T3W-0130\x00\x00',
+    ],
+    (Ecu.vsa, 0x18DA28F1, None): [
+      b'57114-T2F-X840\x00\x00',
+    ],
+    (Ecu.fwdRadar, 0x18DAB0F1, None): [
+      b'36161-T2F-A140\x00\x00',
+      b'36161-T3Z-A830\x00\x00'
+    ],
+    (Ecu.srs, 0x18DA53F1, None): [
+      b'77959-T2F-A030\x00\x00',
+      b'77959-T3Z-A020\x00\x00',
+    ],
+  },
   CAR.HONDA_NBOX_2G: {
     (Ecu.vsa, 0x18da28f1, None): [
       b'57114-TTA-J030\x00\x00',
@@ -1340,7 +1356,7 @@ FW_VERSIONS = {
       b'77959-TZ5-A110\x00\x00',
       b'77959-TZ5-A220\x00\x00',
     ],
-     (Ecu.gateway, 0x18daeff1, None): [
+    (Ecu.gateway, 0x18daeff1, None): [
       b'38897-TYR-A011\x00\x00', # unknown
       b'38897-TZ5-A110\x00\x00', # unknown
       b'38897-TRX-A220\x00\x00',
@@ -1373,9 +1389,6 @@ FW_VERSIONS = {
     (Ecu.shiftByWire, 0x18da0bf1, None): [
       b'54008-TY3-J010\x00\x00',
     ],
-#    (Ecu.combinationMeter, 0x18da60f1, None): [   - remove creates ci test error
-#      b'78109-TY3-A050\x00\x00',
-#    ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-TY3-L130\x00\x00',
     ],

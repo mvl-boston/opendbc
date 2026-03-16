@@ -1,8 +1,7 @@
 import numpy as np
-from collections import namedtuple
 import math
 
-from opendbc.can.packer import CANPacker
+from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
@@ -120,15 +119,19 @@ class CarController(CarControllerBase):
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
+
+    if self.CP.carFingerprint == CAR.ACURA_RLX:
+      CS.v_cruise_factor = CV.MPH_TO_MS
     hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
     if len(CC.orientationNED) == 3:
       self.pitch = CC.orientationNED[1]
+    hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
     if CC.longActive:
       accel = actuators.accel
-      if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)) and (accel > max(0, CS.out.aEgo) + 0.1):
+      if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)) and (accel > max(0, CS.out.aEgo) + 0.1):
         accel = 10000.0 # help with lagged accel until pedal tuning is inserted
       gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
@@ -156,13 +159,16 @@ class CarController(CarControllerBase):
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
+    speed_control = 1 if ((accel <= 0.0) and (CS.out.vEgo == 0)) else 0
+
     # Send CAN commands
     can_sends = []
 
     # tester present - w/ no response (keeps radar disabled)
     if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
       if self.frame % 10 == 0:
-        can_sends.append(make_tester_present_msg(0x18DAB0F1, 1, suppress_response=True))
+        bus = 0 if self.CP.carFingerprint in HONDA_BOSCH_CANFD else 1
+        can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
 
     # Send steering command.
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
@@ -191,7 +197,7 @@ class CarController(CarControllerBase):
                      np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
       pcm_accel = int(1.0 * self.params.NIDEC_GAS_MAX)
-    elif (self.CP.carFingerprint in HONDA_NIDEC_HYBRID) or (self.CP.carFingerprint in CAR.ACURA_MDX_3G):
+    elif (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)):
       pcm_speed_V = [0.0,
                      np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
@@ -262,7 +268,7 @@ class CarController(CarControllerBase):
       if self.CP.openpilotLongitudinalControl:
         # On Nidec, this also controls longitudinal positive acceleration
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
-                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
+                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control))
 
       if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_RLX)):
         # standstill disengage

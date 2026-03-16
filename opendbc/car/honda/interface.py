@@ -48,12 +48,13 @@ class CarInterface(CarInterfaceBase):
       # Disable the radar and let openpilot control longitudinal
       # WARNING: THIS DISABLES AEB!
       # If Bosch radarless, this blocks ACC messages from the camera
+      # TODO: get radar disable working on Bosch CANFD
       ret.alphaLongitudinalAvailable = True
       ret.openpilotLongitudinalControl = alpha_long
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
       cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
-      if candidate == CAR.ACURA_RLX_HYBRID:
+      if candidate == CAR.ACURA_RLX:
         cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.noOutput))
       ret.safetyConfigs = cfgs
       ret.openpilotLongitudinalControl = True
@@ -100,7 +101,7 @@ class CarInterface(CarInterfaceBase):
       if candidate in HONDA_BOSCH_RADARLESS:
         ret.stopAccel = CarControllerParams.BOSCH_ACCEL_MIN  # stock uses -4.0 m/s^2 once stopped but limited by safety model
     else:
-      # default longitudinal tuning for all hondas
+      # default longitudinal tuning for all Nidec hondas
       ret.longitudinalTuning.kiBP = [0., 5., 35.]
       ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
 
@@ -270,6 +271,10 @@ class CarInterface(CarInterfaceBase):
       ret.steerActuatorDelay = 0.15
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+
+    if candidate == CAR.ACURA_RDX_3G_MMR:
+      CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000] # alpha longitudinal pedal tuning
+      ret.dashcamOnly = is_release  # TODO: release from dashcam when there's enough driving data for torqued/paramsd to converge
 
     # These cars use alternate user brake msg (0x1BE)
     if 0x1BE in fingerprint[CAN.pt] and candidate in (CAR.HONDA_ACCORD, CAR.HONDA_HRV_3G, CAR.ACURA_ADX, CAR.ACURA_MDX_4G,
