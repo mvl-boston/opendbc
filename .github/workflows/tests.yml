@@ -124,7 +124,7 @@ jobs:
         path: opendbc_repo
     - uses: ./.github/workflows/setup-with-retry
       id: setup-step
-      - name: Cache test routes
+    - name: Cache test routes
       id: routes-cache
       uses: actions/cache@v4
       with:
