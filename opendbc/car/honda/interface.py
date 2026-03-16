@@ -57,6 +57,9 @@ class CarInterface(CarInterfaceBase):
 
       ret.pcmCruise = True
 
+    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR):
+      ret.stoppingDecelRate = 0.3
+
     if candidate == CAR.HONDA_CRV_5G:
       ret.enableBsm = 0x12f8bfa7 in fingerprint[CAN.radar]
 
@@ -321,7 +324,7 @@ class CarInterface(CarInterfaceBase):
     elif (ret.transmissionType == TransmissionType.manual) and (not ret.openpilotLongitudinalControl):
       ret.autoResumeSng = False
     else:
-      ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR,
+      ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR
                                                        CAR.ACURA_TLX_1G, CAR.HONDA_CLARITY})
     if ret.autoResumeSng:
       ret.minEnableSpeed = -1.
