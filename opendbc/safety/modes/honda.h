@@ -157,7 +157,7 @@ static void honda_rx_hook(const CANPacket_t *msg) {
       else {
         honda_stock_brake = (msg->data[0] << 2) | (msg->data[1] >> 6);
       }
-
+      
       // Forward AEB when stock braking is higher than openpilot braking
       // only stop forwarding when AEB event is over
       if (!honda_stock_aeb) {
@@ -308,7 +308,7 @@ static safety_config honda_nidec_init(uint16_t param) {
 
   bool enable_nidec_alt = GET_FLAG(param, HONDA_PARAM_NIDEC_ALT);
   honda_nidec_hybrid = GET_FLAG(param, HONDA_PARAM_NIDEC_HYBRID);
-  
+
   if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
     static RxCheck honda_nidec_alt_rx_checks[] = {
@@ -410,7 +410,11 @@ static safety_config honda_bosch_init(uint16_t param) {
       SET_TX_MSGS(HONDA_RADARLESS_TX_MSGS, ret);
     }
   } else if (honda_bosch_canfd) {
-    SET_TX_MSGS(HONDA_CANFD_TX_MSGS, ret);
+    if (honda_bosch_long) {
+      SET_TX_MSGS(HONDA_CANFD_LONG_TX_MSGS, ret);
+    } else {
+      SET_TX_MSGS(HONDA_CANFD_TX_MSGS, ret);
+    }
   } else {
     if (honda_bosch_long) {
       SET_TX_MSGS(HONDA_BOSCH_LONG_TX_MSGS, ret);
