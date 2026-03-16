@@ -556,11 +556,5 @@ class CarController(CarControllerBase):
     new_actuators.torque = self.last_torque
     new_actuators.torqueOutputCan = apply_torque
 
-    if self.frame % 6000 == 0:
-      self.param_writer.put_many({
-        "HondaGasFactorParams": self.gasfactor,
-        "HondaWindFactorParams": self.windfactor,
-      })
-
     self.frame += 1
     return new_actuators, can_sends
