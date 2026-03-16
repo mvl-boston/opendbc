@@ -409,12 +409,6 @@ class CAR(Platforms):
     radar_dbc_dict('acura_ilx_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
-  ACURA_RLX = HondaNidecPlatformConfig(
-    [], # 2017 RLX, don't add to cardocs since custom panda
-    CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.39, steerRatio=13.9, tireStiffnessFactor=0.8467),  #spec, stiff/ctf from Accord
-    radar_dbc_dict('acura_ilx_2016_can_generated'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
-  )
   HONDA_PILOT = HondaNidecPlatformConfig(
     [
       HondaCarDocs("Honda Pilot 2016-22", min_steer_speed=12. * CV.MPH_TO_MS),
@@ -524,7 +518,7 @@ FW_QUERY_CONFIG = FwQueryConfig(
   # Note that we still attempt to match with them when they are present
   # This is or'd with (ALL_ECUS - ESSENTIAL_ECUS) from fw_versions.py
   non_essential_ecus={
-    Ecu.eps: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_E, CAR.HONDA_CRV_SA, CAR.ACURA_MDX_3G, CAR.ACURA_RLX, CAR.HONDA_ACCORD_9G,
+    Ecu.eps: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_E, CAR.HONDA_CRV_SA, CAR.ACURA_MDX_3G, CAR.HONDA_ACCORD_9G,
               CAR.HONDA_E_ADVANCE, CAR.ACURA_MDX_4G, *HONDA_BOSCH_ALT_RADAR, *HONDA_BOSCH_RADARLESS, *HONDA_BOSCH_CANFD],
     Ecu.vsa: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_ACCORD_9G, CAR.HONDA_CIVIC, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID,
               CAR.HONDA_E, CAR.HONDA_E_ADVANCE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G, CAR.ACURA_MDX_4G,
