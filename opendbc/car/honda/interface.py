@@ -50,10 +50,7 @@ class CarInterface(CarInterfaceBase):
       ret.openpilotLongitudinalControl = alpha_long
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
-      cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
-      if candidate == CAR.ACURA_RLX:
-        cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.noOutput))
-      ret.safetyConfigs = cfgs
+      ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
       ret.openpilotLongitudinalControl = True
 
       ret.pcmCruise = True
@@ -76,7 +73,7 @@ class CarInterface(CarInterfaceBase):
 
     if all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
       ret.transmissionType = TransmissionType.manual
-    elif 0x191 in fingerprint[CAN.pt] and candidate not in (CAR.ACURA_RDX, CAR.ACURA_RLX):
+    elif 0x191 in fingerprint[CAN.pt] and candidate != CAR.ACURA_RDX:
       # Traditional CVTs, gearshift position in GEARBOX_CVT
       ret.transmissionType = TransmissionType.cvt
     else:
@@ -298,7 +295,6 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_ALT.value
     if ret.openpilotLongitudinalControl and candidate in HONDA_BOSCH:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_LONG.value
-
     if candidate in HONDA_BOSCH_RADARLESS:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
     if candidate in HONDA_BOSCH_CANFD:
@@ -314,7 +310,7 @@ class CarInterface(CarInterfaceBase):
     elif (ret.transmissionType == TransmissionType.manual) and (not ret.openpilotLongitudinalControl):
       ret.autoResumeSng = False
     else:
-      ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX,
+      ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR
                                                        CAR.ACURA_TLX_1G, CAR.HONDA_CLARITY})
     if ret.autoResumeSng:
       ret.minEnableSpeed = -1.
