@@ -46,8 +46,8 @@ class CAR(Platforms):
 
   EXTRA_HYUNDAI = ExtraPlatformConfig(
     [
-      CommunityCarDocs("Hyundai Palisade 2023-24", package="HDA2"),
-      CommunityCarDocs("Kia Telluride 2023-24", package="HDA2"),
+      CommunityCarDocs("Hyundai Palisade 2023-24", "Highway Driving Assist II"),
+      CommunityCarDocs("Kia Telluride 2023-24", "Highway Driving Assist II"),
     ],
   )
 
@@ -69,8 +69,8 @@ class CAR(Platforms):
 
   EXTRA_VOLKSWAGEN = ExtraPlatformConfig(
     [
-      FlexRayCarDocs("Audi A4 2016-24", package="All"),
-      FlexRayCarDocs("Audi A5 2016-24", package="All"),
-      FlexRayCarDocs("Audi Q5 2017-24", package="All"),
+      FlexRayCarDocs("Audi A4 2016-24"),
+      FlexRayCarDocs("Audi A5 2016-24"),
+      FlexRayCarDocs("Audi Q5 2017-24"),
     ],
   )
