@@ -145,6 +145,7 @@ routes = [
   CarTestRoute("0416c2843c0bfc91/0000001d--59c7744d87", HONDA.ACURA_RDX_3G_MMR),
   CarTestRoute("54fd8451b3974762/2021-04-01--14-50-10", HONDA.HONDA_RIDGELINE),
   CarTestRoute("2d5808fae0b38ac6/2021-09-01--17-14-11", HONDA.HONDA_E),
+  CarTestRoute("16a94dfbfdf5a51f/00000007--5ac9e58f1b", HONDA.HONDA_E_ADVANCE),
   CarTestRoute("f44aa96ace22f34a/2021-12-22--06-22-31", HONDA.HONDA_CIVIC_2022),
   CarTestRoute("1f032f5173c8ad99/00000006--573b3fcaf5", HONDA.HONDA_CIVIC_2022),  # Civic Type R with manual transmission
   CarTestRoute("b1c832ad56b6bc9d/00000010--debfcf5867", HONDA.HONDA_CIVIC_2022),  # 2025 Civic Hatch Hybrid with new eCVT transmission
