@@ -117,7 +117,7 @@ class CarController(CarControllerBase):
     self.windfactor_before_brake = 0.0
     self.gasfactor_before_max = 0.0
     self.windfactor_before_max = 0.0
-    self.speed_addon = 0 # if self.CP.carFingerprint == CAR.HONDA_ODYSSEY_TWN else 70.0
+    self.speed_addon = 0
     self.last_brake_frame = self.frame
 
     self.gasfactor = 1.9
@@ -132,8 +132,6 @@ class CarController(CarControllerBase):
     actuators = CC.actuators
     hud_control = CC.hudControl
 
-    if self.CP.carFingerprint == CAR.ACURA_RLX:
-      CS.v_cruise_factor = CV.MPH_TO_MS
     hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
@@ -284,7 +282,7 @@ class CarController(CarControllerBase):
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
           can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                        self.stopping_counter, self.CP.carFingerprint, gas_pedal_force, CS.out.vEgo))
+                                                        self.stopping_counter, self.CP.carFingerprint, gas_pedal_force))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
 
@@ -334,7 +332,7 @@ class CarController(CarControllerBase):
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
         if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS):
-          can_sends.append(hondacan.create_radar_hud(self.packer, self.CAN.pt, stopaccel))
+          can_sends.append(hondacan.create_radar_hud(self.packer, self.CAN.pt))
         if self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH:
           can_sends.append(hondacan.create_legacy_brake_command(self.packer, self.CAN.pt))
         if self.CP.carFingerprint not in HONDA_BOSCH:
@@ -347,7 +345,7 @@ class CarController(CarControllerBase):
     new_actuators.gas = float(self.gasfactor)
     new_actuators.brake = float(self.brakefactor)
     new_actuators.torque = self.last_torque
-    new_actuators.torqueOutputCan = float(self.boost_counter) # force new version
+    new_actuators.torqueOutputCan = float(self.boost_counter)
 
     self.frame += 1
     return new_actuators, can_sends
