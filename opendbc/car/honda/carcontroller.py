@@ -149,13 +149,13 @@ class CarController(CarControllerBase):
       if CS.out.vEgo < 1e-3: # release after complete stop
         self.ai_stopping = 999.0
       stopaccel = min(actuators.accel, self.ai_stopping) * (morebrakefactor if actuators.accel < 0.0 else 1.0)
-
       accel = stopaccel
       gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
       gas, brake = 0.0, 0.0
       self.boost_counter = 20
+      self.ai_stopping = 999.0
 
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
