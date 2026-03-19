@@ -149,7 +149,7 @@ class CarController(CarControllerBase):
       if CS.out.vEgo < 1e-3: # release after complete stop
         self.ai_stopping = 999.0
       stopaccel = min(actuators.accel, self.ai_stopping) * (morebrakefactor if actuators.accel < 0.0 else 1.0)
-      
+
       accel = stopaccel
       gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
