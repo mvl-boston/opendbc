@@ -145,7 +145,7 @@ class CarController(CarControllerBase):
       morebrakefactor = np.interp(CS.out.vEgo, [4.47, 8.94], [1.5, 1.0])
       stopping_distance = (CS.out.vEgo * CS.out.vEgo / 2 / -CS.out.aEgo) if CS.out.aEgo < 0.0 else 999.0
       if stopping_distance < 10.0: # force continue braking if within 10m from a complete stop
-        self.ai_stopping = min (self.ai_stopping, actuators.accel)
+        self.ai_stopping = min(self.ai_stopping, actuators.accel)
       if CS.out.vEgo < 1e-3: # release after complete stop
         self.ai_stopping = 999.0
       stopaccel = min(actuators.accel, self.ai_stopping) * (morebrakefactor if actuators.accel < 0.0 else 1.0)
