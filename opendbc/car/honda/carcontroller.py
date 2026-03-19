@@ -140,7 +140,9 @@ class CarController(CarControllerBase):
 
     stopaccel = 0.0
     if CC.longActive:
-      stopaccel = -0.2 if ((actuators.longControlState == LongCtrlState.stopping) and (actuators.accel >= -0.2)) else actuators.accel
+      # stopaccel = -0.2 if ((actuators.longControlState == LongCtrlState.stopping) and (actuators.accel >= -0.2)) else actuators.accel
+      morebrakefactor = np.interp(CS.out.vEgo, [4.47, 8.94], [1.5, 1.0])
+      stopaccel = actuators.accel * (morebrakefactor if actuators.accel < 0.0 else 1.0)
       accel = stopaccel
       gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
