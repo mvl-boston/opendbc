@@ -28,8 +28,8 @@ non_tested_cars = [
   SUBARU.SUBARU_FORESTER_HYBRID,
   VOLKSWAGEN.PORSCHE_MACAN_MK1,
   # Honda/Acura test routes below expired, replace when CI bucket sync is fixed
-  HONDA.HONDA_CRV_SA, # expired testroute
-  HONDA.ACURA_TLX_2G,
+  HONDA.ACURA_RDX_3G_MMR,
+  HONDA.ACURA_INTEGRA,
 
   # These had their DSUs unplugged, need new routes
   # TOYOTA.LEXUS_ES  # hybrid
@@ -142,7 +142,7 @@ routes = [
   CarTestRoute("684e8f96bd491a0e/2021-11-03--11-08-42", HONDA.HONDA_PILOT),  # Passport
   CarTestRoute("0a78dfbacc8504ef/2020-03-04--13-29-55", HONDA.HONDA_CIVIC_BOSCH),
   CarTestRoute("f34a60d68d83b1e5/2020-10-06--14-35-55", HONDA.ACURA_RDX),
-  CarTestRoute("0416c2843c0bfc91/0000001d--59c7744d87", HONDA.ACURA_RDX_3G_MMR),
+  # CarTestRoute("0416c2843c0bfc91/0000001d--59c7744d87", HONDA.ACURA_RDX_3G_MMR), # Azure route bug
   CarTestRoute("54fd8451b3974762/2021-04-01--14-50-10", HONDA.HONDA_RIDGELINE),
   CarTestRoute("2d5808fae0b38ac6/2021-09-01--17-14-11", HONDA.HONDA_E),
   CarTestRoute("16a94dfbfdf5a51f/00000007--5ac9e58f1b", HONDA.HONDA_E_ADVANCE),
@@ -157,10 +157,11 @@ routes = [
   CarTestRoute("414af83891dbf72c/00000006--51fa6d99cd", HONDA.HONDA_NBOX_2G),
   CarTestRoute("ad9840558640c31d/0000001a--d6cd4871c2", HONDA.ACURA_MDX_4G_MMR),  # 2025 MDX
   CarTestRoute("ad9840558640c31d/000001f2--026c4f6275", HONDA.ACURA_TLX_2G_MMR),
+  CarTestRoute("6b22f2fcd61fa86a/00000000--b3adfc8746", HONDA.ACURA_TLX_2G),
   CarTestRoute("c45f8d145722812e/0000001b--37a99319c3", HONDA.ACURA_MDX_4G),
   CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA),
   CarTestRoute("ad9840558640c31d/00000026--538590661c", HONDA.ACURA_ADX),
-  # CarTestRoute("4991f6e1afbe5adb/00000005--713a39aaee", HONDA.HONDA_CRV_SA), # South Africa model - breaking CI
+  CarTestRoute("4991f6e1afbe5adb/00000005--713a39aaee", HONDA.HONDA_CRV_SA), # South Africa model
   CarTestRoute("0b3cfa082cbbe54e/0000000c--5218004ec8", HONDA.HONDA_FIT_4G),
   # port extensions
   CarTestRoute("ad9840558640c31d/0000003d--a35002b59f", HONDA.ACURA_MDX_3G_MMR),
