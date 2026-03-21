@@ -28,15 +28,11 @@ non_tested_cars = [
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
   VOLKSWAGEN.PORSCHE_MACAN_MK1,
-  HONDA.ACURA_INTEGRA, # need new route - expired
-  HONDA.ACURA_TLX_2G, # need new route - expired
-  HONDA.HONDA_CRV_SA, # need new route - expired
-  HONDA.ACURA_TLX_2G_MMR, # need to fix Integra bug causing error
-  HONDA.HONDA_PILOT_4G_MMR, # awaiting driver for testroute
-  # custom hardware / not upstreamable
-  HONDA.HONDA_CLARITY,
-  HONDA.ACURA_MDX_3G,
-  HONDA.ACURA_TLX_1G,
+  HONDA.ACURA_TLX_2G,
+  HONDA.HONDA_CITY_7G,
+  HONDA.ACURA_RDX_3G_MMR,
+  HONDA.ACURA_INTEGRA,
+  HONDA.PILOT_4G_MMR,
 
   # These had their DSUs unplugged, need new routes
   # TOYOTA.LEXUS_ES  # hybrid
