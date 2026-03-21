@@ -116,7 +116,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
 
 def create_steering_control(packer, CAN, apply_torque, lkas_active, tja_control):
   values = {
-    "STEER_TORQUE": apply_torque if lkas_active else 0,
+    "STEER_TORQUE": 4200 if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
   }
 
