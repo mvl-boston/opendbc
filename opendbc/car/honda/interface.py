@@ -104,7 +104,7 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
 
     if True: # candidate == CAR.HONDA_CITY_7G: - 5mph stopping all cars
-      ret.vEgoStopping = 2.0
+      ret.vEgoStopping = 1.0
       ret.vEgoStarting = ret.vEgoStopping
       ret.stoppingDecelRate = 0.3
 
