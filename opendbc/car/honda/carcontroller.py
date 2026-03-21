@@ -7,7 +7,6 @@ from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
-from opendbc.car.common.conversions import Conversions as CV
 
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
 from opendbc.sunnypilot.car.honda.gas_interceptor import GasInterceptorCarController
@@ -130,9 +129,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     gas_pedal_force = 0.0
     actuators = CC.actuators
     hud_control = CC.hudControl
-
-    if self.CP.carFingerprint == CAR.ACURA_RLX:
-      CS.v_cruise_factor = CV.MPH_TO_MS
     hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
@@ -142,7 +138,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     if CC.longActive:
       accel = actuators.accel
-      if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX)) and (accel > max(0, CS.out.aEgo) + 0.1):
+      if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)) and (accel > max(0, CS.out.aEgo) + 0.1):
         accel = 10000.0 # help with lagged accel until pedal tuning is inserted
       gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
@@ -295,7 +291,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     # Send dashboard UI commands.
     if self.frame % 10 == 0:
-      if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR, CAR.ACURA_RLX)):
+      if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)):
         # standstill disengage
         if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
           pcm_speed = 25.0 / 3.6
