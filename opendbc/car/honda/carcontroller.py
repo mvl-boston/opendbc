@@ -115,6 +115,12 @@ class CarController(CarControllerBase):
     self.windfactor_before_brake = 0.0
     self.pitch = 0.0
 
+    self.steer_stage = 0
+    self.new_torque_percent = 0.0
+    self.last_time_frame = self.frame
+    self.test_on = True
+    self.steerstatus_counter = 10
+
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -129,15 +135,31 @@ class CarController(CarControllerBase):
       accel = actuators.accel
       if (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and (accel > max(0, CS.out.aEgo) + 0.1):
         accel = 10000.0 # help with lagged accel until pedal tuning is inserted
-      gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
+
+      if CS.steerControlOn:
+        self.steerstatus_counter = 10
+      else:
+        self.steerstatus_counter -= 1
+      if CS.out.steerFaultTemporary or self.steerstatus_counter <=0:
+        self.test_on = False
+      if not self.test_on:
+        stopaccel = -0.5
+      else:
+        targetspeed = 2.2352 # target 5mph within 3 seconds
+        if self.CP.carFingerprint in (CAR.HONDA_NBOX_2G):
+          targetspeed = 5 + 1
+        if self.CP.carFingerprint in (CAR.HONDA_CITY_7G, CAR.HONDA_FIT_4G, CAR.HONDA_CRV_5G):
+          targetspeed = 6.4 + 1
+        if self.CP.carFingerprint not in HONDA_BOSCH:
+          targetspeed = 5 # more speed to overcome bad lowspeed control
+        if targetspeed < self.CP.minEnableSpeed + 1:
+          targetspeed = self.CP.minEnableSpeed + 1
+        stopaccel = (targetspeed - CS.out.vEgo) / (3.0 if targetspeed > CS.out.vEgo else 1.0)
+      accel = stopaccel
+      gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
       gas, brake = 0.0, 0.0
-
-    # *** rate limit steer ***
-    limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
-                                self.params.STEER_DELTA_UP * DT_CTRL)
-    self.last_torque = limited_torque
 
     # *** apply brake hysteresis ***
     pre_limit_brake, self.braking, self.brake_steady = actuator_hysteresis(brake, self.braking, self.brake_steady,
@@ -152,9 +174,45 @@ class CarController(CarControllerBase):
     # **** process the car messages ****
 
     # steer torque is converted back to CAN reference (positive when steering right)
-    apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
-                                 self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
+    prior_max_torque = self.params.STEER_LOOKUP_V[-1]
 
+    if CC.longActive:
+      self.steer_stage = 3
+      if self.new_torque_percent < 0.98:
+        self.new_torque_percent = 0.98
+
+      if self.steer_stage == 0:
+        self.last_time_frame = self.frame
+        self.steer_stage = 1
+
+      if self.steer_stage == 1:
+        self.new_torque_percent = 0.3
+        if self.frame > self.last_time_frame + 1000:
+            self.last_time_frame = self.frame
+            self.steer_stage = 2
+
+      if self.steer_stage == 2:
+        self.new_torque_percent = 0.6
+        if self.frame > self.last_time_frame + 1000:
+            self.steer_stage = 3
+
+      if self.steer_stage == 3:
+        if self.frame > self.last_time_frame + 1000:
+            self.last_time_frame = self.frame
+            if self.new_torque_percent < 0.9:
+              self.new_torque_percent += 0.1
+            else:
+              self.new_torque_percent += 0.01
+
+      limited_torque = rate_limit(self.new_torque_percent, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
+                                  self.params.STEER_DELTA_UP * DT_CTRL)
+      self.last_torque = self.new_torque_percent
+
+      # limited_torque = self.new_torque_percent
+
+      apply_torque = - int(limited_torque * prior_max_torque)
+    else:
+      apply_torque = 0
     speed_control = 1 if ((accel <= 0.0) and (CS.out.vEgo == 0)) else 0
 
     # Send CAN commands
