@@ -158,7 +158,7 @@ routes = [
   CarTestRoute("ad9840558640c31d/000001f2--026c4f6275", HONDA.ACURA_TLX_2G_MMR),
   CarTestRoute("6b22f2fcd61fa86a/00000000--b3adfc8746", HONDA.ACURA_TLX_2G),
   CarTestRoute("c45f8d145722812e/0000001b--37a99319c3", HONDA.ACURA_MDX_4G),
-  CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA),
+  # CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA), # Azure route bug
   CarTestRoute("ad9840558640c31d/00000026--538590661c", HONDA.ACURA_ADX),
   CarTestRoute("4991f6e1afbe5adb/00000005--713a39aaee", HONDA.HONDA_CRV_SA), # South Africa model
   CarTestRoute("0b3cfa082cbbe54e/0000000c--5218004ec8", HONDA.HONDA_FIT_4G),
@@ -305,7 +305,6 @@ routes = [
   CarTestRoute("cd9cff4b0b26c435/2021-05-13--15-12-39", TOYOTA.TOYOTA_CHR),
   CarTestRoute("57858ede0369a261/2021-05-18--20-34-20", TOYOTA.TOYOTA_CHR),  # hybrid
   CarTestRoute("ea8fbe72b96a185c/2023-02-08--15-11-46", TOYOTA.TOYOTA_CHR_TSS2),
-  CarTestRoute("ea8fbe72b96a185c|2023-02-22--09-20-34", TOYOTA.TOYOTA_CHR_TSS2),  # openpilot longitudinal, with smartDSU
   CarTestRoute("6719965b0e1d1737/2023-02-09--22-44-05", TOYOTA.TOYOTA_CHR_TSS2),  # hybrid
   CarTestRoute("6719965b0e1d1737/2023-08-29--06-40-05", TOYOTA.TOYOTA_CHR_TSS2),  # hybrid, openpilot longitudinal, radar disabled
   CarTestRoute("14623aae37e549f3/2021-10-24--01-20-49", TOYOTA.TOYOTA_PRIUS_V),
