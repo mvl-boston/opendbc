@@ -71,10 +71,9 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
     values["COMPUTER_BRAKE_HYBRID"] = apply_brake
     values["BRAKE_PUMP_REQUEST_HYBRID"] = apply_brake > 0
   else:
-    values.update({
-      "COMPUTER_BRAKE": apply_brake,
-      "BRAKE_PUMP_REQUEST": pump_on,
-    })
+    values["COMPUTER_BRAKE"] = apply_brake
+    values["BRAKE_PUMP_REQUEST"] = pump_on
+
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
