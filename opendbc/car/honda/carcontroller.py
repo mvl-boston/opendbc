@@ -126,6 +126,7 @@ class CarController(CarControllerBase):
     self.accel_last = 0.0
     self.boost_counter = 0
     self.ai_stopping = 999.0
+    self.prior_accel = 0.0
 
   def update(self, CC, CS, now_nanos):
     gas_pedal_force = 0.0
@@ -146,8 +147,9 @@ class CarController(CarControllerBase):
       stopping_distance = (CS.out.vEgo * CS.out.vEgo / 2 / -CS.out.aEgo) if CS.out.aEgo < 0.0 else 999.0
       if stopping_distance < 10.0 and not hud_control.leadVisible: # force continue braking if within 10m from a complete stop
         self.ai_stopping = min(self.ai_stopping, actuators.accel)
-      if CS.out.vEgo < 1e-3: # release after complete stop
+      if CS.out.brakePressed or (CS.out.vEgo < 1e-3 and (actuators.accel > self.prior_accel)): # release after complete stop and accel increase
         self.ai_stopping = 999.0
+      self.prior_accel = actuators.accel
       stopaccel = min(actuators.accel, self.ai_stopping) * (morebrakefactor if actuators.accel < 0.0 else 1.0)
       accel = stopaccel
       gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
