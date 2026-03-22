@@ -7,6 +7,7 @@ from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
+from opendbc.car.common.pid import PIDController
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -128,6 +129,12 @@ class CarController(CarControllerBase):
     self.ai_stopping = 999.0
     self.prior_accel = 0.0
 
+    self.nidec_pid = PIDController (k_p=([0,], [0,]),
+                                    k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
+                                    k_f=1,
+                                    pos_limit=self.params.NIDEC_ACCEL_MAX
+                                    neg_limit=self.params.NIDEC_ACCEL_MIN)
+
   def update(self, CC, CS, now_nanos):
     gas_pedal_force = 0.0
     actuators = CC.actuators
@@ -149,6 +156,7 @@ class CarController(CarControllerBase):
         self.ai_stopping = min(self.ai_stopping, actuators.accel)
       if CS.out.brakePressed or (CS.out.vEgo < 1e-3 and (actuators.accel > self.prior_accel)): # release after complete stop and accel increase
         self.ai_stopping = 999.0
+        self.nidec_pid.reset()
       self.prior_accel = actuators.accel
       stopaccel = min(actuators.accel, self.ai_stopping) * (morebrakefactor if actuators.accel < 0.0 else 1.0)
       accel = stopaccel
@@ -197,6 +205,8 @@ class CarController(CarControllerBase):
     # all of this is only relevant for HONDA NIDEC
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
+    self.nidec_pid.pos_limit = max_accel
+
     # TODO this 1.44 is just to maintain previous behavior
     pcm_speed_BP = [-wind_brake,
                     -wind_brake * (3 / 4),
