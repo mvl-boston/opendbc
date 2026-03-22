@@ -129,11 +129,11 @@ class CarController(CarControllerBase):
     self.ai_stopping = 999.0
     self.prior_accel = 0.0
 
-    self.nidec_pid = PIDController (k_p=([0,], [0,]),
-                                    k_i= ([0., 5., 35.], [1.2, 0.8, 0.5]),
-                                    k_f=1,
-                                    pos_limit=self.params.NIDEC_ACCEL_MAX,
-                                    neg_limit=self.params.NIDEC_ACCEL_MIN)
+    self.nidec_pid = PIDController(k_p=([0,], [0,]),
+                                   k_i=([0., 5., 35.], [1.2, 0.8, 0.5]),
+                                   k_f=1,
+                                   pos_limit=self.params.NIDEC_ACCEL_MAX,
+                                   neg_limit=self.params.NIDEC_ACCEL_MIN)
 
   def update(self, CC, CS, now_nanos):
     gas_pedal_force = 0.0
