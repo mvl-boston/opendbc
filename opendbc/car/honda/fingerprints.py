@@ -1232,10 +1232,10 @@ FW_VERSIONS = {
     (Ecu.shiftByWire, 0x18DA0BF1, None): [
       b'54008-3E7-H520\x00\x00',
     ],
-  },
     (Ecu.eps, 0x18da30f1, None): [
       b'39990-3E7-H060\x00\x00',
     ],
+  },
   CAR.HONDA_CITY_7G: {
     (Ecu.eps, 0x18da30f1, None): [
       b'39990-T14-B030\x00\x00',
