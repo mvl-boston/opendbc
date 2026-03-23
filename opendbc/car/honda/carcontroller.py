@@ -158,7 +158,7 @@ class CarController(CarControllerBase):
         self.ai_stopping = 999.0
         self.nidec_pid.reset()
       self.prior_accel = actuators.accel
-      stopaccel = float(min(actuators.accel, self.ai_stopping) * (morebrakefactor if actuators.accel < 0.0 else 1.0))
+      stopaccel = min(actuators.accel, self.ai_stopping) * (morebrakefactor if actuators.accel < 0.0 else 1.0)
       stopaccel += self.nidec_pid.update(error = stopaccel - CS.out.aEgo, speed = CS.out.vEgo)
       accel = stopaccel
       gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
@@ -364,7 +364,7 @@ class CarController(CarControllerBase):
 
     new_actuators = actuators.as_builder()
     new_actuators.speed = float(self.speedfactor)
-    new_actuators.accel = self.accel
+    new_actuators.accel = float(self.accel)
     new_actuators.gas = float(self.gasfactor)
     new_actuators.brake = float(self.brakefactor)
     new_actuators.torque = self.last_torque
