@@ -151,7 +151,7 @@ class CarController(CarControllerBase):
     if CC.longActive:
       # stopaccel = -0.2 if ((actuators.longControlState == LongCtrlState.stopping) and (actuators.accel >= -0.2)) else actuators.accel
       morebrakefactor = 1.0 # np.interp(CS.out.vEgo, [4.47, 8.94], [1.5, 1.0])
-      stopping_distance = (CS.out.vEgo * CS.out.vEgo / 2 / -CS.out.aEgo) if CS.out.aEgo < 0.0 else 999.0
+      stopping_distance = (CS.out.vEgo * CS.out.vEgo / 2 / -actuators.accel) if actuators.accel < 0.0 else 999.0
       if stopping_distance < 10.0 and not hud_control.leadVisible: # force continue braking if within 10m from a complete stop
         self.ai_stopping = min(self.ai_stopping, actuators.accel)
       if CS.out.brakePressed or (CS.out.vEgo < 1e-3 and (actuators.accel > self.prior_accel)): # release after complete stop and accel increase
