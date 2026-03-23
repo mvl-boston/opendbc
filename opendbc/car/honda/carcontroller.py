@@ -160,12 +160,14 @@ class CarController(CarControllerBase):
       self.prior_accel = actuators.accel
       stopaccel = min(actuators.accel, self.ai_stopping) * (morebrakefactor if actuators.accel < 0.0 else 1.0)
       accel = stopaccel
+      self.nidec_pid.update(error = accel - CS.out.aEgo, speed = CS.out.vEgo) 
       gas, brake = compute_gas_brake(stopaccel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
       gas, brake = 0.0, 0.0
       self.boost_counter = 20
       self.ai_stopping = 999.0
+      self.nidec_pid.reset()
     self.accel = accel
 
     # *** rate limit steer ***
