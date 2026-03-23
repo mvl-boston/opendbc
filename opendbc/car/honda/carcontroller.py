@@ -166,7 +166,8 @@ class CarController(CarControllerBase):
       gas, brake = 0.0, 0.0
       self.boost_counter = 20
       self.ai_stopping = 999.0
-
+    self.accel = accel
+    
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
