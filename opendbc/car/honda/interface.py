@@ -105,9 +105,11 @@ class CarInterface(CarInterfaceBase):
       pass # moved to opendbc controller
 
     if candidate == CAR.HONDA_CITY_7G:
-      ret.vEgoStopping = 1.0
-      ret.vEgoStarting = ret.vEgoStopping
-      ret.stoppingDecelRate = 0.3
+      ret.vEgoStopping = 2.0
+    else:
+      ret.vEgoStopping = 1.0 # make up for driving model creep at stop lights/signs
+    ret.vEgoStarting = ret.vEgoStopping
+    ret.stoppingDecelRate = 0.3
 
     # Disable control if EPS mod detected
     for fw in car_fw:
