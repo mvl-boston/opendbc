@@ -98,7 +98,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
 
   if car_fingerprint == CAR.ACURA_RDX_3G:
     acc_control_values.update({
-      "SET_TO_ZERO": 0 if (standstill and stopping_counter <= 200) else 1
+      "SET_TO_ZERO": 0 if (standstill and stopping_counter >= 200) else 1
     })
   
   if car_fingerprint in HONDA_BOSCH_RADARLESS:
