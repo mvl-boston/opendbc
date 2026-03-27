@@ -254,6 +254,8 @@ class CarController(CarControllerBase):
           # live-learn gas pedal adjustments when openpilot is controlling gas
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
             gas_error = self.accel - CS.out.aEgo
+            if (self.CP.carFingerprint == CAR.ACURA_RDX_3G and CS.out.vEgo < 1e-3):
+              self.gasfactor = 3.0 # max due to turbolag
             if gas_error != 0.0 and gas_pedal_force > 0.0:
               if self.CP.carFingerprint in (CAR.HONDA_INSIGHT, CAR.ACURA_RDX_3G): # Insight gas pedal reacts too slowly
                 learn_speed = 150
