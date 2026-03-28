@@ -171,7 +171,7 @@
 |Hyundai|Tucson Hybrid 2022-24|All|[Upstream](#upstream)|
 |Hyundai|Tucson Plug-in Hybrid 2024|All|[Upstream](#upstream)|
 |Hyundai|Veloster 2019-20|Smart Cruise Control (SCC)|[Upstream](#upstream)|
-|Jeep|Cherokee 2019-23|Adaptive Cruise Control (ACC)|[Upstream](#upstream)|
+|Jeep|Cherokee 2019-23|Adaptive Cruise Control (ACC)|[Dashcam mode](#dashcam)|
 |Jeep|Grand Cherokee 2016-18|Adaptive Cruise Control (ACC)|[Upstream](#upstream)|
 |Jeep|Grand Cherokee 2019-21|Adaptive Cruise Control (ACC)|[Upstream](#upstream)|
 |Kia|Carnival 2022-24|Smart Cruise Control (SCC)|[Upstream](#upstream)|
@@ -257,8 +257,8 @@
 |Peugeot|208 2019-25|Adaptive Cruise Control (ACC) & Lane Assist|[Dashcam mode](#dashcam)|
 |Porsche|Macan 2017-24|Adaptive Cruise Control (ACC) & Lane Assist|[Dashcam mode](#dashcam)|
 |Ram|1500 2019-24|Adaptive Cruise Control (ACC)|[Upstream](#upstream)|
-|Ram|2500 2020-24|Adaptive Cruise Control (ACC)|[Upstream](#upstream)|
-|Ram|3500 2019-22|Adaptive Cruise Control (ACC)|[Upstream](#upstream)|
+|Ram|2500 2020-24|Adaptive Cruise Control (ACC)|[Dashcam mode](#dashcam)|
+|Ram|3500 2019-22|Adaptive Cruise Control (ACC)|[Dashcam mode](#dashcam)|
 |Rivian|R1S 2022-24|All|[Upstream](#upstream)|
 |Rivian|R1T 2022-24|All|[Upstream](#upstream)|
 |SEAT|Alhambra 2018-20|Adaptive Cruise Control (ACC) & Lane Assist|[Dashcam mode](#dashcam)|
