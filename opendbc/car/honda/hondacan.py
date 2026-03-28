@@ -100,7 +100,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
     acc_control_values.update({
       "SET_TO_ZERO": 0 if (standstill and stopping_counter >= 200) else 1
     })
-  
+
   if car_fingerprint in HONDA_BOSCH_RADARLESS:
     acc_control_values.update({
       "CONTROL_ON": enabled,
