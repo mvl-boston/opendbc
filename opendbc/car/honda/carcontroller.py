@@ -202,7 +202,7 @@ class CarController(CarControllerBase):
             if self.new_torque_percent < 0.9:
               self.new_torque_percent += 0.1
             else:
-              self.new_torque_percent += 0.01
+              self.new_torque_percent += 0.1 # 10 percent increase
 
       limited_torque = rate_limit(self.new_torque_percent, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                   self.params.STEER_DELTA_UP * DT_CTRL)
