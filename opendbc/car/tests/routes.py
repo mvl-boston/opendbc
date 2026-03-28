@@ -35,6 +35,7 @@ non_tested_cars = [
   HONDA.ACURA_INTEGRA,
   HONDA.HONDA_PILOT_4G_MMR,
   HONDA.ACURA_TLX_2G,
+  HONDA.HONDA_ACCORD_9G_AU,
 
   # These had their DSUs unplugged, need new routes
   # TOYOTA.LEXUS_ES  # hybrid
