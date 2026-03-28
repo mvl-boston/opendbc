@@ -78,6 +78,7 @@ jobs:
         repository: 'sunnypilot/sunnypilot'
         ref: '4962753e47d58f6c86fc284710b6a444ae45788f'
         submodules: true
+    - run: ./tools/op.sh setup
     - run: rm -rf opendbc_repo/
     - uses: actions/checkout@v4
       with:
