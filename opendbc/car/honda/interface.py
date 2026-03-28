@@ -283,16 +283,9 @@ class CarInterface(CarInterfaceBase):
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.ACURA_MDX_4G:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
-      ret.steerActuatorDelay = 0.3
-      ret.lateralTuning.pid.kf = 0.000035
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
-
-    elif candidate in (CAR.HONDA_PASSPORT_4G, CAR.HONDA_PILOT_4G_MMR):
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
-      ret.steerActuatorDelay = 0.3
-      ret.lateralTuning.pid.kf = 0.000035
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
+      ret.steerActuatorDelay = 0.15
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 9150], [0, 9150]]
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     else:
       ret.steerActuatorDelay = 0.15
