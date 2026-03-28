@@ -91,6 +91,10 @@ class CarInterface(CarInterfaceBase):
       ret.longitudinalTuning.kiBP = [0., 5., 35.]
       ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
 
+    ret.vEgoStopping = 1.0
+    ret.vEgoStarting = ret.vEgoStopping
+    ret.stoppingDecelRate = 0.3
+
     # Disable control if EPS mod detected
     for fw in car_fw:
       if fw.ecu == "eps" and b"," in fw.fwVersion:
