@@ -1,6 +1,7 @@
 import numpy as np
-from opendbc.can.packer import CANPacker
-from opendbc.car import Bus, apply_driver_steer_torque_limits
+from opendbc.can import CANPacker
+from opendbc.car import Bus
+from opendbc.car.lateral import apply_driver_steer_torque_limits
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.rivian.riviancan import create_lka_steering, create_longitudinal, create_wheel_touch, create_adas_status
 from opendbc.car.rivian.values import CarControllerParams
@@ -47,7 +48,8 @@ class CarController(CarControllerBase):
       else:
         self.cancel_frames = 0
 
-      can_sends.append(create_adas_status(self.packer, CS.vdm_adas_status, interface_status))
+      for msg in CS.vdm_adas_status:
+        can_sends.append(create_adas_status(self.packer, msg, interface_status))
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / steer_max
