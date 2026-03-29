@@ -17,6 +17,10 @@
 #define HONDA_ALT_BRAKE_ADDR_CHECK(pt_bus)                                                                                              \
   {.msg = {{0x1BE, (pt_bus), 3, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* BRAKE_MODULE */  \
 
+// Wheel Speed is used on Integra due to lack of Engine Data message
+#define HONDA_INTEGRA_CHECK(pt_bus)                                                                                                     \
+  {.msg = {{0x1D0, (pt_bus), 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* WHEEL_SPEED */   \
+
 enum {
   HONDA_BTN_NONE = 0,
   HONDA_BTN_MAIN = 1,
@@ -71,8 +75,8 @@ static void honda_rx_hook(const CANPacket_t *msg) {
   const bool pcm_cruise = ((honda_hw == HONDA_BOSCH) && !honda_bosch_long) || (honda_hw == HONDA_NIDEC);
   unsigned int pt_bus = honda_get_pt_bus();
 
-  // sample speed
-  if (msg->addr == 0x158U) {
+  // sample speed - 0x158 used for all supported Hondas except Integra (use 0x1D0 wheel_speed message)
+  if ((msg->addr == 0x158U) || (msg->addr == 0x1D0U)) {
     vehicle_moving = msg->data[0] | msg->data[1];
   }
 
@@ -341,6 +345,7 @@ static safety_config honda_bosch_init(uint16_t param) {
   // Bosch radarless has the powertrain bus on bus 0
   static RxCheck honda_bosch_pt0_rx_checks[] = {
     HONDA_COMMON_RX_CHECKS(0)
+    HONDA_INTEGRA_CHECK(0)
   };
 
   static RxCheck honda_bosch_pt0_alt_brake_rx_checks[] = {
