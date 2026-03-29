@@ -429,7 +429,7 @@ class CarController(CarControllerBase):
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                  self.CP.openpilotLongitudinalControl))
 
-      steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
+      steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       reduced_steering = CS.out.steeringPressed
       steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
 
