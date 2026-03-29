@@ -203,6 +203,9 @@ class CarInterface(CarInterfaceBase):
       ret.steerActuatorDelay = 0.15
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3596], [0, 3596]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.vEgoStopping = 2. * CV.KPH_TO_MS
+      ret.vEgoStarting = ret.vEgoStopping
+      ret.stoppingDecelRate = 0.3
 
     else:
       ret.steerActuatorDelay = 0.15
