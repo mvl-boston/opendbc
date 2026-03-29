@@ -6,8 +6,7 @@
 #define HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(pt_bus)                                                                                      \
   {.msg = {{0x1A6, (pt_bus), 8, 25U, .max_counter = 3U, .ignore_quality_flag = true},                  /* SCM_BUTTONS */       \
            {0x296, (pt_bus), 4, 25U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }}},                                 \
-  {.msg = {{0x158, (pt_bus), 8, 100U, .max_counter = 3U, .ignore_quality_flag = true},                   /* ENGINE_DATA */     \
-           {0x1D0, (pt_bus), 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }}},             /* WHEEL_SPEED */     \
+  {.msg = {{0x158, (pt_bus), 8, 100U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},   /* ENGINE_DATA */     \
   {.msg = {{0x17C, (pt_bus), 8, 100U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* POWERTRAIN_DATA */  \
 
 #define HONDA_COMMON_RX_CHECKS(pt_bus)                                                                                                  \
@@ -17,6 +16,11 @@
 // Alternate brake message is used on some Honda Bosch, and Honda Bosch radarless (where PT bus is 0)
 #define HONDA_ALT_BRAKE_ADDR_CHECK(pt_bus)                                                                                              \
   {.msg = {{0x1BE, (pt_bus), 3, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* BRAKE_MODULE */  \
+
+// Wheel Speed is used on Integra due to lack of Engine Data message
+#define HONDA_INTEGRA_CHECK(pt_bus)                                                                                              \
+  {.msg = {{0x1D0, (pt_bus), 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* WHEEL_SPEED */  \
+
 
 enum {
   HONDA_BTN_NONE = 0,
@@ -342,6 +346,7 @@ static safety_config honda_bosch_init(uint16_t param) {
   // Bosch radarless has the powertrain bus on bus 0
   static RxCheck honda_bosch_pt0_rx_checks[] = {
     HONDA_COMMON_RX_CHECKS(0)
+    HONDA_INTEGRA_CHECK(0)
   };
 
   static RxCheck honda_bosch_pt0_alt_brake_rx_checks[] = {
