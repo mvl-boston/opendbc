@@ -18,9 +18,8 @@
   {.msg = {{0x1BE, (pt_bus), 3, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* BRAKE_MODULE */  \
 
 // Wheel Speed is used on Integra due to lack of Engine Data message
-#define HONDA_INTEGRA_CHECK(pt_bus)                                                                                              \
-  {.msg = {{0x1D0, (pt_bus), 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* WHEEL_SPEED */  \
-
+#define HONDA_INTEGRA_CHECK(pt_bus)                                                                                                     \
+  {.msg = {{0x1D0, (pt_bus), 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* WHEEL_SPEED */   \
 
 enum {
   HONDA_BTN_NONE = 0,
