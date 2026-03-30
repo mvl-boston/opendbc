@@ -1,6 +1,6 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS,
+from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_RADARLESS,
                                       HONDA_BOSCH_CANFD, CarControllerParams)
 
 # CAN bus layout with relay
@@ -78,15 +78,14 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
-def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint, gas_force):
-
+def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint):
   commands = []
   min_gas_accel = CarControllerParams.BOSCH_GAS_LOOKUP_BP[0]
 
   control_on = 5 if enabled else 0
-  gas_command = gas if active and gas_force > min_gas_accel else -30000
+  gas_command = gas if active and accel > min_gas_accel else -30000
   accel_command = accel if active else 0
-  braking = 1 if active and gas_force < min_gas_accel else 0
+  braking = 1 if active and accel < min_gas_accel else 0
   standstill = 1 if active and stopping_counter > 0 else 0
   standstill_release = 1 if active and stopping_counter == 0 else 0
 
@@ -94,12 +93,12 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   acc_control_values = {
     'ACCEL_COMMAND': accel_command,
     'STANDSTILL': standstill,
-    'BRAKE_REQUEST': braking,
   }
 
   if car_fingerprint in HONDA_BOSCH_RADARLESS:
     acc_control_values.update({
       "CONTROL_ON": enabled,
+      "IDLESTOP_ALLOW": stopping_counter > 200,  # allow idle stop after 4 seconds (50 Hz)
     })
   else:
     acc_control_values.update({
@@ -107,6 +106,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
       "CONTROL_ON": control_on,
       "GAS_COMMAND": gas_command,  # used for gas
       "BRAKE_LIGHTS": braking,
+      "BRAKE_REQUEST": braking,
       "STANDSTILL_RELEASE": standstill_release,
     })
     acc_control_on_values = {
@@ -144,7 +144,7 @@ def create_bosch_supplemental_1(packer, CAN):
   return packer.make_can_msg("BOSCH_SUPPLEMENTAL_1", CAN.lkas, values)
 
 
-def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, hud_v_cruise, is_metric, acc_hud, boost):
+def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, hud_v_cruise, is_metric, acc_hud):
   acc_hud_values = {
     'CRUISE_SPEED': hud_v_cruise,
     'ENABLE_MINI_CAR': 1 if enabled else 0,
@@ -164,7 +164,7 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     acc_hud_values['ACC_ON'] = int(enabled)
     acc_hud_values['PCM_SPEED'] = pcm_speed * CV.MS_TO_KPH
     acc_hud_values['PCM_GAS'] = pcm_accel
-    acc_hud_values['SET_ME_X01'] = boost
+    acc_hud_values['SET_ME_X01'] = 1
     acc_hud_values['FCM_OFF'] = acc_hud['FCM_OFF']
     acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
     acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
@@ -173,15 +173,14 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
   return packer.make_can_msg("ACC_HUD", bus, acc_hud_values)
 
 
-def create_lkas_hud(packer, bus, CP, hud_control, lat_active, enabled, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed):
+def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, alert_steer_required, lkas_hud):
   commands = []
 
   lkas_hud_values = {
     'LKAS_READY': 1,
     'LKAS_STATE_CHANGE': 1,
     'STEERING_REQUIRED': alert_steer_required,
-    'DASHED_LANES': enabled and not (lat_active and not steer_maxed),
-    'SOLID_LANES': lat_active and not steer_maxed,
+    'SOLID_LANES': hud_control.lanesVisible,
     'BEEP': 0,
   }
 
@@ -200,11 +199,9 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, enabled, steering_
 
   # New HUD concept for selected Bosch cars, overwrites some of the above
   # TODO: make global across all Honda if feedback is favorable
-  # Try all Bosch A, didn't work on Nidec, and caused LKAS error in Bosch B/C
-  if CP.carFingerprint in HONDA_BOSCH and CP.carFingerprint not in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
+  if CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
     lkas_hud_values['DASHED_LANES'] = steering_available
     lkas_hud_values['SOLID_LANES'] = lat_active
-    lkas_hud_values['LKAS_PROBLEM'] = lat_active and reduced_steering
 
   if CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
     commands.append(packer.make_can_msg('LKAS_HUD_A', bus, lkas_hud_values))
