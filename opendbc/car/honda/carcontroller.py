@@ -6,6 +6,7 @@ from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
+from opendbc.car.common.pid import PIDController
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -109,6 +110,13 @@ class CarController(CarControllerBase):
     self.brake = 0.0
     self.last_torque = 0.0
 
+    self.nidec_pid = PIDController(k_p=([0,], [0,]),
+                                   k_i=([0., 5., 35.], [1.2, 0.8, 0.5]),
+                                   k_f=1,
+                                   pos_limit=self.params.NIDEC_ACCEL_MAX,
+                                   neg_limit=self.params.NIDEC_ACCEL_MIN)
+    self.nidec_pid.reset()
+
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -116,7 +124,7 @@ class CarController(CarControllerBase):
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
     if CC.longActive:
-      accel = actuators.accel
+      accel =  self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
       gas, brake = compute_gas_brake(actuators.accel, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
