@@ -123,6 +123,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.windfactor_before_maxgas = 1.0
     self.windfactor_before_brake = 0.0
     self.pitch = 0.0
+    self.last_bosch_gas = -30000
 
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
@@ -263,6 +264,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
               self.gasfactor_before_gasmax = self.gasfactor
               self.windfactor_before_gasmax = self.windfactor
           self.gas = float(np.interp(gas_pedal_force * self.gasfactor, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+          max_gas = self.params.BOSCH_GAS_MAXSTART if gas_pedal_force <= 0 else (self.bosch_last_gas + self.params.BOSCH_GAS_DELTA_UP)
+          self.gas = min(self.gas, max_gas)
+          self.bosch_last_gas = self.gas
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
