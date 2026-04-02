@@ -121,17 +121,17 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active, tja_control)
   }
 
   if tja_control:
-    values["STEER_DOWN_TO_ZERO"] = lkas_active
+    values["STEER_DOWN_TO_ZERO"] = 0 # lkas_active
 
   return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
 
 
-def create_bosch_supplemental_1(packer, CAN):
+def create_bosch_supplemental_1(packer, CAN, lkas_active):
   # non-active params
   values = {
     "SET_ME_X04": 0x04,
     "SET_ME_X80": 0x80,
-    "SET_ME_X10": 0x10,
+    "SET_ME_X10": 32 if lkas_active else 16 # 0x10,
   }
   return packer.make_can_msg("BOSCH_SUPPLEMENTAL_1", CAN.lkas, values)
 
