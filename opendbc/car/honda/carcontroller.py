@@ -242,7 +242,7 @@ class CarController(CarControllerBase):
             self.brake_pid_factor = self.brake_pid.update(error = self.nidec_pid_factor - CS.out.aEgo, speed = CS.out.vEgo) / -apply_brake
           else:
             self.brake_pid_factor = 0
-          brakefactor = 1 = self-brake_pid_factor
+          brakefactor = 1 = self.brake_pid_factor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
