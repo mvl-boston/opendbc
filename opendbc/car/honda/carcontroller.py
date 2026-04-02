@@ -136,6 +136,9 @@ class CarController(CarControllerBase):
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
+    if (self.CP.carFingerprint == CAR.ACURA_MDX_3G_MMR) and (self.apply_brake_last > 0): # lower steer limits while braking
+      brake_limit = float(233.0 / self.params.STEER_MAX)
+      limited_torque = float(np.clip(apply_torque, -brake_limit, brake_limit))
     self.last_torque = limited_torque
 
     # *** apply brake hysteresis ***
@@ -153,8 +156,6 @@ class CarController(CarControllerBase):
     # steer torque is converted back to CAN reference (positive when steering right)
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
-    if self.apply_brake_last > 0: # lower steer limits while braking
-      apply_torque = int(np.clip(apply_torque, -233, 233))
 
     # Send CAN commands
     can_sends = []
