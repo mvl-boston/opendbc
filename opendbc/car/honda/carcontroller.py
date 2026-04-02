@@ -111,12 +111,21 @@ class CarController(CarControllerBase):
     self.brake = 0.0
     self.last_torque = 0.0
 
+    self.nidec_pid_factor = 0.0
+    self.brake_pid_factor = 0.0
+
     self.nidec_pid = PIDController(k_p=([0,], [0,]),
                                    k_i=([0., 5., 35.], [1.2, 0.8, 0.5]),
                                    k_f=1,
                                    pos_limit=self.params.NIDEC_ACCEL_MAX,
                                    neg_limit=self.params.NIDEC_ACCEL_MIN)
     self.nidec_pid.reset()
+
+    self.brake_pid = PIDController(k_p=([0,], [0,]),
+                                   k_i=([0.]], [1/150.0]),
+                                   pos_limit=2.0,
+                                   neg_limit=0)
+    self.brake_pid.reset()
 
     self.pitch = 0.0
 
@@ -132,10 +141,11 @@ class CarController(CarControllerBase):
 
     if CC.longActive:
       if actuators.longControlState == LongCtrlState.pid:
-        accel = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo) + hill_brake
+        self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
+        accel = self.nidec_pid_factor + hill_brake
       else:
         accel = actuators.accel
-      gas, brake = compute_gas_brake(actuators.accel, CS.out.vEgo, self.CP.carFingerprint)
+      gas, brake = compute_gas_brake(accel, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
       gas, brake = 0.0, 0.0
@@ -228,7 +238,12 @@ class CarController(CarControllerBase):
                                                         self.stopping_counter, self.CP.carFingerprint))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
-          apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
+          if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid):
+            self.brake_pid_factor = self.brake_pid.update(error = self.nidec_pid_factor - CS.out.aEgo, speed = CS.out.vEgo) / -apply_brake
+          else:
+            self.brake_pid_factor = 0
+          brakefactor = 1 = self-brake_pid_factor
+          apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
           pcm_override = True
@@ -260,10 +275,10 @@ class CarController(CarControllerBase):
           self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
     new_actuators = actuators.as_builder()
-    new_actuators.speed = self.speed
+    new_actuators.speed = float(self.nidec_pid_factor)
     new_actuators.accel = self.accel
     new_actuators.gas = self.gas
-    new_actuators.brake = self.brake
+    new_actuators.brake = float(self.brake_pid_factor)
     new_actuators.torque = self.last_torque
     new_actuators.torqueOutputCan = apply_torque
 
