@@ -132,7 +132,7 @@ class CarController(CarControllerBase):
 
     if CC.longActive:
       if actuators.longControlState == LongCtrlState.pid:
-        accel = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo) + self.pitch
+        accel = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo) + hill_brake
       else:
         accel = actuators.accel
       gas, brake = compute_gas_brake(actuators.accel, CS.out.vEgo, self.CP.carFingerprint)
