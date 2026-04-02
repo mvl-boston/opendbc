@@ -153,7 +153,9 @@ class CarController(CarControllerBase):
     # steer torque is converted back to CAN reference (positive when steering right)
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
-
+    if self.apply_brake_last > 0: # lower steer limits while braking
+      apply_torque = int(np.clip(apply_torque, -233, 233))
+    
     # Send CAN commands
     can_sends = []
 
