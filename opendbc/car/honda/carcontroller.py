@@ -138,7 +138,7 @@ class CarController(CarControllerBase):
                                 self.params.STEER_DELTA_UP * DT_CTRL)
     if (self.CP.carFingerprint == CAR.ACURA_MDX_3G_MMR) and (self.apply_brake_last > 0): # lower steer limits while braking
       brake_limit = float(233.0 / self.params.STEER_MAX)
-      limited_torque = float(np.clip(apply_torque, -brake_limit, brake_limit))
+      limited_torque = float(np.clip(limited_torque, -brake_limit, brake_limit))
     self.last_torque = limited_torque
 
     # *** apply brake hysteresis ***
