@@ -155,7 +155,7 @@ class CarController(CarControllerBase):
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
     if self.apply_brake_last > 0: # lower steer limits while braking
       apply_torque = int(np.clip(apply_torque, -233, 233))
-    
+
     # Send CAN commands
     can_sends = []
 
