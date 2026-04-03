@@ -126,6 +126,7 @@ class CarController(CarControllerBase):
                                    pos_limit=2.0,
                                    neg_limit=0)
     self.brake_pid.reset()
+    self.brake_pid.i = 0.4
 
     self.pitch = 0.0
 
