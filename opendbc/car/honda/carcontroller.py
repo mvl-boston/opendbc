@@ -128,6 +128,7 @@ class CarController(CarControllerBase):
                                    rate=50)
     self.brake_pid.reset()
     self.brake_pid.i = 0.4
+    self.brake_pid_factor_non_lowspeed = self.brake_pid.i
 
     self.pitch = 0.0
 
@@ -244,6 +245,10 @@ class CarController(CarControllerBase):
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 0) and (not CS.out.stockAeb):
             self.brake_pid_factor = self.brake_pid.update(error = -(self.nidec_pid_factor - CS.out.aEgo)/apply_brake, speed = CS.out.vEgo)
+          if (CS.out.vEgo >= 2): # save pid above 2m/s
+            self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
+          if (CS.out.vEgo < 1e-3): # restore 2m/s pid after stopped
+            self.brake_pid.i = self.brake_pid_factor_non_lowspeed
           brakefactor = 1 + self.brake_pid_factor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
