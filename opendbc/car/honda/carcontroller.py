@@ -145,6 +145,8 @@ class CarController(CarControllerBase):
         accel = self.nidec_pid_factor + hill_brake
       else:
         accel = actuators.accel
+        self.nidec_pid.reset
+        self.nidec_pid_factor = 0
       gas, brake = compute_gas_brake(accel, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
@@ -240,8 +242,6 @@ class CarController(CarControllerBase):
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid):
             self.brake_pid_factor = self.brake_pid.update(error = self.nidec_pid_factor - CS.out.aEgo, speed = CS.out.vEgo) / -apply_brake
-          else:
-            self.brake_pid_factor = 0
           brakefactor = 1 + self.brake_pid_factor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
