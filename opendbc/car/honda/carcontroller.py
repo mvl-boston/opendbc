@@ -145,6 +145,8 @@ class CarController(CarControllerBase):
     if CC.longActive:
       if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb):
         self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
+        if (actuators.accel < -0.2) and (self.brake_pid.i > 0): # snap pid to zero on decel, until gas is fixed
+          self.brake_pid.i = 0
         accel = self.nidec_pid_factor + hill_brake
       else:
         accel = actuators.accel
