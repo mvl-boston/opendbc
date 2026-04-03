@@ -240,7 +240,7 @@ class CarController(CarControllerBase):
                                                         self.stopping_counter, self.CP.carFingerprint))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
-          if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid):
+          if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 0):
             self.brake_pid_factor = self.brake_pid.update(error = -(self.nidec_pid_factor - CS.out.aEgo)/apply_brake, speed = CS.out.vEgo)
           brakefactor = 1 + self.brake_pid_factor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
