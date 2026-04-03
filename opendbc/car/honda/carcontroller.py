@@ -142,7 +142,7 @@ class CarController(CarControllerBase):
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
     if CC.longActive:
-      if actuators.longControlState == LongCtrlState.pid:
+      if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb):
         self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
         accel = self.nidec_pid_factor + hill_brake
       else:
@@ -242,7 +242,7 @@ class CarController(CarControllerBase):
                                                         self.stopping_counter, self.CP.carFingerprint))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
-          if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 0):
+          if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 0) and (not CS.out.stockAeb):
             self.brake_pid_factor = self.brake_pid.update(error = -(self.nidec_pid_factor - CS.out.aEgo)/apply_brake, speed = CS.out.vEgo)
           brakefactor = 1 + self.brake_pid_factor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
