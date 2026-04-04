@@ -132,7 +132,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                    neg_limit=-2.0,
                                    rate=50)
     self.brake_pid.reset()
-  
+
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
     gas_pedal_force = 0.0
