@@ -27,8 +27,10 @@ non_tested_cars = [
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
   VOLKSWAGEN.PORSCHE_MACAN_MK1,
-  # Honda/Acura test routes below expired, replace when CI bucket sync is fixed
-  HONDA.ACURA_INTEGRA,
+  HONDA.ACURA_INTEGRA, # need new route - expired
+  HONDA.ACURA_TLX_2G), # need to fix Integra bug causing error
+  HONDA.HONDA_FIT_4G), # need new route - expired
+
 
   # These had their DSUs unplugged, need new routes
   # TOYOTA.LEXUS_ES  # hybrid
