@@ -250,7 +250,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           else:
             self.brake_pid.reset()
             targetaccel = accel
-            
+
           self.accel = float(np.clip(targetaccel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
           gas_pedal_force = self.accel + wind_brake_ms2 * self.windfactor + hill_brake
 
