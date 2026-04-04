@@ -30,6 +30,7 @@ non_tested_cars = [
   HONDA.ACURA_INTEGRA, # need new route - expired
   HONDA.HONDA_FIT_4G, # need new route - expired
   HONDA.ACURA_TLX_2G, # need new route - expired
+  HONDA.HONDA_CRV_SA, # need new route - expired
   HONDA.ACURA_TLX_2G_MMR, # need to fix Integra bug causing error
 
   # These had their DSUs unplugged, need new routes
@@ -162,7 +163,7 @@ routes = [
   # CarTestRoute("6b22f2fcd61fa86a/00000000--b3adfc8746", HONDA.ACURA_TLX_2G), # need new route - expired
   # CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA), # need new route - expired
   CarTestRoute("ad9840558640c31d/00000026--538590661c", HONDA.ACURA_ADX),
-  CarTestRoute("4991f6e1afbe5adb/00000005--713a39aaee", HONDA.HONDA_CRV_SA), # South Africa model
+  # CarTestRoute("4991f6e1afbe5adb/00000005--713a39aaee", HONDA.HONDA_CRV_SA), # South Africa model  # need new route - expired
   # CarTestRoute("0b3cfa082cbbe54e/0000000c--5218004ec8", HONDA.HONDA_FIT_4G), # need new route - expired
   # port extensions
   CarTestRoute("ad9840558640c31d/0000003d--a35002b59f", HONDA.ACURA_MDX_3G_MMR),
