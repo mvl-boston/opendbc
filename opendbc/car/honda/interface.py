@@ -198,7 +198,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.28], [0.08]]
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 32767], [0, 32767]]  # TODO: determine if there is a dead zone at the top end
 
-    elif candidate in (CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G, CAR.HONDA_PASSPORT_4G, CAR.ACURA_MDX_4G_MMR):
+    elif candidate in (CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G, CAR.ACURA_MDX_4G_MMR):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       # ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.38], [0.11]] replace w Marco tune below
       ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
@@ -207,6 +207,12 @@ class CarInterface(CarInterfaceBase):
           CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
       if candidate == CAR.ACURA_MDX_4G_MMR:
           ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 8700], [0, 8700]]
+
+    elif candidate == CAR.HONDA_PASSPORT_4G:
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4600], [0, 4600]]
+      # ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.38], [0.11]] replace w Marco tune below
+      ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
+      ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
     elif candidate == CAR.ACURA_TLX_2G_MMR:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # start with 4096
