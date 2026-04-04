@@ -146,9 +146,9 @@ class CarController(CarControllerBase):
       if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb):
         self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
         if (actuators.accel < -0.2):
-          if self.brake_pid.i > 0: # snap pid to zero on decel, until gas is fixed
-            self.brake_pid.i = 0
-          self.brake_pid.i = min(actuators.accel, self.brake_pid.i) # force faster negative slope while hard braking
+          if self.nidec_pid.i > 0: # snap pid to zero on decel, until gas is fixed
+            self.nidec_pid.i = 0
+          self.nidec_pid.i = min(actuators.accel, self.nidec_pid.i) # force faster negative slope while hard braking
         accel = self.nidec_pid_factor + hill_brake
       else:
         accel = actuators.accel
