@@ -28,8 +28,8 @@ non_tested_cars = [
   SUBARU.SUBARU_FORESTER_HYBRID,
   VOLKSWAGEN.PORSCHE_MACAN_MK1,
   HONDA.ACURA_INTEGRA, # need new route - expired
-  HONDA.ACURA_TLX_2G), # need to fix Integra bug causing error
-  HONDA.HONDA_FIT_4G), # need new route - expired
+  HONDA.ACURA_TLX_2G, # need to fix Integra bug causing error
+  HONDA.HONDA_FIT_4G, # need new route - expired
 
 
   # These had their DSUs unplugged, need new routes
