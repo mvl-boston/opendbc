@@ -276,7 +276,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   }
 
   // Only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
-  if (msg->addr == 0x18DAEFF1U) {
+  if (msg->addr == 0x18DA07F1U) {
     if ((GET_BYTES(msg, 0, 4) != 0x00803E02U) || (GET_BYTES(msg, 4, 4) != 0x0U)) {
       tx = false;
     }
@@ -349,7 +349,7 @@ static safety_config honda_bosch_init(uint16_t param) {
   static CanMsg HONDA_CANFD_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x296, 0, 4, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}}; // Bosch CANFD
 
   static CanMsg HONDA_CANFD_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = false}, {0x1DF, 0, 8, .check_relay = true}, {0x1EF, 0, 8, .check_relay = false},
-                                              {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}, {0x18DAEFF1, 0, 8, .check_relay = false}};
+                                              {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}, {0x18DA07F1, 0, 8, .check_relay = false}};
 
   const uint16_t HONDA_PARAM_ALT_BRAKE = 1;
   const uint16_t HONDA_PARAM_RADARLESS = 8;
