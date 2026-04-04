@@ -1287,14 +1287,6 @@ FW_VERSIONS = {
       b'39494-T20-A010\x00\x00',
     ],
   },
-  CAR.ACURA_MDX_4G_MMR: {
-    (Ecu.fwdCamera, 0x18dab5f1, None): [
-      b'8S102-TYA-A020\x00\x00',
-    ],
-    (Ecu.fwdRadar, 0x18dab0f1, None): [
-      b'8S302-TYA-A020\x00\x00',
-    ],
-  },
   CAR.ACURA_ADX: {
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'8S102-3BH-A020\x00\x00',

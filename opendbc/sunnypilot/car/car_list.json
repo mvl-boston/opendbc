@@ -2326,12 +2326,13 @@
     ],
     "package": "All"
   },
-  "Kia Niro EV (with HDA II) 2025": {
+  "Kia Niro EV (with HDA II) 2024-25": {
     "platform": "KIA_NIRO_EV_2ND_GEN",
     "make": "Kia",
     "brand": "hyundai",
     "model": "Niro EV (with HDA II)",
     "year": [
+      "2024",
       "2025"
     ],
     "package": "Highway Driving Assist II"
@@ -2378,13 +2379,14 @@
     ],
     "package": "Smart Cruise Control (SCC)"
   },
-  "Kia Niro Hybrid 2023": {
+  "Kia Niro Hybrid 2023-24": {
     "platform": "KIA_NIRO_HEV_2ND_GEN",
     "make": "Kia",
     "brand": "hyundai",
     "model": "Niro Hybrid",
     "year": [
-      "2023"
+      "2023",
+      "2024"
     ],
     "package": "Smart Cruise Control (SCC)"
   },
@@ -3025,27 +3027,29 @@
     ],
     "package": "Adaptive Cruise Control (ACC)"
   },
-  "Rivian R1S 2022-24": {
-    "platform": "RIVIAN_R1_GEN1",
+  "Rivian R1S 2022-25": {
+    "platform": "RIVIAN_R1",
     "make": "Rivian",
     "brand": "rivian",
     "model": "R1S",
     "year": [
       "2022",
       "2023",
-      "2024"
+      "2024",
+      "2025"
     ],
     "package": "All"
   },
-  "Rivian R1T 2022-24": {
-    "platform": "RIVIAN_R1_GEN1",
+  "Rivian R1T 2022-25": {
+    "platform": "RIVIAN_R1",
     "make": "Rivian",
     "brand": "rivian",
     "model": "R1T",
     "year": [
       "2022",
       "2023",
-      "2024"
+      "2024",
+      "2025"
     ],
     "package": "All"
   },
