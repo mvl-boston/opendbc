@@ -7,7 +7,6 @@ BO_ 829 LKAS_HUD: 4 ADAS
  SG_ LKAS_PROBLEM : 12|1@0+ (1,0) [0|1] "" BDY
  SG_ LKAS_OFF : 11|1@0+ (1,0) [0|1] "" BDY
  SG_ SOLID_LANES : 10|1@0+ (1,0) [0|1] "" BDY
- SG_ CLEAN_WINDSHIELD : 26|1@0+ (1,0) [0|1] "" BDY
  SG_ STEERING_REQUIRED : 8|1@0+ (1,0) [0|1] "" BDY
  SG_ BEEP : 17|2@0+ (1,0) [0|1] "" BDY
  SG_ RDM_PROBLEM : 21|1@0+ (1,0) [0|1] "" BDY
