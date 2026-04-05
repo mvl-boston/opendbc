@@ -469,7 +469,7 @@ class TestHondaBoschLongSafety(HondaButtonEnableBase, TestHondaBoschSafetyBase):
   MIN_ACCEL = -3.5
 
   STEER_BUS = 1
-  TX_MSGS = [[0xE4, 1], [0x1DF, 1], [0x1EF, 1], [0x1FA, 1], [0x30C, 1], [0x33D, 1], [0x33DA, 1], [0x33DB, 1], [0x39F, 1], [0x18DAB0F1, 1]]
+  TX_MSGS = [[0xE4, 1], [0x1DF, 1], [0x1EF, 1], [0x1FA, 1], [0x30C, 1], [0x33D, 1], [0x33DA, 1], [0x33DB, 1], [0x39F, 1], [0x18DA07F1, 1]]
   FWD_BLACKLISTED_ADDRS = {}
   # 0x1DF is to test that radar is disabled
   RELAY_MALFUNCTION_ADDRS = {1: (0xE4, 0x1DF, 0x33D, 0x33DA, 0x33DB)}  # STEERING_CONTROL, ACC_CONTROL
@@ -492,10 +492,10 @@ class TestHondaBoschLongSafety(HondaButtonEnableBase, TestHondaBoschSafetyBase):
     pass
 
   def test_diagnostics(self):
-    tester_present = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x3E\x80\x00\x00\x00\x00\x00")
+    tester_present = libsafety_py.make_CANPacket(0x18DA07F1, self.PT_BUS, b"\x02\x3E\x80\x00\x00\x00\x00\x00")
     self.assertTrue(self._tx(tester_present))
 
-    not_tester_present = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\xAA\xAA\x00\x00\x00\x00\x00")
+    not_tester_present = libsafety_py.make_CANPacket(0x18DA07F1, self.PT_BUS, b"\x03\xAA\xAA\x00\x00\x00\x00\x00")
     self.assertFalse(self._tx(not_tester_present))
 
   def test_gas_safety_check(self):
@@ -623,9 +623,9 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
   STEER_BUS = 0
   BUTTONS_BUS = 0
 
-  TX_MSGS = [[0xE4, 0], [0x1DF, 0],  [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x18DAB0F1, 0]]
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x1DF, 0x33D]}
-  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1DF, 0x33D)}  # STEERING_CONTROL / ACC_CONTROL / LKAS_HUD
+  TX_MSGS = [[0xE4, 0], [0x1DF, 0],  [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x18DA07F1, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0x1DF, 0x33D]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0x1DF, 0x33D)}  # STEERING_CONTROL / ACC_CONTROL / LKAS_HUD - temp exclude steering
 
   def setUp(self):
     super().setUp()

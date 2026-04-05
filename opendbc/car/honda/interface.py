@@ -50,7 +50,7 @@ class CarInterface(CarInterfaceBase):
       # If Bosch radarless, this blocks ACC messages from the camera
       # TODO: get radar disable working on Bosch CANFD
       ret.alphaLongitudinalAvailable = True
-      ret.openpilotLongitudinalControl = alpha_long
+      ret.openpilotLongitudinalControl = True
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
       ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
@@ -321,7 +321,7 @@ class CarInterface(CarInterfaceBase):
       if communication_control is None:
         communication_control = bytes([uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
                                        uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT])
-      disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1, com_cont_req=communication_control)
+      disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DA07F1, com_cont_req=communication_control)
 
   @staticmethod
   def deinit(CP, can_recv, can_send):
