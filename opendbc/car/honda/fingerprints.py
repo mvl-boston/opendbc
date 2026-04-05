@@ -27,6 +27,14 @@ FW_VERSIONS = {
       b'77959-T3Z-A020\x00\x00',
     ],
   },
+  CAR.HONDA_ACCORD_9G_AU: {
+    (Ecu.fwdRadar, 0x18DAB0F1, None): [
+      b'36707-T2M-Q640\x00\x00',
+      ],
+    (Ecu.srs, 0x18DA53F1, None): [
+      b'77959-T2A-B110\x00\x00',
+    ],
+  },
   CAR.HONDA_NBOX_2G: {
     (Ecu.vsa, 0x18da28f1, None): [
       b'57114-TTA-J030\x00\x00',
