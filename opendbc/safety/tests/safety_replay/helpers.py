@@ -23,8 +23,8 @@ def is_steering_msg(mode, param, addr):
   elif mode in (CarParams.SafetyModel.hyundai, CarParams.SafetyModel.hyundaiLegacy):
     ret = addr == 832
   elif mode == CarParams.SafetyModel.hyundaiCanfd:
-    ret = addr == (0x110 if param & HyundaiSafetyFlags.CANFD_LKA_STEERING_ALT else
-                   0x50 if param & HyundaiSafetyFlags.CANFD_LKA_STEERING else
+    ret = addr == (0x110 if param & HyundaiSafetyFlags.CANFD_LKA_STEER_MSG_ALT else
+                   0x50 if param & HyundaiSafetyFlags.CANFD_LKA_STEER_MSG else
                    0x12A)
   elif mode == CarParams.SafetyModel.chrysler:
     ret = addr == 0x292
@@ -108,4 +108,4 @@ def init_segment(safety, msgs, mode, param):
     safety.set_controls_allowed_lat(1)
     safety.set_desired_angle_last(angle)
     safety.set_angle_meas(angle, angle)
-  assert safety.safety_tx_hook(msg), "failed to initialize panda safety for segment"
+  assert safety.safety_tx_hook(msg), "failed to initialize safety for segment"
