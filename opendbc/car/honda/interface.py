@@ -187,7 +187,6 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4095], [0, 4095]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
-      CarControllerParams.BOSCH_MAXSTART = 667
       CarControllerParams.BOSCH_GAS_DELTA_UP = 60
 
     elif candidate == CAR.ACURA_RDX_3G_MMR:
