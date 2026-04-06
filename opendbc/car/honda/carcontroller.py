@@ -232,7 +232,9 @@ class CarController(CarControllerBase):
     new_accel = int(np.clip(new_accel, 0, self.params.NIDEC_GAS_MAX)
     self.prior_gas_average = self.prior_gas_average * (1 - self.average_factor) + (new_accel * self.average_factor)
 
-    if (self.CP.carFingerprint not in HONDA_BOSCH) and (pcm_accel > 0):
+    if self.CP.carFingerprint in HONDA_BOSCH:
+      new_accel = pcm_accel
+    elif 0 < new_accel < self.params.NIDEC_GAS_MAX:
       if self.nidec_pid_factor > CS.out.aEgo:
         self.gas_factor *= 1.0001
       else:
@@ -243,8 +245,6 @@ class CarController(CarControllerBase):
         self.average_factor /= 1.0001
       else:
         self.average_factor *= 1.0001
-    else:
-      new_accel = pcm_accel;
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
@@ -311,10 +311,10 @@ class CarController(CarControllerBase):
     new_actuators = actuators.as_builder()
     new_actuators.speed = float(self.nidec_pid_factor)
     new_actuators.accel = self.accel
-    new_actuators.gas = self.gas
+    new_actuators.gas = float(self.gas_factor)
     new_actuators.brake = float(self.brake_pid_factor)
     new_actuators.torque = self.last_torque
-    new_actuators.torqueOutputCan = apply_torque
+    new_actuators.torqueOutputCan = float(self.average_factor)
 
     self.frame += 1
     return new_actuators, can_sends
