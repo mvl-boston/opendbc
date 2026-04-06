@@ -133,8 +133,8 @@ class CarController(CarControllerBase):
     self.pitch = 0.0
 
     self.prior_gas_average = 0.0
-    self.average_factor = 0.1
-    self.gas_factor = 1.0
+    self.average_factor = 0.25
+    self.gas_factor = 3.0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
