@@ -34,7 +34,6 @@ class CarControllerParams:
 
   BOSCH_GAS_LOOKUP_BP = [0.0, 2.0]  # 2m/s^2
   BOSCH_GAS_LOOKUP_V = [0, 1600]
-  BOSCH_GAS_MAXSTART = 9999
   BOSCH_GAS_DELTA_UP = 9999
 
   STEER_STEP = 1  # 100 Hz
