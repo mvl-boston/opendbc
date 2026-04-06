@@ -147,7 +147,7 @@ class CarController(CarControllerBase):
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
     if CC.longActive:
-      if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb):
+      if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed):
         self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
         if (actuators.accel < -0.2):
           if self.nidec_pid.i > 0: # snap pid to zero on decel, until gas is fixed
@@ -234,7 +234,7 @@ class CarController(CarControllerBase):
 
     if self.CP.carFingerprint in HONDA_BOSCH:
       new_accel = pcm_accel
-    elif 0 < new_accel < self.params.NIDEC_GAS_MAX:
+    elif (0 < new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed):
       if self.nidec_pid_factor > CS.out.aEgo:
         self.gas_factor *= 1.0001
       else:
