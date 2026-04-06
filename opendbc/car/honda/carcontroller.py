@@ -229,7 +229,7 @@ class CarController(CarControllerBase):
 
     # feedforward for Nidec decaying-average gas pedal
     new_accel = int((pcm_accel - self.prior_gas_average * (1 - self.average_factor)) / self.average_factor)
-    new_accel = int(np.clip(new_accel, 0, self.params.NIDEC_GAS_MAX)
+    new_accel = int(np.clip(new_accel, 0, self.params.NIDEC_GAS_MAX))
     self.prior_gas_average = self.prior_gas_average * (1 - self.average_factor) + (new_accel * self.average_factor)
 
     if self.CP.carFingerprint in HONDA_BOSCH:
