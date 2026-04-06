@@ -117,6 +117,7 @@ class CarController(CarControllerBase):
     self.windfactor_before_maxgas = 1.0
     self.windfactor_before_brake = 0.0
     self.pitch = 0.0
+    self.bosch_last_gas = -30000
 
     # Bosch extra-brake controller
     self.brake_pid = PIDController(k_p=([0,], [0,]),
