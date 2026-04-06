@@ -253,8 +253,10 @@ class CarController(CarControllerBase):
             if (self.CP.carFingerprint == CAR.ACURA_RDX_3G and CS.out.vEgo < 1e-3):
               self.gasfactor = 3.0 # max due to turbolag
             if gas_error != 0.0 and gas_pedal_force > 0.0:
-              if self.CP.carFingerprint in (CAR.HONDA_INSIGHT, CAR.ACURA_RDX_3G): # Insight gas pedal reacts too slowly
+              if self.CP.carFingerprint == CAR.HONDA_INSIGHT: # Insight gas pedal reacts too slowly
                 learn_speed = 150
+              if self.CP.carFingerprint == CAR.ACURA_RDX_3G: # RDX vibrates around zero
+                learn_speed = 300
               else:
                 learn_speed = 50
               self.gasfactor = np.clip(self.gasfactor + gas_error / learn_speed * gas_pedal_force, 0.1, 3.0)
@@ -272,6 +274,9 @@ class CarController(CarControllerBase):
               self.gasfactor_before_gasmax = self.gasfactor
               self.windfactor_before_gasmax = self.windfactor
           self.gas = float(np.interp(gas_pedal_force * self.gasfactor, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+          max_gas = max(self.params.BOSCH_GAS_DELTA_UP, self.bosch_last_gas + self.params.BOSCH_GAS_DELTA_UP)
+          self.gas = min(self.gas, max_gas)
+          self.bosch_last_gas = self.gas
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
