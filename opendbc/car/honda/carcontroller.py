@@ -132,6 +132,10 @@ class CarController(CarControllerBase):
 
     self.pitch = 0.0
 
+    self.prior_gas_average = 0.0
+    self.average_factor = 0.1
+    self.gas_factor = 1.0
+
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -221,7 +225,26 @@ class CarController(CarControllerBase):
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
-      pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+      pcm_accel = int(np.clip((accel * self.gas_factor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+
+    # feedforward for Nidec decaying-average gas pedal
+    new_accel = int((pcm_accel - self.prior_gas_average * (1 - self.average_factor)) / self.average_factor)
+    new_accel = int(np.clip(new_accel, 0, self.params.NIDEC_GAS_MAX)
+    self.prior_gas_average = self.prior_gas_average * (1 - self.average_factor) + (new_accel * self.average_factor)
+
+    if (self.CP.carFingerprint not in HONDA_BOSCH) and (pcm_accel > 0):
+      if self.nidec_pid_factor > CS.out.aEgo:
+        self.gas_factor *= 1.0001
+      else:
+        self.gas_factor /= 1.0001
+      more_new_accel_needed = (new_accel > pcm_accel and self.nidec_pid_factor > CS.out.aEgo) or \
+                              (new_accel < pcm_accel and self.nidec_pid_factor < CS.out.aEgo)
+      if more_new_accel_needed:
+        self.average_factor /= 1.0001
+      else:
+        self.average_factor *= 1.0001
+    else:
+      new_accel = pcm_accel;
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
@@ -268,7 +291,7 @@ class CarController(CarControllerBase):
     if self.frame % 10 == 0:
       if self.CP.openpilotLongitudinalControl:
         # On Nidec, this also controls longitudinal positive acceleration
-        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
+        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, new_accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
