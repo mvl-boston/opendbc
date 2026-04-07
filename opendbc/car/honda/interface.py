@@ -209,7 +209,7 @@ class CarInterface(CarInterfaceBase):
           ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 8700], [0, 8700]]
 
     elif candidate == CAR.HONDA_PASSPORT_4G:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 6300], [0, 6300]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
       # ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.38], [0.11]] replace w Marco tune below
       ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
