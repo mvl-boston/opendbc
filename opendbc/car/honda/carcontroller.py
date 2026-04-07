@@ -127,7 +127,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     # Bosch extra-brake controller
     self.brake_pid = PIDController(k_p=([0,], [0,]),
-                                   k_i=([0.], [2.0]),
+                                   k_i=([0.], [0.5]),
                                    pos_limit=0.0,
                                    neg_limit=-2.0,
                                    rate=50)
