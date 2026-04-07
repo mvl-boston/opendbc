@@ -205,8 +205,6 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
       if candidate == CAR.HONDA_PILOT_4G:
           CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
-      if candidate == CAR.ACURA_MDX_4G_MMR:
-          ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 8700], [0, 8700]]
 
     elif candidate == CAR.ACURA_MDX_4G_MMR:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 8700], [0, 8700]]
