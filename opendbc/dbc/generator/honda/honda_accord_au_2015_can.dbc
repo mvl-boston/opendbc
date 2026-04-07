@@ -1,4 +1,4 @@
-CM_ "IMPORT _honda_common.dbc";
+CM_ "IMPORT _honda_elesys_base.dbc";
 CM_ "IMPORT _nidec_common.dbc";
 CM_ "IMPORT _lkas_hud_4byte.dbc";
 CM_ "IMPORT _nidec_scm_group_a.dbc";
