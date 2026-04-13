@@ -570,10 +570,13 @@ class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLo
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch,
                                  HondaSafetyFlags.RADARLESS | HondaSafetyFlags.BOSCH_LONG | HondaSafetyFlags.NO_ENGINE_DATA_MSG)
     self.safety.init_tests()
+    cnt_speed_before_prime = self.__class__.cnt_speed
     self._abs_tick = 0
     # Prime twice so movement starts in a stable "current == prior" state even if C statics persist.
     self._rx(self._abs_sensor_msg(self._abs_tick))
     self._rx(self._abs_sensor_msg(self._abs_tick))
+    # Keep inherited counter-based tests on the same phase as other Honda classes.
+    self.__class__.cnt_speed = cnt_speed_before_prime
 
   def _abs_sensor_msg(self, abs_sensor):
     values = {
