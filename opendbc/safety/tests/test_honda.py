@@ -572,7 +572,7 @@ class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLo
     self.safety.init_tests()
     cnt_speed_before_prime = self.__class__.cnt_speed
     self._abs_tick = 0
-    # Prime twice so movement starts in a stable "current == prior" state even if C statics persist.
+    # Prime twice so movement starts in a stable "current == prior" state
     self._rx(self._abs_sensor_msg(self._abs_tick))
     self._rx(self._abs_sensor_msg(self._abs_tick))
     # Keep inherited counter-based tests on the same phase as other Honda classes.
