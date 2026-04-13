@@ -561,30 +561,40 @@ class TestHondaBoschRadarlessLongSafety(common.LongitudinalAccelSafetyTest, Hond
     pass
 
 
-class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(common.LongitudinalAccelSafetyTest, HondaButtonEnableBase,
-                                                       TestHondaBoschRadarlessSafetyBase):
+class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLongSafety):
   """
     Covers the Honda Bosch Radarless safety mode with longitudinal control and no engine_data message
   """
-  TX_MSGS = [[0xE4, 0], [0x33D, 0], [0x1C8, 0], [0x30C, 0]]
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D, 0x1C8, 0x30C]}
-  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1C8, 0x30C, 0x33D)}
+  cnt_abs = 0
 
   def setUp(self):
-    super().setUp()
+    TestHondaBoschRadarlessSafetyBase.setUp(self)
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch,
                                  HondaSafetyFlags.RADARLESS | HondaSafetyFlags.BOSCH_LONG | HondaSafetyFlags.NO_ENGINE_DATA_MSG)
     self.safety.init_tests()
+    self.__class__.cnt_abs = 0
+    self._abs_tick = 0
+    self._rx(self._abs_sensor_msg(self._abs_tick))  # prime prev-sensor state for movement tests
 
-  def _accel_msg(self, accel):
+  def _abs_sensor_msg(self, abs_sensor):
     values = {
-      "ACCEL_COMMAND": accel,
+      "ABS_SENSOR_FL": abs_sensor,
+      "ABS_SENSOR_FR": abs_sensor,
+      "ABS_SENSOR_RL": abs_sensor,
+      "ABS_SENSOR_RR": abs_sensor,
+      "COUNTER": self.cnt_abs % 4,
     }
-    return self.packer.make_can_msg_safety("ACC_CONTROL", self.PT_BUS, values)
+    self.__class__.cnt_abs += 1
+    return self.packer.make_can_msg_safety("ABS_SENSOR", self.PT_BUS, values)
 
-  # Longitudinal doesn't need to send buttons
-  def test_spam_cancel_safety_check(self):
-    pass
+  def _speed_msg(self, speed):
+    return self._vehicle_moving_msg(speed)
+
+  # vehicle_moving in safety is based on consecutive ABS_SENSOR samples
+  def _vehicle_moving_msg(self, speed):
+    if speed > self.STANDSTILL_THRESHOLD:
+      self._abs_tick = (self._abs_tick + 1) % 256
+    return self._abs_sensor_msg(self._abs_tick)
 
 
 class TestHondaBoschCANFDSafetyBase(TestHondaBoschSafetyBase):
