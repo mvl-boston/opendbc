@@ -582,9 +582,10 @@ class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLo
       "ABS_SENSOR_FR": abs_sensor,
       "ABS_SENSOR_RL": abs_sensor,
       "ABS_SENSOR_RR": abs_sensor,
-      "COUNTER": self.cnt_abs % 4,
+      # Use the shared speed counter so inherited counter checks keep their expectations.
+      "COUNTER": self.cnt_speed % 4,
     }
-    self.__class__.cnt_abs += 1
+    self.__class__.cnt_speed += 1
     return self.packer.make_can_msg_safety("ABS_SENSOR", self.PT_BUS, values)
 
   def _speed_msg(self, speed):
