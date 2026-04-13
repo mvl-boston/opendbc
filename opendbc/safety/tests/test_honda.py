@@ -565,16 +565,15 @@ class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLo
   """
     Covers the Honda Bosch Radarless safety mode with longitudinal control and no engine_data message
   """
-  cnt_abs = 0
-
   def setUp(self):
     TestHondaBoschRadarlessSafetyBase.setUp(self)
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch,
                                  HondaSafetyFlags.RADARLESS | HondaSafetyFlags.BOSCH_LONG | HondaSafetyFlags.NO_ENGINE_DATA_MSG)
     self.safety.init_tests()
-    self.__class__.cnt_abs = 0
     self._abs_tick = 0
-    self._rx(self._abs_sensor_msg(self._abs_tick))  # prime prev-sensor state for movement tests
+    # Prime twice so movement starts in a stable "current == prior" state even if C statics persist.
+    self._rx(self._abs_sensor_msg(self._abs_tick))
+    self._rx(self._abs_sensor_msg(self._abs_tick))
 
   def _abs_sensor_msg(self, abs_sensor):
     values = {
@@ -591,7 +590,8 @@ class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLo
   def _speed_msg(self, speed):
     return self._vehicle_moving_msg(speed)
 
-  # vehicle_moving in safety is based on consecutive ABS_SENSOR samples
+  # vehicle_moving in safety is based on consecutive ABS_SENSOR samples.
+  # Standstill sends the same sample; moving sends a changed sample.
   def _vehicle_moving_msg(self, speed):
     if speed > self.STANDSTILL_THRESHOLD:
       self._abs_tick = (self._abs_tick + 1) % 256
