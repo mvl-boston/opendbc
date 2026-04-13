@@ -228,7 +228,7 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
     if candidate in HONDA_BOSCH_CANFD:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_CANFD.value
-    if candidate == CAR.ACURA_INTEGRA:
+    if candidate in (CAR.ACURA_INTEGRA, CAR.HONDA_CIVIC_2022):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NO_ENGINE_DATA_MSG.value
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
