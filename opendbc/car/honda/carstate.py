@@ -7,7 +7,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, \
-                                                 HondaFlags, HondaSafetyFlags, CruiseButtons, CruiseSettings, GearShifter, CarControllerParams
+                                                 HondaFlags, CruiseButtons, CruiseSettings, GearShifter, CarControllerParams
 from opendbc.car.interfaces import CarStateBase
 
 TransmissionType = structs.CarParams.TransmissionType
@@ -84,8 +84,7 @@ class CarState(CarStateBase):
     # blend in transmission speed at low speed, since it has more low speed accuracy
     # STANDSTILL->WHEELS_MOVING bit can be noisy around zero, so use XMISSION_SPEED
     v_wheel = sum([cp.vl["WHEEL_SPEEDS"][f"WHEEL_SPEED_{s}"] for s in ("FL", "FR", "RL", "RR")]) / 4.0 * CV.KPH_TO_MS
-    no_engine_data_msg = bool(self.CP.safetyConfigs[-1].safetyParam & HondaSafetyFlags.NO_ENGINE_DATA_MSG.value)
-    if no_engine_data_msg:  # use ABS_SENSOR for cars without ENGINE_DATA
+    if self.CP.carFingerprint == CAR.ACURA_INTEGRA:  # use ABS_SENSOR for Integra since no ENGINE_DATA message
       lowspeed_source = sum((cp.vl["ABS_SENSOR"][f"ABS_SENSOR_{s}"] - getattr(self, f"abs_prior_{s}")) % 256 for s in ("FL", "FR", "RL", "RR"))
       for s in ("FL", "FR", "RL", "RR"):
         setattr(self, f"abs_prior_{s}", cp.vl["ABS_SENSOR"][f"ABS_SENSOR_{s}"])
