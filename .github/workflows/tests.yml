@@ -71,17 +71,17 @@ jobs:
         name: car_diff_${{ github.event.number }}
         path: diff.txt
     - name: Update refs
-      if: github.repository == 'commaai/opendbc' && github.ref == 'refs/heads/master'
+      if: github.repository == 'commaai/opendbc' && github.ref == 'refs/heads/'
       run: source setup.sh && python opendbc/car/tests/car_diff.py --update-refs
     - name: Checkout ci-artifacts
-      if: github.repository == 'commaai/opendbc' && github.ref == 'refs/heads/master'
+      if: github.repository == 'commaai/opendbc' && github.ref == 'refs/heads/'
       uses: actions/checkout@v4
       with:
         repository: commaai/ci-artifacts
         ssh-key: ${{ secrets.CI_ARTIFACTS_DEPLOY_KEY }}
         path: ${{ github.workspace }}/ci-artifacts
     - name: Push refs
-      if: github.repository == 'commaai/opendbc' && github.ref == 'refs/heads/master'
+      if: github.repository == 'commaai/opendbc' && github.ref == 'refs/heads/'
       working-directory: ${{ github.workspace }}/ci-artifacts
       run: |
         ls ${{ github.workspace }}/car_diff/*.zst 2>/dev/null || exit 0
@@ -108,7 +108,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         repository: 'sunnypilot/sunnypilot'
-        ref: 'master'
+        ref: '1658898498b8867dca06b22be85bc650e6a284f9'
         submodules: true
     - run: ./tools/op.sh setup
     - run: rm -rf opendbc_repo/
