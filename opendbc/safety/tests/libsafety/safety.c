@@ -223,11 +223,11 @@ void set_acc_main_on(bool c){
   acc_main_on = c;
 }
 
-void set_current_safety_param_sp(int param){
+void set_current_safety_param_sp(uint16_t param){
   current_safety_param_sp = param;
 }
 
-int get_current_safety_param_sp(void){
+uint16_t get_current_safety_param_sp(void){
   return current_safety_param_sp;
 }
 
@@ -298,4 +298,10 @@ void init_tests(void){
 
   // assumes autopark on safety mode init to avoid a fault. get rid of that for testing
   tesla_autopark = false;
+
+  // reset MADS state to prevent leaking between tests
+  mads_set_system_state(false, false, false);
+  mads_button_press = MADS_BUTTON_UNAVAILABLE;
+  heartbeat_engaged_mads = false;
+  heartbeat_engaged_mads_mismatches = 0U;
 }

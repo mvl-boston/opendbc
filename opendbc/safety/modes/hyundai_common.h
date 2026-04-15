@@ -37,8 +37,8 @@ bool hyundai_longitudinal = false;
 extern bool hyundai_camera_scc;
 bool hyundai_camera_scc = false;
 
-extern bool hyundai_canfd_lka_steering;
-bool hyundai_canfd_lka_steering = false;
+extern bool hyundai_canfd_lka_steer_msg;
+bool hyundai_canfd_lka_steer_msg = false;
 
 extern bool hyundai_alt_limits;
 bool hyundai_alt_limits = false;
@@ -70,18 +70,18 @@ static bool acc_main_on_tx;
 static uint32_t acc_main_on_mismatches;
 
 void hyundai_common_init(uint16_t param) {
-  const int HYUNDAI_PARAM_EV_GAS = 1;
-  const int HYUNDAI_PARAM_HYBRID_GAS = 2;
-  const int HYUNDAI_PARAM_CAMERA_SCC = 8;
-  const int HYUNDAI_PARAM_CANFD_LKA_STEERING = 16;
-  const int HYUNDAI_PARAM_ALT_LIMITS = 64; // TODO: shift this down with the rest of the common flags
-  const int HYUNDAI_PARAM_FCEV_GAS = 256;
-  const int HYUNDAI_PARAM_ALT_LIMITS_2 = 512;
+  const uint16_t HYUNDAI_PARAM_EV_GAS = 1;
+  const uint16_t HYUNDAI_PARAM_HYBRID_GAS = 2;
+  const uint16_t HYUNDAI_PARAM_CAMERA_SCC = 8;
+  const uint16_t HYUNDAI_PARAM_CANFD_LKA_STEER_MSG = 16;
+  const uint16_t HYUNDAI_PARAM_ALT_LIMITS = 64; // TODO: shift this down with the rest of the common flags
+  const uint16_t HYUNDAI_PARAM_FCEV_GAS = 256;
+  const uint16_t HYUNDAI_PARAM_ALT_LIMITS_2 = 512;
 
   hyundai_ev_gas_signal = GET_FLAG(param, HYUNDAI_PARAM_EV_GAS);
   hyundai_hybrid_gas_signal = !hyundai_ev_gas_signal && GET_FLAG(param, HYUNDAI_PARAM_HYBRID_GAS);
   hyundai_camera_scc = GET_FLAG(param, HYUNDAI_PARAM_CAMERA_SCC);
-  hyundai_canfd_lka_steering = GET_FLAG(param, HYUNDAI_PARAM_CANFD_LKA_STEERING);
+  hyundai_canfd_lka_steer_msg = GET_FLAG(param, HYUNDAI_PARAM_CANFD_LKA_STEER_MSG);
   hyundai_alt_limits = GET_FLAG(param, HYUNDAI_PARAM_ALT_LIMITS);
   hyundai_fcev_gas_signal = GET_FLAG(param, HYUNDAI_PARAM_FCEV_GAS);
   hyundai_alt_limits_2 = GET_FLAG(param, HYUNDAI_PARAM_ALT_LIMITS_2);
@@ -99,7 +99,7 @@ void hyundai_common_init(uint16_t param) {
   acc_main_on_mismatches = 0U;
 
 #ifdef ALLOW_DEBUG
-  const int HYUNDAI_PARAM_LONGITUDINAL = 4;
+  const uint16_t HYUNDAI_PARAM_LONGITUDINAL = 4;
   hyundai_longitudinal = GET_FLAG(param, HYUNDAI_PARAM_LONGITUDINAL);
 #else
   hyundai_longitudinal = false;
