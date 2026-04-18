@@ -280,13 +280,13 @@ class CarController(CarControllerBase):
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
+          # limit brake release to 32 units per frame to match factory
+          apply_brake = max(self.apply_brake_last - 32, apply_brake)
+
           pcm_override = True
           if apply_brake > 0: # prevent fault from concurrent gas + brake
             pcm_speed = 0.0
             new_accel = 0
-
-          # limit brake release to 32 units per frame to match factory
-          apply_brake = max(self.apply_brake_last - 32, apply_brake)
 
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
                                                          pcm_override, pcm_cancel_cmd, alert_fcw,
