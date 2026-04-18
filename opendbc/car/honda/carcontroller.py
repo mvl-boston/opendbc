@@ -135,6 +135,7 @@ class CarController(CarControllerBase):
     self.prior_gas_average = 0.0
     self.average_factor = 0.25
     self.gas_factor = 3.0
+    self.new_accel = 0.0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -228,19 +229,19 @@ class CarController(CarControllerBase):
       pcm_accel = int(np.clip((accel * self.gas_factor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
     # feedforward for Nidec decaying-average gas pedal
-    new_accel = int((pcm_accel - self.prior_gas_average * (1 - self.average_factor)) / self.average_factor)
-    new_accel = int(np.clip(new_accel, 0, self.params.NIDEC_GAS_MAX))
-    self.prior_gas_average = self.prior_gas_average * (1 - self.average_factor) + (new_accel * self.average_factor)
+    self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - self.average_factor)) / self.average_factor)
+    self.new_accel = int(np.clip(self.new_accel, 0, self.params.NIDEC_GAS_MAX))
+    self.prior_gas_average = self.prior_gas_average * (1 - self.average_factor) + (self.new_accel * self.average_factor)
 
     if self.CP.carFingerprint in HONDA_BOSCH:
-      new_accel = pcm_accel
-    elif (0 < new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed):
+      self.new_accel = pcm_accel
+    elif (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed):
       if self.nidec_pid_factor > CS.out.aEgo:
         self.gas_factor *= 1.0001
       else:
         self.gas_factor /= 1.0001
-      more_new_accel_needed = (new_accel > pcm_accel and self.nidec_pid_factor > CS.out.aEgo) or \
-                              (new_accel < pcm_accel and self.nidec_pid_factor < CS.out.aEgo)
+      more_new_accel_needed = (self.new_accel > pcm_accel and self.nidec_pid_factor > CS.out.aEgo) or \
+                              (self.new_accel < pcm_accel and self.nidec_pid_factor < CS.out.aEgo)
       if more_new_accel_needed:
         self.average_factor /= 1.0001
       else:
@@ -286,7 +287,7 @@ class CarController(CarControllerBase):
           pcm_override = True
           if apply_brake > 0: # prevent fault from concurrent gas + brake
             pcm_speed = 0.0
-            new_accel = 0
+            self.new_accel = 0
 
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
                                                          pcm_override, pcm_cancel_cmd, alert_fcw,
@@ -298,7 +299,7 @@ class CarController(CarControllerBase):
     if self.frame % 10 == 0:
       if self.CP.openpilotLongitudinalControl:
         # On Nidec, this also controls longitudinal positive acceleration
-        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, new_accel,
+        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, self.new_accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
