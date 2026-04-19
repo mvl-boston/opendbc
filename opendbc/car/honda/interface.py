@@ -232,7 +232,7 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate == CAR.ACURA_MDX_4G:
       ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 9150], [0, 9150]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 4209], [0, 2560, 9150]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.ACURA_TLX_2G_MMR:
