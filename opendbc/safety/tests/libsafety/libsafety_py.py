@@ -12,9 +12,16 @@ libsafety_dir = os.path.dirname(os.path.abspath(__file__))
 
 def _build_libsafety() -> str:
   """Compile libsafety.so to a temp file and return its path."""
+  # unittest-parallel can import this module concurrently from multiple
+  # worker processes. Building through a shared intermediate object path
+  # (`safety.os`) must be serialized to avoid clobbering partially written
+  # objects and producing invalid shared libraries.
+  import fcntl
+
   root = str(Path(libsafety_dir).parents[3])
   safety_c = os.path.join(libsafety_dir, "safety.c")
   safety_os = os.path.join(libsafety_dir, "safety.os")
+  lock_path = os.path.join(libsafety_dir, ".libsafety-build.lock")
 
   cflags = [
     '-Wall', '-Wextra', '-Werror', '-nostdlib', '-fno-builtin',
@@ -30,8 +37,10 @@ def _build_libsafety() -> str:
   fd, libsafety_so = tempfile.mkstemp(suffix='.so')
   os.close(fd)
 
-  subprocess.check_call(['cc', '-fPIC', *cflags, '-I', root, '-c', safety_c, '-o', safety_os])
-  subprocess.check_call(['cc', '-shared', safety_os, '-o', libsafety_so, *ldflags])
+  with open(lock_path, "w") as lock_file:
+    fcntl.flock(lock_file, fcntl.LOCK_EX)
+    subprocess.check_call(['cc', '-fPIC', *cflags, '-I', root, '-c', safety_c, '-o', safety_os])
+    subprocess.check_call(['cc', '-shared', safety_os, '-o', libsafety_so, *ldflags])
   return libsafety_so
 
 
