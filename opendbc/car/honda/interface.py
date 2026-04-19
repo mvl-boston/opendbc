@@ -90,9 +90,9 @@ class CarInterface(CarInterfaceBase):
     ret.lateralTuning.pid.kf = 0.00006  # conservative feed-forward
     ret.steerActuatorDelay = 0.1
 
+    ret.stoppingDecelRate = 0.3  # smooth out harsh braking before standstill
     if candidate in HONDA_BOSCH:
       # longitudinal gas-only tuning for Bosch hondas is in carcontroller
-      ret.stoppingDecelRate = 0.4  # drivers reporting braking was too harsh before standstill
       if candidate in HONDA_BOSCH_RADARLESS:
         ret.stopAccel = CarControllerParams.BOSCH_ACCEL_MIN  # stock uses -4.0 m/s^2 once stopped but limited by safety model
         ret.longitudinalActuatorDelay = 0.25 # s
