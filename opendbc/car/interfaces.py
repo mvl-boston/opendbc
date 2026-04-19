@@ -160,11 +160,17 @@ class CarInterfaceBase(ABC):
 
   @classmethod
   def get_params_sp(cls, car_params, candidate: str, fingerprint: dict[int, dict[int, int]], car_fw: list[structs.CarParams.CarFw], alpha_long: bool,
-                    docs: bool) -> structs.CarParamsSP:
+                    *args, docs: bool = False) -> structs.CarParamsSP:
     car_params_sp = structs.CarParamsSP()
 
     platform = PLATFORMS[candidate]
     car_params_sp.flags |= int(platform.config.sp_flags)
+
+    # Backward-compatible shim:
+    # - callers may pass one extra positional arg (historically `is_release`)
+    # - SP params don't use `is_release`, so ignore the extra arg and assume False
+    if len(args) > 1:
+      raise TypeError(f"get_params_sp() takes at most 7 positional arguments ({6 + len(args)} given)")
 
     return cls._get_params_sp(car_params, car_params_sp, candidate, fingerprint, car_fw, alpha_long, docs)
 
