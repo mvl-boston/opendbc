@@ -115,8 +115,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        repository: 'commaai/openpilot'
-        ref: '41994b1d27423e8a10008019a962417bf0f5f974'
+        repository: 'mvl-boston/openpilot'
+        ref: '0110-op-honda'
         submodules: true
     - run: ./tools/op.sh setup
     - run: rm -rf opendbc_repo/
