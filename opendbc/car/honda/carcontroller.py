@@ -286,15 +286,15 @@ class CarController(CarControllerBase):
 
     # Send dashboard UI commands.
     if self.frame % 10 == 0:
+      if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)):
+        # standstill disengage
+        if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
+          pcm_speed = 25.0 / 3.6
+
       if self.CP.openpilotLongitudinalControl:
         # On Nidec, this also controls longitudinal positive acceleration
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control))
-
-      if CC.longActive and (self.CP.carFingerprint == CAR.ACURA_MDX_3G):
-        # standstill disengage
-        if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
-          pcm_speed = 25.0 / 3.6
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
       reduced_steering = CS.out.steeringPressed
