@@ -416,28 +416,20 @@ class CarController(CarControllerBase):
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
-    # Send dashboard UI commands. On CAN FD, ACC_HUD is a radar/ADAS look-alike that openpilot only
-    # owns when it has disabled the radar (op longitudinal); in stock ACC the real system sends it and
-    # the non-long safety config doesn't allowlist it.
-    if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
-        pcm_accel = actuators.accel
-        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
-                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
-                                                 self.CP.openpilotLongitudinalControl))
-
-      if CC.longActive and (self.CP.carFingerprint == CAR.ACURA_MDX_3G):
+    # Send dashboard UI commands.
+    if self.frame % 10 == 0:
+      if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)):
         # standstill disengage
         if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
           pcm_speed = 25.0 / 3.6
 
       if self.CP.openpilotLongitudinalControl:
-        if self.CP.carFingerprint not in HONDA_BOSCH_CANFD:
-          # On Nidec, this also controls longitudinal positive acceleration
-          can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
-                                                   hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
-                                                   self.CP.openpilotLongitudinalControl))
+        # On Nidec, this also controls longitudinal positive acceleration
+        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
+                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
+                                                 self.CP.openpilotLongitudinalControl))
 
-      steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
+      steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
       reduced_steering = CS.out.steeringPressed
       steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
 
