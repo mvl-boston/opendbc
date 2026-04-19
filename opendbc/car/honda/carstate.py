@@ -119,6 +119,10 @@ class CarState(CarStateBase, CarStateExt):
       # FIXME: the stock camera stops steering on NO_TORQUE_ALERT_1
       ret.steerFaultTemporary = steer_status not in ("NORMAL", "LOW_SPEED_LOCKOUT", "TJA_LOW_SPEED_LOCKOUT", "NO_TORQUE_ALERT_2")
 
+    if (self.CP.carFingerprint == CAR.ACURA_MDX_4G) and (steer_status == "TJA_LOW_SPEED_LOCKOUT"):
+      ret.steerFaultPermanent = False
+      ret.steerFaultTemporary = False
+
     # All Honda EPS cut off slightly above standstill, some much higher
     # Don't alert in the near-standstill range, but alert for per-vehicle configured minimums above that
     if CarControllerParams.STEER_GLOBAL_MIN_SPEED < ret.vEgo < (self.CP.minSteerSpeed + 0.5):
@@ -128,17 +132,9 @@ class CarState(CarStateBase, CarStateExt):
       self.low_speed_alert = False
     ret.lowSpeedAlert = self.low_speed_alert
 
-    if self.CP.carFingerprint == CAR.ACURA_RLX:
-      # ignore until RLX steering is fixed
-      ret.steerFaultPermanent = False
-      ret.steerFaultTemporary = False
-
     # Log non-critical stock ACC/LKAS faults if Nidec (camera) or longitudinal CANFD alt-brake
     if self.CP.carFingerprint not in HONDA_BOSCH:
-      if self.CP.carFingerprint == CAR.ACURA_RLX:
-        ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"]) # TODO: fix LKAS_HUD bus 4 once red panda working
-      else:
-        ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
+      ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
 
     elif self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
@@ -148,6 +144,10 @@ class CarState(CarStateBase, CarStateExt):
           ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
         else:
           ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
+
+      # Log non-critical stock ACC/LKAS faults if Nidec (camera)
+      if self.CP.carFingerprint not in HONDA_BOSCH:
+        ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
 
     ret.espDisabled = cp.vl["VSA_STATUS"]["ESP_DISABLED"] != 0
 
@@ -166,8 +166,7 @@ class CarState(CarStateBase, CarStateExt):
     ret.parkingBrake = bool(cp.vl[self.car_state_scm_msg]["PARKING_BRAKE_ON"])
 
     if self.CP.transmissionType == TransmissionType.manual:
-      reverse_light_msg = cp.vl["SCM_FEEDBACK"] if self.CP.carFingerprint in HONDA_BOSCH else cp.vl["SCM_BUTTONS"]
-      ret.gearShifter = GearShifter.reverse if bool(reverse_light_msg["REVERSE_LIGHT"]) else GearShifter.drive
+      ret.gearShifter = GearShifter.reverse if bool(cp.vl[self.car_state_scm_msg]["REVERSE_LIGHT"]) else GearShifter.drive
     else:
       gear_position = self.shifter_values.get(cp.vl[self.gearbox_msg]["GEAR_SHIFTER"], None)
       ret.gearShifter = self.parse_gear_shifter(gear_position)
@@ -243,7 +242,7 @@ class CarState(CarStateBase, CarStateExt):
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
-    if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
 
     if self.CP.enableBsm:
