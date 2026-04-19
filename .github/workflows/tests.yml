@@ -143,20 +143,40 @@ jobs:
             uptime || true
             free -h || true
             df -h || true
-            ps -eo pid,ppid,%cpu,%mem,rss,cmd --sort=-rss | sed -n '1,25p' || true
+            ps -eo pid,ppid,%cpu,%mem,rss,vsz,cmd --sort=-rss | sed -n '1,25p' || true
+            echo "--- /proc/meminfo (pressure signals) ---"
+            rg "^(MemTotal|MemFree|MemAvailable|SwapTotal|SwapFree|SwapCached|Active\\(anon\\)|Inactive\\(anon\\)|AnonPages|Shmem):" /proc/meminfo || true
             echo "--- cgroup memory ---"
             for path in \
-              /sys/fs/cgroup/memory.max \
+              /sys/fs/cgroup \
               /sys/fs/cgroup/memory.current \
+              /sys/fs/cgroup/memory.max \
+              /sys/fs/cgroup/memory.swap.current \
+              /sys/fs/cgroup/memory.swap.max \
+              /sys/fs/cgroup/memory.events \
               /sys/fs/cgroup/memory/memory.limit_in_bytes \
-              /sys/fs/cgroup/memory/memory.usage_in_bytes
+              /sys/fs/cgroup/memory/memory.usage_in_bytes \
+              /sys/fs/cgroup/memory/memory.memsw.usage_in_bytes \
+              /sys/fs/cgroup/memory/memory.memsw.limit_in_bytes
             do
               if [ -f "${path}" ]; then
                 echo "${path}=$(cat "${path}")"
+              elif [ -d "${path}" ]; then
+                echo "${path}=DIR"
               else
                 echo "${path}=MISSING"
               fi
             done
+            echo "--- top process memory details ---"
+            TOP_PID="$(ps -eo pid,rss --sort=-rss | sed -n '2p' | awk '{print $1}')"
+            if [ -n "${TOP_PID}" ] && [ -r "/proc/${TOP_PID}/status" ]; then
+              echo "top_pid=${TOP_PID}"
+              rg "^(Name|VmRSS|VmHWM|VmSize|VmSwap|RssAnon|RssFile|RssShmem|Threads):" "/proc/${TOP_PID}/status" || true
+              [ -r "/proc/${TOP_PID}/oom_score" ] && echo "oom_score=$(cat "/proc/${TOP_PID}/oom_score")"
+              [ -r "/proc/${TOP_PID}/oom_score_adj" ] && echo "oom_score_adj=$(cat "/proc/${TOP_PID}/oom_score_adj")"
+            else
+              echo "top_pid=UNAVAILABLE"
+            fi
             echo "--- kernel OOM hints ---"
             dmesg -T 2>/dev/null | rg -i "out of memory|oom|killed process" | tail -n 40 || true
           } | tee -a "${RESOURCE_LOG}"
@@ -213,13 +233,21 @@ jobs:
           ulimit -a || true
           echo "=== cgroup memory ==="
           for path in \
-            /sys/fs/cgroup/memory.max \
+            /sys/fs/cgroup \
             /sys/fs/cgroup/memory.current \
+            /sys/fs/cgroup/memory.max \
+            /sys/fs/cgroup/memory.swap.current \
+            /sys/fs/cgroup/memory.swap.max \
+            /sys/fs/cgroup/memory.events \
             /sys/fs/cgroup/memory/memory.limit_in_bytes \
-            /sys/fs/cgroup/memory/memory.usage_in_bytes
+            /sys/fs/cgroup/memory/memory.usage_in_bytes \
+            /sys/fs/cgroup/memory/memory.memsw.usage_in_bytes \
+            /sys/fs/cgroup/memory/memory.memsw.limit_in_bytes
           do
             if [ -f "${path}" ]; then
               echo "${path}=$(cat "${path}")"
+            elif [ -d "${path}" ]; then
+              echo "${path}=DIR"
             else
               echo "${path}=MISSING"
             fi
