@@ -160,13 +160,13 @@ class CarInterfaceBase(ABC):
 
   @classmethod
   def get_params_sp(cls, car_params, candidate: str, fingerprint: dict[int, dict[int, int]], car_fw: list[structs.CarParams.CarFw], alpha_long: bool,
-                    docs: bool) -> structs.CarParamsSP:
+                    is_release: bool = False, docs: bool = False) -> structs.CarParamsSP:
     car_params_sp = structs.CarParamsSP()
 
     platform = PLATFORMS[candidate]
     car_params_sp.flags |= int(platform.config.sp_flags)
 
-    return cls._get_params_sp(car_params, car_params_sp, candidate, fingerprint, car_fw, alpha_long, docs)
+    return cls._get_params_sp(car_params, car_params_sp, candidate, fingerprint, car_fw, alpha_long, is_release, docs)
 
   @staticmethod
   @abstractmethod
@@ -176,7 +176,7 @@ class CarInterfaceBase(ABC):
 
   @staticmethod
   def _get_params_sp(stock_cp: structs.CarParams, ret: structs.CarParamsSP, candidate, fingerprint: dict[int, dict[int, int]],
-                     car_fw: list[structs.CarParams.CarFw], alpha_long: bool, docs: bool) -> structs.CarParamsSP:
+                     car_fw: list[structs.CarParams.CarFw], alpha_long: bool, is_release: bool, docs: bool) -> structs.CarParamsSP:
     carlog.debug(f"Car {candidate} does not have a _get_params_sp method, using defaults")
     return ret
 
