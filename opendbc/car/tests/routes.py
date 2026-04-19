@@ -50,7 +50,6 @@ non_tested_cars = [
   HONDA.HONDA_CLARITY,
   HONDA.ACURA_MDX_3G,
   HONDA.ACURA_TLX_1G,
-  HONDA.ACURA_RLX, # TODO: get route once tuning done
 ]
 
 
