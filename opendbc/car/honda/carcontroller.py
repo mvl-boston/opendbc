@@ -1,4 +1,4 @@
-import numpy as np
+import numpy as np # retry CI without concurrency
 import math
 
 from opendbc.can import CANPacker

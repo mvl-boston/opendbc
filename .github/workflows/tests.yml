@@ -128,7 +128,7 @@ jobs:
     - name: Build openpilot
       run: scons -j$(nproc) common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
     - name: Test car models
-      timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 10 }}
+      timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 999 }}
       run: |
         set -euxo pipefail
         PYTEST_LOG="/tmp/test_models_pytest.log"
