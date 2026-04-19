@@ -7,7 +7,6 @@ from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
-from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.common.pid import PIDController
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -131,9 +130,6 @@ class CarController(CarControllerBase):
     gas_pedal_force = 0.0
     actuators = CC.actuators
     hud_control = CC.hudControl
-
-    if self.CP.carFingerprint == CAR.ACURA_RLX:
-      CS.v_cruise_factor = CV.MPH_TO_MS
     hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
