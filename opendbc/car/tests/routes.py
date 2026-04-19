@@ -34,6 +34,7 @@ non_tested_cars = [
   HONDA.HONDA_CLARITY,
   HONDA.ACURA_MDX_3G,
   HONDA.ACURA_TLX_1G,
+  HONDA.HONDA_PILOT_4G_MMR, # awaiting driver for testroute
 
   # These had their DSUs unplugged, need new routes
   # TOYOTA.LEXUS_ES  # hybrid
