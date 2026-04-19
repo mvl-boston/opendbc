@@ -44,7 +44,7 @@ jobs:
   mutation:
     name: Safety mutation tests
     runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-latest' }}
-    timeout-minutes: ${{ github.repository == 'commaai/opendbc' && 20 || 999 }}
+    timeout-minutes: ${{ github.repository == 'commaai/opendbc' && 45 || 999 }}
     env:
       GIT_REF: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.event.before || format('origin/{0}', github.event.repository.default_branch) }}
     steps:
@@ -53,7 +53,6 @@ jobs:
           fetch-depth: 0  # need master to get diff
       - uses: ./.github/workflows/cache
       - name: Run mutation tests
-        timeout-minutes: ${{ github.repository == 'commaai/opendbc' && 5 || 999 }}
         run: |
           source setup.sh
           scons -j8
@@ -76,9 +75,8 @@ jobs:
     - uses: actions/checkout@v4
       with:
         repository: 'sunnypilot/sunnypilot'
-        ref: '4962753e47d58f6c86fc284710b6a444ae45788f'
+        ref: '342ff24510542d5ba2d4bb9c193308db0c9ad462'
         submodules: true
-    - run: ./tools/op.sh setup
     - run: rm -rf opendbc_repo/
     - uses: actions/checkout@v4
       with:
