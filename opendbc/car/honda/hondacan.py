@@ -67,14 +67,13 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
     "AEB_STATUS": 0,
   }
 
-  if (CP_SP.flags & HondaFlagsSP.NIDEC_HYBRID):
+  if CP_SP.flags & HondaFlagsSP.NIDEC_HYBRID:
     values["COMPUTER_BRAKE_HYBRID"] = apply_brake
     values["BRAKE_PUMP_REQUEST_HYBRID"] = apply_brake > 0
   else:
-    values.update({
-      "COMPUTER_BRAKE": apply_brake,
-      "BRAKE_PUMP_REQUEST": pump_on,
-    })
+    values["COMPUTER_BRAKE"] = apply_brake
+    values["BRAKE_PUMP_REQUEST"] = pump_on
+
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
@@ -122,11 +121,15 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   return commands
 
 
-def create_steering_control(packer, CAN, apply_torque, lkas_active, fingerprint):
+def create_steering_control(packer, CAN, apply_torque, lkas_active, tja_control):
   values = {
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
   }
+
+  if tja_control:
+    values["STEER_DOWN_TO_ZERO"] = lkas_active
+
   return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
 
 
@@ -146,7 +149,7 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     'ENABLE_MINI_CAR': 1 if enabled else 0,
     # only moves the lead car without ACC_ON
     'HUD_DISTANCE': hud_control.leadDistanceBars,  # wraps to 0 at 4 bars
-    'IMPERIAL_UNIT': 0 if (CP.carFingerprint == CAR.ACURA_RLX) else int(not is_metric),
+    'IMPERIAL_UNIT': int(not is_metric),
     'HUD_LEAD': 2 if enabled and hud_control.leadVisible else 1 if enabled else 0,
     'SET_ME_X01_2': 1,
   }
@@ -160,7 +163,7 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     acc_hud_values['ACC_ON'] = int(enabled)
     acc_hud_values['PCM_SPEED'] = pcm_speed * CV.MS_TO_KPH
     acc_hud_values['PCM_GAS'] = pcm_accel
-    acc_hud_values['SET_ME_X01'] = speed_control if (CP.flags & HondaFlags.HYBRID) and (CP.carFingerprint in (CAR.ACURA_RLX, CAR.ACURA_MDX_3G_MMR)) else 1
+    acc_hud_values['SET_ME_X01'] = speed_control if (CP.flags & HondaFlags.HYBRID) and (CP.carFingerprint in (CAR.ACURA_MDX_3G_MMR)) else 1
     acc_hud_values['FCM_OFF'] = acc_hud['FCM_OFF']
     acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
     acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
@@ -200,7 +203,6 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
   if CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
     lkas_hud_values['DASHED_LANES'] = steering_available and lat_active
     lkas_hud_values['SOLID_LANES'] = lat_active
-    lkas_hud_values['LKAS_PROBLEM'] = lat_active and reduced_steering
 
   if CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
     commands.append(packer.make_can_msg('LKAS_HUD_A', bus, lkas_hud_values))
