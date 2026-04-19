@@ -251,7 +251,10 @@ class CarController(CarControllerBase):
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
             gas_error = self.accel - CS.out.aEgo
             if gas_error != 0.0 and gas_pedal_force > 0.0:
-              learn_speed = 150 if (self.CP.carFingerprint == CAR.HONDA_INSIGHT) else 50 # Insight gas pedal reacts too slowly
+              if self.CP.carFingerprint in (CAR.HONDA_INSIGHT, CAR.ACURA_RDX_3G): # Insight gas pedal reacts too slowly
+                learn_speed = 150
+              else:
+                learn_speed = 50
               self.gasfactor = np.clip(self.gasfactor + gas_error / learn_speed * gas_pedal_force, 0.1, 3.0)
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
               wind_adjust = 1 + wind_brake_ms2 / 1000
