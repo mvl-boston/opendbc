@@ -32,6 +32,7 @@ non_tested_cars = [
   HONDA.ACURA_TLX_2G, # need new route - expired
   HONDA.HONDA_CRV_SA, # need new route - expired
   HONDA.ACURA_TLX_2G_MMR, # need to fix Integra bug causing error
+  HONDA.HONDA_PILOT_4G_MMR, # awaiting driver for testroute
   # custom hardware / not upstreamable
   HONDA.HONDA_CLARITY,
   HONDA.ACURA_MDX_3G,
