@@ -209,7 +209,7 @@ jobs:
 
         export MAX_EXAMPLES=1
         set +e
-        /usr/bin/time -v pytest --continue-on-collection-errors --durations=0 --durations-min=5 -n ${{ contains(runner.name, 'nsc') && 'logical' || '1' }} selfdrive/car/tests/test_models.py 2>&1 | tee "${PYTEST_LOG}"
+        /usr/bin/time -v pytest --continue-on-collection-errors --durations=0 --durations-min=5 -n ${{ contains(runner.name, 'nsc') && 'logical' || '0' }} selfdrive/car/tests/test_models.py 2>&1 | tee "${PYTEST_LOG}"
         PYTEST_EXIT=${PIPESTATUS[0]}
         set -e
 
