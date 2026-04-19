@@ -127,6 +127,7 @@ class CarController(CarControllerBase):
     self.brake_pid.reset()
 
   def update(self, CC, CS, now_nanos):
+    gas_pedal_force = 0.0
     actuators = CC.actuators
     hud_control = CC.hudControl
 
