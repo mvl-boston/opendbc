@@ -29,12 +29,12 @@ non_tested_cars = [
   HONDA.HONDA_ODYSSEY_5G_MMR,  # TODO: find public route
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
-  HONDA.ACURA_TLX_2G_MMR,
   # Honda/Acura test routes below expired, replace when CI bucket sync is fixed
-  HONDA.ACURA_TLX_2G,
-  HONDA.HONDA_NBOX_2G,
-  HONDA.ACURA_MDX_4G_MMR,
-  HONDA.HONDA_CITY_7G,
+  HONDA.ACURA_INTEGRA, # need new route - expired
+  HONDA.HONDA_FIT_4G, # need new route - expired
+  HONDA.ACURA_TLX_2G, # need new route - expired
+  HONDA.HONDA_CRV_SA, # need new route - expired
+  HONDA.ACURA_TLX_2G_MMR, # need to fix Integra bug causing error
 
   # port extensions
   HYUNDAI.KIA_CEED_PHEV_2022_NON_SCC,
@@ -109,7 +109,7 @@ routes = [
   CarTestRoute("68aac44ad69f838e/2021-05-18--20-40-52", HONDA.HONDA_CRV),
   CarTestRoute("14fed2e5fa0aa1a5/2021-05-25--14-59-42", HONDA.HONDA_CRV_HYBRID),
   CarTestRoute("52f3e9ae60c0d886/2021-05-23--15-59-43", HONDA.HONDA_FIT),
-  CarTestRoute("7a27edd824e984f1/0000000a--4fb8a92b44", HONDA.HONDA_FIT), # manual transmission
+  CarTestRoute("7a27edd824e984f1/0000000a--4fb8a92b44", HONDA.HONDA_FIT),  # manual transmission
   CarTestRoute("2c4292a5cd10536c/2021-08-19--21-32-15", HONDA.HONDA_FREED),
   CarTestRoute("03be5f2fd5c508d1/2020-04-19--18-44-15", HONDA.HONDA_HRV),
   CarTestRoute("320098ff6c5e4730/2023-04-13--17-47-46", HONDA.HONDA_HRV_3G),
@@ -123,8 +123,8 @@ routes = [
   CarTestRoute("f29e2b57a55e7ad5/2021-03-24--20-52-38", HONDA.HONDA_ACCORD),  # hybrid, 2021 with new style HUD msgs
   CarTestRoute("1ad763dd22ef1a0e/2020-02-29--18-37-03", HONDA.HONDA_CRV_5G),
   CarTestRoute("0a96f86fcfe35964/2020-02-05--07-25-51", HONDA.HONDA_ODYSSEY),
-  CarTestRoute("7817fe954aff07b8/00000001--fdaaf36c4f", HONDA.HONDA_ODYSSEY_TWN), # Taiwan
-  CarTestRoute("5bd1fcb9a66f60e1/000001d6--f1bff3e876", HONDA.HONDA_ODYSSEY_TWN), # Singapore
+  CarTestRoute("7817fe954aff07b8/00000001--fdaaf36c4f", HONDA.HONDA_ODYSSEY_TWN),  # Taiwan
+  CarTestRoute("5bd1fcb9a66f60e1/000001d6--f1bff3e876", HONDA.HONDA_ODYSSEY_TWN),  # Singapore
   CarTestRoute("d7233a428eb7d0b5/00000001--9b99b04d43", HONDA.HONDA_ODYSSEY_5G_MMR),
   CarTestRoute("d83f36766f8012a5/2020-02-05--18-42-21", HONDA.HONDA_CIVIC_BOSCH_DIESEL),
   CarTestRoute("f0890d16a07a236b/2021-05-25--17-27-22", HONDA.HONDA_INSIGHT),
@@ -132,7 +132,7 @@ routes = [
   CarTestRoute("684e8f96bd491a0e/2021-11-03--11-08-42", HONDA.HONDA_PILOT),  # Passport
   CarTestRoute("0a78dfbacc8504ef/2020-03-04--13-29-55", HONDA.HONDA_CIVIC_BOSCH),
   CarTestRoute("f34a60d68d83b1e5/2020-10-06--14-35-55", HONDA.ACURA_RDX),
-  CarTestRoute("0416c2843c0bfc91/0000001d--59c7744d87", HONDA.ACURA_RDX_3G_MMR),
+  CarTestRoute("23412c73dbeccd3a/00000000--be4606224f", HONDA.ACURA_RDX_3G_MMR),
   CarTestRoute("54fd8451b3974762/2021-04-01--14-50-10", HONDA.HONDA_RIDGELINE),
   CarTestRoute("2d5808fae0b38ac6/2021-09-01--17-14-11", HONDA.HONDA_E),
   CarTestRoute("16a94dfbfdf5a51f/00000007--5ac9e58f1b", HONDA.HONDA_E_ADVANCE),
@@ -141,16 +141,20 @@ routes = [
   CarTestRoute("b1c832ad56b6bc9d/00000010--debfcf5867", HONDA.HONDA_CIVIC_2022),  # 2025 Civic Hatch Hybrid with new eCVT transmission
   CarTestRoute("f9c43864cf057d05/2024-01-15--23-01-20", HONDA.HONDA_PILOT_4G),  # TODO: Replace with a newer route
   CarTestRoute("f39cf149898833ff/0000002b--54f3fae045", HONDA.HONDA_ACCORD_11G),
-  # CarTestRoute("56b2cf1dacdcd033/00000017--d24ffdb376", HONDA.HONDA_CITY_7G),  # Brazilian model
+  CarTestRoute("56b2cf1dacdcd033/00000017--d24ffdb376", HONDA.HONDA_CITY_7G),  # Brazilian model
   CarTestRoute("2dc4489d7e1410ca/00000001--bbec3f5117", HONDA.HONDA_CRV_6G),
   CarTestRoute("a703d058f4e05aeb/00000008--f169423024", HONDA.HONDA_PASSPORT_4G),
-  CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA),
+  CarTestRoute("414af83891dbf72c/00000006--51fa6d99cd", HONDA.HONDA_NBOX_2G),
+  CarTestRoute("ad9840558640c31d/0000001a--d6cd4871c2", HONDA.ACURA_MDX_4G_MMR),  # 2025 MDX
+  # CarTestRoute("ad9840558640c31d/000001f2--026c4f6275", HONDA.ACURA_TLX_2G_MMR), # need to fix Integra bug causing error
+  CarTestRoute("619b464263ab23f2/00000025--ece505fdfc", HONDA.ACURA_MDX_4G),
+  # CarTestRoute("6b22f2fcd61fa86a/00000000--b3adfc8746", HONDA.ACURA_TLX_2G), # need new route - expired
+  # CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA), # need new route - expired
   CarTestRoute("ad9840558640c31d/00000026--538590661c", HONDA.ACURA_ADX),
-  CarTestRoute("c45f8d145722812e/0000001b--37a99319c3", HONDA.ACURA_MDX_4G),
-  # CarTestRoute("ad9840558640c31d/000001f2--026c4f6275", HONDA.ACURA_TLX_2G_MMR), # canbus (single TX failure??) breaking CI
-  CarTestRoute("0b3cfa082cbbe54e/0000000c--5218004ec8", HONDA.HONDA_FIT_4G),
+  # CarTestRoute("4991f6e1afbe5adb/00000005--713a39aaee", HONDA.HONDA_CRV_SA), # South Africa model  # need new route - expired
+  # CarTestRoute("0b3cfa082cbbe54e/0000000c--5218004ec8", HONDA.HONDA_FIT_4G), # need new route - expired
   # port extensions
-  CarTestRoute("ad9840558640c31d/0000003d--a35002b59f", HONDA.ACURA_MDX_3G_MMR),
+  CarTestRoute("ad9840558640c31d/0000011e--b1ab30a633", HONDA.ACURA_MDX_3G_MMR),
   CarTestRoute("21ea2d289932890b/00000134--3862dfe91d", HONDA.HONDA_ACCORD_9G),
   CarTestRoute("4991f6e1afbe5adb/00000005--713a39aaee", HONDA.HONDA_CRV_SA), # South Africa model
 
