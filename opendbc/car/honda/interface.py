@@ -57,9 +57,6 @@ class CarInterface(CarInterfaceBase):
 
       ret.pcmCruise = True
 
-    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR):
-      ret.stoppingDecelRate = 0.3
-
     if candidate == CAR.HONDA_CRV_5G:
       ret.enableBsm = 0x12f8bfa7 in fingerprint[CAN.radar]
 
@@ -90,6 +87,7 @@ class CarInterface(CarInterfaceBase):
     ret.lateralTuning.pid.kf = 0.00006  # conservative feed-forward
     ret.steerActuatorDelay = 0.1
 
+    ret.stoppingDecelRate = 0.3  # smooth out harsh braking before standstill
     if candidate in HONDA_BOSCH:
       ret.longitudinalActuatorDelay = 0.5 # s
       # longitudinal gas-only tuning for Bosch hondas is in carcontroller
