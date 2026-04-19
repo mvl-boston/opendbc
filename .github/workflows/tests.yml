@@ -134,21 +134,43 @@ jobs:
         PYTEST_LOG="/tmp/test_models_pytest.log"
         RESOURCE_LOG="/tmp/test_models_resource_monitor.log"
 
-        echo "Runner: ${{ runner.name }}"
-        echo "CPU cores: $(nproc)"
-        free -h || true
-        df -h || true
-        cat /sys/fs/cgroup/memory.max || true
+        snapshot() {
+          local reason="${1}"
+          {
+            echo "=== ${reason} @ $(date -Is) ==="
+            echo "Runner: ${{ runner.name }}"
+            echo "CPU cores: $(nproc)"
+            uptime || true
+            free -h || true
+            df -h || true
+            ps -eo pid,ppid,%cpu,%mem,rss,cmd --sort=-rss | sed -n '1,25p' || true
+            echo "--- cgroup memory ---"
+            for path in \
+              /sys/fs/cgroup/memory.max \
+              /sys/fs/cgroup/memory.current \
+              /sys/fs/cgroup/memory/memory.limit_in_bytes \
+              /sys/fs/cgroup/memory/memory.usage_in_bytes
+            do
+              if [ -f "${path}" ]; then
+                echo "${path}=$(cat "${path}")"
+              else
+                echo "${path}=MISSING"
+              fi
+            done
+            echo "--- kernel OOM hints ---"
+            dmesg -T 2>/dev/null | rg -i "out of memory|oom|killed process" | tail -n 40 || true
+          } | tee -a "${RESOURCE_LOG}"
+        }
+
+        snapshot "startup"
 
         # Periodically sample resource usage so abrupt terminations have context.
         (
           while true; do
-            echo "===== $(date -Is) ====="
-            free -h || true
-            ps -eo pid,ppid,%cpu,%mem,rss,cmd --sort=-rss | sed -n '1,40p'
-            sleep 20
+            sleep 30
+            snapshot "periodic"
           done
-        ) > "${RESOURCE_LOG}" 2>&1 &
+        ) &
         MONITOR_PID=$!
 
         cleanup() {
@@ -157,15 +179,25 @@ jobs:
 
         on_term() {
           echo "Received SIGTERM at $(date -Is)" | tee -a "${PYTEST_LOG}"
+          snapshot "sigterm"
           cleanup
           exit 143
         }
 
-        trap on_term TERM
+        trap on_term TERM INT
         trap cleanup EXIT
 
         export MAX_EXAMPLES=1
+        set +e
         /usr/bin/time -v pytest --continue-on-collection-errors --durations=0 --durations-min=5 -n ${{ contains(runner.name, 'nsc') && 'logical' || '1' }} selfdrive/car/tests/test_models.py 2>&1 | tee "${PYTEST_LOG}"
+        PYTEST_EXIT=${PIPESTATUS[0]}
+        set -e
+
+        if [ "${PYTEST_EXIT}" -ne 0 ]; then
+          snapshot "pytest-exit-${PYTEST_EXIT}"
+        fi
+
+        exit "${PYTEST_EXIT}"
       env:
         NUM_JOBS: 4
         JOB_ID: ${{ matrix.job }}
@@ -180,8 +212,18 @@ jobs:
           echo "=== ulimit ==="
           ulimit -a || true
           echo "=== cgroup memory ==="
-          cat /sys/fs/cgroup/memory.max || true
-          cat /sys/fs/cgroup/memory.current || true
+          for path in \
+            /sys/fs/cgroup/memory.max \
+            /sys/fs/cgroup/memory.current \
+            /sys/fs/cgroup/memory/memory.limit_in_bytes \
+            /sys/fs/cgroup/memory/memory.usage_in_bytes
+          do
+            if [ -f "${path}" ]; then
+              echo "${path}=$(cat "${path}")"
+            else
+              echo "${path}=MISSING"
+            fi
+          done
           echo "=== OOM hints from dmesg ==="
           dmesg -T 2>/dev/null | rg -i "out of memory|oom|killed process" | tail -n 200 || true
         } | tee "${SYSTEM_LOG}"
