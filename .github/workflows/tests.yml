@@ -74,8 +74,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        repository: 'sunnypilot/sunnypilot'
-        ref: '342ff24510542d5ba2d4bb9c193308db0c9ad462'
+        repository: 'mvl-boston/openpilot'
+        ref: 'sp-honda-202508'
         submodules: true
     - run: rm -rf opendbc_repo/
     - uses: actions/checkout@v4
