@@ -285,7 +285,7 @@ class CarController(CarControllerBase):
           # limit brake release to 32 units per frame to match factory
           apply_brake = max(self.apply_brake_last - 32, apply_brake)
 
-          pcm_override = CC.longActive
+          pcm_override = CC.longActive or CS.out.stockAeb
           if apply_brake > 0: # prevent fault from concurrent gas + brake
             pcm_speed = 0.0
             self.new_accel = 0
