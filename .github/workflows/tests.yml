@@ -75,6 +75,10 @@ jobs:
         ref: '0101-honda-spacelab'
         submodules: true
     - run: ./tools/op.sh setup
+    - name: Activate openpilot venv
+      run: |
+        source .venv/bin/activate
+        echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
     - run: rm -rf opendbc_repo/
     - uses: actions/checkout@v4
       with:
