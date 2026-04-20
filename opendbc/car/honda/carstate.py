@@ -88,10 +88,15 @@ class CarState(CarStateBase):
     v_wheel = sum([cp.vl["WHEEL_SPEEDS"][f"WHEEL_SPEED_{s}"] for s in ("FL", "FR", "RL", "RR")]) / 4.0 * CV.KPH_TO_MS
     if self.CP.carFingerprint == CAR.ACURA_INTEGRA:  # use ABS_SENSOR for Integra since no ENGINE_DATA message
       abs_counter = cp.vl["ABS_SENSOR"]["COUNTER"]
-      if self.abs_counter_prev != abs_counter:
-        self.lowspeed_source = sum((cp.vl["ABS_SENSOR"][f"ABS_SENSOR_{s}"] - getattr(self, f"abs_prior_{s}")) % 256 for s in ("FL", "FR", "RL", "RR"))
-        for s in ("FL", "FR", "RL", "RR"):
-          setattr(self, f"abs_prior_{s}", cp.vl["ABS_SENSOR"][f"ABS_SENSOR_{s}"])
+      abs_values = {s: cp.vl["ABS_SENSOR"][f"ABS_SENSOR_{s}"] for s in ("FL", "FR", "RL", "RR")}
+      has_new_abs_sample = (self.abs_counter_prev != abs_counter) or any(abs_values[s] != getattr(self, f"abs_prior_{s}") for s in abs_values)
+
+      # Keep last low-speed value when no new ABS frame arrives, but still process
+      # samples where values changed even if the 2-bit counter wrapped/replayed.
+      if has_new_abs_sample:
+        self.lowspeed_source = sum((abs_values[s] - getattr(self, f"abs_prior_{s}")) % 256 for s in abs_values)
+        for s in abs_values:
+          setattr(self, f"abs_prior_{s}", abs_values[s])
         self.abs_counter_prev = abs_counter
     else:
       self.lowspeed_source = cp.vl["ENGINE_DATA"]["XMISSION_SPEED"]
