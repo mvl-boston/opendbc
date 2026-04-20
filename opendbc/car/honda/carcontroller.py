@@ -1,4 +1,4 @@
-import numpy as np # force CI rerun
+import numpy as np
 import math
 
 from opendbc.can import CANPacker
