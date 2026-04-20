@@ -89,8 +89,12 @@ static void honda_rx_hook(const CANPacket_t *msg) {
     static unsigned int abs_prev_rl = 0;
     static unsigned int abs_prev_rr = 0;
     static unsigned int abs_counter_checksum = 0;
+    static bool prior_moving = false;
     if (msg->data[7] != abs_counter_checksum) { // occasionally car sends repeated abs_sensor messages, need to ignore
       vehicle_moving = ((msg->data[0] != abs_prev_fl) || (msg->data[1] != abs_prev_fr) || (msg->data[2] != abs_prev_rl) || (msg->data[3] != abs_prev_rr));
+      prior_moving = vehicle_moving;
+    } else {
+      vehicle_moving = prior_moving;
     }
     abs_prev_fl = msg->data[0];
     abs_prev_fr = msg->data[1];
