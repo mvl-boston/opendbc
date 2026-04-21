@@ -28,7 +28,6 @@ non_tested_cars = [
   SUBARU.SUBARU_FORESTER_HYBRID,
   # Honda/Acura test routes below expired, replace when CI bucket sync is fixed
   HONDA.ACURA_INTEGRA, # need new route - expired
-  HONDA.HONDA_FIT_4G, # need new route - expired
   HONDA.ACURA_TLX_2G, # need new route - expired
   HONDA.HONDA_CRV_SA, # need new route - expired
   HONDA.ACURA_TLX_2G_MMR, # need to fix Integra bug causing error
@@ -148,7 +147,7 @@ routes = [
   # CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA), # need new route - expired
   CarTestRoute("ad9840558640c31d/00000026--538590661c", HONDA.ACURA_ADX),
   # CarTestRoute("4991f6e1afbe5adb/00000005--713a39aaee", HONDA.HONDA_CRV_SA), # South Africa model  # need new route - expired
-  # CarTestRoute("0b3cfa082cbbe54e/0000000c--5218004ec8", HONDA.HONDA_FIT_4G), # need new route - expired
+  CarTestRoute("f0a3de7786dcc72c/0000001a--4336abf007", HONDA.HONDA_FIT_4G),
   # port extensions
   CarTestRoute("ad9840558640c31d/0000011e--b1ab30a633", HONDA.ACURA_MDX_3G_MMR),
   CarTestRoute("21ea2d289932890b/00000134--3862dfe91d", HONDA.HONDA_ACCORD_9G),
