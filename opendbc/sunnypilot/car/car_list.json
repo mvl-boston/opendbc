@@ -1329,12 +1329,13 @@
     ],
     "package": "Honda Sensing"
   },
-  "Honda Fit (Taiwan) 2025": {
+  "Honda Fit (Taiwan) 2024-25": {
     "platform": "HONDA_FIT_4G",
     "make": "Honda",
     "brand": "honda",
     "model": "Fit (Taiwan)",
     "year": [
+      "2024",
       "2025"
     ],
     "package": "All"
