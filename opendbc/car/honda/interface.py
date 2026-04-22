@@ -189,6 +189,8 @@ class CarInterface(CarInterfaceBase):
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
       CarControllerParams.BOSCH_GAS_DELTA_UP = 60
+      CarControllerParams.STEER_DELTA_UP = 10
+      CarControllerParams.STEER_DELTA_DOWN = 10
       if not ret.openpilotLongitudinalControl:
         # When using stock ACC, the radar intercepts and filters steering commands the EPS would otherwise accept
         ret.minSteerSpeed = 70. * CV.KPH_TO_MS
