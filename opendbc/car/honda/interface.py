@@ -108,6 +108,9 @@ class CarInterface(CarInterfaceBase):
       if fw.ecu == "eps" and b"," in fw.fwVersion:
         ret.dashcamOnly = True
 
+    CarControllerParams.STEER_DELTA_UP = 3
+    CarControllerParams.STEER_DELTA_DOWN = 3
+
     if candidate == CAR.HONDA_CIVIC:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[1.1], [0.33]]
@@ -187,6 +190,9 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
+      CarControllerParams.BOSCH_GAS_DELTA_UP = 60
+      CarControllerParams.STEER_DELTA_UP = 30
+      CarControllerParams.STEER_DELTA_DOWN = 60
       if not ret.openpilotLongitudinalControl:
         # When using stock ACC, the radar intercepts and filters steering commands the EPS would otherwise accept
         ret.minSteerSpeed = 70. * CV.KPH_TO_MS
