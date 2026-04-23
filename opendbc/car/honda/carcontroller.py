@@ -113,8 +113,8 @@ class CarController(CarControllerBase):
 
     self.gasfactor = 1.0
     self.gasfactor_before_maxgas = 1.0
-    self.windfactor = 1.0
-    self.windfactor_before_maxgas = 1.0
+    self.windfactor = 3.0
+    self.windfactor_before_maxgas = 3.0
     self.windfactor_before_brake = 0.0
     self.pitch = 0.0
     self.bosch_last_gas = -30000
