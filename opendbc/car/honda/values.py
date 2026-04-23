@@ -39,7 +39,7 @@ class CarControllerParams:
   STEER_STEP = 1  # 100 Hz
   STEER_DELTA_UP = 3  # min/max in 0.33s for all Honda
   STEER_DELTA_DOWN = 3
-  STEER_GLOBAL_MIN_SPEED = 0.3 * CV.MPH_TO_MS
+  STEER_GLOBAL_MIN_SPEED = 0.4 * CV.MPH_TO_MS
 
   def __init__(self, CP):
     self.STEER_MAX = CP.lateralParams.torqueBP[-1]
