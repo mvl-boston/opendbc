@@ -289,6 +289,8 @@ class CarController(CarControllerBase):
           if apply_brake > 0: # prevent fault from concurrent gas + brake
             pcm_speed = 0.0
             self.new_accel = 0
+          elif CS.out.gasPressed: # prevent fault from user gas with a pcm_speed of zero
+            pcm_speed = min(100.0, max(pcm_speed, CS.out.vEgo + 5))
 
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
                                                          pcm_override, pcm_cancel_cmd, alert_fcw,
