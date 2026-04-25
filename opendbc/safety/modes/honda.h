@@ -18,7 +18,7 @@
   {.msg = {{0x326, (pt_bus), 8, 10U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* SCM_FEEDBACK */  \
 
 // For radarless cars without ENGINE_DATA, swap in ABS_SENSOR for low-speed movement checks.
-#define HONDA_COMMON_RX_CHECKS_NO_ENGINE_DATA(pt_bus)                                                                                   \
+#define HONDA_NO_ENGINE_DATA_RX_CHECKS(pt_bus)                                                                                   \
   HONDA_BASE_RX_CHECKS(pt_bus)                                                                                                          \
   {.msg = {{0x20E, (pt_bus), 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* ABS_SENSOR */    \
   {.msg = {{0x326, (pt_bus), 8, 10U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* SCM_FEEDBACK */  \
@@ -88,11 +88,15 @@ static void honda_rx_hook(const CANPacket_t *msg) {
     static unsigned int abs_prev_fr = 0;
     static unsigned int abs_prev_rl = 0;
     static unsigned int abs_prev_rr = 0;
-    vehicle_moving = ((msg->data[0] != abs_prev_fl) || (msg->data[1] != abs_prev_fr) || (msg->data[2] != abs_prev_rl) || (msg->data[3] != abs_prev_rr));
+    static unsigned int abs_prev_counter_checksum = 0;
+    if (msg->data[7] != abs_prev_counter_checksum) { // occasionally car sends repeated abs_sensor messages, need to ignore
+      vehicle_moving = ((msg->data[0] != abs_prev_fl) || (msg->data[1] != abs_prev_fr) || (msg->data[2] != abs_prev_rl) || (msg->data[3] != abs_prev_rr));
+    }
     abs_prev_fl = msg->data[0];
     abs_prev_fr = msg->data[1];
     abs_prev_rl = msg->data[2];
     abs_prev_rr = msg->data[3];
+    abs_prev_counter_checksum = msg->data[7];
   } else if (msg->addr == 0x158U) {
     vehicle_moving = msg->data[0] | msg->data[1];
   } else {
@@ -375,7 +379,7 @@ static safety_config honda_bosch_init(uint16_t param) {
 
   // Only used by no-engine-data radarless configurations (e.g. Integra).
   static RxCheck honda_bosch_radarless_no_engine_data_rx_checks[] = {
-    HONDA_COMMON_RX_CHECKS_NO_ENGINE_DATA(0)
+    HONDA_NO_ENGINE_DATA_RX_CHECKS(0)
   };
 
   // Bosch has powertrain on bus 1, verified 0x1A6 does not exist
