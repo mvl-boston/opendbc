@@ -90,7 +90,7 @@ class CarState(CarStateBase):
     if self.CP.carFingerprint == CAR.ACURA_INTEGRA:  # use ABS_SENSOR for Integra since no ENGINE_DATA message
       abs_counter = cp.vl["ABS_SENSOR"]["COUNTER"]
       abs_checksum = cp.vl["ABS_SENSOR"]["CHECKSUM"]
-      if (self.abs_counter_prev != abs_counter) or (self.abs_checksum_prev != abs_checksum): # checksum needed due to safety tests reverting to frame 0 
+      if (self.abs_counter_prev != abs_counter) or (self.abs_checksum_prev != abs_checksum): # checksum needed since safety tests skip to frame 0 after warmup
         self.lowspeed_source = sum((cp.vl["ABS_SENSOR"][f"ABS_SENSOR_{s}"] - getattr(self, f"abs_prior_{s}")) % 256 for s in ("FL", "FR", "RL", "RR"))
         for s in ("FL", "FR", "RL", "RR"):
           setattr(self, f"abs_prior_{s}", cp.vl["ABS_SENSOR"][f"ABS_SENSOR_{s}"])
