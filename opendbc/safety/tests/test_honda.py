@@ -571,7 +571,6 @@ class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLo
                                  HondaSafetyFlags.RADARLESS | HondaSafetyFlags.BOSCH_LONG | HondaSafetyFlags.NO_ENGINE_DATA_MSG)
     self.safety.init_tests()
     self._abs_tick = 0
-    self._rx(self._abs_sensor_msg(self._abs_tick))
 
   def _abs_sensor_msg(self, abs_sensor):
     values = {
