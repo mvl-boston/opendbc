@@ -106,6 +106,9 @@ class CarInterface(CarInterfaceBase):
       if fw.ecu == "eps" and b"," in fw.fwVersion:
         ret.dashcamOnly = True
 
+    CarControllerParams.STEER_DELTA_UP = 3
+    CarControllerParams.STEER_DELTA_DOWN = 3
+
     if candidate == CAR.HONDA_CIVIC:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[1.1], [0.33]]
@@ -119,6 +122,8 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.HONDA_CIVIC_2022:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 3200], [0, 2560, 5120]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      CarControllerParams.STEER_DELTA_UP = 3
+      CarControllerParams.STEER_DELTA_DOWN = 6
 
     elif candidate == CAR.HONDA_ACCORD:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
