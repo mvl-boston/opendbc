@@ -566,7 +566,7 @@ class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLo
     Covers the Honda Bosch Radarless safety mode with longitudinal control and no engine_data message
   """
   def setUp(self):
-    TestHondaBoschRadarlessSafetyBase.setUp(self)
+    super().setUp()
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch,
                                  HondaSafetyFlags.RADARLESS | HondaSafetyFlags.BOSCH_LONG | HondaSafetyFlags.NO_ENGINE_DATA_MSG)
     self.safety.init_tests()
