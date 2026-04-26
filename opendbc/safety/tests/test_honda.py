@@ -541,14 +541,13 @@ class TestHondaBoschRadarlessLongSafety(common.LongitudinalAccelSafetyTest, Hond
   """
     Covers the Honda Bosch Radarless safety mode with longitudinal control
   """
-  SAFETY_PARAM = HondaSafetyFlags.RADARLESS | HondaSafetyFlags.BOSCH_LONG
   TX_MSGS = [[0xE4, 0], [0x33D, 0], [0x1C8, 0], [0x30C, 0]]
   FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D, 0x1C8, 0x30C]}
   RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1C8, 0x30C, 0x33D)}
 
   def setUp(self):
     super().setUp()
-    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, self.SAFETY_PARAM)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.RADARLESS | HondaSafetyFlags.BOSCH_LONG)
     self.safety.init_tests()
 
   def _accel_msg(self, accel):
@@ -566,15 +565,14 @@ class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLo
   """
     Covers the Honda Bosch Radarless safety mode with longitudinal control and no engine_data message
   """
-  SAFETY_PARAM = TestHondaBoschRadarlessLongSafety.SAFETY_PARAM | HondaSafetyFlags.NO_ENGINE_DATA_MSG
-
   def setUp(self):
-    super().setUp()
+    TestHondaBoschRadarlessSafetyBase.setUp(self)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch,
+                                 HondaSafetyFlags.RADARLESS | HondaSafetyFlags.BOSCH_LONG | HondaSafetyFlags.NO_ENGINE_DATA_MSG)
+    self.safety.init_tests()
     cnt_speed_before_prime = self.__class__.cnt_speed
     self._abs_tick = 0
-    # Prime twice so movement starts in a stable "current == prior" state
-    self._rx(self._speed_msg(0))
-    self._rx(self._speed_msg(0))
+    self._rx(self._abs_sensor_msg(self._abs_tick))
     # Keep inherited counter-based tests on the same phase as other Honda classes.
     self.__class__.cnt_speed = cnt_speed_before_prime
 
