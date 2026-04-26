@@ -582,6 +582,7 @@ class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLo
       "ABS_SENSOR_RR": ((self._abs_tick // 4) + (self._abs_tick % 4)) % 256,
       "COUNTER": self.cnt_speed % 4,
     }
+    self.__class__.cnt_speed += 1
     return self.packer.make_can_msg_safety("ABS_SENSOR", self.PT_BUS, values)
 
 
