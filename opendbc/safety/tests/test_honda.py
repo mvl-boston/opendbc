@@ -572,24 +572,17 @@ class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLo
     self.safety.init_tests()
     self._abs_tick = 0
 
-  def _abs_sensor_msg(self, abs_sensor):
+  # ABS_SENSOR values increase with movement.  Change in sum of units per message approximates units of XMISSION_SPEED.
+  def _speed_msg(self, speed):
+    self._abs_tick += speed
     values = {
-      "ABS_SENSOR_FL": abs_sensor,
-      "ABS_SENSOR_FR": abs_sensor,
-      "ABS_SENSOR_RL": abs_sensor,
-      "ABS_SENSOR_RR": abs_sensor,
-      # Use the shared speed counter so inherited counter checks keep their expectations.
+      "ABS_SENSOR_FL": (self._abs_tick // 4) % 256,
+      "ABS_SENSOR_FR": (self._abs_tick // 4) % 256,
+      "ABS_SENSOR_RL": (self._abs_tick // 4) % 256,
+      "ABS_SENSOR_RR": ((self._abs_tick // 4) + (self._abs_tick % 4)) % 256,
       "COUNTER": self.cnt_speed % 4,
     }
-    self.__class__.cnt_speed += 1
     return self.packer.make_can_msg_safety("ABS_SENSOR", self.PT_BUS, values)
-
-  # vehicle_moving in safety is based on consecutive ABS_SENSOR samples.
-  # Standstill sends the same sample; moving sends a changed sample.
-  def _speed_msg(self, speed):
-    if speed > self.STANDSTILL_THRESHOLD:
-      self._abs_tick = (self._abs_tick + 1) % 256
-    return self._abs_sensor_msg(self._abs_tick)
 
 
 class TestHondaBoschCANFDSafetyBase(TestHondaBoschSafetyBase):
