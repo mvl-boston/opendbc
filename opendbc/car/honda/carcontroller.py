@@ -1,5 +1,4 @@
 import math
-import json
 import numpy as np
 
 from openpilot.common.params import Params
@@ -14,7 +13,6 @@ from opendbc.car.common.pid import PIDController
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
-HONDA_BRAKE_PID_PARAMS = "HondaBrakePIDParams"
 
 
 def compute_gb_honda_bosch(accel, speed):
@@ -140,20 +138,11 @@ class CarController(CarControllerBase):
     self.average_factor = 0.25
     self.gas_factor = 3.0
     self.new_accel = 0.0
-
-    self.cached_brake_pid_factor = None
-    if self.CP.carFingerprint not in HONDA_BOSCH:
-      params = Params()
-      brake_pid_state = params.get(HONDA_BRAKE_PID_PARAMS)
-      if brake_pid_state is not None:
-        try:
-          persistent_state = json.loads(brake_pid_state)
-          if persistent_state.get("carFingerprint") == self.CP.carFingerprint:
-            learned_factor = float(np.clip(persistent_state.get("brakePIDFactorNonLowSpeed", self.brake_pid.i), 0.0, 2.0))
-            self.brake_pid.i = self.brake_pid_factor_non_lowspeed = self.brake_pid_factor = learned_factor
-            self.cached_brake_pid_factor = learned_factor
-        except Exception:
-          params.remove(HONDA_BRAKE_PID_PARAMS)
+    if (persistent_brake_pid_factor := Params().get("HondaBrakePIDParams")) is not None:
+      try:
+        self.brake_pid.i = self.brake_pid_factor_non_lowspeed = float(persistent_brake_pid_factor)
+      except Exception:
+        pass
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -345,14 +334,8 @@ class CarController(CarControllerBase):
     new_actuators.torque = self.last_torque
     new_actuators.torqueOutputCan = float(self.average_factor)
 
-    if self.CP.carFingerprint not in HONDA_BOSCH and self.frame > 0 and self.frame % int(60. / DT_CTRL) == 0:
-      learned_factor = float(np.clip(self.brake_pid_factor_non_lowspeed, 0.0, 2.0))
-      if learned_factor != self.cached_brake_pid_factor:
-        Params().put_nonblocking(HONDA_BRAKE_PID_PARAMS, json.dumps({
-          "carFingerprint": self.CP.carFingerprint,
-          "brakePIDFactorNonLowSpeed": learned_factor,
-        }))
-        self.cached_brake_pid_factor = learned_factor
+    if self.frame and not self.frame % 6000:
+      Params().put_nonblocking("HondaBrakePIDParams", str(self.brake_pid_factor_non_lowspeed))
 
     self.frame += 1
     return new_actuators, can_sends
