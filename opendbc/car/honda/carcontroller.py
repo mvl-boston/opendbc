@@ -328,8 +328,8 @@ class CarController(CarControllerBase):
     new_actuators.torque = self.last_torque
     new_actuators.torqueOutputCan = float(self.average_factor)
 
-    if self.frame and not self.frame % 6000:
-      Params().put_nonblocking("HondaBrakePIDParams", self.brake_pid_factor_non_lowspeed)
+    if self.frame % 6000 == 0:
+      Params().put_nonblocking("HondaBrakePIDParams", float(self.brake_pid_factor_non_lowspeed))
 
     self.frame += 1
     return new_actuators, can_sends
