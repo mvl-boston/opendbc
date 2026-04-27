@@ -1,6 +1,5 @@
-import math
 import numpy as np
-
+import math
 from openpilot.common.params import Params
 
 from opendbc.can import CANPacker
@@ -129,7 +128,7 @@ class CarController(CarControllerBase):
                                    neg_limit=0,
                                    rate=50)
     self.brake_pid.reset()
-    self.brake_pid.i = 0.4
+    self.brake_pid.i = 0.4 if (Params().get("HondaBrakePIDParams") is None) else Params().get("HondaBrakePIDParams")
     self.brake_pid_factor_non_lowspeed = self.brake_pid.i
 
     self.pitch = 0.0
@@ -138,8 +137,6 @@ class CarController(CarControllerBase):
     self.average_factor = 0.25
     self.gas_factor = 3.0
     self.new_accel = 0.0
-    if (persistent_brake_pid_factor := Params().get("HondaBrakePIDParams")) is not None:
-      self.brake_pid.i = self.brake_pid_factor_non_lowspeed = persistent_brake_pid_factor
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
