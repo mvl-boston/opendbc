@@ -366,6 +366,12 @@ class CarControllerBase(ABC):
     self.frame = 0
     self.secoc_key: bytes = b"00" * 16
 
+  def get_persistent_state(self) -> dict[str, Any] | None:
+    return None
+
+  def set_persistent_state(self, persistent_state: dict[str, Any] | None) -> None:
+    pass
+
   @abstractmethod
   def update(self, CC: structs.CarControl, CS: CarStateBase, now_nanos: int) -> tuple[structs.CarControl.Actuators, list[CanData]]:
     pass
