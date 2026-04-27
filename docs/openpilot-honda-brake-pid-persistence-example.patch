@@ -1,0 +1,71 @@
+diff --git a/common/params_keys.h b/common/params_keys.h
+index 000000000..111111111 100644
+--- a/common/params_keys.h
++++ b/common/params_keys.h
+@@
+  {"GithubUsername", {PERSISTENT, STRING}},
+  {"GitRemote", {PERSISTENT, STRING}},
++ {"HondaBrakePIDParams", {PERSISTENT | DONT_LOG, JSON}},
+  {"GsmApn", {PERSISTENT, STRING}},
+  {"GsmMetered", {PERSISTENT, BOOL, "1"}},
+  {"GsmRoaming", {PERSISTENT, BOOL}},
+diff --git a/selfdrive/car/card.py b/selfdrive/car/card.py
+index 222222222..333333333 100644
+--- a/selfdrive/car/card.py
++++ b/selfdrive/car/card.py
+@@
+ import cereal.messaging as messaging
+ from cereal import car
+ from openpilot.common.params import Params
+@@
+   params = Params()
+   CI = get_car_interface(CP)
++
++  if hasattr(CI, "CC") and hasattr(CI.CC, "set_persistent_state"):
++    brake_pid_cache = params.get("HondaBrakePIDParams")
++    if brake_pid_cache is not None:
++      try:
++        CI.CC.set_persistent_state(json.loads(brake_pid_cache))
++      except Exception:
++        cloudlog.exception("failed to restore Honda brake PID params")
++        params.remove("HondaBrakePIDParams")
+@@
+   while True:
+     sm.update()
+@@
+     actuators, can_sends = CI.apply(CC, now_nanos)
+@@
++    if sm.frame % 3000 == 0 and hasattr(CI, "CC") and hasattr(CI.CC, "get_persistent_state"):
++      persistent_state = CI.CC.get_persistent_state()
++      if persistent_state is not None:
++        params.put_nonblocking("HondaBrakePIDParams", json.dumps(persistent_state))
+diff --git a/selfdrive/car/tests/test_honda_brake_pid_persistence.py b/selfdrive/car/tests/test_honda_brake_pid_persistence.py
+new file mode 100644
+index 000000000..444444444
+--- /dev/null
++++ b/selfdrive/car/tests/test_honda_brake_pid_persistence.py
+@@
++import json
++from unittest.mock import Mock
++
++from openpilot.common.params import Params
++
++
++def test_honda_brake_pid_cache_round_trip():
++  params = Params()
++  controller = Mock()
++  controller.get_persistent_state.return_value = {
++    "version": 1,
++    "carFingerprint": "HONDA_CIVIC",
++    "brakePIDFactorNonLowSpeed": 0.62,
++  }
++
++  params.put_nonblocking("HondaBrakePIDParams", json.dumps(controller.get_persistent_state()))
++  restored = json.loads(params.get("HondaBrakePIDParams"))
++
++  controller.set_persistent_state(restored)
++  controller.set_persistent_state.assert_called_once_with({
++    "version": 1,
++    "carFingerprint": "HONDA_CIVIC",
++    "brakePIDFactorNonLowSpeed": 0.62,
++  })
