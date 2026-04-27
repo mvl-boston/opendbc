@@ -112,7 +112,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         repository: 'mvl-boston/openpilot'
-        ref: '000-mdx-pedaltest'
+        ref: 'test-brakesave'
         submodules: true
     - run: ./tools/op.sh setup
     - run: rm -rf opendbc_repo/
