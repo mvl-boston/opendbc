@@ -1,8 +1,10 @@
 import re
+from unittest.mock import patch
 
+from opendbc.car.honda.carcontroller import CarController
 from opendbc.car.honda.interface import CarInterface
 from opendbc.car.honda.fingerprints import FW_VERSIONS
-from opendbc.car.honda.values import CAR, HONDA_BOSCH, HONDA_BOSCH_TJA_CONTROL
+from opendbc.car.honda.values import CAR, DBC, HONDA_BOSCH, HONDA_BOSCH_TJA_CONTROL
 
 HONDA_FW_VERSION_RE = br"[A-Z0-9]{5}-[A-Z0-9]{3}(-|,)[A-Z0-9]{4}(\x00){2}$"
 
@@ -22,7 +24,8 @@ class TestHondaFingerprint:
 class TestHondaBrakePIDPersistence:
   def test_nidec_persistent_state_round_trip(self):
     CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
-    controller = CarInterface(CP).CC
+    with patch("opendbc.car.honda.carcontroller.CANPacker"):
+      controller = CarController(DBC[CP.carFingerprint], CP)
 
     controller.set_persistent_state({
       "version": 1,
@@ -41,7 +44,8 @@ class TestHondaBrakePIDPersistence:
 
   def test_nidec_rejects_wrong_fingerprint(self):
     CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC)
-    controller = CarInterface(CP).CC
+    with patch("opendbc.car.honda.carcontroller.CANPacker"):
+      controller = CarController(DBC[CP.carFingerprint], CP)
 
     controller.set_persistent_state({
       "version": 1,
@@ -55,7 +59,8 @@ class TestHondaBrakePIDPersistence:
 
   def test_bosch_cars_do_not_export_state(self):
     CP = CarInterface.get_non_essential_params(CAR.HONDA_CIVIC_BOSCH)
-    controller = CarInterface(CP).CC
+    with patch("opendbc.car.honda.carcontroller.CANPacker"):
+      controller = CarController(DBC[CP.carFingerprint], CP)
 
     controller.set_persistent_state({
       "version": 1,
