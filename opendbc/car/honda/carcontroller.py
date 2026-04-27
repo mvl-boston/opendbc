@@ -139,10 +139,7 @@ class CarController(CarControllerBase):
     self.gas_factor = 3.0
     self.new_accel = 0.0
     if (persistent_brake_pid_factor := Params().get("HondaBrakePIDParams")) is not None:
-      try:
-        self.brake_pid.i = self.brake_pid_factor_non_lowspeed = float(persistent_brake_pid_factor)
-      except Exception:
-        pass
+      self.brake_pid.i = self.brake_pid_factor_non_lowspeed = persistent_brake_pid_factor
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -335,7 +332,7 @@ class CarController(CarControllerBase):
     new_actuators.torqueOutputCan = float(self.average_factor)
 
     if self.frame and not self.frame % 6000:
-      Params().put_nonblocking("HondaBrakePIDParams", str(self.brake_pid_factor_non_lowspeed))
+      Params().put_nonblocking("HondaBrakePIDParams", self.brake_pid_factor_non_lowspeed)
 
     self.frame += 1
     return new_actuators, can_sends
