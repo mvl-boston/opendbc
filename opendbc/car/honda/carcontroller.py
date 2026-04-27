@@ -128,8 +128,8 @@ class CarController(CarControllerBase):
                                    neg_limit=0,
                                    rate=50)
     self.brake_pid.reset()
-    self.brake_pid.i = 0.4 if (Params().get("HondaBrakePIDParams") is None) else Params().get("HondaBrakePIDParams")
-    self.brake_pid_factor_non_lowspeed = self.brake_pid.i
+    self.brake_pid_factor_non_lowspeed = 0.4 if (Params().get("HondaBrakePIDParams") is None) else Params().get("HondaBrakePIDParams")
+    self.brake_pid.i = self.brake_pid_factor_non_lowspeed
 
     self.pitch = 0.0
 
