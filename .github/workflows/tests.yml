@@ -6,6 +6,9 @@ on:
       - master
   pull_request:
 
+env:
+  PARENT_MVL_BRANCH: sp-honda-202511
+
 jobs:
   tests:
     name: ./test.sh
@@ -18,12 +21,33 @@ jobs:
           - os: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-macos-8x14' || 'macos-latest' }}
     steps:
     - uses: actions/checkout@v4
+      with:
+        repository: 'mvl-boston/openpilot'
+        ref: ${{ env.PARENT_MVL_BRANCH }}
+        submodules: true
     - uses: ./.github/workflows/cache
       id: cache
     - uses: commaai/timeout@v1
       with:
         timeout: ${{ github.repository == 'commaai/opendbc' && (steps.cache.outputs.cache-hit == 'true' && '60' || '90') || '999' }}
-    - run: ./test.sh
+    - run: ./tools/op.sh setup
+    - run: rm -rf opendbc_repo/
+    - uses: actions/checkout@v4
+      with:
+        path: opendbc_repo
+    - name: Build host openpilot
+      run: |
+        source .venv/bin/activate
+        scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/
+    - name: Run opendbc tests in host env
+      run: |
+        cd opendbc_repo
+        export UV_PROJECT_ENVIRONMENT="$GITHUB_WORKSPACE/.venv"
+        uv sync --all-extras --inexact
+        source "$UV_PROJECT_ENVIRONMENT/bin/activate"
+        uv lock --check
+        scons -j$(python -c 'import os; print(os.cpu_count() or 1)')
+        lefthook run test
 
   safety_tests:
     name: safety
@@ -75,7 +99,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         repository: 'mvl-boston/openpilot'
-        ref: 'sp-honda-202511'
+        ref: ${{ env.PARENT_MVL_BRANCH }}
         submodules: true
     - run: ./tools/op.sh setup
     - run: rm -rf opendbc_repo/
