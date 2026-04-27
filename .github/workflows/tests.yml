@@ -33,13 +33,12 @@ jobs:
     - name: Build host openpilot
       run: |
         source .venv/bin/activate
-        scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/ opendbc_repo
+        scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/
     - name: Run opendbc tests in host env
       run: |
-        source .venv/bin/activate
-        export PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/opendbc_repo"
         cd opendbc_repo
-        pip install -e .[testing,docs]
+        source setup.sh
+        export PYTHONPATH="$GITHUB_WORKSPACE:$PWD"
         uv lock --check
         scons -j$(python -c 'import os; print(os.cpu_count() or 1)')
         lefthook run test
