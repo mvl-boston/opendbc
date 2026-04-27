@@ -1,5 +1,6 @@
-import numpy as np
 import math
+import json
+import numpy as np
 
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
@@ -11,6 +12,7 @@ from opendbc.car.common.pid import PIDController
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
+HONDA_BRAKE_PID_PARAMS = "HondaBrakePIDParams"
 
 
 def compute_gb_honda_bosch(accel, speed):
@@ -144,6 +146,20 @@ class CarController(CarControllerBase):
   def set_persistent_state(self, persistent_state):
     if self.CP.carFingerprint not in HONDA_BOSCH and persistent_state is not None and persistent_state.get("carFingerprint") == self.CP.carFingerprint:
       self.brake_pid.i = self.brake_pid_factor_non_lowspeed = self.brake_pid_factor = float(np.clip(persistent_state.get("brakePIDFactorNonLowSpeed", self.brake_pid.i), 0.0, 2.0))
+
+  def restore_persistent_state(self, params):
+    if self.CP.carFingerprint not in HONDA_BOSCH:
+      brake_pid_state = params.get(HONDA_BRAKE_PID_PARAMS)
+      if brake_pid_state is not None:
+        try:
+          self.set_persistent_state(json.loads(brake_pid_state))
+        except Exception:
+          params.remove(HONDA_BRAKE_PID_PARAMS)
+
+  def cache_persistent_state(self, params):
+    if self.frame > 0 and self.frame % int(60. / DT_CTRL) == 0:
+      if (persistent_state := self.get_persistent_state()) is not None:
+        params.put_nonblocking(HONDA_BRAKE_PID_PARAMS, json.dumps(persistent_state))
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
