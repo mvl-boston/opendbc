@@ -12,10 +12,6 @@ from opendbc.car.common.pid import PIDController
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 
-HONDA_BRAKE_PID_STATE_VERSION = 1
-HONDA_BRAKE_PID_STATE_MIN = 0.0
-HONDA_BRAKE_PID_STATE_MAX = 2.0
-
 
 def compute_gb_honda_bosch(accel, speed):
   # TODO returns 0s, is unused
@@ -142,31 +138,12 @@ class CarController(CarControllerBase):
     self.new_accel = 0.0
 
   def get_persistent_state(self):
-    if self.CP.carFingerprint in HONDA_BOSCH:
-      return None
-
-    return {
-      "version": HONDA_BRAKE_PID_STATE_VERSION,
-      "carFingerprint": self.CP.carFingerprint,
-      "brakePIDFactorNonLowSpeed": float(np.clip(self.brake_pid_factor_non_lowspeed,
-                                                  HONDA_BRAKE_PID_STATE_MIN, HONDA_BRAKE_PID_STATE_MAX)),
-    }
+    if self.CP.carFingerprint not in HONDA_BOSCH:
+      return {"carFingerprint": self.CP.carFingerprint, "brakePIDFactorNonLowSpeed": float(np.clip(self.brake_pid_factor_non_lowspeed, 0.0, 2.0))}
 
   def set_persistent_state(self, persistent_state):
-    if self.CP.carFingerprint in HONDA_BOSCH or persistent_state is None:
-      return
-
-    if persistent_state.get("version") != HONDA_BRAKE_PID_STATE_VERSION:
-      return
-
-    if persistent_state.get("carFingerprint") != self.CP.carFingerprint:
-      return
-
-    learned_factor = float(np.clip(persistent_state.get("brakePIDFactorNonLowSpeed", self.brake_pid.i),
-                                   HONDA_BRAKE_PID_STATE_MIN, HONDA_BRAKE_PID_STATE_MAX))
-    self.brake_pid.i = learned_factor
-    self.brake_pid_factor_non_lowspeed = learned_factor
-    self.brake_pid_factor = learned_factor
+    if self.CP.carFingerprint not in HONDA_BOSCH and persistent_state is not None and persistent_state.get("carFingerprint") == self.CP.carFingerprint:
+      self.brake_pid.i = self.brake_pid_factor_non_lowspeed = self.brake_pid_factor = float(np.clip(persistent_state.get("brakePIDFactorNonLowSpeed", self.brake_pid.i), 0.0, 2.0))
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
