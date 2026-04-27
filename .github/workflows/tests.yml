@@ -18,10 +18,31 @@ jobs:
           - os: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-macos-8x14' || 'macos-latest' }}
     steps:
     - uses: actions/checkout@v4
+      with:
+        repository: 'mvl-boston/openpilot'
+        ref: 'test-brakesave'
+        submodules: true
     - uses: commaai/timeout@v1
       with:
         timeout: ${{ github.repository == 'commaai/opendbc' && '90' || '999' }}
-    - run: ./test.sh
+    - run: ./tools/op.sh setup
+    - run: rm -rf opendbc_repo/
+    - uses: actions/checkout@v4
+      with:
+        path: opendbc_repo
+    - name: Build host openpilot
+      run: |
+        source .venv/bin/activate
+        scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/ opendbc_repo
+    - name: Run opendbc tests in host env
+      run: |
+        source .venv/bin/activate
+        export PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/opendbc_repo"
+        cd opendbc_repo
+        pip install -e .[testing,docs]
+        uv lock --check
+        scons -j$(python -c 'import os; print(os.cpu_count() or 1)')
+        lefthook run test
 
   safety_tests:
     name: safety
