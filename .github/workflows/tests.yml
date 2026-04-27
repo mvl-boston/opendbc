@@ -36,9 +36,10 @@ jobs:
         scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/
     - name: Run opendbc tests in host env
       run: |
-        source .venv/bin/activate
         cd opendbc_repo
-        uv pip install -e .[testing,docs]
+        export UV_PROJECT_ENVIRONMENT="$GITHUB_WORKSPACE/.venv"
+        uv sync --all-extras --inexact
+        source "$UV_PROJECT_ENVIRONMENT/bin/activate"
         uv lock --check
         scons -j$(python -c 'import os; print(os.cpu_count() or 1)')
         lefthook run test
