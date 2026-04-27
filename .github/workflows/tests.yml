@@ -36,9 +36,9 @@ jobs:
         scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/
     - name: Run opendbc tests in host env
       run: |
+        source .venv/bin/activate
         cd opendbc_repo
-        source setup.sh
-        export PYTHONPATH="$GITHUB_WORKSPACE:$PWD"
+        uv pip install -e .[testing,docs]
         uv lock --check
         scons -j$(python -c 'import os; print(os.cpu_count() or 1)')
         lefthook run test
