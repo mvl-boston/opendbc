@@ -1,3 +1,4 @@
+parent_branch: &parent_mvl_branch 'test-brakesave'
 name: tests
 
 on:
@@ -20,7 +21,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         repository: 'mvl-boston/openpilot'
-        ref: 'test-brakesave'
+        ref: *parent_mvl_branch
         submodules: true
     - uses: commaai/timeout@v1
       with:
@@ -133,7 +134,7 @@ jobs:
     - uses: actions/checkout@v4
       with:
         repository: 'mvl-boston/openpilot'
-        ref: 'test-brakesave'
+        ref: *parent_mvl_branch
         submodules: true
     - run: ./tools/op.sh setup
     - run: rm -rf opendbc_repo/
