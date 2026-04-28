@@ -155,6 +155,8 @@ class CarInterface(CarInterfaceBase):
       ret.steerActuatorDelay = 0.15
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5100], [0, 5100]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      if (ret.flags & HondaFlags.HYBRID):
+        CarControllerParams.BOSCH_GAS_LOOKUP_BP = [-0.3, 2.0]
 
     elif candidate == CAR.HONDA_FIT:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
