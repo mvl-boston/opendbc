@@ -36,7 +36,7 @@ jobs:
     - name: Build host openpilot
       run: |
         source .venv/bin/activate
-        scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/
+        scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/ cereal/ selfdrive/pandad/ sunnypilot/ msgq_repo/ opendbc_repo
     - name: Run opendbc tests in host env
       run: |
         cd opendbc_repo
@@ -44,7 +44,6 @@ jobs:
         uv sync --all-extras --inexact
         source "$UV_PROJECT_ENVIRONMENT/bin/activate"
         uv lock --check
-        scons -j$(python -c 'import os; print(os.cpu_count() or 1)')
         lefthook run test
 
   safety_tests:
