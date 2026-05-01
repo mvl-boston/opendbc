@@ -229,6 +229,8 @@ class CarInterface(CarInterfaceBase):
       if not ret.openpilotLongitudinalControl:
         # When using stock ACC, the radar intercepts and filters steering commands the EPS would otherwise accept
         ret.minSteerSpeed = 70. * CV.KPH_TO_MS
+      else:
+        ret.minSteerSpeed = 0.3 * CV.MPH_TO_MS
 
     elif candidate == CAR.ACURA_MDX_4G:
       ret.steerActuatorDelay = 0.15
