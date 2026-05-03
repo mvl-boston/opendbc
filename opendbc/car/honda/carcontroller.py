@@ -247,7 +247,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         if self.CP.carFingerprint in HONDA_BOSCH:
           if (accel < 0) and (CS.out.vEgo > 1e-3):
             brake_addon = self.brake_pid.update(error = accel - CS.out.aEgo, speed = CS.out.vEgo)
-            if candidate == CAR.HONDA_INSIGHT:
+            if self.CP.carFingerprint == CAR.HONDA_INSIGHT:
               targetaccel = min(accel * 0.75,accel * 0.75 + brake_addon)
             else:
               targetaccel = min(accel,accel + brake_addon)
