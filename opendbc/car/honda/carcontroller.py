@@ -1,5 +1,6 @@
 import numpy as np
 import math
+from openpilot.common.params import Params
 
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
@@ -7,6 +8,7 @@ from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
+from opendbc.car.common.pid import PIDController
 
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
 from opendbc.sunnypilot.car.honda.gas_interceptor import GasInterceptorCarController
@@ -116,13 +118,21 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.bosch_last_gas = 0
 
-    self.gasfactor = 1.0
-    self.gasfactor_before_maxgas = 1.0
-    self.windfactor = 1.0
-    self.windfactor_before_maxgas = 1.0
-    self.windfactor_before_brake = 0.0
+    self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
+    self.gasfactor_before_maxgas = self.gasfactor
+    self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
+    self.windfactor_before_maxgas = self.windfactor_before_brake = self.windfactor
     self.pitch = 0.0
+
+    # Bosch extra-brake controller
+    self.brake_pid = PIDController(k_p=([0,], [0,]),
+                                   k_i=([0.], [0.5]),
+                                   pos_limit=0.0,
+                                   neg_limit=-2.0,
+                                   rate=50)
+    self.brake_pid.reset()
 
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
@@ -235,22 +245,36 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         ts = self.frame * DT_CTRL
 
         if self.CP.carFingerprint in HONDA_BOSCH:
-          self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
+          if (accel < 0) and (CS.out.vEgo > 1e-3):
+            brake_addon = self.brake_pid.update(error = accel - CS.out.aEgo, speed = CS.out.vEgo)
+            if self.CP.carFingerprint == CAR.HONDA_INSIGHT:
+              targetaccel = min(accel * 0.75,accel * 0.75 + brake_addon)
+            else:
+              targetaccel = min(accel,accel + brake_addon)
+          else:
+            self.brake_pid.reset()
+            targetaccel = accel
+
+          self.accel = float(np.clip(targetaccel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
           gas_pedal_force = self.accel + wind_brake_ms2 * self.windfactor + hill_brake
 
           # live-learn gas pedal adjustments when openpilot is controlling gas
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
             gas_error = self.accel - CS.out.aEgo
-            if (self.CP.carFingerprint == CAR.ACURA_RDX_3G and CS.out.vEgo < 1e-3):
-              self.gasfactor = 3.0 # max due to turbolag
             if gas_error != 0.0 and gas_pedal_force > 0.0:
-              if self.CP.carFingerprint in (CAR.HONDA_INSIGHT, CAR.ACURA_RDX_3G): # Insight gas pedal reacts too slowly
+              if self.CP.carFingerprint == CAR.HONDA_INSIGHT: # Insight gas pedal reacts too slowly
                 learn_speed = 150
+              elif self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Prevent overreacting to turbo lag
+                learn_speed = 300
               else:
                 learn_speed = 50
               self.gasfactor = np.clip(self.gasfactor + gas_error / learn_speed * gas_pedal_force, 0.1, 3.0)
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
-              wind_adjust = 1 + wind_brake_ms2 / 1000
+              if self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Faster reaction
+                wind_learn_speed = 100
+              else:
+                wind_learn_speed = 1000
+              wind_adjust = 1 + wind_brake_ms2 / wind_learn_speed
               self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
             if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
               self.windfactor = max(self.windfactor, self.windfactor_before_brake)
@@ -263,6 +287,11 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
               self.gasfactor_before_gasmax = self.gasfactor
               self.windfactor_before_gasmax = self.windfactor
           self.gas = float(np.interp(gas_pedal_force * self.gasfactor, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+
+          # limit gas ramp to 60 units per frame, matches stock.  Higher sometimes causes powertrain to ignore gas command.
+          max_gas = max(60, self.bosch_last_gas + 60)
+          self.gas = min(self.gas, max_gas)
+          self.bosch_last_gas = self.gas
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
@@ -283,7 +312,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           gas_error = actuators.accel - CS.out.aEgo
           if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and self.CP_SP.enableGasInterceptor:
             if gas_error != 0.0 and gas > 0.0:
-              self.gasfactor = np.clip(self.gasfactor + gas_error / 50 * (gas * 4.8), 0.1, 3.0)
+              self.gasfactor = np.clip(self.gasfactor + gas_error / 150 * (gas * 4.8), 0.1, 3.0)
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
               wind_adjust = 1 + (wind_brake * 4.8) / 1000
               self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
@@ -335,6 +364,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     new_actuators.brake = float(self.windfactor)
     new_actuators.torque = self.last_torque
     new_actuators.torqueOutputCan = apply_torque
+
+    if self.frame % 6000 == 0:
+      Params().put_nonblocking("HondaGasFactorParams", float(self.gasfactor))
+      Params().put_nonblocking("HondaWindFactorParams", float(self.windfactor))
 
     self.frame += 1
     return new_actuators, can_sends

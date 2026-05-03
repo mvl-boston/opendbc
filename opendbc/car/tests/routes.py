@@ -27,8 +27,8 @@ non_tested_cars = [
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
   VOLKSWAGEN.PORSCHE_MACAN_MK1,
+  # Honda/Acura test routes below expired, replace when CI bucket sync is fixed
   HONDA.ACURA_INTEGRA, # need new route - expired
-  HONDA.HONDA_FIT_4G, # need new route - expired
   HONDA.ACURA_TLX_2G, # need new route - expired
   HONDA.HONDA_CRV_SA, # need new route - expired
   HONDA.ACURA_TLX_2G_MMR, # need to fix Integra bug causing error
@@ -48,7 +48,6 @@ non_tested_cars = [
   HYUNDAI.KIA_FORTE_2021_NON_SCC,
   HYUNDAI.KIA_SELTOS_2023_NON_SCC,
   HYUNDAI.GENESIS_G70_2021_NON_SCC,
-  HONDA.HONDA_ACCORD_9G,
   HONDA.HONDA_CLARITY,
   HONDA.ACURA_MDX_3G,
   HONDA.ACURA_TLX_1G,
@@ -164,9 +163,9 @@ routes = [
   # CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA), # need new route - expired
   CarTestRoute("ad9840558640c31d/00000026--538590661c", HONDA.ACURA_ADX),
   # CarTestRoute("4991f6e1afbe5adb/00000005--713a39aaee", HONDA.HONDA_CRV_SA), # South Africa model  # need new route - expired
-  # CarTestRoute("0b3cfa082cbbe54e/0000000c--5218004ec8", HONDA.HONDA_FIT_4G), # need new route - expired
+  CarTestRoute("f0a3de7786dcc72c/0000001a--4336abf007", HONDA.HONDA_FIT_4G),
   # port extensions
-  CarTestRoute("ad9840558640c31d/0000003d--a35002b59f", HONDA.ACURA_MDX_3G_MMR),
+  CarTestRoute("ad9840558640c31d/0000011e--b1ab30a633", HONDA.ACURA_MDX_3G_MMR),
   CarTestRoute("21ea2d289932890b/00000134--3862dfe91d", HONDA.HONDA_ACCORD_9G),
 
   CarTestRoute("87d7f06ade479c2e/2023-09-11--23-30-11", HYUNDAI.HYUNDAI_AZERA_6TH_GEN),
@@ -377,7 +376,7 @@ routes = [
   CarTestRoute("6a7075a4fdd765ee/0000004e--1f612006dd", PSA.PSA_PEUGEOT_208),
 
   CarTestRoute("bc095dc92e101734/000000db--ee9fe46e57", RIVIAN.RIVIAN_R1),
-  CarTestRoute("c70d59e4150956fc/0000006e--48bfbfda01", RIVIAN.RIVIAN_R1), # GEN2
+  # CarTestRoute("c70d59e4150956fc/0000006e--48bfbfda01", RIVIAN.RIVIAN_R1), # GEN2 - EXPIRED
 
   CarTestRoute("7dc058789994da80/00000112--adb970f6a8", TESLA.TESLA_MODEL_3),
   CarTestRoute("c8a98e58647765ad/00000002--84e4746136", TESLA.TESLA_MODEL_Y),
