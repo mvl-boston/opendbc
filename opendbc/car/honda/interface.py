@@ -24,10 +24,10 @@ class CarInterface(CarInterfaceBase):
   DRIVABLE_GEARS = (structs.CarState.GearShifter.sport,)
 
   @staticmethod
-  def get_pid_accel_limits(CP, CP_SP, current_speed, cruise_speed):
+  def get_pid_accel_limits(CP, current_speed, cruise_speed):
     if CP.carFingerprint in HONDA_BOSCH:
       return CarControllerParams.BOSCH_ACCEL_MIN, CarControllerParams.BOSCH_ACCEL_MAX
-    elif CP_SP.enableGasInterceptor:
+    elif CarControllerParams.GASINTERCEPTOR_ON:
       return CarControllerParams.NIDEC_ACCEL_MIN, CarControllerParams.NIDEC_ACCEL_MAX
     else:
       # NIDECs don't allow acceleration near cruise_speed,
@@ -414,6 +414,8 @@ class CarInterface(CarInterfaceBase):
     else:
       ret.enableGasInterceptor = 0x201 in fingerprint[CAN.pt]
       stock_cp.pcmCruise = not ret.enableGasInterceptor
+      if 0x201 in fingerprint[CAN.pt]:
+        CarControllerParams.GASINTERCEPTOR_ON = True
 
     if ret.enableGasInterceptor and candidate not in HONDA_BOSCH:
       ret.safetyParam |= HondaSafetyFlagsSP.GAS_INTERCEPTOR
