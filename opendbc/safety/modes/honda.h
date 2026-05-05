@@ -266,8 +266,8 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   if (msg->addr == 0x18DAB0F1U) {
     tx = true;
     // if ((GET_BYTES(msg, 0, 4) != 0x00803E02U) || (GET_BYTES(msg, 4, 4) != 0x0U)) {
-    //  tx = false;
-    }
+    //   tx = false;
+    // }
   }
 
   return tx;
