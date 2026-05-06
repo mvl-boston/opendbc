@@ -4,15 +4,13 @@ CM_ "IMPORT _nidec_common.dbc";
 CM_ "IMPORT _lkas_hud_5byte.dbc";
 CM_ "IMPORT _nidec_scm_group_a.dbc";
 CM_ "IMPORT _steering_sensors_b.dbc";
-CM_ "IMPORT _steering_control_b.dbc";
+CM_ "IMPORT _steering_control_d_ext.dbc";
 
 BO_ 392 GEARBOX_AUTO: 6 XXX
  SG_ CHECKSUM : 43|4@0+ (1,0) [0|15] "" XXX
  SG_ COUNTER : 45|2@0+ (1,0) [0|3] "" XXX
  SG_ GEAR_SHIFTER : 27|4@0+ (1,0) [0|15] "" EON
  SG_ GEAR : 36|5@0+ (1,0) [0|31] "" EON
-
-CM_ "Gearbox CVT only added for interface querying, not used by car"
 
 BO_ 401 GEARBOX_CVT: 8 PCM
  SG_ SELECTED_P : 0|1@0+ (1,0) [0|1] "" XXX
