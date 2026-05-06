@@ -238,16 +238,15 @@ class CarController(CarControllerBase):
     if self.CP.carFingerprint in HONDA_BOSCH:
       self.new_accel = pcm_accel
     elif (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed):
-      if self.nidec_pid_factor > CS.out.aEgo:
-        self.gas_factor *= 1.0001
-      else:
-        self.gas_factor /= 1.0001
+      gas_factor_error = (self.nidec_pid_factor - CS.out.aEgo)
+      self.gas_factor *= (1 + 0.0001 * gas_factor_error)
       more_new_accel_needed = (self.new_accel > pcm_accel and self.nidec_pid_factor > CS.out.aEgo) or \
                               (self.new_accel < pcm_accel and self.nidec_pid_factor < CS.out.aEgo)
+      new_accel_factor = abs(gas_factor_error * (self.new_accel - pcm_accel))
       if more_new_accel_needed:
-        self.average_factor /= 1.0001
+        self.average_factor /= (1 + 0.0001 * new_accel_factor)
       else:
-        self.average_factor = min(1.0, self.average_factor * 1.0001)
+        self.average_factor = min(1.0, self.average_factor * (1 + 0.0001 * new_accel_factor))
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
