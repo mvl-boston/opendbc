@@ -7,7 +7,7 @@ on:
   pull_request:
 
 env:
-  PARENT_MVL_BRANCH: sp-honda-dev-202604
+  PARENT_MVL_BRANCH: sp-honda-dev-202606
 
 jobs:
   tests:
