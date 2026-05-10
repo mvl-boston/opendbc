@@ -1289,6 +1289,16 @@
     ],
     "package": "Honda Sensing"
   },
+  "Honda Fit (Taiwan) 2021": {
+    "platform": "HONDA_FIT_4G",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Fit (Taiwan)",
+    "year": [
+      "2021"
+    ],
+    "package": "All"
+  },
   "Honda Fit (Taiwan) 2024-25": {
     "platform": "HONDA_FIT_4G",
     "make": "Honda",
