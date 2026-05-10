@@ -145,6 +145,8 @@ def create_bosch_supplemental_1(packer, CAN):
 
 
 def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, hud_v_cruise, is_metric, acc_hud, speed_control):
+  commands = []
+
   acc_hud_values = {
     'CRUISE_SPEED': hud_v_cruise,
     'ENABLE_MINI_CAR': 1 if enabled else 0,
@@ -170,7 +172,16 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
     acc_hud_values['ICONS'] = acc_hud['ICONS']
 
-  return packer.make_can_msg("ACC_HUD", bus, acc_hud_values)
+  if CP.carFingerprint in HONDA_BOSCH_CANFD:
+    canfd_radar_hud_values = {
+      'ACC_ON': int(enabled),
+      'SET_ME_X04': 0x04,
+      'SET_ME_X08': 0x08,
+    }
+    commands.append(packer.make_can_msg('CANFD_RADAR_HUD', bus, canfd_radar_hud_values))
+
+  commands.append(packer.make_can_msg('ACC_HUD', bus, acc_hud_values))
+  return commands
 
 
 def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed):
