@@ -5,3 +5,12 @@ CM_ "IMPORT _lkas_hud_8byte.dbc";
 CM_ "IMPORT _bosch_standstill.dbc";
 CM_ "IMPORT _steering_sensors_a.dbc";
 CM_ "IMPORT _gearbox_common.dbc";
+
+BO_ 784 CANFD_RADAR_HUD: 8 XXX
+ SG_ ZEROES_BOH : 7|8@0+ (1,0) [0|255] "" XXX
+ SG_ SET_ME_X08 : 15|8@0+ (1,0) [0|255] "" XXX
+ SG_ ZEROES_BOH2 : 23|32@0+ (1,0) [0|4294967295] "" XXX
+ SG_ SET_ME_X04 : 52|7@0+ (1,0) [0|127] "" XXX
+ SG_ UNTRACKED_LEADCAR : 53|1@0+ (1,0) [0|1] "" XXX
+ SG_ ZEROES_BOH3 : 54|1@0+ (1,0) [0|1] "" XXX
+ SG_ ACC_ON : 55|1@0+ (1,0) [0|1] "" XXX
