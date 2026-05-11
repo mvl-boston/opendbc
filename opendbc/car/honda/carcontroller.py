@@ -134,8 +134,10 @@ class CarController(CarControllerBase):
     self.pitch = 0.0
 
     self.prior_gas_average = 0.0
-    self.average_factor = 0.25
-    self.gas_factor = 3.0
+    self.average_factor = 0.25 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
+    self.gasfactor = 3.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
+    self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
+    self.windfactor_before_maxgas = self.windfactor_before_brake = self.windfactor
     self.new_accel = 0.0
 
   def update(self, CC, CS, now_nanos):
@@ -328,7 +330,10 @@ class CarController(CarControllerBase):
     new_actuators.torqueOutputCan = float(self.average_factor)
 
     if self.frame % 6000 == 0:
+      Params().put_nonblocking("HondaFeedForwardParams", float(self.average_factor))
       Params().put_nonblocking("HondaBrakePIDParams", float(self.brake_pid_factor_non_lowspeed))
+      Params().put_nonblocking("HondaGasFactorParams", float(self.gasfactor))
+      Params().put_nonblocking("HondaWindFactorParams", float(self.windfactor))
 
     self.frame += 1
     return new_actuators, can_sends
