@@ -250,7 +250,7 @@ class CarController(CarControllerBase):
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 10.0, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
-      pcm_accel = int(np.clip((accel * self.gas_factor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+      pcm_accel = int(np.clip((accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
     # feedforward for Nidec decaying-average gas pedal
     self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - self.average_factor)) / self.average_factor)
@@ -260,11 +260,11 @@ class CarController(CarControllerBase):
     if self.CP.carFingerprint in HONDA_BOSCH:
       self.new_accel = pcm_accel
     elif (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed):
-      gas_factor_error = (self.nidec_pid_factor - CS.out.aEgo)
-      self.gas_factor *= (1 + 0.0001 * gas_factor_error)
+      gasfactor_error = (self.nidec_pid_factor - CS.out.aEgo)
+      self.gasfactor *= (1 + 0.0001 * gasfactor_error)
       more_new_accel_needed = (self.new_accel > pcm_accel and self.nidec_pid_factor > CS.out.aEgo) or \
                               (self.new_accel < pcm_accel and self.nidec_pid_factor < CS.out.aEgo)
-      new_accel_factor = abs(gas_factor_error * (self.new_accel - pcm_accel))
+      new_accel_factor = abs(gasfactor_error * (self.new_accel - pcm_accel))
       if more_new_accel_needed:
         self.average_factor /= (1 + 0.0001 * new_accel_factor)
       else:
@@ -344,7 +344,7 @@ class CarController(CarControllerBase):
     new_actuators = actuators.as_builder()
     new_actuators.speed = float(self.nidec_pid_factor)
     new_actuators.accel = self.accel
-    new_actuators.gas = float(self.gas_factor)
+    new_actuators.gas = float(self.gasfactor)
     new_actuators.brake = float(self.brake_pid_factor)
     new_actuators.torque = self.last_torque
     new_actuators.torqueOutputCan = float(self.average_factor)
