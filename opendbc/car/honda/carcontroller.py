@@ -158,10 +158,29 @@ class CarController(CarControllerBase):
             self.nidec_pid.i = 0
           self.nidec_pid.i = min(actuators.accel, self.nidec_pid.i) # force faster negative slope while hard braking
         accel = self.nidec_pid_factor + hill_brake
+
+        # copy wind tuning from Bosch code
+        gas_error = self.accel - CS.out.aEgo
+        wind_learn_speed = 1000
+        wind_adjust = 1 + wind_brake_ms2 / wind_learn_speed
+        self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
+        gas_pedal_force = accel
+        if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
+          self.windfactor = max(self.windfactor, self.windfactor_before_brake)
+        else:
+          self.windfactor_before_brake = self.windfactor
+        if gas_pedal_force >= self.params.BOSCH_ACCEL_MAX: # don't increase gasfactor nor windfactor at accel max, allow decreases
+          self.gasfactor = min(self.gasfactor, self.gasfactor_before_gasmax)
+          self.windfactor = min(self.windfactor, self.windfactor_before_gasmax)
+        else:
+          self.gasfactor_before_gasmax = self.gasfactor
+          self.windfactor_before_gasmax = self.windfactor
+
       else:
         accel = actuators.accel
         self.nidec_pid.reset()
         self.nidec_pid_factor = 0
+      
       gas, brake = compute_gas_brake(accel, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
@@ -204,7 +223,7 @@ class CarController(CarControllerBase):
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
 
     # wind brake from air resistance decel at high speed
-    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15])
+    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
     # all of this is only relevant for HONDA NIDEC
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
     # TODO this 1.44 is just to maintain previous behavior
