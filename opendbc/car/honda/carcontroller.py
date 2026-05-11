@@ -162,7 +162,7 @@ class CarController(CarControllerBase):
         # copy wind tuning from Bosch code
         gas_error = self.accel - CS.out.aEgo
         wind_learn_speed = 1000
-        wind_adjust = 1 + wind_brake_ms2 / wind_learn_speed
+        wind_adjust = 1 + wind_brake / wind_learn_speed
         self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
         gas_pedal_force = accel
         if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
