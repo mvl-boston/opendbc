@@ -183,6 +183,35 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
   commands.append(packer.make_can_msg('ACC_HUD', bus, acc_hud_values))
   return commands
 
+# missing radar 0x310 - unchanging hardcode - frequency 10
+# 6cd5558 - data
+# 6cd5559 - data
+# F31AA52 - data
+# F31AA5C - data
+# 18DAF1B5 (initial then stopped - likely fingerprint)
+
+# ad9840558640c31d/000005f4--4a233c6e8e
+# {'errorLogMessage': '{"msg": "crash", "ctx": {"daemon": "card", "dongle_id": "ad9840558640c31d", "version": "0.11.0", "origin": '
+#                     '"github.com/mvl-boston/openpilot", "branch": "000-testcanfd", "commit": "a0cd3a229dd052140f31771ed6a6405b5e9ce03a", "dirty": '
+#                     'false, "device": "tizi"}, "exc_info": "Traceback (most recent call last):\\n  File '
+#                     '\\"/data/openpilot/openpilot/system/manager/process.py\\", line 36, in launcher\\n    mod.main()\\n  File '
+#                     '\\"/data/openpilot/selfdrive/car/card.py\\", line 277, in main\\n    car.card_thread()\\n  File '
+#                     '\\"/data/openpilot/selfdrive/car/card.py\\", line 267, in card_thread\\n    self.step()\\n  File '
+#                     '\\"/data/openpilot/selfdrive/car/card.py\\", line 250, in step\\n    self.controls_update(CS, self.sm[\'carControl\'])\\n  File '
+#                     '\\"/data/openpilot/selfdrive/car/card.py\\", line 238, in controls_update\\n    self.pm.send(\'sendcan\', '
+#                     "can_list_to_can_capnp(can_sends, msgtype='sendcan', valid=CS.canValid))\\n                            "
+#                     '^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\\n  File '
+#                     '\\"/data/openpilot/openpilot/selfdrive/pandad/pandad_api_impl.py\\", line 53, in can_list_to_can_capnp\\n    '
+#                     'f._set_by_field(addr_f, msg[0])\\n  File \\"capnp/lib/capnp.pyx\\", line 1427, in '
+#                     'capnp.lib.capnp._DynamicStructBuilder._set_by_field\\n  File \\"capnp/lib/capnp.pyx\\", line 1428, in '
+#                     'capnp.lib.capnp._DynamicStructBuilder._set_by_field\\n  File \\"capnp/lib/capnp.pyx\\", line 904, in '
+#                     "capnp.lib.capnp._setDynamicFieldWithField\\ncapnp.lib.capnp.KjException: Tried to set field: '<field schema for address>' with "
+#                     "a value of: '(784, b'\\\\x00\\\\x08\\\\x00\\\\x00\\\\x00\\\\x00\\\\x01\\\\x0b', 0)' which is an unsupported type: '<class "
+#                     '\'tuple\'>\'", "level": "ERROR", "levelnum": 40, "name": "swaglog", "filename": "process.py", "lineno": 42, "pathname": '
+#                     '"/data/openpilot/openpilot/system/manager/process.py", "module": "process", "funcName": "launcher", "host": "comma-2129ec6b", '
+#                     '"process": 48491, "thread": 547527194400, "threadName": "MainThread", "created": 1778422472.2509103}',
+
+# fix is to try to separate into a new command
 
 def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed):
   commands = []
