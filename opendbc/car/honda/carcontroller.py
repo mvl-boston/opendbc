@@ -183,7 +183,7 @@ class CarController(CarControllerBase):
         accel = actuators.accel
         self.nidec_pid.reset()
         self.nidec_pid_factor = 0
-      
+
       gas, brake = compute_gas_brake(accel, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
