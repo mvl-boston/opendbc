@@ -3,7 +3,7 @@ name: tests
 on:
   push:
     branches:
-      - master
+      - rlx-sp-test2
   pull_request:
 
 jobs:
@@ -124,8 +124,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
       with:
-        repository: 'sunnypilot/sunnypilot'
-        ref: 'master'
+        repository: 'mvl-boston/openpilot'
+        ref: 'rlx-sp-test2'
         submodules: true
     - run: rm -rf opendbc_repo/
     - uses: actions/checkout@v4
