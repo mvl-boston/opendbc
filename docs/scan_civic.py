@@ -15,7 +15,7 @@ for fp, routes in data.items():
 
     found = False
 
-    for route in routes[:10]:
+    for route in routes:
 
         base = "/".join(route.split("/")[:2])
 
