@@ -184,7 +184,7 @@ class CarInterface(CarInterfaceBase):
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
 
     elif candidate == CAR.ACURA_RDX_3G_MMR:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4076], [0, 4076]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
       if not ret.openpilotLongitudinalControl:
