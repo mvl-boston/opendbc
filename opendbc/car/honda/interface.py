@@ -158,7 +158,7 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate in (CAR.HONDA_CRV_6G):
       ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5100], [0, 5100]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5120], [0, 5120]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.HONDA_FIT:
@@ -182,11 +182,11 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
 
     elif candidate == CAR.ACURA_RDX_3G:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4095], [0, 4095]]  # TODO: determine if there is a dead zone at the top end
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
 
     elif candidate == CAR.ACURA_RDX_3G_MMR:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4076], [0, 4076]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
 
@@ -241,9 +241,15 @@ class CarInterface(CarInterfaceBase):
         # When using stock ACC, the radar intercepts and filters steering commands the EPS would otherwise accept
         ret.minSteerSpeed = 70. * CV.KPH_TO_MS
 
-    elif candidate in (CAR.HONDA_ACCORD_9G, CAR.ACURA_TLX_1G): # source mlocoteta
+    elif candidate == CAR.HONDA_ACCORD_9G: # source mlocoteta
       ret.steerActuatorDelay = 0.3
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 239], [0, 239]]
+      ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
+
+    elif candidate == CAR.ACURA_TLX_1G:
+      ret.steerActuatorDelay = 0.3
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 830], [0, 830]]
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
 
