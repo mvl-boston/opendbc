@@ -210,7 +210,7 @@ class CarController(CarControllerBase):
 
       # limited_torque = self.new_torque_percent
 
-      apply_torque = - int(limited_torque * prior_max_torque)
+      apply_torque = - round(limited_torque * prior_max_torque)
     else:
       apply_torque = 0
     speed_control = 1 if ((accel <= 0.0) and (CS.out.vEgo == 0)) else 0
