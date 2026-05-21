@@ -7,7 +7,6 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_TJA_CONTROL, \
-                                                 HONDA_LEGACY_MDX_STEER, \
                                                  HondaFlags, CruiseButtons, CruiseSettings, GearShifter, CarControllerParams
 from opendbc.car.interfaces import CarStateBase
 
@@ -36,7 +35,7 @@ class CarState(CarStateBase):
 
     self.brake_error_msg = "HYBRID_BRAKE_ERROR" if CP.flags & HondaFlags.HYBRID else "STANDSTILL"
     self.brakehold_msg = "BRAKE_HOLD_HYBRID_ALT" if CP.flags & HondaFlags.HYBRID_ALT_BRAKEHOLD else "VSA_STATUS"
-    self.steer_status_msg = "STEER_STATUS_LEGACY" if self.CP.carFingerprint in HONDA_LEGACY_MDX_STEER else "STEER_STATUS"
+    self.steer_status_msg = "STEER_STATUS_LEGACY" if (self.CP.flags & HondaFlags.LEGACY_MDX_STEER) else "STEER_STATUS"
     
     self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv[self.steer_status_msg]["STEER_STATUS"])
 
