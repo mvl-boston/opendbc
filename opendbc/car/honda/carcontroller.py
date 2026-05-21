@@ -233,9 +233,9 @@ class CarController(CarControllerBase):
     speed_val = int(CS.out.vEgo * CV.MS_TO_MPH / 5.0) * 5 + 100
     currentLatSpeed = f"{speed_val:02d}"
     if currentLatSpeed in latFactors:
-      if not CS.out.steeringPressed and abs(limited_torque) > 0.9 and latFactors[currentLatSpeed] > CS.out.LatAccel:
+      if not CS.out.steeringPressed and abs(limited_torque) > 0.9 and latFactors[currentLatSpeed] > abs(CS.out.steeringAngleDeg):
         latFactors[currentLatSpeed] /= 1.001
-      if not CS.out.steeringPressed and abs(limited_torque) < 0.9 and latFactors[currentLatSpeed] < CS.out.LatAccel:
+      if not CS.out.steeringPressed and abs(limited_torque) < 0.9 and latFactors[currentLatSpeed] < abs(CS.out.steeringAngleDeg):
         latFactors[currentLatSpeed] *= 1.001
 
     # Send CAN commands
