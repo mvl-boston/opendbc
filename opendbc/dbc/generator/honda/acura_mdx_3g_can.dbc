@@ -18,4 +18,4 @@ BO_ 400 STEER_STATUS_LEGACY: 5 EPS
  SG_ LKAS_ALLOWED : 9|1@0+ (1,0) [0|1] "" XXX
  SG_ STEER_APPLIED : 23|16@0- (1,0) [0|511] "" XXX
 
-VAL_ 400 STEER_STATUS_LEGACY 7 "permanent_fault" 6 "tmp_fault" 5 "fault_1" 4 "no_torque_alert_2" 3 "low_speed_lockout" 2 "no_torque_alert_1" 1 "driver_steering" 0 "normal" ;
+VAL_ 400 STEER_STATUS 7 "permanent_fault" 6 "tmp_fault" 5 "fault_1" 4 "no_torque_alert_2" 3 "low_speed_lockout" 2 "no_torque_alert_1" 1 "driver_steering" 0 "normal" ;
