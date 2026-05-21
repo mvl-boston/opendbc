@@ -134,8 +134,8 @@ class CarController(CarControllerBase):
     self.pitch = 0.0
 
     self.prior_gas_average = 0.0
-    self.average_factor = 0.25 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
-    self.gasfactor = 3.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
+    self.average_factor = 0.95 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
+    self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
     self.windfactor_before_maxgas = self.windfactor_before_brake = self.windfactor
     self.new_accel = 0.0
