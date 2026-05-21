@@ -37,7 +37,7 @@ class CarState(CarStateBase):
     self.brakehold_msg = "BRAKE_HOLD_HYBRID_ALT" if CP.flags & HondaFlags.HYBRID_ALT_BRAKEHOLD else "VSA_STATUS"
     self.steer_status_msg = "STEER_STATUS_LEGACY" if (self.CP.flags & HondaFlags.LEGACY_MDX_STEER) else "STEER_STATUS"
 
-    self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv[self.steer_status_msg]["STEER_STATUS"])
+    self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
 
     self.brake_switch_prev = False
     self.brake_switch_active = False
