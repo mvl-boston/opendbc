@@ -140,6 +140,21 @@ class CarController(CarControllerBase):
     self.windfactor_before_maxgas = self.windfactor_before_brake = self.windfactor
     self.new_accel = 0.0
 
+    self.latFactors = {
+      "05" : 1.0 if (Params().get("HondaLatAccelFactor05Params") is None) else Params().get("HondaLatAccelFactor05Params"),
+      "10" : 1.0 if (Params().get("HondaLatAccelFactor10Params") is None) else Params().get("HondaLatAccelFactor10Params"),
+      "15" : 1.0 if (Params().get("HondaLatAccelFactor15Params") is None) else Params().get("HondaLatAccelFactor15Params"),
+      "20" : 1.0 if (Params().get("HondaLatAccelFactor20Params") is None) else Params().get("HondaLatAccelFactor20Params"),
+      "25" : 1.0 if (Params().get("HondaLatAccelFactor25Params") is None) else Params().get("HondaLatAccelFactor25Params"),
+      "30" : 1.0 if (Params().get("HondaLatAccelFactor30Params") is None) else Params().get("HondaLatAccelFactor30Params"),
+      "35" : 1.0 if (Params().get("HondaLatAccelFactor35Params") is None) else Params().get("HondaLatAccelFactor35Params"),
+      "40" : 1.0 if (Params().get("HondaLatAccelFactor40Params") is None) else Params().get("HondaLatAccelFactor40Params"),
+      "45" : 1.0 if (Params().get("HondaLatAccelFactor45Params") is None) else Params().get("HondaLatAccelFactor45Params"),
+      "50" : 1.0 if (Params().get("HondaLatAccelFactor50Params") is None) else Params().get("HondaLatAccelFactor50Params"),
+      "55" : 1.0 if (Params().get("HondaLatAccelFactor55Params") is None) else Params().get("HondaLatAccelFactor55Params"),
+      "60" : 1.0 if (Params().get("HondaLatAccelFactor60Params") is None) else Params().get("HondaLatAccelFactor60Params") 
+    }
+
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -354,6 +369,20 @@ class CarController(CarControllerBase):
       Params().put_nonblocking("HondaBrakePIDParams", float(self.brake_pid_factor_non_lowspeed))
       Params().put_nonblocking("HondaGasFactorParams", float(self.gasfactor))
       Params().put_nonblocking("HondaWindFactorParams", float(self.windfactor))
+
+    if self.frame % 12000 == 30:
+      Params().put_nonblocking("HondaLatAccelFactor05Params", float(self.latFactors["05"]))
+      Params().put_nonblocking("HondaLatAccelFactor10Params", float(self.latFactors["10"]))
+      Params().put_nonblocking("HondaLatAccelFactor15Params", float(self.latFactors["15"]))
+      Params().put_nonblocking("HondaLatAccelFactor20Params", float(self.latFactors["20"]))
+      Params().put_nonblocking("HondaLatAccelFactor25Params", float(self.latFactors["25"]))
+      Params().put_nonblocking("HondaLatAccelFactor30Params", float(self.latFactors["30"]))
+      Params().put_nonblocking("HondaLatAccelFactor35Params", float(self.latFactors["35"]))
+      Params().put_nonblocking("HondaLatAccelFactor40Params", float(self.latFactors["40"]))
+      Params().put_nonblocking("HondaLatAccelFactor45Params", float(self.latFactors["45"]))
+      Params().put_nonblocking("HondaLatAccelFactor50Params", float(self.latFactors["50"]))
+      Params().put_nonblocking("HondaLatAccelFactor55Params", float(self.latFactors["55"]))
+      Params().put_nonblocking("HondaLatAccelFactor60Params", float(self.latFactors["60"]))
 
     self.frame += 1
     return new_actuators, can_sends
