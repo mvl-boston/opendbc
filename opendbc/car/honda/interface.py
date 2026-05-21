@@ -278,6 +278,9 @@ class CarInterface(CarInterfaceBase):
                                                       CAR.ACURA_RDX_3G, *HONDA_BOSCH_CANFD):
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
 
+    if 0x190 in fingerprint[CAN.pt] and candidate == CAR.ACURA_MDX_3G:
+      ret.flags |= HondaFlags.LEGACY_MDX_STEER.value
+
     if ret.flags & HondaFlags.BOSCH_ALT_BRAKE:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value
     if candidate in HONDA_NIDEC_ALT_SCM_MESSAGES:
