@@ -1,6 +1,7 @@
 import numpy as np
 import math
 from openpilot.common.params import Params
+from opendbc.car.common.conversions import Conversions as CV
 
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
@@ -228,6 +229,14 @@ class CarController(CarControllerBase):
     # steer torque is converted back to CAN reference (positive when steering right)
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
+
+    speed_val = int(CS.out.vEgo * CV.MS_TO_MPH / 5.0) * 5 + 100
+    currentLatSpeed = f"{speed_val:02d}"
+    if currentLatSpeed in latFactors:
+      if not CS.out.steeringPressed and abs(limited_torque) > 0.9 and latFactors[currentLatSpeed] > CS.out.LatAccel:
+        latFactors[currentLatSpeed] /= 1.001
+      if not CS.out.steeringPressed and abs(limited_torque) < 0.9 and latFactors[currentLatSpeed] < CS.out.LatAccel:
+        latFactors[currentLatSpeed] *= 1.001
 
     # Send CAN commands
     can_sends = []
