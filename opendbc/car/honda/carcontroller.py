@@ -234,9 +234,9 @@ class CarController(CarControllerBase):
     currentLatSpeed = f"{speed_val:02d}"
     if currentLatSpeed in self.latFactors:
       if not CS.out.steeringPressed and abs(limited_torque) > 0.9 and self.latFactors[currentLatSpeed] > abs(CS.out.steeringAngleDeg):
-        latFactors[currentLatSpeed] /= 1.001
+        self.latFactors[currentLatSpeed] /= 1.001
       if not CS.out.steeringPressed and abs(limited_torque) < 0.9 and self.latFactors[currentLatSpeed] < abs(CS.out.steeringAngleDeg):
-        latFactors[currentLatSpeed] *= 1.001
+        self.latFactors[currentLatSpeed] *= 1.001
 
     # Send CAN commands
     can_sends = []
