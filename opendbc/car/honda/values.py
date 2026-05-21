@@ -82,6 +82,7 @@ class HondaFlags(IntFlag):
   BOSCH_TJA_CONTROL = 4096
   LKAS_MINSPEED_CUTOFF = 8192
   HYBRID_ALT_BRAKEHOLD = 16384  # Some Nidec Hybrids use a different brakehold
+  HONDA_LEGACY_MDX_STEER = 32768
 
 
 # Car button codes
