@@ -125,7 +125,7 @@ class CarController(CarControllerBase):
 
     self.brake_pid = PIDController(k_p=([0,], [0,]),
                                    k_i=([0.], [0.5]),
-                                   pos_limit=2.0,
+                                   pos_limit=4.0,
                                    neg_limit=0,
                                    rate=50)
     self.brake_pid.reset()
