@@ -217,7 +217,7 @@ class CarController(CarControllerBase):
       gas_error = self.accel - CS.out.aEgo
       if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed) \
              and (1e-5 <= CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
-        self.creep_factor += 0.001 * creep_amount * gas_error
+        self.creep_factor -= 0.001 * creep_amount * gas_error
         self.creep_amount += 0.0001 * gas_error
     else:
       self.accel = 0.0
