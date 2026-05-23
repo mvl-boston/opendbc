@@ -387,8 +387,8 @@ class CarController(CarControllerBase):
     if self.frame % 6000 == 0:
       Params().put_nonblocking("HondaFeedForwardParams", float(self.average_factor))
       Params().put_nonblocking("HondaBrakePIDParams", float(self.brake_pid_factor_non_lowspeed))
-      Params().put_nonblocking("HondaCreepFactorParams", float(self.creeep_factor))
-      Params().put_nonblocking("HondaCreepAlwaysParams", float(self.creeep_always))
+      Params().put_nonblocking("HondaCreepFactorParams", float(self.creep_factor))
+      Params().put_nonblocking("HondaCreepAlwaysParams", float(self.creep_always))
       Params().put_nonblocking("HondaGasFactorParams", float(self.gasfactor))
       Params().put_nonblocking("HondaWindFactorParams", float(self.windfactor))
 
