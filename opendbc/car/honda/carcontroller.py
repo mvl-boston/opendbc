@@ -17,7 +17,7 @@ LongCtrlState = structs.CarControl.Actuators.LongControlState
 
 def compute_gb_honda_bosch(accel, speed):
   # TODO returns 0s, is unused
-  return 0.0, 0.0, 0.0
+  return 0.0, 0.0
 
 
 def compute_gb_honda_nidec(accel, speed, creep_factor):
