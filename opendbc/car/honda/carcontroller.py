@@ -176,14 +176,14 @@ class CarController(CarControllerBase):
           if self.nidec_pid.i > 0: # snap pid to zero on decel, until gas is fixed
             self.nidec_pid.i = 0
           self.nidec_pid.i = min(actuators.accel, self.nidec_pid.i) # force faster negative slope while hard braking
-        accel = self.nidec_pid_factor + hill_brake
+        self.accel = self.nidec_pid_factor + hill_brake
 
         # copy wind tuning from Bosch code
         gas_error = self.accel - CS.out.aEgo
         wind_learn_speed = 1000
         wind_adjust = 1 + wind_brake / wind_learn_speed
         self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
-        gas_pedal_force = accel
+        gas_pedal_force = self.accel
         if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
           self.windfactor = max(self.windfactor, self.windfactor_before_brake)
         else:
@@ -196,13 +196,13 @@ class CarController(CarControllerBase):
           self.windfactor_before_gasmax = self.windfactor
 
       else:
-        accel = actuators.accel
+        self.accel = actuators.accel
         self.nidec_pid.reset()
         self.nidec_pid_factor = 0
 
-      gas, brake = compute_gas_brake(accel, CS.out.vEgo, self.CP.carFingerprint)
+      gas, brake = compute_gas_brake(self.accel, CS.out.vEgo, self.CP.carFingerprint)
     else:
-      accel = 0.0
+      self.accel = 0.0
       gas, brake = 0.0, 0.0
 
     # *** rate limit steer ***
@@ -274,7 +274,7 @@ class CarController(CarControllerBase):
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 10.0, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
-      pcm_accel = int(np.clip((accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+      pcm_accel = int(np.clip((self.accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
     # feedforward for Nidec decaying-average gas pedal
     self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - self.average_factor)) / self.average_factor)
@@ -309,8 +309,8 @@ class CarController(CarControllerBase):
         ts = self.frame * DT_CTRL
 
         if self.CP.carFingerprint in HONDA_BOSCH:
-          self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
-          self.gas = float(np.interp(accel, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+          self.accel = float(np.clip(self.accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
+          self.gas = float(np.interp(self.accel, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
