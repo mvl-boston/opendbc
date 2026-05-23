@@ -215,7 +215,7 @@ class CarController(CarControllerBase):
         self.nidec_pid.reset()
         self.nidec_pid_factor = 0
 
-      gas, brake, creep_impact = compute_gb_honda_nidec(adjust_accel, CS.out.vEgo, self.CP.carFingerprint, self.creep_factor)
+      gas, brake, creep_impact = compute_gb_honda_nidec(adjust_accel, CS.out.vEgo, self.creep_factor)
       gas_error = self.accel - CS.out.aEgo
       if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed) \
              and (1e-5 <= CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
