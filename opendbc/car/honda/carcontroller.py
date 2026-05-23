@@ -20,22 +20,23 @@ def compute_gb_honda_bosch(accel, speed):
   return 0.0, 0.0, 0.0
 
 
-def compute_gb_honda_nidec(accel, speed):
+def compute_gb_honda_nidec(accel, speed, creep_factor):
   creep_brake = 0.0
   creep_speed = 2.3
   creep_brake_value = 0.15
   if speed < creep_speed:
     creep_brake = (creep_speed - speed) / creep_speed * creep_brake_value
-  gb = float(accel) / 4.8 - creep_brake * self.creep_factor
-  self.creep_impact = -creep_brake
-  return np.clip(gb, 0.0, 1.0), np.clip(-gb, 0.0, 1.0)
+  gb = float(accel) / 4.8 - creep_brake * creep_factor
+  creep_impact = -creep_brake
+  return np.clip(gb, 0.0, 1.0), np.clip(-gb, 0.0, 1.0), creep_impact
 
 
 def compute_gas_brake(accel, speed, fingerprint):
   if fingerprint in HONDA_BOSCH:
     return compute_gb_honda_bosch(accel, speed)
   else:
-    return compute_gb_honda_nidec(accel, speed)
+    return compute_gb_honda_bosch(accel, speed)
+    # return compute_gb_honda_nidec(accel, speed)
 
 
 # TODO not clear this does anything useful
@@ -138,7 +139,6 @@ class CarController(CarControllerBase):
     self.prior_gas_average = 0.0
     self.average_factor = 0.95 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
     self.creep_factor = 1.0 if (Params().get("HondaCreepFactorParams") is None) else Params().get("HondaCreepFactorParams")
-    self.creep_impact = 0.0
     self.creep_always = 0.0 if (Params().get("HondaCreepAlwaysParams") is None) else Params().get("HondaCreepAlwaysParams")
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
@@ -215,11 +215,11 @@ class CarController(CarControllerBase):
         self.nidec_pid.reset()
         self.nidec_pid_factor = 0
 
-      gas, brake = compute_gas_brake(adjust_accel, CS.out.vEgo, self.CP.carFingerprint)
+      gas, brake, creep_impact = compute_gas_brake_honda_nidec(adjust_accel, CS.out.vEgo, self.CP.carFingerprint, self.creep_factor)
       gas_error = self.accel - CS.out.aEgo
       if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed) \
              and (1e-5 <= CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
-        self.creep_factor += 0.001 * self.creep_impact * gas_error
+        self.creep_factor += 0.001 * creep_impact * gas_error
         self.creep_amount += 0.0001 * gas_error
     else:
       self.accel = 0.0
