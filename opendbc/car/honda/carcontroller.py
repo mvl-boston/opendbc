@@ -177,7 +177,7 @@ class CarController(CarControllerBase):
         ACCEL_MAX_VALS = [self.PARAMS.NIDEC_ACCEL_MAX, 0.2]
         cruise_speed = CS.out.cruiseState.speed
         ACCEL_MAX_BP = [cruise_speed - 2., cruise_speed - .2]
-        self.nidec_pid.i.pos_limit = np.interp(CS.out.vEgo, ACCEL_MAX_BP, ACCEL_MAX_VALS)
+        self.nidec_pid.pos_limit = np.interp(CS.out.vEgo, ACCEL_MAX_BP, ACCEL_MAX_VALS)
         
         self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
         if (actuators.accel < -0.2):
