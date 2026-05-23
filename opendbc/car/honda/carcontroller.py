@@ -197,7 +197,7 @@ class CarController(CarControllerBase):
         else:
           self.windfactor_before_brake = self.windfactor
         if (gas_pedal_force >= self.params.BOSCH_ACCEL_MAX) or (CS.out.vEgo >= CS.out.cruiseState.speed - 2.):
-        # don't increase gasfactor nor windfactor at accel max, allow decreases
+          # don't increase gasfactor nor windfactor at accel max, allow decreases
           self.gasfactor = min(self.gasfactor, self.gasfactor_before_gasmax)
           self.windfactor = min(self.windfactor, self.windfactor_before_gasmax)
         else:
