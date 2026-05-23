@@ -20,21 +20,21 @@ def compute_gb_honda_bosch(accel, speed):
   return 0.0, 0.0
 
 
-def compute_gb_honda_nidec(accel, speed):
+def compute_gb_honda_nidec(accel, speed, creep_factor):
   creep_brake = 0.0
   creep_speed = 2.3
   creep_brake_value = 0.15
   if speed < creep_speed:
     creep_brake = (creep_speed - speed) / creep_speed * creep_brake_value
-  gb = float(accel) / 4.8 - creep_brake
-  return np.clip(gb, 0.0, 1.0), np.clip(-gb, 0.0, 1.0)
+  gb = float(accel) / 4.8 - creep_brake * creep_factor
+  return np.clip(gb, 0.0, 1.0), np.clip(-gb, 0.0, 1.0), creep_brake
 
 
-def compute_gas_brake(accel, speed, fingerprint):
+def compute_gas_brake(accel, speed, fingerprint, creep_factor):
   if fingerprint in HONDA_BOSCH:
-    return compute_gb_honda_bosch(accel, speed)
+    return compute_gb_honda_bosch(accel, speed), 0.0
   else:
-    return compute_gb_honda_nidec(accel, speed)
+    return compute_gb_honda_nidec(accel, speed, creep_factor)
 
 
 # TODO not clear this does anything useful
@@ -186,7 +186,8 @@ class CarController(CarControllerBase):
           if self.nidec_pid.i > 0: # snap pid to zero on decel, until gas is fixed
             self.nidec_pid.i = 0
           self.nidec_pid.i = min(actuators.accel, self.nidec_pid.i) # force faster negative slope while hard braking
-        self.accel = self.nidec_pid_factor + hill_brake
+        self.accel = self.nidec_pid_factor
+        adjust_accel = self.accel + hill_brake + self.creep_amount
 
         # copy wind tuning from Bosch code
         gas_error = self.accel - CS.out.aEgo
@@ -208,12 +209,19 @@ class CarController(CarControllerBase):
 
       else:
         self.accel = actuators.accel
+        adjust_accel = self.accel
         self.nidec_pid.reset()
         self.nidec_pid_factor = 0
 
-      gas, brake = compute_gas_brake(self.accel, CS.out.vEgo, self.CP.carFingerprint)
+      gas, brake, creep_amount = compute_gas_brake(adjust_accel, CS.out.vEgo, self.CP.carFingerprint, self.creep_factor)
+      gas_error = self.accel - CS.out.aEgo
+      if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed) \
+             and (1e-5 <= CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
+        self.creep_factor += 0.001 * creep_amount * gas_error
+        self.creep_amount += 0.0001 * gas_error
     else:
       self.accel = 0.0
+      adjust_accel = self.accel
       gas, brake = 0.0, 0.0
 
     # *** rate limit steer ***
@@ -285,7 +293,7 @@ class CarController(CarControllerBase):
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 10.0, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
-      pcm_accel = int(np.clip((self.accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+      pcm_accel = int(np.clip((adjust_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
     # feedforward for Nidec decaying-average gas pedal
     self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - self.average_factor)) / self.average_factor)
@@ -378,7 +386,7 @@ class CarController(CarControllerBase):
 
     new_actuators = actuators.as_builder()
     new_actuators.speed = float(self.nidec_pid_factor)
-    new_actuators.accel = float(self.accel)
+    new_actuators.accel = float(adjust_accel)
     new_actuators.gas = float(self.gasfactor)
     new_actuators.brake = float(self.brake_pid_factor)
     new_actuators.torque = self.last_torque
