@@ -171,6 +171,14 @@ class CarController(CarControllerBase):
 
     if CC.longActive:
       if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed):
+
+        # NIDECs don't allow acceleration near cruise_speed,
+        # so limit limits of pid to prevent windup
+        ACCEL_MAX_VALS = [self.PARAMS.NIDEC_ACCEL_MAX, 0.2]
+        cruise_speed = CS.out.cruiseState.speed
+        ACCEL_MAX_BP = [cruise_speed - 2., cruise_speed - .2]
+        self.nidec_pid.i.pos_limit = np.interp(current_speed, ACCEL_MAX_BP, ACCEL_MAX_VALS)
+        
         self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
         if (actuators.accel < -0.2):
           if self.nidec_pid.i > 0: # snap pid to zero on decel, until gas is fixed
