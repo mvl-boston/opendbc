@@ -100,12 +100,22 @@ def process_hud_alert(hud_alert):
 class HondaParamWriter:
   def __init__(self):
     self._params = Params()
+    self._put = getattr(self._params, "put", None)
     self._queue = Queue()
+    self._last_enqueued = {}
     self._thread = threading.Thread(target=self._run, name="honda-param-writer", daemon=True)
     self._thread.start()
 
   def put_many(self, values):
-    self._queue.put({key: float(value) for key, value in values.items()})
+    pending = {}
+    for key, value in values.items():
+      write_value = float(value)
+      if self._last_enqueued.get(key) != write_value:
+        pending[key] = write_value
+        self._last_enqueued[key] = write_value
+
+    if pending:
+      self._queue.put(pending)
 
   def _run(self):
     while True:
@@ -119,7 +129,10 @@ class HondaParamWriter:
         pass
 
       for key, value in pending.items():
-        self._params.put_nonblocking(key, value)
+        if self._put is not None:
+          self._put(key, value)
+        else:
+          self._params.put_nonblocking(key, value)
 
 
 class CarController(CarControllerBase):
@@ -426,7 +439,8 @@ class CarController(CarControllerBase):
     new_actuators.torque = self.last_torque
     new_actuators.torqueOutputCan = float(self.average_factor)
 
-    if self.frame % 6000 == 0:
+    # Learned params only need to survive occasional restarts, so keep flash traffic low.
+    if self.frame % 30000 == 0:
       self.param_writer.put_many({
         "HondaFeedForwardParams": self.average_factor,
         "HondaBrakePIDParams": self.brake_pid_factor_non_lowspeed,
@@ -436,7 +450,7 @@ class CarController(CarControllerBase):
         "HondaWindFactorParams": self.windfactor,
       })
 
-    if self.frame % 12000 == 30:
+    if self.frame % 60000 == 150:
       self.param_writer.put_many({
         "HondaLatAccelFactor05Params": self.latFactors["05"],
         "HondaLatAccelFactor10Params": self.latFactors["10"],
