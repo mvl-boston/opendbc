@@ -1,4 +1,8 @@
 import math
+import threading
+from queue import Empty, Queue
+
+import numpy as np
 from openpilot.common.params import Params
 
 from opendbc.can import CANPacker
@@ -112,7 +116,7 @@ class HondaParamWriter:
         pass
 
       for key, value in pending.items():
-        self._params.put(key, value)
+        self._params.put_nonblocking(key, value)
 
 
 class CarController(CarControllerBase):
@@ -545,8 +549,10 @@ class CarController(CarControllerBase):
     new_actuators.torqueOutputCan = apply_torque
 
     if self.frame % 6000 == 0:
-      Params().put_nonblocking("HondaGasFactorParams", float(self.gasfactor))
-      Params().put_nonblocking("HondaWindFactorParams", float(self.windfactor))
+      self.param_writer.put_many({
+        "HondaGasFactorParams": self.gasfactor,
+        "HondaWindFactorParams": self.windfactor,
+      })
 
     self.frame += 1
     return new_actuators, can_sends
