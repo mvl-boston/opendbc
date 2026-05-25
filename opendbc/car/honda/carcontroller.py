@@ -1,5 +1,8 @@
-import numpy as np
 import math
+import threading
+from queue import Empty, Queue
+
+import numpy as np
 from openpilot.common.params import Params
 from opendbc.car.common.conversions import Conversions as CV
 
@@ -94,6 +97,31 @@ def process_hud_alert(hud_alert):
   return alert_fcw, alert_steer_required
 
 
+class HondaParamWriter:
+  def __init__(self):
+    self._params = Params()
+    self._queue = Queue()
+    self._thread = threading.Thread(target=self._run, name="honda-param-writer", daemon=True)
+    self._thread.start()
+
+  def put_many(self, values):
+    self._queue.put({key: float(value) for key, value in values.items()})
+
+  def _run(self):
+    while True:
+      pending = self._queue.get()
+
+      # Collapse queued snapshots so delayed writes keep only the newest value per key.
+      try:
+        while True:
+          pending.update(self._queue.get_nowait())
+      except Empty:
+        pass
+
+      for key, value in pending.items():
+        self._params.put_nonblocking(key, value)
+
+
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
@@ -101,6 +129,7 @@ class CarController(CarControllerBase):
     self.params = CarControllerParams(CP)
     self.CAN = hondacan.CanBus(CP)
     self.tja_control = CP.carFingerprint in HONDA_BOSCH_TJA_CONTROL
+    self.param_writer = HondaParamWriter()
 
     self.braking = False
     self.brake_steady = 0.
@@ -398,26 +427,30 @@ class CarController(CarControllerBase):
     new_actuators.torqueOutputCan = float(self.average_factor)
 
     if self.frame % 6000 == 0:
-      Params().put_nonblocking("HondaFeedForwardParams", float(self.average_factor))
-      Params().put_nonblocking("HondaBrakePIDParams", float(self.brake_pid_factor_non_lowspeed))
-      Params().put_nonblocking("HondaCreepFactorParams", float(self.creep_factor))
-      Params().put_nonblocking("HondaCreepAlwaysParams", float(self.creep_always))
-      Params().put_nonblocking("HondaGasFactorParams", float(self.gasfactor))
-      Params().put_nonblocking("HondaWindFactorParams", float(self.windfactor))
+      self.param_writer.put_many({
+        "HondaFeedForwardParams": self.average_factor,
+        "HondaBrakePIDParams": self.brake_pid_factor_non_lowspeed,
+        "HondaCreepFactorParams": self.creep_factor,
+        "HondaCreepAlwaysParams": self.creep_always,
+        "HondaGasFactorParams": self.gasfactor,
+        "HondaWindFactorParams": self.windfactor,
+      })
 
     if self.frame % 12000 == 30:
-      Params().put_nonblocking("HondaLatAccelFactor05Params", float(self.latFactors["05"]))
-      Params().put_nonblocking("HondaLatAccelFactor10Params", float(self.latFactors["10"]))
-      Params().put_nonblocking("HondaLatAccelFactor15Params", float(self.latFactors["15"]))
-      Params().put_nonblocking("HondaLatAccelFactor20Params", float(self.latFactors["20"]))
-      Params().put_nonblocking("HondaLatAccelFactor25Params", float(self.latFactors["25"]))
-      Params().put_nonblocking("HondaLatAccelFactor30Params", float(self.latFactors["30"]))
-      Params().put_nonblocking("HondaLatAccelFactor35Params", float(self.latFactors["35"]))
-      Params().put_nonblocking("HondaLatAccelFactor40Params", float(self.latFactors["40"]))
-      Params().put_nonblocking("HondaLatAccelFactor45Params", float(self.latFactors["45"]))
-      Params().put_nonblocking("HondaLatAccelFactor50Params", float(self.latFactors["50"]))
-      Params().put_nonblocking("HondaLatAccelFactor55Params", float(self.latFactors["55"]))
-      Params().put_nonblocking("HondaLatAccelFactor60Params", float(self.latFactors["60"]))
+      self.param_writer.put_many({
+        "HondaLatAccelFactor05Params": self.latFactors["05"],
+        "HondaLatAccelFactor10Params": self.latFactors["10"],
+        "HondaLatAccelFactor15Params": self.latFactors["15"],
+        "HondaLatAccelFactor20Params": self.latFactors["20"],
+        "HondaLatAccelFactor25Params": self.latFactors["25"],
+        "HondaLatAccelFactor30Params": self.latFactors["30"],
+        "HondaLatAccelFactor35Params": self.latFactors["35"],
+        "HondaLatAccelFactor40Params": self.latFactors["40"],
+        "HondaLatAccelFactor45Params": self.latFactors["45"],
+        "HondaLatAccelFactor50Params": self.latFactors["50"],
+        "HondaLatAccelFactor55Params": self.latFactors["55"],
+        "HondaLatAccelFactor60Params": self.latFactors["60"],
+      })
 
     self.frame += 1
     return new_actuators, can_sends
