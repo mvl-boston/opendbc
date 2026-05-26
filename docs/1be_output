@@ -1,0 +1,62 @@
+--- Phase 2: scan 25 fingerprints ---
+[  1/25]  start  HONDA_PILOT                     (2404 candidates)  rss=184.9MB
+[  1/25]    27.3s  miss         HONDA_PILOT                     miss=2404 missing=0 load_err=0 crash=0   rss=185.2MB
+[  2/25]  start  HONDA_ACCORD                    (3429 candidates)  rss=185.1MB
+  hit       0.312s  /tmp/ccs_local/segments/7253bab343859d38/000006d6--a2fc6b512a/15/rlog.zst
+[  2/25]     0.4s  HIT          HONDA_ACCORD                    /tmp/ccs_local/segments/7253bab343859d38/000006d6--a2fc6b512a/15/rlog.zst   miss=0 missing=0 load_err=0 crash=0   rss=185.2MB
+[  3/25]  start  HONDA_CIVIC_2022                (886 candidates)  rss=185.1MB
+[  3/25]     7.5s  miss         HONDA_CIVIC_2022                miss=886 missing=0 load_err=0 crash=0   rss=185.2MB
+[  4/25]  start  HONDA_CIVIC_BOSCH               (1455 candidates)  rss=185.1MB
+[  4/25]    16.6s  miss         HONDA_CIVIC_BOSCH               miss=1455 missing=0 load_err=0 crash=0   rss=185.2MB
+[  5/25]  start  HONDA_INSIGHT                   (480 candidates)  rss=185.1MB
+[  5/25]     5.5s  miss         HONDA_INSIGHT                   miss=480 missing=0 load_err=0 crash=0   rss=185.2MB
+[  6/25]  start  HONDA_ODYSSEY                   (3340 candidates)  rss=185.1MB
+[  6/25]    32.1s  miss         HONDA_ODYSSEY                   miss=3340 missing=0 load_err=0 crash=0   rss=185.2MB
+[  7/25]  start  HONDA_CRV_5G                    (2863 candidates)  rss=185.2MB
+  hit       0.316s  /tmp/ccs_local/segments/c3bcc0ae7adc05a3/00000257--76b2ab6de1/164/rlog.zst
+[  7/25]     0.4s  HIT          HONDA_CRV_5G                    /tmp/ccs_local/segments/c3bcc0ae7adc05a3/00000257--76b2ab6de1/164/rlog.zst   miss=0 missing=0 load_err=0 crash=0   rss=185.2MB
+[  8/25]  start  ACURA_RDX_3G                    (527 candidates)  rss=185.2MB
+  hit       0.287s  /tmp/ccs_local/segments/0f42bd7adeb29004/00000012--766e98eed9/3/rlog.zst
+[  8/25]     0.4s  HIT          ACURA_RDX_3G                    /tmp/ccs_local/segments/0f42bd7adeb29004/00000012--766e98eed9/3/rlog.zst   miss=0 missing=0 load_err=0 crash=0   rss=185.2MB
+[  9/25]  start  HONDA_RIDGELINE                 (1970 candidates)  rss=185.2MB
+[  9/25]    18.0s  miss         HONDA_RIDGELINE                 miss=1970 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 10/25]  start  HONDA_CRV_HYBRID                (276 candidates)  rss=185.2MB
+[ 10/25]     2.7s  miss         HONDA_CRV_HYBRID                miss=276 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 11/25]  start  HONDA_CIVIC                     (1130 candidates)  rss=185.2MB
+[ 11/25]     9.3s  miss         HONDA_CIVIC                     miss=1130 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 12/25]  start  HONDA_HRV_3G                    (28 candidates)  rss=185.2MB
+  hit       0.309s  /tmp/ccs_local/segments/c28ee1100a35e353/0000004b--8030491b65/12/rlog.zst
+[ 12/25]     0.4s  HIT          HONDA_HRV_3G                    /tmp/ccs_local/segments/c28ee1100a35e353/0000004b--8030491b65/12/rlog.zst   miss=0 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 13/25]  start  ACURA_RDX                       (31 candidates)  rss=185.2MB
+[ 13/25]     0.7s  miss         ACURA_RDX                       miss=31 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 14/25]  start  HONDA RIDGELINE 2017            (44 candidates)  rss=185.2MB
+[ 14/25]     0.8s  miss         HONDA RIDGELINE 2017            miss=44 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 15/25]  start  HONDA_CRV                       (99 candidates)  rss=185.2MB
+[ 15/25]     1.2s  miss         HONDA_CRV                       miss=99 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 16/25]  start  HONDA_FIT                       (173 candidates)  rss=185.2MB
+[ 16/25]     1.8s  miss         HONDA_FIT                       miss=173 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 17/25]  start  HONDA_HRV                       (124 candidates)  rss=185.2MB
+[ 17/25]     1.2s  miss         HONDA_HRV                       miss=124 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 18/25]  start  HONDA_FREED                     (40 candidates)  rss=185.2MB
+[ 18/25]     0.7s  miss         HONDA_FREED                     miss=40 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 19/25]  start  HONDA ODYSSEY 2018              (19 candidates)  rss=185.2MB
+[ 19/25]     0.6s  miss         HONDA ODYSSEY 2018              miss=19 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 20/25]  start  HONDA ACCORD 2018               (16 candidates)  rss=185.2MB
+  hit       0.317s  /tmp/ccs_local/segments/b3a1a214664b7d31/2025-06-26--13-16-24/19/rlog.zst
+[ 20/25]     0.4s  HIT          HONDA ACCORD 2018               /tmp/ccs_local/segments/b3a1a214664b7d31/2025-06-26--13-16-24/19/rlog.zst   miss=0 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 21/25]  start  ACURA_ILX                       (4 candidates)  rss=185.2MB
+[ 21/25]     0.4s  miss         ACURA_ILX                       miss=4 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 22/25]  start  HONDA_E                         (2 candidates)  rss=185.2MB
+[ 22/25]     0.3s  miss         HONDA_E                         miss=2 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 23/25]  start  HONDA CIVIC (BOSCH) 2019        (10 candidates)  rss=185.2MB
+[ 23/25]     0.5s  miss         HONDA CIVIC (BOSCH) 2019        miss=10 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 24/25]  start  HONDA_PILOT_4G                  (2 candidates)  rss=185.2MB
+  hit       0.235s  /tmp/ccs_local/segments/9662a1dab70c9dc3/00000000--f8bf47be5d/4/rlog.zst
+[ 24/25]     0.3s  HIT          HONDA_PILOT_4G                  /tmp/ccs_local/segments/9662a1dab70c9dc3/00000000--f8bf47be5d/4/rlog.zst   miss=0 missing=0 load_err=0 crash=0   rss=185.2MB
+[ 25/25]  start  HONDA_CRV_HYBRID_6G             (3 candidates)  rss=185.2MB
+[ 25/25]     0.4s  miss         HONDA_CRV_HYBRID_6G             miss=3 missing=0 load_err=0 crash=0   rss=185.2MB
+scan done in 131.2s  hits=6  incomplete=0  of 25 fingerprints
+total wall time = 3487.7s
+wiping LOCAL_DIR at exit (drive-fill safety) ...
+wiping /tmp/ccs_local (24.51 GB)
+final rss=185.2MB  done.
