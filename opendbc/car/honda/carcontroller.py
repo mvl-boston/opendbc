@@ -217,7 +217,7 @@ class CarController(CarControllerBase):
         if (actuators.accel < -0.2):
           if self.nidec_pid.i > 0: # snap pid to zero on decel, until gas is fixed
             self.nidec_pid.i = 0
-          self.nidec_pid.i = min(actuators.accel, self.nidec_pid.i) # force faster negative slope while hard braking
+          # this looks wrong: self.nidec_pid.i = min(actuators.accel, self.nidec_pid.i) # force faster negative slope while hard braking
         self.accel = self.nidec_pid_factor
         adjust_accel = self.accel + hill_brake + self.creep_always
 
@@ -250,7 +250,7 @@ class CarController(CarControllerBase):
       if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed) \
              and (1e-5 <= CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
         self.creep_factor += np.clip(0.001 * creep_impact * gas_error, 0.0, 3.0)
-        self.creep_always -= np.clip(0.0001 * gas_error, -3.5, 0.0)
+        self.creep_always += np.clip(0.0001 * gas_error, -3.5, 0.0)
     else:
       self.accel = 0.0
       adjust_accel = self.accel
