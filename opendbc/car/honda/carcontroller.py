@@ -417,14 +417,14 @@ class CarController(CarControllerBase):
           self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
     new_actuators = actuators.as_builder()
-    new_actuators.speed = float(self.creep_factor)
-    # new_actuators.speed = float(self.nidec_pid_factor)
+    new_actuators.speed = float(self.nidec_pid_factor)
     new_actuators.accel = float(adjust_accel)
     # new_actuators.gas = float(self.gasfactor)
     new_actuators.gas = float(self.creep_always)
     new_actuators.brake = float(self.brake_pid_factor)
     new_actuators.torque = self.last_torque
-    new_actuators.torqueOutputCan = float(self.average_factor)
+    # new_actuators.torqueOutputCan = float(self.average_factor)
+    # new_actuators.torqueOutputCan = float(self.creep_factor)
 
     if self.frame % 6000 == 0:
       self.param_writer.put_many({
