@@ -285,7 +285,7 @@ class TestHondaNidecSafetyBase(HondaBase):
     super().test_fwd_hook()
 
     # forwarding AEB brake signal
-    self.FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x33D, 0x30C]}
+    self.FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x30C]}
     self.safety.set_honda_fwd_brake(True)
     super().test_fwd_hook()
 
