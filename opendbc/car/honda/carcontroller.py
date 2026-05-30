@@ -166,6 +166,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
     gas_pedal_force = 0.0
+    min_gas = self.params.BOSCH_GAS_LOOKUP_BP[0]
     actuators = CC.actuators
     hud_control = CC.hudControl
     hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
@@ -287,7 +288,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           # live-learn gas pedal adjustments when openpilot is controlling gas
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
             gas_error = self.accel - CS.out.aEgo
-            if gas_error != 0.0 and gas_pedal_force > 0.0:
+            if gas_error != 0.0 and gas_pedal_force > min_gas:
               if self.CP.carFingerprint == CAR.HONDA_INSIGHT: # Insight gas pedal reacts too slowly
                 learn_speed = 150
               elif self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Prevent overreacting to turbo lag
@@ -302,7 +303,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                 wind_learn_speed = 1000
               wind_adjust = 1 + wind_brake_ms2 / wind_learn_speed
               self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
-            if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
+            if gas_pedal_force <= min_gas: # don't reduce windfactor while braking, allow increases
               self.windfactor = max(self.windfactor, self.windfactor_before_brake)
             else:
               self.windfactor_before_brake = self.windfactor
