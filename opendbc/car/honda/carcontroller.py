@@ -249,8 +249,8 @@ class CarController(CarControllerBase):
       gas_error = self.accel - CS.out.aEgo
       if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed) \
              and (1e-5 <= CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
-        self.creep_factor += np.clip(0.001 * creep_impact * gas_error, 0.0, 3.0)
-        self.creep_always += np.clip(0.0001 * gas_error, -3.5, 0.0)
+        self.creep_factor = np.clip(self.creep_factor + 0.001 * creep_impact * gas_error, 0.0, 3.0)
+        self.creep_always = np.clip(self.creep_always + 0.0001 * gas_error, -3.5, 0.0)
     else:
       self.accel = 0.0
       adjust_accel = self.accel
