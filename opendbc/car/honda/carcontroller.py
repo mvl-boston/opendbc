@@ -217,7 +217,7 @@ class CarController(CarControllerBase):
         self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
         if (actuators.accel < 0.0):
           blendtarget = min(actuators.accel, self.nidec_pid.i) # force faster negative slope while hard braking
-          self.nidec_pid.i = np.interp (actuators.accel, [0.0, -0.2], [self.nidec_pid.i, blendtarget])
+          self.nidec_pid.i = np.interp(actuators.accel, [0.0, -0.2], [self.nidec_pid.i, blendtarget])
         self.accel = self.nidec_pid_factor
         adjust_accel = self.accel + hill_brake + self.creep_always
 
