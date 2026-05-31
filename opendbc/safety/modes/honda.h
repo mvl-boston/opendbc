@@ -192,7 +192,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     bool violation = false;
     violation |= longitudinal_speed_checks(pcm_speed, HONDA_NIDEC_LONG_LIMITS);
     violation |= longitudinal_gas_checks(pcm_gas, HONDA_NIDEC_LONG_LIMITS);
-    if (violation) {
+    if (violation && !gas_pressed) {
       tx = false;
     }
   }
