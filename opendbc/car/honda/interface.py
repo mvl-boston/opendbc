@@ -58,9 +58,6 @@ class CarInterface(CarInterfaceBase):
 
       ret.pcmCruise = True
 
-    if candidate == CAR.ACURA_MDX_3G:
-      ret.stoppingDecelRate = 0.3
-
     if candidate == CAR.HONDA_CRV_5G:
       ret.enableBsm = 0x12f8bfa7 in fingerprint[CAN.radar]
 
@@ -73,9 +70,6 @@ class CarInterface(CarInterfaceBase):
 
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID) and (0x223 in fingerprint[CAN.pt]):
       ret.flags |= HondaFlags.HYBRID_ALT_BRAKEHOLD.value
-
-    if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID):
-      ret.stoppingDecelRate = 0.3
 
     if ret.flags & HondaFlags.ALLOW_MANUAL_TRANS and all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
       # Manual transmission support for allowlisted cars only, to prevent silent fall-through on auto-detection failures
@@ -95,7 +89,6 @@ class CarInterface(CarInterfaceBase):
     if candidate in HONDA_BOSCH:
       ret.longitudinalActuatorDelay = 0.5 # s
       # longitudinal gas-only tuning for Bosch hondas is in carcontroller
-      ret.stoppingDecelRate = 0.4  # drivers reporting braking was too harsh before standstill
       if candidate in HONDA_BOSCH_RADARLESS:
         ret.stopAccel = CarControllerParams.BOSCH_ACCEL_MIN  # stock uses -4.0 m/s^2 once stopped but limited by safety model
     else:
@@ -106,10 +99,11 @@ class CarInterface(CarInterfaceBase):
 
     if candidate == CAR.HONDA_CITY_7G:
       ret.vEgoStopping = 2.0
+      ret.stoppingDecelRate = 0.3
     else:
       ret.vEgoStopping = 0.5 # make up for driving model creep at stop lights/signs
+      ret.stoppingDecelRate = 0.1  
     ret.vEgoStarting = ret.vEgoStopping
-    ret.stoppingDecelRate = 0.3
 
     # Disable control if EPS mod detected
     for fw in car_fw:
