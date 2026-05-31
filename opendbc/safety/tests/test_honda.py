@@ -8,7 +8,7 @@ import opendbc.safety.tests.common as common
 from opendbc.car.structs import CarParams
 from opendbc.safety.tests.common import CANPackerSafety, MAX_WRONG_COUNTERS
 
-HONDA_N_COMMON_TX_MSGS = [[0xE4, 0], [0x194, 0], [0x1FA, 0], [0x30C, 0], [0x33D, 0]]
+HONDA_N_COMMON_TX_MSGS = [[0xE4, 0], [0x194, 0], [0x1FA, 0], [0x30C, 0]]
 
 
 class Btn:
@@ -243,8 +243,8 @@ class HondaBase(common.CarSafetyTest):
 
 class TestHondaNidecSafetyBase(HondaBase):
   TX_MSGS = HONDA_N_COMMON_TX_MSGS
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x33D, 0x30C]}
-  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x194, 0x33D, 0x30C)}
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x30C]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x194, 0x30C)}
 
   PT_BUS = 0
   STEER_BUS = 0
@@ -285,7 +285,7 @@ class TestHondaNidecSafetyBase(HondaBase):
     super().test_fwd_hook()
 
     # forwarding AEB brake signal
-    self.FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x33D, 0x30C]}
+    self.FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x30C]}
     self.safety.set_honda_fwd_brake(True)
     super().test_fwd_hook()
 
