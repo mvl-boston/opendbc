@@ -133,7 +133,7 @@ static void honda_rx_hook(const CANPacket_t *msg) {
   if (honda_nidec_brakegrind_override) {
     if (msg->addr == 0x1A4U) {
       // 109.4 is equal to 0.1 cutoff before scaling
-      brake_pressed_override = (GET_BYTES(msg, 0U, 2U) > 109);
+      brake_pressed_override = (GET_BYTES(msg, 0U, 2U) > 110);
     }
   }
   if (honda_alt_brake_msg) {
