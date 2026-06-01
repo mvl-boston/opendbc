@@ -294,6 +294,7 @@ static safety_config honda_nidec_init(uint16_t param) {
 
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
   const uint16_t HONDA_PARAM_BRAKEGRIND_OVER = 32;
+
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
   honda_brake_switch_prev = false;
