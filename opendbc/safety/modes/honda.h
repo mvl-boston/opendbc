@@ -148,7 +148,7 @@ static void honda_rx_hook(const CANPacket_t *msg) {
       honda_brake_switch_prev = brake_switch;
     }
   }
-  if brake_pressed_override {
+  if (brake_pressed_override) {
     brake_pressed = true;
   }
 
