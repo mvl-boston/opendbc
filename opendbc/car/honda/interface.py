@@ -102,7 +102,7 @@ class CarInterface(CarInterfaceBase):
       ret.stoppingDecelRate = 0.3
     else:
       ret.vEgoStopping = 0.5 # make up for driving model creep at stop lights/signs
-      ret.stoppingDecelRate = 0.1  
+      ret.stoppingDecelRate = 0.1
     ret.vEgoStarting = ret.vEgoStopping
 
     # Disable control if EPS mod detected
