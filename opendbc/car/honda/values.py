@@ -272,7 +272,7 @@ class CAR(Platforms):
     {Bus.pt: 'honda_e_advance_2020_can_generated'}, # 8 bit LKAS_HUD in Advance trim
   )
   HONDA_PILOT_4G = HondaBoschCANFDPlatformConfig(
-    [HondaCarDocs("Honda Pilot 2023-26", "All")],
+    [HondaCarDocs("Honda Pilot 2023-25", "All")],
     CarSpecs(mass=4660 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=17.5),
   )
   HONDA_PILOT_4G_MMR = HondaBoschCANFDPlatformConfig( # Mid-Model Refresh has more powerful EPS
