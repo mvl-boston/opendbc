@@ -17,15 +17,19 @@ FW_VERSIONS = {
     ],
     (Ecu.eps, 0x18da30f1, None): [
       b'39990-TTA-J040\x00\x00',
+      b'39990-TTA-Z020\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-TTA-N930\x00\x00',
+      b'77959-TTA-J910\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'36802-TTA-J070\x00\x00',
+      b'36802-TTA-J240\x00\x00',
     ],
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'38897-TTA-J010\x00\x00',
+      b'36161-TTA-J330\x00\x00',
     ],
   },
   CAR.HONDA_ACCORD: {
