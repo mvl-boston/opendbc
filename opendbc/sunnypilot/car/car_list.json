@@ -1558,7 +1558,7 @@
     ],
     "package": "Honda Sensing"
   },
-  "Honda Pilot 2023-26": {
+  "Honda Pilot 2023-25": {
     "platform": "HONDA_PILOT_4G",
     "make": "Honda",
     "brand": "honda",
@@ -1566,7 +1566,16 @@
     "year": [
       "2023",
       "2024",
-      "2025",
+      "2025"
+    ],
+    "package": "All"
+  },
+  "Honda Pilot 2026": {
+    "platform": "HONDA_PILOT_4G_MMR",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Pilot",
+    "year": [
       "2026"
     ],
     "package": "All"
