@@ -148,10 +148,9 @@ class CarController(CarControllerBase):
     self.brake_pid_factor = 0.0
 
     self.nidec_pid = PIDController(k_p=([0,], [0,]),
-                                   k_i=([0., 5., 35.], [2.4, 1.6, 1.0]),
-                                   # k_i=([0., 5., 35.], [1.2, 0.8, 0.5]),
+                                   k_i=([0., 5., 35.], [1.2, 0.8, 0.5]),
                                    k_f=1,
-                                   pos_limit=self.params.NIDEC_ACCEL_MAX,
+                                   pos_limit=0., # self.params.NIDEC_ACCEL_MAX,
                                    neg_limit=self.params.NIDEC_ACCEL_MIN)
     self.nidec_pid.reset()
 
