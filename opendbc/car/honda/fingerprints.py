@@ -1182,6 +1182,7 @@ FW_VERSIONS = {
       b'8S102-30A-A050\x00\x00',
       b'8S102-30A-A060\x00\x00',
       b'8S102-30A-A070\x00\x00',
+      b'8S102-30A-A080\x00\x00',
     ],
     (Ecu.gateway, 0x18daeff1, None): [
       b'5J802-30A-AA10\x00\x00',
