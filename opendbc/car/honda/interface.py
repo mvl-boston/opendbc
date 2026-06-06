@@ -246,7 +246,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
 
-    elif candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR): # source mlocoteta
+    elif candidate in == CAR.ACURA_MDX_3G: # source mlocoteta
       ret.steerActuatorDelay = 0.3
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 433], [0, 433]]
       ret.lateralTuning.pid.kf = 0.000035
@@ -286,6 +286,9 @@ class CarInterface(CarInterfaceBase):
     if 0x1BE in fingerprint[CAN.pt]:
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
 
+    if 0x190 in fingerprint[CAN.pt] and candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G):
+      ret.flags |= HondaFlags.LEGACY_MDX_STEER.value
+
     if ret.flags & HondaFlags.BOSCH_ALT_BRAKE:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value
     if candidate in HONDA_NIDEC_ALT_SCM_MESSAGES:
@@ -307,7 +310,7 @@ class CarInterface(CarInterfaceBase):
     elif (ret.transmissionType == TransmissionType.manual) and (not ret.openpilotLongitudinalControl):
       ret.autoResumeSng = False
     else:
-      ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR,
+      ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G
                                                        CAR.ACURA_TLX_1G, CAR.HONDA_CLARITY})
     if ret.autoResumeSng:
       ret.minEnableSpeed = -1.
