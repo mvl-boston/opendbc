@@ -46,8 +46,8 @@ jobs:
       run: scons -j1 common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
 
     - name: ./test.sh
-      run: ./test.sh
       timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 999 }}
+      run: opendbc_repo/test.sh
 
   safety_tests:
     name: safety
