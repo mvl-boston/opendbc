@@ -45,22 +45,24 @@ jobs:
       - name: Build openpilot
         run: scons -j1 common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
 
-      # ✅ INSTALL LEFTHOOK AND CAPTURE FULL PATH
-      - name: Install lefthook
+      # ✅ REAL FIX: install Go + lefthook properly
+      - name: Install lefthook (via Go)
         run: |
-          curl -sSfL https://raw.githubusercontent.com/evilmartians/lefthook/master/install.sh | bash
+          sudo apt-get update
+          sudo apt-get install -y golang-go
 
-          LEFTHOOK_BIN=$(which lefthook || echo "$HOME/.local/bin/lefthook")
+          go install github.com/evilmartians/lefthook@latest
 
-          echo "LEFTHOOK_BIN=$LEFTHOOK_BIN" >> $GITHUB_ENV
+          echo "$HOME/go/bin" >> $GITHUB_PATH
 
-      # 🔥 RUN TESTS USING ABSOLUTE PATH (NO PATH ISSUES POSSIBLE)
+      - name: Verify lefthook
+        run: lefthook version
+
       - name: ./test.sh
         timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 999 }}
         run: opendbc_repo/test.sh
         env:
           PYTHONPATH: ${{ github.workspace }}/openpilot:${{ github.workspace }}
-          LEFTHOOK_BIN: ${{ env.LEFTHOOK_BIN }}
 
   safety_tests:
     name: safety
