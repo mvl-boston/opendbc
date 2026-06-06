@@ -37,10 +37,8 @@ class CAR(Platforms):
 
   EXTRA_HONDA = ExtraPlatformConfig(
     [
-      CommunityCarDocs("Acura RDX 2025"),
       CommunityCarDocs("Acura RLX 2017", "Advance Package or Technology Package"),
       GMSecurityCarDocs("Acura ZDX 2024", "All"),
-      CommunityCarDocs("Honda Clarity 2018-21", "All"),
       GMSecurityCarDocs("Honda Prologue 2024-25", "All"),
     ],
   )
