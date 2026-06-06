@@ -116,7 +116,7 @@ class HondaParamWriter:
         pass
 
       for key, value in pending.items():
-        self._params.put_nonblocking(key, value)
+        self._params.put(key, value)
 
 
 class CarController(CarControllerBase):
