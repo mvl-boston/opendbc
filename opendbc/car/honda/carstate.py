@@ -120,6 +120,10 @@ class CarState(CarStateBase):
       ret.steerFaultPermanent = False
       ret.steerFaultTemporary = False
 
+    if (self.CP.carFingerprint == CAR.ACURA_MDX_4G) and (steer_status == "TJA_LOW_SPEED_LOCKOUT"):
+      ret.steerFaultPermanent = False
+      ret.steerFaultTemporary = False
+
     # All Honda EPS cut off slightly above standstill, some much higher
     # Don't alert in the near-standstill range, but alert for per-vehicle configured minimums above that
     if CarControllerParams.STEER_GLOBAL_MIN_SPEED < ret.vEgo < (self.CP.minSteerSpeed + 0.5):
@@ -137,6 +141,11 @@ class CarState(CarStateBase):
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
     else:
       if self.CP.openpilotLongitudinalControl:
+        if (self.CP.carFingerprint in (CAR.ACURA_MDX_4G, *HONDA_BOSCH_CANFD) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
+          ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
+        else:
+          ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
+
         if self.CP.carFingerprint in (HONDA_BOSCH_CANFD | HONDA_BOSCH_TJA_CONTROL) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
           ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
         else:
