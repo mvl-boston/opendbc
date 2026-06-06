@@ -47,7 +47,9 @@ jobs:
 
     - name: ./test.sh
       timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 999 }}
-      run: opendbc_repo/test.sh
+      run: |
+        source setup.sh
+        opendbc_repo/test.sh
 
   safety_tests:
     name: safety
