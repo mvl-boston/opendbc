@@ -41,7 +41,10 @@ jobs:
       run: |
         cd opendbc_repo
         export UV_PROJECT_ENVIRONMENT="$GITHUB_WORKSPACE/.venv"
-        uv sync --all-extras --inexact
+        for delay in 0 30 60 120 240; do
+          [ "$delay" -gt 0 ] && sleep "$delay"
+          uv sync --all-extras --inexact && break
+        done
         source "$UV_PROJECT_ENVIRONMENT/bin/activate"
         uv lock --check
         lefthook run test
