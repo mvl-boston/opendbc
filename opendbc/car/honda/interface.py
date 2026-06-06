@@ -286,7 +286,6 @@ class CarInterface(CarInterfaceBase):
       ret.dashcamOnly = is_release  # TODO: release from dashcam when there's enough driving data for torqued/paramsd to converge
 
     # These cars use alternate user brake msg (0x1BE)
-    # TODO: Only detect feature for Accord/Accord Hybrid, not all Bosch DBCs have BRAKE_MODULE
     if 0x1BE in fingerprint[CAN.pt]:
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
 
