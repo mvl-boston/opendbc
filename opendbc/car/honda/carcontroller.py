@@ -393,6 +393,9 @@ class CarController(CarControllerBase):
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
                                                          pcm_override, pcm_cancel_cmd, alert_fcw,
                                                          self.CP, CS.stock_brake))
+          if (apply_brake > 0) or CS.out.gasPressed: # set zero for feedforward
+            self.new_accel = 0
+
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
