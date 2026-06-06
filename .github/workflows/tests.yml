@@ -13,6 +13,7 @@ jobs:
   tests:
     name: ./test.sh
     runs-on: ${{ matrix.os }}
+
     strategy:
       fail-fast: false
       matrix:
@@ -44,6 +45,11 @@ jobs:
 
       - name: Build openpilot
         run: scons -j1 common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
+
+      - name: Install lefthook
+        run: |
+          curl -sSL https://raw.githubusercontent.com/evilmartians/lefthook/master/install.sh | bash
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: ./test.sh
         timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 999 }}
@@ -134,6 +140,7 @@ jobs:
   test_models:
     name: test models
     runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-latest' }}
+
     strategy:
       fail-fast: false
       matrix:
@@ -169,6 +176,3 @@ jobs:
       - name: Test car models
         timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 999 }}
         run: MAX_EXAMPLES=1 pytest --continue-on-collection-errors --durations=0 --durations-min=5 -n ${{ contains(runner.name, 'nsc') && 'logical' || '0' }} selfdrive/car/tests/test_models.py
-        env:
-          NUM_JOBS: 4
-          JOB_ID: ${{ matrix.job }}
