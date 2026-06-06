@@ -47,7 +47,7 @@ jobs:
 
     - name: ./test.sh
       timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 999 }}
-      run: opendbc_repo/test.sh
+      run: MAX_EXAMPLES=1 pytest --continue-on-collection-errors --durations=0 --durations-min=5 -n ${{ contains(runner.name, 'nsc') && 'logical' || '0' }} opendbc_repo/test.sh
 
   safety_tests:
     name: safety
