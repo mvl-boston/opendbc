@@ -45,15 +45,37 @@ jobs:
       - name: Build openpilot
         run: scons -j1 common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
 
-      # ✅ REAL FIX: install Go + lefthook properly
-      - name: Install lefthook (via Go)
+      # ✅ CROSS-PLATFORM LEFTHOOK INSTALL
+      - name: Install lefthook
+        shell: bash
         run: |
-          sudo apt-get update
-          sudo apt-get install -y golang-go
+          set -e
 
-          go install github.com/evilmartians/lefthook@latest
+          echo "Detecting environment..."
 
-          echo "$HOME/go/bin" >> $GITHUB_PATH
+          # Try Go install if available
+          if command -v go >/dev/null 2>&1; then
+            echo "Using Go install"
+            go install github.com/evilmartians/lefthook@latest
+            echo "$HOME/go/bin" >> $GITHUB_PATH
+
+          else
+            echo "Using binary install fallback"
+
+            OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+            ARCH="$(uname -m)"
+
+            if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; fi
+            if [ "$ARCH" = "arm64" ]; then ARCH="arm64"; fi
+
+            URL="https://github.com/evilmartians/lefthook/releases/latest/download/lefthook_${OS}_${ARCH}"
+
+            mkdir -p $HOME/.local/bin
+            curl -L "$URL" -o $HOME/.local/bin/lefthook
+            chmod +x $HOME/.local/bin/lefthook
+
+            echo "$HOME/.local/bin" >> $GITHUB_PATH
+          fi
 
       - name: Verify lefthook
         run: lefthook version
