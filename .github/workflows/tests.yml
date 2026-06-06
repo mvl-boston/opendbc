@@ -45,21 +45,22 @@ jobs:
       - name: Build openpilot
         run: scons -j1 common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
 
-      # ✅ FIX: install lefthook correctly (no broken curl binary)
+      # ✅ INSTALL LEFTHOOK AND CAPTURE FULL PATH
       - name: Install lefthook
         run: |
           curl -sSfL https://raw.githubusercontent.com/evilmartians/lefthook/master/install.sh | bash
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
 
-      # 🔥 CRITICAL FIX: ensure PATH is correct for ALL later steps
-      - name: Setup PATH
-        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+          LEFTHOOK_BIN=$(which lefthook || echo "$HOME/.local/bin/lefthook")
 
+          echo "LEFTHOOK_BIN=$LEFTHOOK_BIN" >> $GITHUB_ENV
+
+      # 🔥 RUN TESTS USING ABSOLUTE PATH (NO PATH ISSUES POSSIBLE)
       - name: ./test.sh
         timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 999 }}
         run: opendbc_repo/test.sh
         env:
           PYTHONPATH: ${{ github.workspace }}/openpilot:${{ github.workspace }}
+          LEFTHOOK_BIN: ${{ env.LEFTHOOK_BIN }}
 
   safety_tests:
     name: safety
