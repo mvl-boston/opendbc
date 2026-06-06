@@ -45,40 +45,27 @@ jobs:
       - name: Build openpilot
         run: scons -j1 common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
 
-      # ✅ CROSS-PLATFORM LEFTHOOK INSTALL
-      - name: Install lefthook
+      # ✅ ONLY RELIABLE METHOD
+      - name: Install lefthook (Go official)
         shell: bash
         run: |
           set -e
 
-          echo "Detecting environment..."
+          curl -fsSL https://go.dev/dl/go1.22.5.linux-amd64.tar.gz -o go.tar.gz
+          sudo rm -rf /usr/local/go
+          sudo tar -C /usr/local -xzf go.tar.gz
+          export PATH=/usr/local/go/bin:$PATH
 
-          # Try Go install if available
-          if command -v go >/dev/null 2>&1; then
-            echo "Using Go install"
-            go install github.com/evilmartians/lefthook@latest
-            echo "$HOME/go/bin" >> $GITHUB_PATH
+          go version
 
-          else
-            echo "Using binary install fallback"
+          go install github.com/evilmartians/lefthook@latest
 
-            OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
-            ARCH="$(uname -m)"
-
-            if [ "$ARCH" = "x86_64" ]; then ARCH="amd64"; fi
-            if [ "$ARCH" = "arm64" ]; then ARCH="arm64"; fi
-
-            URL="https://github.com/evilmartians/lefthook/releases/latest/download/lefthook_${OS}_${ARCH}"
-
-            mkdir -p $HOME/.local/bin
-            curl -L "$URL" -o $HOME/.local/bin/lefthook
-            chmod +x $HOME/.local/bin/lefthook
-
-            echo "$HOME/.local/bin" >> $GITHUB_PATH
-          fi
+          echo "$HOME/go/bin" >> $GITHUB_PATH
 
       - name: Verify lefthook
-        run: lefthook version
+        run: |
+          export PATH="$HOME/go/bin:$PATH"
+          lefthook version
 
       - name: ./test.sh
         timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 999 }}
