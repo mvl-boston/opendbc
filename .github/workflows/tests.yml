@@ -45,11 +45,15 @@ jobs:
       - name: Build openpilot
         run: scons -j1 common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
 
-      # ✅ FIXED: install lefthook via Go (reliable, no broken binaries)
+      # ✅ FIX: install lefthook correctly (no broken curl binary)
       - name: Install lefthook
         run: |
           curl -sSfL https://raw.githubusercontent.com/evilmartians/lefthook/master/install.sh | bash
           echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      # 🔥 CRITICAL FIX: ensure PATH is correct for ALL later steps
+      - name: Setup PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: ./test.sh
         timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 999 }}
