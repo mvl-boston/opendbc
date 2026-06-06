@@ -70,9 +70,6 @@ class CarInterface(CarInterfaceBase):
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID) and (0x223 in fingerprint[CAN.pt]):
       ret.flags |= HondaFlags.HYBRID_ALT_BRAKEHOLD.value
 
-    if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID):
-      ret.stoppingDecelRate = 0.3
-
     if all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
       ret.transmissionType = TransmissionType.manual
     elif 0x191 in fingerprint[CAN.pt] and candidate != CAR.ACURA_RDX:
@@ -87,7 +84,6 @@ class CarInterface(CarInterfaceBase):
     ret.lateralTuning.pid.kf = 0.00006  # conservative feed-forward
     ret.steerActuatorDelay = 0.1
 
-    ret.stoppingDecelRate = 0.3  # smooth out harsh braking before standstill
     if candidate in HONDA_BOSCH:
       ret.longitudinalActuatorDelay = 0.5 # s
       # longitudinal gas-only tuning for Bosch hondas is in carcontroller
@@ -95,13 +91,17 @@ class CarInterface(CarInterfaceBase):
         ret.stopAccel = CarControllerParams.BOSCH_ACCEL_MIN  # stock uses -4.0 m/s^2 once stopped but limited by safety model
     else:
       # default longitudinal tuning for all Nidec hondas
-      ret.longitudinalTuning.kiBP = [0., 5., 35.]
-      ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
+      # ret.longitudinalTuning.kiBP = [0., 5., 35.]
+      # ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
+      pass # moved to opendbc controller
 
     if candidate == CAR.HONDA_CITY_7G:
       ret.vEgoStopping = 2.0
-      ret.vEgoStarting = ret.vEgoStopping
       ret.stoppingDecelRate = 0.3
+    else:
+      ret.vEgoStopping = 0.5 # make up for driving model creep at stop lights/signs
+      ret.stoppingDecelRate = 0.1
+    ret.vEgoStarting = ret.vEgoStopping
 
     # Disable control if EPS mod detected
     for fw in car_fw:
