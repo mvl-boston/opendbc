@@ -46,9 +46,12 @@ jobs:
       - name: Build openpilot
         run: scons -j1 common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
 
+      # ✅ FIXED LEFTHOOK INSTALL (NO BROKEN CURL)
       - name: Install lefthook
         run: |
-          curl -sSL https://raw.githubusercontent.com/evilmartians/lefthook/master/install.sh | bash
+          mkdir -p $HOME/.local/bin
+          curl -L https://github.com/evilmartians/lefthook/releases/latest/download/lefthook_linux_amd64 -o $HOME/.local/bin/lefthook
+          chmod +x $HOME/.local/bin/lefthook
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: ./test.sh
