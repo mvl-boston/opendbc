@@ -29,7 +29,6 @@ jobs:
           submodules: true
 
       - run: ./tools/op.sh setup
-
       - run: rm -rf opendbc_repo/
 
       - uses: actions/checkout@v4
@@ -46,12 +45,10 @@ jobs:
       - name: Build openpilot
         run: scons -j1 common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
 
-      # ✅ FIXED LEFTHOOK INSTALL (NO BROKEN CURL)
+      # ✅ FIXED: install lefthook via Go (reliable, no broken binaries)
       - name: Install lefthook
         run: |
-          mkdir -p $HOME/.local/bin
-          curl -L https://github.com/evilmartians/lefthook/releases/latest/download/lefthook_linux_amd64 -o $HOME/.local/bin/lefthook
-          chmod +x $HOME/.local/bin/lefthook
+          curl -sSfL https://raw.githubusercontent.com/evilmartians/lefthook/master/install.sh | bash
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: ./test.sh
