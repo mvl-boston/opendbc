@@ -213,10 +213,7 @@ class CarController(CarControllerBase):
     if CC.longActive:
       if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed):
         self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
-        if (actuators.accel < 0.0):
-          blendtarget = min(actuators.accel, self.nidec_pid.i) # force faster negative slope while hard braking
-          self.nidec_pid.i = np.interp(actuators.accel, [0.0, -0.2], [self.nidec_pid.i, blendtarget])
-        self.accel = self.nidec_pid_factor
+        self.accel = actuators.accel + self.nidec_pid_factor
         adjust_accel = self.accel + hill_brake + self.gas_alpha
 
         # copy wind tuning from Bosch code
@@ -338,11 +335,11 @@ class CarController(CarControllerBase):
     if self.CP.carFingerprint in HONDA_BOSCH:
       self.new_accel = pcm_accel
     elif (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and (CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
-      gasfactor_error = (self.nidec_pid_factor - CS.out.aEgo)
+      gasfactor_error = (self.accel - CS.out.aEgo)
       self.gas_alpha = np.clip(self.gas_alpha + 0.00001 * gasfactor_error, -3.0, 3.0)
       self.gasfactor *= (1 + 0.0001 * gasfactor_error)
-      more_new_accel_needed = (self.new_accel > pcm_accel and self.nidec_pid_factor > CS.out.aEgo) or \
-                              (self.new_accel < pcm_accel and self.nidec_pid_factor < CS.out.aEgo)
+      more_new_accel_needed = (self.new_accel > pcm_accel and self.accel > CS.out.aEgo) or \
+                              (self.new_accel < pcm_accel and self.accel < CS.out.aEgo)
       new_accel_factor = abs(gasfactor_error * (self.new_accel - pcm_accel))
       if more_new_accel_needed:
         self.average_factor /= (1 + 0.0001 * new_accel_factor)
@@ -417,7 +414,7 @@ class CarController(CarControllerBase):
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 0) and (not CS.out.stockAeb):
-            self.brake_pid_factor = self.brake_pid.update(error = -(self.nidec_pid_factor - CS.out.aEgo)/apply_brake, speed = CS.out.vEgo)
+            self.brake_pid_factor = self.brake_pid.update(error = -(self.accel - CS.out.aEgo)/apply_brake, speed = CS.out.vEgo)
           if (CS.out.vEgo >= 2): # save pid above 2m/s
             self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
           if (CS.out.vEgo < 1e-3): # restore 2m/s pid after stopped
