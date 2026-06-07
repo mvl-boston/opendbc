@@ -191,7 +191,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
 
     bool violation = false;
     violation |= longitudinal_speed_checks(pcm_speed, HONDA_NIDEC_LONG_LIMITS);
-    if ((pcm_speed != 0) || (pcm_accel != 198)) { // allow 198 while braking which is what factory camera does
+    if ((pcm_speed != 0) || (pcm_gas != 198)) { // allow 198 while braking which is what factory camera does
       violation |= longitudinal_gas_checks(pcm_gas, HONDA_NIDEC_LONG_LIMITS);
     }
     if (violation && !gas_pressed) {
