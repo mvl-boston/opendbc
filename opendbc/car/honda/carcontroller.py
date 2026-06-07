@@ -214,9 +214,9 @@ class CarController(CarControllerBase):
           apply_brake = max(self.apply_brake_last - 32, apply_brake)
 
           pcm_override = CC.longActive or CS.out.stockAeb
-          if apply_brake > 0: # prevent fault from concurrent gas + brake
+          if apply_brake > 0: # prevent fault from concurrent gas + brake, accel at 198 while braking on stock camera
             pcm_speed = 0.0
-            pcm_accel = 0
+            pcm_accel = 198
           elif CS.out.gasPressed: # prevent fault from user gas with a pcm_gas of 198
             pcm_accel = 198
 
