@@ -173,7 +173,7 @@ class CarController(CarControllerBase):
     self.prior_gas_average = 0.0
     self.average_factor = 0.95 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
     self.creep_factor = 1.0 if (Params().get("HondaCreepFactorParams") is None) else Params().get("HondaCreepFactorParams")
-    self.creep_always = 0.0 if (Params().get("HondaCreepAlwaysParams") is None) else Params().get("HondaCreepAlwaysParams")
+    self.gas_alpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
     self.gasfactor_before_gasmax = self.gasfactor
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
@@ -217,7 +217,7 @@ class CarController(CarControllerBase):
           blendtarget = min(actuators.accel, self.nidec_pid.i) # force faster negative slope while hard braking
           self.nidec_pid.i = np.interp(actuators.accel, [0.0, -0.2], [self.nidec_pid.i, blendtarget])
         self.accel = self.nidec_pid_factor
-        adjust_accel = self.accel + hill_brake + self.creep_always
+        adjust_accel = self.accel + hill_brake + self.gas_alpha
 
         # copy wind tuning from Bosch code
         gas_error = self.accel - CS.out.aEgo
@@ -248,7 +248,6 @@ class CarController(CarControllerBase):
       if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed) \
              and (1e-5 <= CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
         self.creep_factor = np.clip(self.creep_factor + 0.001 * creep_impact * gas_error, 0.0, 3.0)
-        self.creep_always = np.clip(self.creep_always + 0.0001 * gas_error, -3.5, 0.0)
     else:
       self.accel = 0.0
       adjust_accel = self.accel
@@ -327,7 +326,7 @@ class CarController(CarControllerBase):
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 10.0, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
-      pcm_accel = int(np.clip((adjust_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+      pcm_accel = int(np.clip((self.gas_alpha + adjust_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
     # feedforward for Nidec decaying-average gas pedal
     max_increase = 20
@@ -340,6 +339,7 @@ class CarController(CarControllerBase):
       self.new_accel = pcm_accel
     elif (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and (CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
       gasfactor_error = (self.nidec_pid_factor - CS.out.aEgo)
+      self.gas_alpha = np.clip(self.gas_alpha + 0.00001 * gasalpha_error, -3.0, 3.0)
       self.gasfactor *= (1 + 0.0001 * gasfactor_error)
       more_new_accel_needed = (self.new_accel > pcm_accel and self.nidec_pid_factor > CS.out.aEgo) or \
                               (self.new_accel < pcm_accel and self.nidec_pid_factor < CS.out.aEgo)
@@ -473,7 +473,7 @@ class CarController(CarControllerBase):
     new_actuators.speed = float(self.nidec_pid_factor)
     new_actuators.accel = float(adjust_accel)
     # new_actuators.gas = float(self.gasfactor)
-    new_actuators.gas = float(self.creep_always)
+    new_actuators.gas = float(self.gas_alpha)
     new_actuators.brake = float(self.brake_pid_factor)
     new_actuators.torque = self.last_torque
     # new_actuators.torqueOutputCan = float(self.average_factor)
@@ -484,7 +484,7 @@ class CarController(CarControllerBase):
         "HondaFeedForwardParams": self.average_factor,
         "HondaBrakePIDParams": self.brake_pid_factor_non_lowspeed,
         "HondaCreepFactorParams": self.creep_factor,
-        "HondaCreepAlwaysParams": self.creep_always,
+        "HondGasAlphaParams": self.gas_alpha,
         "HondaGasFactorParams": self.gasfactor,
         "HondaWindFactorParams": self.windfactor,
       })
