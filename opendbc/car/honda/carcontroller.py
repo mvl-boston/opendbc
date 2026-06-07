@@ -212,14 +212,6 @@ class CarController(CarControllerBase):
 
     if CC.longActive:
       if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed):
-
-        # NIDECs don't allow acceleration near cruise_speed,
-        # so limit limits of pid to prevent windup
-        ACCEL_MAX_VALS = [self.params.NIDEC_ACCEL_MAX, 0.2]
-        cruise_speed = CS.out.cruiseState.speed
-        ACCEL_MAX_BP = [cruise_speed - 2., cruise_speed - .2]
-        self.nidec_pid.pos_limit = np.interp(CS.out.vEgo, ACCEL_MAX_BP, ACCEL_MAX_VALS)
-
         self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
         if (actuators.accel < 0.0):
           blendtarget = min(actuators.accel, self.nidec_pid.i) # force faster negative slope while hard braking
