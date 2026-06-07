@@ -339,7 +339,7 @@ class CarController(CarControllerBase):
       self.new_accel = pcm_accel
     elif (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and (CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
       gasfactor_error = (self.nidec_pid_factor - CS.out.aEgo)
-      self.gas_alpha = np.clip(self.gas_alpha + 0.00001 * gasalpha_error, -3.0, 3.0)
+      self.gas_alpha = np.clip(self.gas_alpha + 0.00001 * gasfactor_error, -3.0, 3.0)
       self.gasfactor *= (1 + 0.0001 * gasfactor_error)
       more_new_accel_needed = (self.new_accel > pcm_accel and self.nidec_pid_factor > CS.out.aEgo) or \
                               (self.new_accel < pcm_accel and self.nidec_pid_factor < CS.out.aEgo)
