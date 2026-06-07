@@ -484,7 +484,7 @@ class CarController(CarControllerBase):
         "HondaFeedForwardParams": self.average_factor,
         "HondaBrakePIDParams": self.brake_pid_factor_non_lowspeed,
         "HondaCreepFactorParams": self.creep_factor,
-        "HondGasAlphaParams": self.gas_alpha,
+        "HondaGasAlphaParams": self.gas_alpha,
         "HondaGasFactorParams": self.gasfactor,
         "HondaWindFactorParams": self.windfactor,
       })
