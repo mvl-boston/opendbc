@@ -220,7 +220,9 @@ class CarController(CarControllerBase):
           elif CS.out.gasPressed: # prevent fault from user gas with a pcm_gas of 198
             pcm_accel = 198
 
-          can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
+          can_sends.append(hondacan.create_brake_command(self.packer, self.CAN,
+                                                         0 if (self.apply_brake_last == 0) else apply_brake,
+                                                         pump_on,
                                                          pcm_override, pcm_cancel_cmd, alert_fcw,
                                                          self.CP.carFingerprint, CS.stock_brake))
           self.apply_brake_last = apply_brake
