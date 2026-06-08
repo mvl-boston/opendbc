@@ -191,8 +191,10 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
 
     bool violation = false;
     violation |= longitudinal_speed_checks(pcm_speed, HONDA_NIDEC_LONG_LIMITS);
-    violation |= longitudinal_gas_checks(pcm_gas, HONDA_NIDEC_LONG_LIMITS);
-    if (violation) {
+    if ((pcm_speed != 0) || (pcm_gas != 198)) { // allow 198 while braking which is what factory camera does
+      violation |= longitudinal_gas_checks(pcm_gas, HONDA_NIDEC_LONG_LIMITS);
+    }
+    if (violation && !gas_pressed) {
       tx = false;
     }
   }
@@ -277,7 +279,7 @@ static safety_config honda_nidec_init(uint16_t param) {
   // 0xE4 is steering on all cars except CRV and RDX, 0x194 for CRV and RDX,
   // 0x1FA is brake control, 0x30C is acc hud, 0x33D is lkas hud
   static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
-                                     {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
+                                     {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 4, .check_relay = false}};
 
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
 

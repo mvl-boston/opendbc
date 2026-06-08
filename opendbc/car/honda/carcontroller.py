@@ -210,8 +210,19 @@ class CarController(CarControllerBase):
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
-          pcm_override = True
-          can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
+          # limit brake release to 32 units per frame to match factory
+          apply_brake = max(self.apply_brake_last - 32, apply_brake)
+
+          pcm_override = CC.longActive or CS.out.stockAeb
+          if apply_brake > 0: # prevent fault from concurrent gas + brake, accel at 198 while braking on stock camera
+            pcm_speed = 0.0
+            pcm_accel = 198
+          elif CS.out.gasPressed: # prevent fault from user gas with a pcm_gas of 198
+            pcm_accel = 198
+
+          can_sends.append(hondacan.create_brake_command(self.packer, self.CAN,
+                                                         0 if (self.apply_brake_last == 0) else apply_brake,
+                                                         pump_on,
                                                          pcm_override, pcm_cancel_cmd, alert_fcw,
                                                          self.CP.carFingerprint, CS.stock_brake))
           self.apply_brake_last = apply_brake
@@ -226,8 +237,9 @@ class CarController(CarControllerBase):
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
       reduced_steering = CS.out.steeringPressed
-      can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
-                                                steering_available, reduced_steering, alert_steer_required, CS.lkas_hud))
+      if self.CP.carFingerprint in HONDA_BOSCH:
+        can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
+                                                  steering_available, reduced_steering, alert_steer_required, CS.lkas_hud))
 
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
