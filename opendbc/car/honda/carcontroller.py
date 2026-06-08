@@ -295,7 +295,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                 learn_speed = 300
               else:
                 learn_speed = 50
-              self.gasfactor = np.clip(self.gasfactor + gas_error / learn_speed * (gas_pedal_force - min_gas), 0.1, 3.0)
+              self.gasfactor = np.clip(self.gasfactor + gas_error / learn_speed * (gas_pedal_force - min_gas), 0.01, 3.0)
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
               if self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Faster reaction
                 wind_learn_speed = 100
