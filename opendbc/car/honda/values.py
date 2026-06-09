@@ -112,6 +112,9 @@ class HondaCarDocs(CarDocs):
 
     self.car_parts = CarParts.common([harness])
 
+    if CP.alphaLongitudinalAvailable:
+      self.footnotes.append(Footnote.HONDA_ALPHALONG)
+
     if CP.carFingerprint in (CAR.HONDA_CLARITY,):
       self.car_parts = CarParts.common([CarHarness.honda_clarity])
       self.car_parts.custom_parts_url = "https://shop.retropilot.org/product/honda-clarity-proxy-board-kit"
@@ -123,9 +126,9 @@ class Footnote(Enum):
   CIVIC_DIESEL = CarFootnote(
     "2019 Honda Civic 1.6L Diesel Sedan does not have ALC below 12mph.",
     Column.FSR_STEERING)
-  TRAFFIC_JAM_ASSIST = CarFootnote(
-    "ALC is supported below 45mph only when following a lead car.",
-    Column.FSR_STEERING)
+  HONDA_ALPHALONG = CarFootnote(
+    "Enabling longitudinal control (alpha) will disable all CMBS functionality, including AEB and FCW.",
+    Column.LONGITUDINAL)
 
 
 @dataclass
