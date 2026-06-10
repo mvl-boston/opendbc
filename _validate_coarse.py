@@ -20,7 +20,9 @@ class Sig:
         self.msb = start_bit
 
 def get_raw_value(dat, sig):  # verbatim from parser.py
-    ret = 0; i = sig.msb // 8; bits = sig.size
+    ret = 0;
+    i = sig.msb // 8;
+    bits = sig.size
     while 0 <= i < len(dat) and bits > 0:
         lsb = sig.lsb if (sig.lsb // 8) == i else i * 8
         msb = sig.msb if (sig.msb // 8) == i else (i + 1) * 8 - 1
@@ -73,23 +75,38 @@ print("[A2] CHKSUM/CNTR avoid the honda_* auto-enforcement trap (names != CHECKS
 
 # (3) control-flow replica of _update_bosch
 BOSCH = [0x2C8, 0x2C9]
-class Pt:  __slots__ = ("trackId","dRel","yRel","vRel","aRel","yvRel","measured")
-class Errs: canError = False
+class Pt:
+    __slots__ = ("trackId","dRel","yRel","vRel","aRel","yvRel","measured")
+class Errs:
+    canError = False
 class RDt:
-    def __init__(self): self.errors = Errs(); self.points = []
+    def __init__(self): self.errors = Errs();
+        self.points = []
 def ub(pts, vl, upd, can_valid):
     ret = RDt()
-    if not can_valid: ret.errors.canError = True
+    if not can_valid:
+        ret.errors.canError = True
     for ii in BOSCH:
         tid = BOSCH.index(ii)
-        if ii not in upd: pts.pop(tid, None); continue
+        if ii not in upd:
+            pts.pop(tid, None);
+            continue
         cpt = vl[ii]
-        if cpt["LONG_DIST_HI"] == 0xFF: pts.pop(tid, None); continue
+        if cpt["LONG_DIST_HI"] == 0xFF:
+            pts.pop(tid, None);
+            continue
         if tid not in pts:
-            p = Pt(); p.trackId = tid; p.aRel = float("nan"); p.yvRel = float("nan"); pts[tid] = p
-        pts[tid].dRel = cpt["LONG_DIST"]; pts[tid].yRel = -cpt["LAT_DIST"]
-        pts[tid].vRel = cpt["REL_SPEED"]; pts[tid].measured = True
-    ret.points = list(pts.values()); return ret
+            p = Pt();
+            p.trackId = tid;
+            p.aRel = float("nan");
+            p.yvRel = float("nan");
+            pts[tid] = p
+        pts[tid].dRel = cpt["LONG_DIST"];
+        pts[tid].yRel = -cpt["LAT_DIST"]
+        pts[tid].vRel = cpt["REL_SPEED"];
+        pts[tid].measured = True
+    ret.points = list(pts.values());
+    return ret
 
 live = {"LONG_DIST":1500,"LONG_DIST_HI":0x05,"LAT_DIST":100,"REL_SPEED":-4.0}
 sent = {"LONG_DIST":65520,"LONG_DIST_HI":0xFF,"LAT_DIST":0,"REL_SPEED":0.0}
@@ -101,7 +118,9 @@ print("[A3] two live leads -> 2 points (track 0/1); dRel/yRel(-LAT)/vRel/measure
 r = ub(pts, {0x2C8:sent,0x2C9:live}, {0x2C8,0x2C9}, True)
 assert 0 not in pts and 1 in pts and len(r.points)==1
 print("[A7] 0x2C8 sentinel -> track 0 cleared, track 1 kept")
-pts = {0:Pt(),1:Pt()}; pts[0].trackId=0; pts[1].trackId=1
+pts = {0:Pt(),1:Pt()};
+pts[0].trackId=0;
+pts[1].trackId=1
 r = ub(pts, {0x2C9:live}, {0x2C9}, True)
 assert 0 not in pts and 1 in pts
 print("[A7] 0x2C8 absent from cycle -> stale track 0 aged out")
