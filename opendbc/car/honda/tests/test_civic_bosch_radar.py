@@ -185,6 +185,7 @@ class TestCivicBoschFineParser(unittest.TestCase):
 
   def test_multi_object_emission(self):
     dt_ns = int(0.05 * 1e9)
+
     def burst(ns, cntr):
       return self._emit(ns, [self._f(0x280, _hdr_frame(3000, cntr=cntr)),   # slot 0
                              self._f(0x284, _hdr_frame(4000, cntr=cntr)),   # slot 1
