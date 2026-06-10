@@ -122,6 +122,13 @@ def _create_bosch_can_parser(CP):
 class RadarInterface(RadarInterfaceBase):
   def __init__(self, CP, CP_SP):
     super().__init__(CP, CP_SP)
+
+    # ADD THIS
+    print(f"DEBUG: Checking radar for {CP.carFingerprint}")
+    print(f"DEBUG: Raw CP.flags: {bin(CP.flags)}")
+    print(f"DEBUG: HONDA_BOSCH_A_RADAR is: {int(HondaFlags.HONDA_BOSCH_A_RADAR)}")
+    print(f"DEBUG: Result of & : {bool(CP.flags & HondaFlags.HONDA_BOSCH_A_RADAR)}")
+
     self.track_id = 0
     self.radar_fault = False
     self.radar_wrong_config = False
