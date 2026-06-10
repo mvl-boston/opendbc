@@ -128,7 +128,7 @@ class RadarInterface(RadarInterfaceBase):
     self.radar_off_can = CP.radarUnavailable
 
     # Bosch fine 0x280 track-table (Honda Civic Bosch, 36802-TBA) vs the legacy Nidec path
-    self.bosch_radar = (CP.flags & HondaFlags.BOSCH_A_RADAR)
+    self.bosch_radar = (CP.flags & HondaFlags.HONDA_BOSCH_A_RADAR)
 
     # Per-SLOT history for vRel derivation: slot index -> (last_dRel_m, last_seen_nanos).
     # NOTE: keyed by SLOT (0..5), not trackId. trackId now carries an incarnation (S1) so it changes on
