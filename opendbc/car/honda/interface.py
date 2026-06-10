@@ -57,7 +57,7 @@ class CarInterface(CarInterfaceBase):
       ret.pcmCruise = not ret.openpilotLongitudinalControl
 
       # 0x280 fine-range radar ingest is GATED to all Bosch A
-      if ret.flags & HondaFlags.BOSCH_A_RADAR:
+      if ret.flags & HondaFlags.HONDA_BOSCH_A_RADAR:
         ret.radarUnavailable = False
     else:
       ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
