@@ -113,7 +113,7 @@ BOSCH_RADAR_VREL_DT_MAX_S = 0.5  # s; baseline older than this -> re-seed, do no
 
 
 def _create_bosch_can_parser(CP):
-  if Bus.radar not in DBC[CP.carFingerprint]:
+  if not (CP.flags & HondaFlags.HONDA_BOSCH_A_RADAR):
     return None
   messages = [(m, 20) for m in BOSCH_RADAR_HDR_MSGS]
   return CANParser(DBC[CP.carFingerprint][Bus.radar], messages, CanBus(CP).camera)
