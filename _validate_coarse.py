@@ -80,7 +80,8 @@ class Pt:
 class Errs:
     canError = False
 class RDt:
-    def __init__(self): self.errors = Errs();
+    def __init__(self):
+        self.errors = Errs();
         self.points = []
 def ub(pts, vl, upd, can_valid):
     ret = RDt()
@@ -89,21 +90,21 @@ def ub(pts, vl, upd, can_valid):
     for ii in BOSCH:
         tid = BOSCH.index(ii)
         if ii not in upd:
-            pts.pop(tid, None);
+            pts.pop(tid, None)
             continue
         cpt = vl[ii]
         if cpt["LONG_DIST_HI"] == 0xFF:
-            pts.pop(tid, None);
+            pts.pop(tid, None)
             continue
         if tid not in pts:
-            p = Pt();
-            p.trackId = tid;
-            p.aRel = float("nan");
-            p.yvRel = float("nan");
+            p = Pt()
+            p.trackId = tid
+            p.aRel = float("nan")
+            p.yvRel = float("nan")
             pts[tid] = p
         pts[tid].dRel = cpt["LONG_DIST"];
         pts[tid].yRel = -cpt["LAT_DIST"]
-        pts[tid].vRel = cpt["REL_SPEED"];
+        pts[tid].vRel = cpt["REL_SPEED"]
         pts[tid].measured = True
     ret.points = list(pts.values());
     return ret
@@ -118,8 +119,8 @@ print("[A3] two live leads -> 2 points (track 0/1); dRel/yRel(-LAT)/vRel/measure
 r = ub(pts, {0x2C8:sent,0x2C9:live}, {0x2C8,0x2C9}, True)
 assert 0 not in pts and 1 in pts and len(r.points)==1
 print("[A7] 0x2C8 sentinel -> track 0 cleared, track 1 kept")
-pts = {0:Pt(),1:Pt()};
-pts[0].trackId=0;
+pts = {0:Pt(),1:Pt()}
+pts[0].trackId=0
 pts[1].trackId=1
 r = ub(pts, {0x2C9:live}, {0x2C9}, True)
 assert 0 not in pts and 1 in pts
