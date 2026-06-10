@@ -230,7 +230,7 @@ class RadarInterface(RadarInterfaceBase):
   def _update_bosch(self, updated_messages):
     # FINE per-track object table (0x280 block). Fixed slot map (0x280->slot0 ... 0x2DC->slot5).
     # RX-parse only; never takes 0x1DF / longitudinal authority, so factory AEB/CMBS stays fully live.
-    # Up to 6 RadarPoints are emitted; radard selects leadOne/leadTwo (we do NOT pre-select).
+    # Up to 6 RadarPoints are emitted; radard selects leadOne/leadTwo (we do NOT preselect).
     #
     # trackId is slot*STRIDE + incarnation (S1, no-reuse). vRel is NOT published on these frames (rlog-
     # confirmed b4:b5 is azimuth, not range-rate), so it is DERIVED per-SLOT as d(dRel)/dt across cycles
