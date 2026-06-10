@@ -20,8 +20,8 @@ class Sig:
         self.msb = start_bit
 
 def get_raw_value(dat, sig):  # verbatim from parser.py
-    ret = 0;
-    i = sig.msb // 8;
+    ret = 0
+    i = sig.msb // 8
     bits = sig.size
     while 0 <= i < len(dat) and bits > 0:
         lsb = sig.lsb if (sig.lsb // 8) == i else i * 8
@@ -81,7 +81,7 @@ class Errs:
     canError = False
 class RDt:
     def __init__(self):
-        self.errors = Errs();
+        self.errors = Errs()
         self.points = []
 def ub(pts, vl, upd, can_valid):
     ret = RDt()
@@ -102,11 +102,11 @@ def ub(pts, vl, upd, can_valid):
             p.aRel = float("nan")
             p.yvRel = float("nan")
             pts[tid] = p
-        pts[tid].dRel = cpt["LONG_DIST"];
+        pts[tid].dRel = cpt["LONG_DIST"]
         pts[tid].yRel = -cpt["LAT_DIST"]
         pts[tid].vRel = cpt["REL_SPEED"]
         pts[tid].measured = True
-    ret.points = list(pts.values());
+    ret.points = list(pts.values())
     return ret
 
 live = {"LONG_DIST":1500,"LONG_DIST_HI":0x05,"LAT_DIST":100,"REL_SPEED":-4.0}
