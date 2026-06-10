@@ -176,6 +176,11 @@ class RadarInterface(RadarInterfaceBase):
     self.updated_messages = set()
 
   def update(self, can_strings):
+    print(f"DEBUG: Updating {self.CP.carFingerprint}, bosch_radar={self.bosch_radar}, radar_off_can={self.radar_off_can}")
+    
+    # Check the parser's keys
+    print(f"DEBUG: Parser keys: {list(self.rcp.vl.keys())}")
+
     if self.radar_off_can or self.rcp is None:
       return super().update(None)
 
