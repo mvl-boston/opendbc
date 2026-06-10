@@ -7,7 +7,7 @@ from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.interfaces import RadarInterfaceBase
 from opendbc.car.honda.hondacan import CanBus
-from opendbc.car.honda.values import DBC, CAR
+from opendbc.car.honda.values import DBC, HONDA_BOSCH, HondaFlags
 
 
 def _create_nidec_can_parser(car_fingerprint):
@@ -251,7 +251,7 @@ class RadarInterface(RadarInterfaceBase):
     self.radar_off_can = CP.radarUnavailable
 
     # Bosch fine 0x280 track-table (Honda Civic Bosch, 36802-TBA) vs the legacy Nidec path
-    self.bosch_radar = CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH and Bus.radar in DBC[CP.carFingerprint]
+    self.bosch_radar = (CP.flags & HondaFlags.BOSCH_A_RADAR)
 
     # R1: per-SLOT [range, range_rate] KF (replaces the (last_dRel, nanos) derivative baseline).
     # NOTE: keyed by SLOT (0..5), not trackId. trackId now carries an incarnation (S1) so it changes on
