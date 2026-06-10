@@ -17,7 +17,7 @@ import re
 from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.honda.radar_interface import (
-  RadarInterface, BOSCH_RADAR_HDR_MSGS, BOSCH_RADAR_HDR_TAG, BOSCH_RADAR_LAT_SCALE, BOSCH_RADAR_STALE_S,
+  RadarInterface, BOSCH_RADAR_HDR_MSGS, BOSCH_RADAR_HDR_TAG, BOSCH_RADAR_STALE_S,
 )
 from opendbc.car.honda.values import CAR, DBC
 
@@ -82,7 +82,8 @@ for label, frame in (("strength 0xFE", hf(3999, strength=0xFE)), ("range 0x8000"
   assert len(rr.points) == 0, label
 print("[3c] sentinel skip (strength 0xFE / range 0x8000 / range>=0xFF80) -> 0 points OK")
 
-ri = make_ri(); b = ri.rcp.bus
+ri = make_ri()
+b = ri.rcp.bus
 rr = ri.update([0, [(0x280, hf(3000), b), (0x284, hf(4000), b), (0x2D0, hf(5000), b)]])
 assert {p.trackId for p in rr.points} == {0, 1, 2}
 print("[3d] multi-object emission -> 3 points, stable distinct trackIds {0,1,2} OK")
@@ -93,7 +94,8 @@ assert not math.isnan(p0.vRel) and p0.vRel < 0.0  # range shrank -> closing -> v
 print("[3e] derived vRel (d(dRel)/dt) closing-negative on a shrinking range OK (vRel=%.2f m/s)" % p0.vRel)
 
 # staleness: build a point on 0x280, then let the parser clock advance past STALE_S without 0x280
-ri = make_ri(); b = ri.rcp.bus
+ri = make_ri()
+b = ri.rcp.bus
 ri.update([0, [(0x280, hf(3000), b)]])
 assert len(ri.pts) == 1
 rr = ri.update([int((BOSCH_RADAR_STALE_S + 0.05) * 1e9), [(0x284, hf(0x8000), b)]])
@@ -125,7 +127,8 @@ def load_280(path):
   return out
 
 if os.path.exists(BFCAR_CSV):
-  ri = make_ri(); b = ri.rcp.bus
+  ri = make_ri()
+  b = ri.rcp.bus
   ranges, vrels = [], []
   for i, data in enumerate(load_280(BFCAR_CSV)):
     rr = ri.update([i * int(0.05e9), [(0x280, data, b)]])
@@ -139,7 +142,8 @@ if os.path.exists(BFCAR_CSV):
         % (len(ranges), max(ranges), min(ranges), sum(vrels) / len(vrels)))
 
 if os.path.exists(IDLE_CSV):
-  ri = make_ri(); b = ri.rcp.bus
+  ri = make_ri()
+  b = ri.rcp.bus
   mx = 0
   for i, data in enumerate(load_280(IDLE_CSV)):
     rr = ri.update([i * int(0.05e9), [(0x280, data, b)]])
