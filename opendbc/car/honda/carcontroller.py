@@ -283,7 +283,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             targetaccel = accel
 
           self.accel = float(np.clip(targetaccel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
-          gas_pedal_force = self.accel + wind_brake_ms2 * self.windfactor + hill_brake
+          gas_pedal_force = accel + wind_brake_ms2 * self.windfactor + hill_brake # not using self.accel since pid resets w gas pedal
 
           # live-learn gas pedal adjustments when openpilot is controlling gas
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
