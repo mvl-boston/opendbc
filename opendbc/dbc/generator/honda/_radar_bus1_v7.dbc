@@ -1,0 +1,209 @@
+VERSION "Accord 9G AU Radar BUS 1"
+
+NS_ :
+	CM_
+	BA_DEF_
+	BA_
+	VAL_
+	BA_DEF_DEF_
+BS_:
+
+BU_: RADAR ADAS EON
+
+
+BO_ 768 RADAR_VEHICLE_STATE: 8 ADAS
+ SG_ VEHICLE_SPEED : 15|8@0+ (1,0) [0|255] "kph" RADAR
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" RADAR
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" RADAR
+
+BO_ 769 RADAR_VEHICLE_STATE2: 8 ADAS
+
+BO_ 1024 RADAR_DIAGNOSTIC: 8 RADAR
+ SG_ RADAR_STATE : 7|8@0+ (1,0) [0|255] "" EON
+ SG_ NOT_READY : 15|8@0+ (1,0) [0|255] "" EON
+ SG_ RADAR_FLAGS : 23|8@0+ (1,0) [0|255] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1040 RADAR_TRACK_A0: 8 RADAR
+ SG_ LONG_DIST : 7|12@0+ (0.0625,0) [0|127.9] "m" EON
+ SG_ TRACK_FLAGS : 11|4@0+ (1,0) [0|15] "" EON
+ SG_ FLAG_B23 : 23|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B22 : 22|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B21 : 21|1@0+ (1,0) [0|1] "" EON
+ SG_ LAT_DIST : 20|13@0- (0.0078125,0) [-32|32] "m" EON
+ SG_ REL_SPEED : 37|14@0- (0.0078125,0) [-64|64] "m/s" EON
+ SG_ TRACK_STATUS : 55|4@0+ (1,0) [0|15] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1041 RADAR_TRACK_A1: 8 RADAR
+ SG_ LONG_DIST : 7|12@0+ (0.0625,0) [0|127.9] "m" EON
+ SG_ TRACK_FLAGS : 11|4@0+ (1,0) [0|15] "" EON
+ SG_ FLAG_B23 : 23|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B22 : 22|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B21 : 21|1@0+ (1,0) [0|1] "" EON
+ SG_ LAT_DIST : 20|13@0- (0.0078125,0) [-32|32] "m" EON
+ SG_ REL_SPEED : 37|14@0- (0.0078125,0) [-64|64] "m/s" EON
+ SG_ TRACK_STATUS : 55|4@0+ (1,0) [0|15] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1042 RADAR_TRACK_A2: 8 RADAR
+ SG_ LONG_DIST : 7|12@0+ (0.0625,0) [0|127.9] "m" EON
+ SG_ TRACK_FLAGS : 11|4@0+ (1,0) [0|15] "" EON
+ SG_ FLAG_B23 : 23|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B22 : 22|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B21 : 21|1@0+ (1,0) [0|1] "" EON
+ SG_ LAT_DIST : 20|13@0- (0.0078125,0) [-32|32] "m" EON
+ SG_ REL_SPEED : 37|14@0- (0.0078125,0) [-64|64] "m/s" EON
+ SG_ TRACK_STATUS : 55|4@0+ (1,0) [0|15] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1043 RADAR_TRACK_A3: 8 RADAR
+ SG_ LONG_DIST : 7|12@0+ (0.0625,0) [0|127.9] "m" EON
+ SG_ TRACK_FLAGS : 11|4@0+ (1,0) [0|15] "" EON
+ SG_ FLAG_B23 : 23|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B22 : 22|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B21 : 21|1@0+ (1,0) [0|1] "" EON
+ SG_ LAT_DIST : 20|13@0- (0.0078125,0) [-32|32] "m" EON
+ SG_ REL_SPEED : 37|14@0- (0.0078125,0) [-64|64] "m/s" EON
+ SG_ TRACK_STATUS : 55|4@0+ (1,0) [0|15] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1044 RADAR_TRACK_A4: 8 RADAR
+ SG_ LONG_DIST : 7|12@0+ (0.0625,0) [0|127.9] "m" EON
+ SG_ TRACK_FLAGS : 11|4@0+ (1,0) [0|15] "" EON
+ SG_ FLAG_B23 : 23|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B22 : 22|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B21 : 21|1@0+ (1,0) [0|1] "" EON
+ SG_ LAT_DIST : 20|13@0- (0.0078125,0) [-32|32] "m" EON
+ SG_ REL_SPEED : 37|14@0- (0.0078125,0) [-64|64] "m/s" EON
+ SG_ TRACK_STATUS : 55|4@0+ (1,0) [0|15] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1045 RADAR_TRACK_A5: 8 RADAR
+ SG_ LONG_DIST : 7|12@0+ (0.0625,0) [0|127.9] "m" EON
+ SG_ TRACK_FLAGS : 11|4@0+ (1,0) [0|15] "" EON
+ SG_ FLAG_B23 : 23|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B22 : 22|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B21 : 21|1@0+ (1,0) [0|1] "" EON
+ SG_ LAT_DIST : 20|13@0- (0.0078125,0) [-32|32] "m" EON
+ SG_ REL_SPEED : 37|14@0- (0.0078125,0) [-64|64] "m/s" EON
+ SG_ TRACK_STATUS : 55|4@0+ (1,0) [0|15] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1046 RADAR_TRACK_A6: 8 RADAR
+ SG_ LONG_DIST : 7|12@0+ (0.0625,0) [0|127.9] "m" EON
+ SG_ TRACK_FLAGS : 11|4@0+ (1,0) [0|15] "" EON
+ SG_ FLAG_B23 : 23|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B22 : 22|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B21 : 21|1@0+ (1,0) [0|1] "" EON
+ SG_ LAT_DIST : 20|13@0- (0.0078125,0) [-32|32] "m" EON
+ SG_ REL_SPEED : 37|14@0- (0.0078125,0) [-64|64] "m/s" EON
+ SG_ TRACK_STATUS : 55|4@0+ (1,0) [0|15] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1047 RADAR_TRACK_A7: 8 RADAR
+ SG_ LONG_DIST : 7|12@0+ (0.0625,0) [0|127.9] "m" EON
+ SG_ TRACK_FLAGS : 11|4@0+ (1,0) [0|15] "" EON
+ SG_ FLAG_B23 : 23|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B22 : 22|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B21 : 21|1@0+ (1,0) [0|1] "" EON
+ SG_ LAT_DIST : 20|13@0- (0.0078125,0) [-32|32] "m" EON
+ SG_ REL_SPEED : 37|14@0- (0.0078125,0) [-64|64] "m/s" EON
+ SG_ TRACK_STATUS : 55|4@0+ (1,0) [0|15] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1056 RADAR_TRACK_B0: 8 RADAR
+ SG_ LONG_DIST : 7|12@0+ (0.0625,0) [0|127.9] "m" EON
+ SG_ TRACK_FLAGS : 11|4@0+ (1,0) [0|15] "" EON
+ SG_ FLAG_B23 : 23|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B22 : 22|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B21 : 21|1@0+ (1,0) [0|1] "" EON
+ SG_ LAT_DIST : 20|13@0- (0.0078125,0) [-32|32] "m" EON
+ SG_ REL_SPEED : 37|14@0- (0.0078125,0) [-64|64] "m/s" EON
+ SG_ TRACK_STATUS : 55|4@0+ (1,0) [0|15] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1057 RADAR_TRACK_B1: 8 RADAR
+ SG_ LONG_DIST : 7|12@0+ (0.0625,0) [0|127.9] "m" EON
+ SG_ TRACK_FLAGS : 11|4@0+ (1,0) [0|15] "" EON
+ SG_ FLAG_B23 : 23|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B22 : 22|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B21 : 21|1@0+ (1,0) [0|1] "" EON
+ SG_ LAT_DIST : 20|13@0- (0.0078125,0) [-32|32] "m" EON
+ SG_ REL_SPEED : 37|14@0- (0.0078125,0) [-64|64] "m/s" EON
+ SG_ TRACK_STATUS : 55|4@0+ (1,0) [0|15] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1058 RADAR_TRACK_B2: 8 RADAR
+ SG_ LONG_DIST : 7|12@0+ (0.0625,0) [0|127.9] "m" EON
+ SG_ TRACK_FLAGS : 11|4@0+ (1,0) [0|15] "" EON
+ SG_ FLAG_B23 : 23|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B22 : 22|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B21 : 21|1@0+ (1,0) [0|1] "" EON
+ SG_ LAT_DIST : 20|13@0- (0.0078125,0) [-32|32] "m" EON
+ SG_ REL_SPEED : 37|14@0- (0.0078125,0) [-64|64] "m/s" EON
+ SG_ TRACK_STATUS : 55|4@0+ (1,0) [0|15] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1059 RADAR_TRACK_B3: 8 RADAR
+ SG_ LONG_DIST : 7|12@0+ (0.0625,0) [0|127.9] "m" EON
+ SG_ TRACK_FLAGS : 11|4@0+ (1,0) [0|15] "" EON
+ SG_ FLAG_B23 : 23|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B22 : 22|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B21 : 21|1@0+ (1,0) [0|1] "" EON
+ SG_ LAT_DIST : 20|13@0- (0.0078125,0) [-32|32] "m" EON
+ SG_ REL_SPEED : 37|14@0- (0.0078125,0) [-64|64] "m/s" EON
+ SG_ TRACK_STATUS : 55|4@0+ (1,0) [0|15] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1060 RADAR_TRACK_B4: 8 RADAR
+ SG_ LONG_DIST : 7|12@0+ (0.0625,0) [0|127.9] "m" EON
+ SG_ TRACK_FLAGS : 11|4@0+ (1,0) [0|15] "" EON
+ SG_ FLAG_B23 : 23|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B22 : 22|1@0+ (1,0) [0|1] "" EON
+ SG_ FLAG_B21 : 21|1@0+ (1,0) [0|1] "" EON
+ SG_ LAT_DIST : 20|13@0- (0.0078125,0) [-32|32] "m" EON
+ SG_ REL_SPEED : 37|14@0- (0.0078125,0) [-64|64] "m/s" EON
+ SG_ TRACK_STATUS : 55|4@0+ (1,0) [0|15] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+BO_ 1279 RADAR_STATUS_4FF: 8 RADAR
+ SG_ STATUS_A : 7|8@0+ (1,0) [0|255] "" EON
+ SG_ STATUS_B : 15|8@0+ (1,0) [0|111] "" EON
+ SG_ STATUS_C : 23|8@0+ (1,0) [0|255] "" EON
+ SG_ STATUS_D : 31|8@0+ (1,0) [0|255] "" EON
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+
+
+CM_ SG_ 1040 LONG_DIST "CONFIRMED. 12-bit unsigned, 0.0625 m/bit. 0x7FF = empty slot (frame = 7FFFxx0000000000).";
+CM_ SG_ 1040 TRACK_FLAGS "byte1 low nibble. 0xF when slot empty; varies when tracked. NOT distance precision (tested). Quality/age/ID - unknown semantics.";
+CM_ SG_ 1040 LAT_DIST "CONFIRMED v6: 13-bit signed, bytes2-3 bits12..0, 0.0078125 m/bit (1/128). Lane clustering at 0 and +/-3.5m validated on 21 logs. Left/right sign convention unverified.";
+CM_ SG_ 1040 REL_SPEED "CONFIRMED v6: 14-bit signed, byte4 bits5..0 + byte5, 0.0078125 m/s per bit (1/128). r=0.994 vs dDist/dt, 99% sign agreement, 429k reference frames. Negative = closing. REPLACES old byte3 guess (r=-0.006, was noise).";
+CM_ SG_ 1040 FLAG_B22 "byte2 bit6. NOT a stationary flag (disproven: among physically-stationary tracks, REL_SPEED ~ -vEgo, set only 3-15%; set on moving tracks 10-24%). Weakly biased to closing targets. Do not use for filtering; derive stationarity as REL_SPEED + vEgo ~ 0.";
+CM_ SG_ 1040 FLAG_B23 "byte2 bit7. Also biased to large |REL_SPEED|. Unknown.";
+CM_ SG_ 1040 FLAG_B21 "byte2 bit5. Rare (~550 frames). Unknown.";
+CM_ SG_ 1040 TRACK_STATUS "byte6 high nibble, 0-9 observed, mostly 0. Low nibble always 0.";
+CM_ SG_ 1040 CHECKSUM "CONFIRMED: standard Honda nibble-sum checksum, byte7 low nibble. 100% on 2.33M frames (all 0x4xx tracks).";
+CM_ SG_ 1040 COUNTER "CONFIRMED: byte7 bits5-4, increments mod 4, 100% on 2.33M frames. byte7 bits7-6 always 0.";
+CM_ SG_ 1024 RADAR_STATE "byte0. CORRECTED v7: 0x7D=active, only seen while moving; 0x6F=normal standby at standstill, NOT a fault; 0x68=initializing, first ~2.2s after car start with RADAR_FLAGS=0x08. 0x68/0x08 reappearing while car is awake means radar knocked into re-init, e.g. by UDS scan, giving latched ACC/CMBS error.";
+CM_ SG_ 1024 NOT_READY "byte1. NEW in v7 (was unmapped; the init flag was wrongly attributed to RADAR_FLAGS/byte2 in v6). 0x08 = initializing/not-ready, only seen with RADAR_STATE 0x68. 0x00 in all normal operation.";
+CM_ SG_ 1024 RADAR_FLAGS "byte2. 0x10 in ~5% of active_tracking frames, 0x08 rare; never nonzero at standby. Semantics unknown.";
+CM_ BO_ 1056 "B-group slots 0x420-0x424 hold predominantly stationary/slow objects: 76-87% of valid tracks satisfy REL_SPEED ~ -vEgo regardless of flag bits. FLAG_B22 carries no stationary info here either.";
+CM_ BO_ 1279 "10 Hz. Bytes 4-6 always 0x00. STATUS_A-D variable, semantics unknown. Honda nibble-sum checksum and mod-4 counter CONFIRMED 100% on 10k frames.";
+CM_ BO_ 768 "VEHICLE_SPEED CONFIRMED: byte1, integer kph, matches carState vEgo exactly. Honda checksum and counter CONFIRMED 100%.";
+VAL_ 1024 RADAR_STATE 125 "active_tracking" 111 "standby_standstill" 104 "initializing";
