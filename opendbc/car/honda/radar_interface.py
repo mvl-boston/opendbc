@@ -2,11 +2,14 @@
 from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.interfaces import RadarInterfaceBase
-from opendbc.car.honda.values import DBC
+from opendbc.car.honda.values import DBC, CAR
 
 
 def _create_nidec_can_parser(car_fingerprint):
-  radar_messages = [0x400] + list(range(0x430, 0x43A)) + list(range(0x440, 0x446))
+  if car_fingerprint == CAR.HONDA_ACCORD_9G_AU:
+    radar_messages = [0x400] + list(range(0x410, 0x424))
+  else:
+    radar_messages = [0x400] + list(range(0x430, 0x43A)) + list(range(0x440, 0x446))
   messages = [(m, 20) for m in radar_messages]
   return CANParser(DBC[car_fingerprint][Bus.radar], messages, 1)
 
@@ -24,7 +27,7 @@ class RadarInterface(RadarInterfaceBase):
       self.rcp = None
     else:
       self.rcp = _create_nidec_can_parser(CP.carFingerprint)
-    self.trigger_msg = 0x445
+    self.trigger_msg = 0x4FF if (CP.carFingerprint == CAR.HONDA_ACCORD_9G_AU) else 0x445
     self.updated_messages = set()
 
   def update(self, can_strings):
