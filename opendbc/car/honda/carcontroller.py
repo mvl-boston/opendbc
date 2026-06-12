@@ -162,6 +162,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                    neg_limit=-2.0,
                                    rate=50)
     self.brake_pid.reset()
+    self.temp_errorlogging = 0.0
 
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
@@ -295,6 +296,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                 learn_speed = 300
               else:
                 learn_speed = 50
+              self.temp_errorlogging = gas_error
               self.gasfactor = np.clip(self.gasfactor + gas_error / learn_speed * (gas_pedal_force - min_gas), 0.01, 3.0)
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
               if self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Faster reaction
@@ -385,7 +387,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                                        self.last_button_frame, self.CAN))
 
     new_actuators = actuators.as_builder()
-    new_actuators.speed = self.speed
+    new_actuators.speed = self.temp_errorlogging
+    # new_actuators.speed = self.speed
     new_actuators.accel = self.accel
     new_actuators.gas = float(self.gasfactor)
     new_actuators.brake = float(self.windfactor)
