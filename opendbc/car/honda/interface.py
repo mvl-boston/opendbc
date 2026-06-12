@@ -53,7 +53,6 @@ class CarInterface(CarInterfaceBase):
       ret.openpilotLongitudinalControl = alpha_long and (candidate not in HONDA_BOSCH_CANFD)
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
-      ret.radarUnavailable = True
       ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
       ret.openpilotLongitudinalControl = True
 
