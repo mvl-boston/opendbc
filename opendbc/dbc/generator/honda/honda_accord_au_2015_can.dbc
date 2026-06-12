@@ -5,3 +5,4 @@ CM_ "IMPORT _nidec_scm_group_a.dbc";
 CM_ "IMPORT _steering_sensors_c.dbc";
 CM_ "IMPORT _steering_control_a.dbc";
 CM_ "IMPORT _gearbox_legacy.dbc";
+CM_ "IMPORT _radar_bus1_v7.dbc
