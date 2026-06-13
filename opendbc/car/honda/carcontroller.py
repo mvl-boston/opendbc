@@ -319,7 +319,7 @@ class CarController(CarControllerBase):
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
           can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                        self.stopping_counter, self.CP.carFingerprint))
+                                                        self.stopping_counter, self.CP.carFingerprint, self.accel))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 0) and (not CS.out.stockAeb):
