@@ -55,7 +55,10 @@ class RadarInterface(RadarInterfaceBase):
       cpt = self.rcp.vl[ii]
       if ii == 0x400:
         # check for radar faults
-        self.radar_fault = cpt['RADAR_STATE'] != 0x79
+        if self.radar_type == 'Elesys':
+          self.radar_fault = cpt['RADAR_STATE'] not in (104, 111, 125)
+        else:
+          self.radar_fault = cpt['RADAR_STATE'] != 0x79
         self.radar_wrong_config = cpt['RADAR_STATE'] == 0x69
       elif cpt['LONG_DIST'] < (127 if (self.radar_type == 'Elesys') else 255):
         if self.radar_type == 'Elesys':
