@@ -22,13 +22,14 @@ class RadarInterface(RadarInterfaceBase):
     self.radar_fault = False
     self.radar_wrong_config = False
     self.radar_off_can = CP.radarUnavailable
+    self.radar_type = 'Elesys' if (CP.carFingerprint == CAR.HONDA_ACCORD_9G_AU) else 'Nidec'
 
     # Nidec
     if self.radar_off_can:
       self.rcp = None
     else:
       self.rcp = _create_nidec_can_parser(CP.carFingerprint)
-    self.trigger_msg = 0x4FF if (CP.carFingerprint == CAR.HONDA_ACCORD_9G_AU) else 0x445
+    self.trigger_msg = 0x423 if (self.radar_type == 'Elesys') else 0x445
     self.updated_messages = set()
 
   def update(self, can_strings):
@@ -56,7 +57,7 @@ class RadarInterface(RadarInterfaceBase):
         # check for radar faults
         self.radar_fault = cpt['RADAR_STATE'] != 0x79
         self.radar_wrong_config = cpt['RADAR_STATE'] == 0x69
-      elif cpt['LONG_DIST'] < 255:
+      elif cpt['LONG_DIST'] < (127 if (self.radar_type == 'Elesys') else 255):
         if ii not in self.pts or cpt['NEW_TRACK']:
           self.pts[ii] = structs.RadarData.RadarPoint()
           self.pts[ii].trackId = self.track_id
