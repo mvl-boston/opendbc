@@ -384,3 +384,4 @@ class CarController(CarControllerBase):
         "HondaGasFactorParams": self.gasfactor,
         "HondaWindFactorParams": self.windfactor,
       })
+   return new_actuators, can_sends
