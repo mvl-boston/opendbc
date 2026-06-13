@@ -297,7 +297,7 @@ class CAR(Platforms):
   HONDA_ACCORD_9G_AU = HondaNidecPlatformConfig(
     [], # don't add to cardocs since custom steering board
     CarSpecs(mass=3343 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=17.5, centerToFrontRatio=0.37, minSteerSpeed=99. * CV.MPH_TO_MS),  # as spec
-    {Bus.pt: 'honda_accord_au_2015_can_generated', Bus.radar: 'honda_accord_au_2015_can_generated'},
+    {Bus.pt: 'honda_accord_au_2015_can_generated', Bus.radar: 'honda_accord_2015au_radar'},
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   HONDA_CRV = HondaNidecPlatformConfig(
