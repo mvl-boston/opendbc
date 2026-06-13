@@ -1,6 +1,8 @@
 import numpy as np
 import math
 from openpilot.common.params import Params
+import threading
+from queue import Empty, Queue
 
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
@@ -91,6 +93,31 @@ def process_hud_alert(hud_alert):
   return alert_fcw, alert_steer_required
 
 
+class HondaParamWriter:
+  def __init__(self):
+    self._params = Params()
+    self._queue = Queue()
+    self._thread = threading.Thread(target=self._run, name="honda-param-writer", daemon=True)
+    self._thread.start()
+
+  def put_many(self, values):
+    self._queue.put({key: float(value) for key, value in values.items()})
+
+  def _run(self):
+    while True:
+      pending = self._queue.get()
+
+      # Collapse queued snapshots so delayed writes keep only the newest value per key.
+      try:
+        while True:
+          pending.update(self._queue.get_nowait())
+      except Empty:
+        pass
+
+      for key, value in pending.items():
+        self._params.put(key, value)
+
+
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
@@ -98,6 +125,7 @@ class CarController(CarControllerBase):
     self.params = CarControllerParams(CP)
     self.CAN = hondacan.CanBus(CP)
     self.tja_control = CP.carFingerprint in HONDA_BOSCH_TJA_CONTROL
+    self.param_writer = HondaParamWriter()
 
     self.braking = False
     self.brake_steady = 0.
@@ -350,10 +378,9 @@ class CarController(CarControllerBase):
     new_actuators.torqueOutputCan = float(self.average_factor)
 
     if self.frame % 6000 == 0:
-      Params().put_nonblocking("HondaFeedForwardParams", float(self.average_factor))
-      Params().put_nonblocking("HondaBrakePIDParams", float(self.brake_pid_factor_non_lowspeed))
-      Params().put_nonblocking("HondaGasFactorParams", float(self.gasfactor))
-      Params().put_nonblocking("HondaWindFactorParams", float(self.windfactor))
-
-    self.frame += 1
-    return new_actuators, can_sends
+      self.param_writer.put_many({
+        "HondaFeedForwardParams": self.average_factor,
+        "HondaBrakePIDParams": self.brake_pid_factor_non_lowspeed,
+        "HondaGasFactorParams": self.gasfactor,
+        "HondaWindFactorParams": self.windfactor,
+      })
