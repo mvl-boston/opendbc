@@ -8,9 +8,10 @@ from opendbc.car.honda.values import DBC, CAR
 def _create_nidec_can_parser(car_fingerprint):
   if car_fingerprint == CAR.HONDA_ACCORD_9G_AU:
     radar_messages = [0x400] + list(range(0x410, 0x424))
+    messages = [(m, 10) for m in radar_messages]
   else:
     radar_messages = [0x400] + list(range(0x430, 0x43A)) + list(range(0x440, 0x446))
-  messages = [(m, 20) for m in radar_messages]
+    messages = [(m, 20) for m in radar_messages]
   return CANParser(DBC[car_fingerprint][Bus.radar], messages, 1)
 
 
