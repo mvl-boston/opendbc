@@ -220,7 +220,7 @@ class CarController(CarControllerBase):
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
-    if (self.CP.carFingerprint == CAR.ACURA_MDX_3G_MMR) and \
+    if (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and \
         (self.apply_brake_last > 0 or self.new_accel < 1e-5): # lower steer limits while braking
       brake_limit = float(233.0 / self.params.STEER_MAX)
       limited_torque = float(np.clip(limited_torque, -brake_limit, brake_limit))
