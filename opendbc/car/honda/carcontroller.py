@@ -291,20 +291,20 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             gas_error = self.accel - CS.out.aEgo
             if gas_error != 0.0 and gas_pedal_force > min_gas:
               if self.CP.carFingerprint in (CAR.HONDA_INSIGHT, CAR.HONDA_CIVIC_BOSCH): # gas pedal reacts too slowly
-                learn_speed = 150
+                learn_speed = 150.0
               elif self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Prevent overreacting to turbo lag
-                learn_speed = 300
+                learn_speed = 300.0
               else:
-                learn_speed = 50
+                learn_speed = 50.0
               self.temp_errorlogging = gas_error
               self.gasfactor = np.clip(self.gasfactor + gas_error / learn_speed * (gas_pedal_force - min_gas), 0.01, 3.0)
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
               if self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Faster reaction
-                wind_learn_speed = 100
+                wind_learn_speed = 100.0
               else:
-                wind_learn_speed = 1000
-              wind_adjust = 1 + wind_brake_ms2 / wind_learn_speed
-              self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
+                wind_learn_speed = 1000.0
+              wind_adjust = 1.0 + wind_brake_ms2 / wind_learn_speed
+              self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0.0) else 1.0/wind_adjust), 0.1, 3.0)
             if gas_pedal_force <= min_gas: # don't reduce windfactor while braking, allow increases
               self.windfactor = max(self.windfactor, self.windfactor_before_brake)
             else:
@@ -341,10 +341,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           gas_error = actuators.accel - CS.out.aEgo
           if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and self.CP_SP.enableGasInterceptor:
             if gas_error != 0.0 and gas > 0.0:
-              self.gasfactor = np.clip(self.gasfactor + gas_error / 150 * (gas * 4.8), 0.1, 3.0)
+              self.gasfactor = np.clip(self.gasfactor + gas_error / 150.0 * (gas * 4.8), 0.1, 3.0)
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
-              wind_adjust = 1 + (wind_brake * 4.8) / 1000
-              self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
+              wind_adjust = 1.0 + (wind_brake * 4.8) / 1000.0
+              self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0.0) else 1.0/wind_adjust), 0.1, 5.0)
             if gas <= 0.0: # don't reduce windfactor while braking, allow increases
               self.windfactor = max(self.windfactor, self.windfactor_before_brake)
             else:
