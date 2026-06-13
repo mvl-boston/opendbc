@@ -290,7 +290,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
             gas_error = self.accel - CS.out.aEgo
             if gas_error != 0.0 and gas_pedal_force > min_gas:
-              if self.CP.carFingerprint == CAR.HONDA_INSIGHT: # Insight gas pedal reacts too slowly
+              if self.CP.carFingerprint in (CAR.HONDA_INSIGHT, CAR.HONDA_CIVIC_BOSCH): # gas pedal reacts too slowly
                 learn_speed = 150
               elif self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Prevent overreacting to turbo lag
                 learn_speed = 300
