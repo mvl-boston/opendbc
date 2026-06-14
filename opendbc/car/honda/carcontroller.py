@@ -163,6 +163,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                    rate=50)
     self.brake_pid.reset()
     self.temp_errorlogging = 0.0
+    self.temp_errorlogging2 = 0.0
 
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
@@ -285,6 +286,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
           self.accel = float(np.clip(targetaccel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
           gas_pedal_force = accel + wind_brake_ms2 * self.windfactor + hill_brake # not using self.accel since pid resets w gas pedal
+          self.temp_errorlogging2 = float(gas_pedal_force)
 
           # live-learn gas pedal adjustments when openpilot is controlling gas
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
@@ -393,7 +395,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     new_actuators.gas = float(self.gasfactor)
     new_actuators.brake = float(self.windfactor)
     new_actuators.torque = self.last_torque
-    new_actuators.torqueOutputCan = apply_torque
+    new_actuators.torqueOutputCan = float(self.temp_errorlogging2)
 
     if self.frame % 6000 == 0:
       self.param_writer.put_many({
