@@ -161,8 +161,8 @@ class CarController(CarControllerBase):
     self.nidec_pid.reset()
 
     # extra-brake controller
-    self.brake_pid = PIDController(k_p=([0,], [0,]),
-                                   k_i=([0.], [2.0]),
+    self.brake_pid = PIDController(k_p=0.0,
+                                   k_i=2.0,
                                    pos_limit=4.0,
                                    neg_limit=0,
                                    rate=50)
