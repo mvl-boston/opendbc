@@ -85,7 +85,6 @@ class CarInterface(CarInterfaceBase):
     ret.lateralTuning.pid.kf = 0.00006  # conservative feed-forward
     ret.steerActuatorDelay = 0.1
 
-    ret.stoppingDecelRate = 0.3  # smooth out harsh braking before standstill
     if candidate in HONDA_BOSCH:
       ret.longitudinalActuatorDelay = 0.5 # s
       # longitudinal gas-only tuning for Bosch hondas is in carcontroller
@@ -98,8 +97,11 @@ class CarInterface(CarInterfaceBase):
 
     if candidate == CAR.HONDA_CITY_7G:
       ret.vEgoStopping = 2.0
-      ret.vEgoStarting = ret.vEgoStopping
       ret.stoppingDecelRate = 0.3
+    else:
+      ret.vEgoStopping = 0.5
+      ret.stoppingDecelRate = 0.1
+    ret.vEgoStarting = ret.vEgoStopping
 
     # Disable control if EPS mod detected
     for fw in car_fw:
