@@ -474,7 +474,7 @@ class CarController(CarControllerBase):
     new_actuators.brake = float(self.brake_pid.i)
     new_actuators.torque = self.last_torque
     # new_actuators.torqueOutputCan = float(self.average_factor)
-    new_actuators.torqueOutputCan = float(self.brake_pid_factor = 0.0)
+    new_actuators.torqueOutputCan = float(self.brake_pid_factor)
 
     if self.frame % 6000 == 0:
       self.param_writer.put_many({
