@@ -335,7 +335,8 @@ class CarController(CarControllerBase):
 
     if self.CP.carFingerprint in HONDA_BOSCH:
       self.new_accel = pcm_accel
-    elif (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and (CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
+    elif (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
+         (CS.out.vEgo <= CS.out.cruiseState.speed - 2.) and (self.apply_brake_last == 0):
       gasfactor_error = (self.accel - CS.out.aEgo)
       self.gas_alpha = np.clip(self.gas_alpha + 0.0001 * gasfactor_error, -3.0, 3.0)
       self.gasfactor *= (1 + 0.0001 * gasfactor_error * adjust_accel)
