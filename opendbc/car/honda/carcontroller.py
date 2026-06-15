@@ -211,7 +211,8 @@ class CarController(CarControllerBase):
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
 
     if CC.longActive:
-      if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed):
+      if (actuators.longControlState in (LongCtrlState.pid, LongCtrlState.stopping)) and (CS.out.vEgo > 1e-5)
+         and (not CS.out.stockAeb) and (not CS.out.gasPressed):
         self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
         self.accel = actuators.accel + self.nidec_pid_factor
         adjust_accel = self.accel + hill_brake + self.gas_alpha
