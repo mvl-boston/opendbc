@@ -234,7 +234,7 @@ class _SlotRangeKF:
 
 
 def _create_bosch_can_parser(CP):
-  if Bus.radar not in DBC[CP.carFingerprint]:
+  if not (CP.flags & HondaFlags.HONDA_BOSCH_A_RADAR):
     return None
   messages = [(m, 20) for m in BOSCH_RADAR_HDR_MSGS]
   return CANParser(DBC[CP.carFingerprint][Bus.radar], messages, CanBus(CP).camera)
@@ -249,7 +249,7 @@ class RadarInterface(RadarInterfaceBase):
     self.radar_off_can = CP.radarUnavailable
 
     # Bosch fine 0x280 track-table (Honda Civic Bosch, 36802-TBA) vs the legacy Nidec path
-    self.bosch_radar = CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH and Bus.radar in DBC[CP.carFingerprint]
+    self.bosch_radar = (CP.flags & HondaFlags.HONDA_BOSCH_A_RADAR)
 
     # R1: per-SLOT [range, range_rate] KF (replaces the (last_dRel, nanos) derivative baseline).
     # NOTE: keyed by SLOT (0..5), not trackId. trackId now carries an incarnation (S1) so it changes on
