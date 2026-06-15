@@ -7,7 +7,7 @@ from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.interfaces import RadarInterfaceBase
 from opendbc.car.honda.hondacan import CanBus
-from opendbc.car.honda.values import DBC, CAR
+from opendbc.car.honda.values import DBC
 
 
 def _create_nidec_can_parser(car_fingerprint):
