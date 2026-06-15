@@ -63,6 +63,7 @@ jobs:
     timeout-minutes: ${{ github.repository == 'commaai/opendbc' && 45 || 999 }}
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         include:
           - os: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-latest' }}
