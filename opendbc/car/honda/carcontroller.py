@@ -236,10 +236,8 @@ class CarController(CarControllerBase):
           self.windfactor_before_gasmax = self.windfactor
 
       else:
-        self.accel = actuators.accel
-        adjust_accel = self.accel
-        self.nidec_pid.reset()
-        self.nidec_pid_factor = 0
+        self.accel = actuators.accel + self.nidec_pid_factor
+        adjust_accel = self.accel + hill_brake + self.gas_alpha
 
       gas, brake, creep_impact = compute_gb_honda_nidec(adjust_accel, CS.out.vEgo, self.creep_factor)
       gas_error = self.accel - CS.out.aEgo
