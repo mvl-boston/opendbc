@@ -287,7 +287,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
           # live-learn gas pedal adjustments when openpilot is controlling gas
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
-            gas_error = self.accel - CS.out.aEgo
+            gas_error = accel - CS.out.aEgo
             if gas_error != 0.0 and gas_pedal_force > min_gas:
               if self.CP.carFingerprint == CAR.HONDA_INSIGHT: # Insight gas pedal reacts too slowly
                 learn_speed = 150
