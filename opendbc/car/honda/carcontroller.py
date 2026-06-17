@@ -164,6 +164,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.brake_pid.reset()
     self.temp_errorlogging = 0.0
     self.temp_errorlogging2 = 0.0
+    self.temp_errorlogging3 = 0.0
+    self.temp_errorlogging4 = 0.0
 
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
@@ -286,7 +288,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
           self.accel = float(np.clip(targetaccel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
           gas_pedal_force = accel + wind_brake_ms2 * self.windfactor + hill_brake # not using self.accel since pid resets w gas pedal
-          self.temp_errorlogging2 = float(gas_pedal_force)
+          self.temp_errorlogging = float(gas_pedal_force)
+          self.temp_errorlogging2 = float(accel)
+          self.temp_errorlogging3 = float(wind_brake_ms2 * self.windfactor)
+          self.temp_errorlogging4 = float(hill_brake)
 
           # live-learn gas pedal adjustments when openpilot is controlling gas
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
@@ -298,7 +303,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                 learn_speed = 300.0
               else:
                 learn_speed = 50.0
-              self.temp_errorlogging = gas_error
               self.gasfactor = np.clip(self.gasfactor + gas_error / learn_speed * (gas_pedal_force - min_gas), 0.01, 3.0)
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
               if self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Faster reaction
@@ -393,10 +397,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     new_actuators.speed = float(self.temp_errorlogging)
     # new_actuators.speed = self.speed
     new_actuators.accel = self.accel
-    new_actuators.gas = float(self.gasfactor)
-    new_actuators.brake = float(self.windfactor)
+    new_actuators.gas = float(self.temp_errorlogging2)
+    new_actuators.brake = float(self.temp_errorlogging3)
     new_actuators.torque = self.last_torque
-    new_actuators.torqueOutputCan = float(self.temp_errorlogging2)
+    new_actuators.torqueOutputCan = float(self.temp_errorlogging4)
 
     if self.frame % 6000 == 0:
       self.param_writer.put_many({
