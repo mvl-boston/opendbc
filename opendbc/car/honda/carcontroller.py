@@ -215,7 +215,7 @@ class CarController(CarControllerBase):
          and (not CS.out.stockAeb) and (not CS.out.gasPressed):
         self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
         self.accel = actuators.accel + self.nidec_pid_factor
-        adjust_accel = self.accel + hill_brake + self.gas_alpha
+        adjust_accel = self.accel + hill_brake
 
         # copy wind tuning from Bosch code
         gas_error = self.accel - CS.out.aEgo
@@ -237,7 +237,7 @@ class CarController(CarControllerBase):
 
       else:
         self.accel = actuators.accel + self.nidec_pid_factor
-        adjust_accel = self.accel + hill_brake + self.gas_alpha
+        adjust_accel = self.accel + hill_brake
 
       gas, brake, creep_impact = compute_gb_honda_nidec(adjust_accel, CS.out.vEgo, self.creep_factor)
       gas_error = self.accel - CS.out.aEgo
@@ -337,7 +337,7 @@ class CarController(CarControllerBase):
     elif (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
          (CS.out.vEgo <= CS.out.cruiseState.speed - 2.) and (self.apply_brake_last == 0):
       gasfactor_error = (self.accel - CS.out.aEgo)
-      self.gas_alpha = np.clip(self.gas_alpha + 0.0001 * gasfactor_error, -3.0, 3.0)
+      self.gas_alpha = np.clip(self.gas_alpha + 0.0001 * gasfactor_error / 4.8, -3.0, 3.0)
       self.gasfactor *= (1 + 0.0001 * gasfactor_error * adjust_accel)
       more_new_accel_needed = (self.new_accel > pcm_accel and self.accel > CS.out.aEgo) or \
                               (self.new_accel < pcm_accel and self.accel < CS.out.aEgo)
