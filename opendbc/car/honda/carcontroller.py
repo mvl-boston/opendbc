@@ -223,9 +223,10 @@ class CarController(CarControllerBase):
           if self.last_pcm_speed != 0.0: # wait for 0 pcm_speed to be sent on slower message
             apply_brake = 0
 
+          acc_override_stop = (self.CP.carFingerprint == CAR.CAR.HONDA_ACCORD_9G_AU and pcm_override and (CS.out.standstill or CS.out.brakePressed))
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
                                                          pcm_override, pcm_cancel_cmd, alert_fcw,
-                                                         self.CP.carFingerprint, CS.stock_brake))
+                                                         self.CP.carFingerprint, CS.stock_brake, acc_override_stop))
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
