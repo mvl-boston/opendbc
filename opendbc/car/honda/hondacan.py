@@ -46,7 +46,8 @@ class CanBus(CanBusBase):
     return self.offset
 
 
-def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_cancel_cmd, fcw, car_fingerprint, stock_brake):
+def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_cancel_cmd, fcw, car_fingerprint, stock_brake,
+                         acc_override_stop):
   # TODO: do we loose pressure if we keep pump off for long?
   brake_rq = apply_brake >= 4
   pcm_fault_cmd = False
@@ -65,6 +66,7 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
     "AEB_REQ_1": 0,
     "AEB_REQ_2": 0,
     "AEB_STATUS": 0,
+    "SET_ME_X00": acc_override_stop,
   }
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
