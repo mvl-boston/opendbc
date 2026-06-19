@@ -60,12 +60,8 @@ class RadarInterface(RadarInterfaceBase):
         else:
           self.radar_fault = cpt['RADAR_STATE'] != 0x79
         self.radar_wrong_config = cpt['RADAR_STATE'] == 0x69
-      elif cpt['LONG_DIST'] < (127 if (self.radar_type == 'Elesys') else 255):
-        if self.radar_type == 'Elesys':
-          do_subroutine = (ii not in self.pts)
-        else:
-          do_subroutine = (ii not in self.pts or cpt['NEW_TRACK'])
-        if do_subroutine:
+      elif cpt['LONG_DIST'] < 255:
+        if (ii not in self.pts or cpt['NEW_TRACK']):
           self.pts[ii] = structs.RadarData.RadarPoint()
           self.pts[ii].trackId = self.track_id
           self.track_id += 1
