@@ -643,6 +643,13 @@ class TestHondaBoschRadarlessSafetyBase(TestHondaBoschSafetyBase):
     self.packer = CANPackerSafety("honda_bosch_radarless_generated")
     self.safety = libsafety_py.libsafety
 
+  def test_buttons_fwd(self):
+    # SCM_BUTTONS (0x296) forwards only when disengaged
+    self.safety.set_controls_allowed(False)
+    self.assertEqual(2, self.safety.safety_fwd_hook(0, 0x296))
+    self.safety.set_controls_allowed(True)
+    self.assertEqual(-1, self.safety.safety_fwd_hook(0, 0x296))
+
 
 class TestHondaBoschRadarlessSafety(HondaPcmEnableBase, TestHondaBoschRadarlessSafetyBase):
   """
