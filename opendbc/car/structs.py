@@ -148,6 +148,16 @@ class CarControlSP:
   leadOne: 'LeadData' = field(default_factory=lambda: LeadData())
   leadTwo: 'LeadData' = field(default_factory=lambda: LeadData())
   intelligentCruiseButtonManagement: 'IntelligentCruiseButtonManagement' = field(default_factory=lambda: IntelligentCruiseButtonManagement())
+  dashPath: 'CarControlSP.DashPath' = field(default_factory=lambda: CarControlSP.DashPath())
+
+  @auto_dataclass
+  class DashPath:
+    valid: bool = auto_field()
+    poly: list[float] = auto_field()  # lane-center cubic [c0, c1, c2, c3]; y = c0 + c1*x + c2*x^2 + c3*x^3 (m, +left)
+    reach: float = auto_field()       # rendered-length fraction 0..1 (1 = full, 0 = retracted)
+    laneCross: int = auto_field()     # lane-cross pulse: 0 none, +1 right, -1 left
+    leftLine: bool = auto_field()     # draw the left dash line
+    rightLine: bool = auto_field()    # draw the right dash line
 
   @auto_dataclass
   class Param:
