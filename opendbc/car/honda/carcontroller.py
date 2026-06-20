@@ -16,6 +16,8 @@ from opendbc.car.common.pid import PIDController
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
 from opendbc.sunnypilot.car.honda.gas_interceptor import GasInterceptorCarController
 from opendbc.sunnypilot.car.honda.icbm import IntelligentCruiseButtonManagementInterface
+from opendbc.sunnypilot.car.honda import lane_path
+from opendbc.sunnypilot.car.honda import hud_object_author
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -132,6 +134,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.params = CarControllerParams(CP)
     self.CAN = hondacan.CanBus(CP)
+    self.hud_object_author = hud_object_author.HudObjectAuthor()  # authors HUD_OBJECTS: OP's lead + forwarded camera objects (radarless)
     self.tja_control = CP.carFingerprint in HONDA_BOSCH_TJA_CONTROL
     self.param_writer = HondaParamWriter()
 
@@ -380,6 +383,24 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.speed = pcm_speed
           if not self.CP_SP.enableGasInterceptor:
             self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
+
+    # Render OP's lane and lead car on the dash
+    if self.frame % 2 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      dp = CC_SP.dashPath
+      offsets = lane_path.encode_lane_path_poly(dp.poly, dp.valid)
+      mux = lane_path.MUX_CYCLE[(self.frame // 2) % len(lane_path.MUX_CYCLE)]
+      can_sends.append(lane_path.create_lane_path(self.packer, self.CAN.lkas, offsets, mux))
+
+      # Only replace dash lead car when OP controls long
+      if self.CP.openpilotLongitudinalControl:
+        tracks = CS.hud_object_tracker.snapshot() if CS.hud_object_tracker is not None else None
+        can_sends.append(self.hud_object_author.update(self.packer, self.CAN.lkas, CC_SP.leadOne, tracks, self.frame, now_nanos * 1e-9))
+
+    if self.frame % 20 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      # COUNTER_2 trails the packer's COUNTER (frame//20 % 4) by one. TODO: do we need the - 1 trail?
+      dp = CC_SP.dashPath
+      can_sends.append(lane_path.create_lkas_hud_2(self.packer, self.CAN.lkas, (self.frame // 20 - 1) % 4,
+                                                   dp.reach, dp.laneCross, dp.leftLine, dp.rightLine))
 
     # Intelligent Cruise Button Management
     can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CC_SP, self.packer, self.frame,
