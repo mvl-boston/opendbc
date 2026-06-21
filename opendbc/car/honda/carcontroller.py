@@ -215,8 +215,8 @@ class CarController(CarControllerBase):
           apply_brake = max(self.apply_brake_last - 32, apply_brake)
 
           pcm_override = CC.longActive or CS.out.stockAeb
-          if self.CP.carFingerprint == CAR.HONDA_ACCORD_9G_AU and CS.out.stock_brake[COMPUTER_BRAKE] > 0:
-            apply_brake = max (4, apply_brake)
+          if self.CP.carFingerprint == CAR.HONDA_ACCORD_9G_AU and CS.stock_brake[COMPUTER_BRAKE] > 0:
+            apply_brake = max(4, apply_brake)
           if apply_brake > 0: # prevent fault from concurrent gas + brake, accel at 198 while braking on stock camera
             pcm_speed = 0.0
             pcm_accel = 198
