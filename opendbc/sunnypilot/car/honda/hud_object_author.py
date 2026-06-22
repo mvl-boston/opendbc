@@ -159,8 +159,8 @@ class HudObjectAuthor:
   def update(self, packer, bus, lead, tracks, frame: int, now: float):
     """`lead` = carControlSP.leadOne; `tracks` = the camera's HudObject snapshot (may be None); `frame` = the
     carcontroller frame counter. Returns one packed HUD_OBJECTS frame for the slot the cycle lands on (OP's lead in
-    slot 0, a forwarded camera car in 1-9, else inactive). re-ID + smoothing run every tick so their state stays
-    continuous across the non-lead frames."""
+    slot 0, else a forwarded camera adjacent car — including in slot 0 when OP has no lead — else inactive). re-ID +
+    smoothing run every tick so their state stays continuous across the non-lead frames."""
     op_id = self._track_id.update(lead.status, lead.dRel, lead.vRel, now)
     stock_lead, in_use = None, set()
     for t in (tracks or ()):
@@ -177,16 +177,16 @@ class HudObjectAuthor:
 
     track_index = TRACK_INDEX_CYCLE[(frame // 2) % len(TRACK_INDEX_CYCLE)]
     slot = (track_index - 1) % 16
-    if slot == 0:                                       # slot 0 = OP's lead; CAR_TYPE/ROTATION borrowed from the
-      if lead.status:                                   # stock lead (OP has neither), else sane defaults
-        track = {"d_rel": d_rel, "y_rel": y_rel, "object_id": lead_id, "is_lead_car": 1,
-                 "car_type": stock_lead.car_type if stock_lead is not None else CAR_TYPE_CAR,
-                 "rotation": stock_lead.rotation if stock_lead is not None else lead_rotation(y_rel / LAT_SCALE)}
-      else:
-        track = None
-    else:                                               # slots 1-9 = the camera's adjacent cars, forwarded
+    if slot == 0 and lead.status:
+      track = {"d_rel": d_rel, "y_rel": y_rel, "object_id": lead_id, "is_lead_car": 1,
+               "car_type": stock_lead.car_type if stock_lead is not None else CAR_TYPE_CAR,
+               # disengaged -> no camera rotation; calculate one from the lead's lateral
+               "rotation": stock_lead.rotation if stock_lead is not None else lead_rotation(y_rel / LAT_SCALE)}
+    # forward slots 1-9 and slot 0 when not a lead
+    else:
       st = tracks[slot] if (tracks and slot < len(tracks)) else None
       track = ({"d_rel": st.d_rel, "y_rel": st.y_rel, "object_id": st.object_id, "is_lead_car": 0,
                 "car_type": st.car_type, "rotation": st.rotation}
+                # never forward the camera's lead: if OP has no lead, the HUD must not flag one OP isn't acting on
                if (st is not None and st.valid and not st.is_lead_car) else None)
     return create_hud_object(packer, bus, track_index, track)
