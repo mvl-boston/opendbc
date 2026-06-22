@@ -26,6 +26,10 @@ LAT_DIST_LIM_M = 204.7   # 12-bit signed @0.1 -> ±204.x m
 # So scale OP's lead yRel by LAT_SCALE to land the lead car marker on our lane
 LAT_SCALE = 0.35
 
+# Used when no rotation available from camera (OP disengaged)
+ROT_BAND_M = 2.5         # m of lateral offset per rotation step
+ROT_MAX = 3              # ±3 -> ±30 deg
+
 # OP has no persistent lead identity, so LeadObjectId mints a new OBJECT_ID on a fresh lead or a range discontinuity
 # (a handoff to a different car). dRel is noisy, so instead of a per-sample range-rate test we run a leaky predictor
 # (feed-forward vRel, leak toward dRel) and re-id only when the residual accumulates past REID_GAP_M.
@@ -101,6 +105,14 @@ class LeadSmoother:
     return self._d, self._y
 
 
+def lead_rotation(lateral_left_m: float) -> int:
+  """Rotation from a lead's lateral offset. Used for OP's lead when camera isn't feeding a rotation (disengaged).
+  Negative is rotating to left, positive is rotating to right.
+  """
+  magnitude = min(round(abs(lateral_left_m) / ROT_BAND_M), ROT_MAX)
+  return -magnitude if lateral_left_m > 0 else magnitude
+
+
 def create_hud_object(packer, bus, track_index, track):
   """Pack one HUD_OBJECTS frame for TRACK_INDEX `track_index`.
 
@@ -169,7 +181,7 @@ class HudObjectAuthor:
       if lead.status:                                   # stock lead (OP has neither), else sane defaults
         track = {"d_rel": d_rel, "y_rel": y_rel, "object_id": lead_id, "is_lead_car": 1,
                  "car_type": stock_lead.car_type if stock_lead is not None else CAR_TYPE_CAR,
-                 "rotation": stock_lead.rotation if stock_lead is not None else 0}
+                 "rotation": stock_lead.rotation if stock_lead is not None else lead_rotation(y_rel / LAT_SCALE)}
       else:
         track = None
     else:                                               # slots 1-9 = the camera's adjacent cars, forwarded
