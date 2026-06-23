@@ -92,8 +92,8 @@ LAT_DIST_LIM_M = 204.7   # 12-bit signed @0.1 -> ±204.x m
 LAT_SCALE = 0.35
 
 # Used when no rotation available from camera (OP disengaged)
-ROT_BAND_M = 2.5         # m of lateral offset per rotation step
-ROT_MAX = 3              # ±3 -> ±30 deg
+ROT_BAND_M = 1.5         # m of lateral offset per rotation step
+ROT_MAX = 6              # ±6 -> ±30 deg
 
 # OP has no persistent lead identity, so LeadObjectId mints a new OBJECT_ID on a fresh lead or a range discontinuity
 # (a handoff to a different car). dRel is noisy, so instead of a per-sample range-rate test we run a leaky predictor
