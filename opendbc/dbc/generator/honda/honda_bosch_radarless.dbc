@@ -75,4 +75,4 @@ CM_ SG_ 114120023 LAT_DIST "positive = left of ego, 204.7 (max value) when inact
 CM_ SG_ 114120023 ROTATION "0 straight, negative left, positive right. Range of -3 to 3 seen so far. -128 when inactive.";
 
 VAL_ 477 GEAR_MT 14 "reverse" 6 "6th" 5 "5th" 4 "4th" 3 "3rd" 2 "2nd" 1 "1st" 0 "Clutch";
-VAL_ 114120023 CAR_TYPE 7 "CAR" -7 "TRUCK" -1 "INACTIVE" 0 "UNKNOWN";
+VAL_ 114120023 CAR_TYPE 7 "CAR" 6 "MOTORCYCLE" -7 "TRUCK" -1 "INACTIVE" 0 "UNKNOWN";
