@@ -20,7 +20,7 @@ BO_ 456 ACC_CONTROL: 8 XXX
  SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
 
 BO_ 114120023 HUD_OBJECTS: 8 CAM
- SG_ TRACK_INDEX M : 7|6@0+ (1,0) [0|63] "" XXX
+ SG_ MUX M : 7|6@0+ (1,0) [0|63] "" XXX
  SG_ OBJECT_ID m1 : 15|5@0+ (1,0) [0|31] "" XXX
  SG_ IS_LEAD_CAR m1 : 17|1@0+ (1,0) [0|1] "" XXX
  SG_ CAR_TYPE m1 : 23|4@0- (1,0) [-8|7] "" XXX
@@ -69,7 +69,7 @@ BO_ 254913108 LKAS_HUD_2: 8 ADAS
 CM_ SG_ 456 IDLESTOP_ALLOW "allows car to turn off engine at a standstill";
 CM_ SG_ 456 STANDSTILL "set to 1 when camera requests -4.0 m/s^2";
 CM_ SG_ 495 SPEED_LIMIT "Defaults to 0xFF if no speed limit found";
-CM_ SG_ 114120023 TRACK_INDEX "1-10, 17-26, 33-42, 49-58 map to the same 10 objects for 5Hz frequency each";
+CM_ SG_ 114120023 MUX "1-10, 17-26, 33-42, 49-58 map to the same 10 objects for 5Hz frequency each";
 CM_ SG_ 114120023 IS_LEAD_CAR "1 when this track is the lead car; the lead, when present, is always track index 1";
 CM_ SG_ 114120023 LAT_DIST "positive = left of ego, 204.7 (max value) when inactive";
 CM_ SG_ 114120023 ROTATION "0 straight, negative left, positive right. Range of -3 to 3 seen so far. -128 when inactive.";

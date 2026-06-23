@@ -6,8 +6,10 @@ OFFSETS_PER_INDEX = 4
 NUM_PTS = NUM_INDICES * OFFSETS_PER_INDEX  # 40 lateral offsets, near->far
 
 # LANE_PATH carries 40 lateral offsets as 10 MUX indices x 4 offsets each. The camera repeats every index
-# across 4 redundant banks: MUX = index + bank*16 (banks 1-10, 17-26, 33-42, 49-58), logical index = (mux-1) % 16.
+# across 4 redundant banks: MUX = index + bank*16
 # We cycle all 40 MUX values bank-major at ~50 Hz so each index refreshes evenly.
+# MUX values: 1-10, 17-26, 33-42, 49-58
+# logical index = (mux-1) % 16.
 MUX_CYCLE = tuple(idx + bank * 16 for bank in range(4) for idx in range(1, NUM_INDICES + 1))
 
 OFFSET_UNAVAILABLE = 2047  # camera's "no point" sentinel (12-bit signed max)
@@ -43,6 +45,13 @@ def encode_lane_path_poly(poly, valid=True):
   if not valid or len(poly) == 0:
     return [OFFSET_UNAVAILABLE] * NUM_PTS
   return _encode(np.polyval(list(poly)[::-1], LOOKAHEAD))  # polyval wants highest-degree-first
+
+
+def next_mux(mux):
+  try:
+    return MUX_CYCLE[(MUX_CYCLE.index(int(mux)) + 1) % len(MUX_CYCLE)]
+  except ValueError:
+    return MUX_CYCLE[0]
 
 
 def create_lane_path(packer, bus, offsets, mux):

@@ -30,17 +30,17 @@ class HudObjectTracker:
       HudObject(slot=i, object_id=0, d_rel=0.0, y_rel=0.0, is_lead_car=False, valid=False)
       for i in range(NUM_SLOTS)
     ]
+    self.last_mux = 0   # MUX of the most recent frame; LANE_PATH (and our authored HUD_OBJECTS) follow it to stay paired
 
   def update(self, cp_cam: CANParser) -> None:
-    # HUD_OBJECTS is one message multiplexed over 10 slots x 4 banks (TRACK_INDEX = (bank<<4)|slot, slot 1..10),
+    # HUD_OBJECTS is one message multiplexed over 10 slots x 4 banks (MUX = (bank<<4)|slot, slot 1..10),
     # each frame carrying one slot at fixed bit positions. vl exposes only the latest frame, so we iterate vl_all
-    # (all frames since the last update) and dispatch each to its slot by TRACK_INDEX.
-    # (Touching vl first registers the message.)
-    # TODO: do we need vl_all here?
-    _ = cp_cam.vl["HUD_OBJECTS"]
+    # (all frames since the last update) and dispatch each to its slot by MUX.
+    # last_mux is what LANE_PATH and our authored HUD_OBJECTS follow, so they stay paired. (Touching vl first registers the message.)
+    self.last_mux = int(cp_cam.vl["HUD_OBJECTS"]["MUX"])
     vla = cp_cam.vl_all["HUD_OBJECTS"]
 
-    indices = vla["TRACK_INDEX"]
+    muxes = vla["MUX"]
     obj_ids = vla["OBJECT_ID"]
     long_dists = vla["LONG_DIST"]
     lat_dists = vla["LAT_DIST"]
@@ -48,9 +48,9 @@ class HudObjectTracker:
     car_types = vla["CAR_TYPE"]
     rotations = vla["ROTATION"]
 
-    for ti, oid, ld, yd, lead, ct, rot in zip(indices, obj_ids, long_dists, lat_dists, lead_flags,
-                                              car_types, rotations, strict=True):
-      slot = (int(ti) - 1) % 16
+    for mux, oid, ld, yd, lead, ct, rot in zip(muxes, obj_ids, long_dists, lat_dists, lead_flags,
+                                               car_types, rotations, strict=True):
+      slot = (int(mux) - 1) % 16
       if 0 <= slot < NUM_SLOTS:
         valid = oid != 0 and ld < LONG_DIST_CAP_M
         self._tracks[slot] = HudObject(
@@ -69,9 +69,6 @@ class HudObjectTracker:
 
 
 # ---- Author: OP's lead in slot 0 + camera's adjacent cars forwarded in slots 1-9 --------------------
-
-# TRACK_INDEX cycle, mirroring lane_path.MUX_CYCLE: 10 slots x 4 redundant banks, bank-major. Slot = (track_index - 1) % 16.
-TRACK_INDEX_CYCLE = tuple(slot + bank * 16 for bank in range(4) for slot in range(1, NUM_SLOTS + 1))
 
 # Byte-faithful empty-slot values (decoded from stock HUD_OBJECTS); an inconsistent frame risks the dash rejecting it.
 INACTIVE = {
@@ -178,13 +175,13 @@ def lead_rotation(lateral_left_m: float) -> int:
   return -magnitude if lateral_left_m > 0 else magnitude
 
 
-def create_hud_object(packer, bus, track_index, track):
-  """Pack one HUD_OBJECTS frame for TRACK_INDEX `track_index`.
+def create_hud_object(packer, bus, mux, track):
+  """Pack one HUD_OBJECTS frame for mux.
 
   `track` is None for an inactive slot, else a dict {d_rel, y_rel, object_id, is_lead_car, car_type, rotation}.
   CAR_TYPE/ROTATION are borrowed from the stock camera (OP doesn't provide them); CHECKSUM/COUNTER by the packer.
   """
-  values = {"TRACK_INDEX": track_index}
+  values = {"MUX": mux}
   if track is None:
     values.update(INACTIVE)
   else:
@@ -201,7 +198,7 @@ def create_hud_object(packer, bus, track_index, track):
 
 class HudObjectAuthor:
   """Authors HUD_OBJECTS: OP's lead in slot 0 (stable id via LeadObjectId + dRel/yRel smoothing via LeadSmoother),
-  the camera's non-lead cars forwarded in slots 1-9, cycling TRACK_INDEX. The carcontroller calls update() once per
+  the camera's non-lead cars forwarded in slots 1-9, cycling MUX. The carcontroller calls update() once per
   ~50 Hz tick and sends the returned frame."""
   def __init__(self):
     self._track_id = LeadObjectId()
@@ -221,11 +218,11 @@ class HudObjectAuthor:
     self._prev_op_id = op_id
     return self._lead_id
 
-  def update(self, packer, bus, lead, tracks, frame: int, now: float):
-    """`lead` = carControlSP.leadOne; `tracks` = the camera's HudObject snapshot (may be None); `frame` = the
-    carcontroller frame counter. Returns one packed HUD_OBJECTS frame for the slot the cycle lands on (OP's lead in
-    slot 0, else a forwarded camera adjacent car — including in slot 0 when OP has no lead — else inactive). re-ID +
-    smoothing run every tick so their state stays continuous across the non-lead frames."""
+  def update(self, packer, bus, lead, tracks, mux: int, now: float):
+    """`lead` = carControlSP.leadOne; `tracks` = the camera's HudObject snapshot (may be None); `mux` = the shared
+    LANE_PATH/HUD_OBJECTS multiplexor for this frame. Returns one packed HUD_OBJECTS frame for the slot the mux lands
+    on (OP's lead in slot 0, else a forwarded camera adjacent car — including in slot 0 when OP has no lead — else
+    inactive). re-ID + smoothing run every tick so their state stays continuous across the non-lead frames."""
     op_id = self._track_id.update(lead.status, lead.dRel, lead.vRel, now)
     stock_lead, in_use = None, set()
     for t in (tracks or ()):
@@ -240,8 +237,7 @@ class HudObjectAuthor:
 
     d_rel, y_rel = self._smoother.update(lead.dRel, LAT_SCALE * lead.yRel, lead.vRel, lead_id, now)
 
-    track_index = TRACK_INDEX_CYCLE[(frame // 2) % len(TRACK_INDEX_CYCLE)]
-    slot = (track_index - 1) % 16
+    slot = (mux - 1) % 16
     if slot == 0 and lead.status:
       track = {"d_rel": d_rel, "y_rel": y_rel, "object_id": lead_id, "is_lead_car": 1,
                "car_type": stock_lead.car_type if stock_lead is not None else CAR_TYPE_CAR,
@@ -254,4 +250,4 @@ class HudObjectAuthor:
                 "car_type": st.car_type, "rotation": st.rotation}
                 # never forward the camera's lead: if OP has no lead, the HUD must not flag one OP isn't acting on
                if (st is not None and st.valid and not st.is_lead_car) else None)
-    return create_hud_object(packer, bus, track_index, track)
+    return create_hud_object(packer, bus, mux, track)

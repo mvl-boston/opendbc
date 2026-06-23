@@ -388,13 +388,14 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     if self.frame % 2 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       dp = CC_SP.dashPath
       offsets = lane_path.encode_lane_path_poly(dp.poly, dp.valid)
-      mux = lane_path.MUX_CYCLE[(self.frame // 2) % len(lane_path.MUX_CYCLE)]
+      # Keep mux synced betweeen LANE_PATH and HUD_OBJECTS
+      mux = lane_path.next_mux(CS.hud_object_tracker.last_mux)
       can_sends.append(lane_path.create_lane_path(self.packer, self.CAN.lkas, offsets, mux))
 
       # Only replace dash lead car when OP controls long
       if self.CP.openpilotLongitudinalControl:
-        tracks = CS.hud_object_tracker.snapshot() if CS.hud_object_tracker is not None else None
-        can_sends.append(self.hud_object_author.update(self.packer, self.CAN.lkas, CC_SP.leadOne, tracks, self.frame, now_nanos * 1e-9))
+        tracks = CS.hud_object_tracker.snapshot()
+        can_sends.append(self.hud_object_author.update(self.packer, self.CAN.lkas, CC_SP.leadOne, tracks, mux, now_nanos * 1e-9))
 
     if self.frame % 20 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       # COUNTER_2 trails the packer's COUNTER (frame//20 % 4) by one. TODO: do we need the - 1 trail?
