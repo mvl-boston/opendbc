@@ -16,8 +16,8 @@ from opendbc.car.common.pid import PIDController
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
 from opendbc.sunnypilot.car.honda.gas_interceptor import GasInterceptorCarController
 from opendbc.sunnypilot.car.honda.icbm import IntelligentCruiseButtonManagementInterface
-from opendbc.sunnypilot.car.honda import lane_path
-from opendbc.sunnypilot.car.honda import hud_object_author
+from opendbc.car.honda import lane_path
+from opendbc.car.honda import hud_objects
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -134,7 +134,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.params = CarControllerParams(CP)
     self.CAN = hondacan.CanBus(CP)
-    self.hud_object_author = hud_object_author.HudObjectAuthor()  # authors HUD_OBJECTS: OP's lead + forwarded camera objects (radarless)
+    self.hud_object_author = hud_objects.HudObjectAuthor()  # authors HUD_OBJECTS: OP's lead + forwarded camera objects (radarless)
     self.tja_control = CP.carFingerprint in HONDA_BOSCH_TJA_CONTROL
     self.param_writer = HondaParamWriter()
 
