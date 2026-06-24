@@ -18,7 +18,6 @@ BO_ 829 LKAS_HUD: 8 ADAS
  SG_ RDM_ON_2 : 28|1@0+ (1,0) [0|1] "" BDY
  SG_ LANE_ASSIST_BEEP_OFF : 30|1@0+ (1,0) [0|1] "" XXX
  SG_ LANE_LINES : 36|2@0+ (1,0) [0|3] "" XXX
- SG_ LKAS_READY_2 : 46|1@0+ (1,0) [0|1] "" XXX
  SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" XXX
  SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
 
