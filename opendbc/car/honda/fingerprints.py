@@ -1328,6 +1328,7 @@ FW_VERSIONS = {
       b'36161-TZ6-A340\x00\x00', # unknown
       b'36161-TZ6-A640\x00\x00', # unknown
       b'36161-TZ6-A730\x00\x00',
+      b'36161-TZ6-C340\x00\x00',
     ],
     (Ecu.gateway, 0x18daeff1, None): [
       b'38897-TRX-A220\x00\x00',
@@ -1354,6 +1355,7 @@ FW_VERSIONS = {
       b'28101-5NC-A740\x00\x00', # unknown
       b'28101-5NC-A770\x00\x00',
       b'28103-5NC-B210\x00\x00', # unknown
+      b'28103-5NC-C110\x00\x00',
     ],
     (Ecu.vsa, 0x18da28f1, None): [
       b'57114-TRX-H130\x00\x00',
