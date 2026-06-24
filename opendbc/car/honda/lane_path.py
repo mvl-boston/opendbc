@@ -5,7 +5,9 @@ NUM_INDICES = 10
 OFFSETS_PER_INDEX = 4
 NUM_PTS = NUM_INDICES * OFFSETS_PER_INDEX  # 40 lateral offsets, near->far
 
-# LANE_PATH carries 40 lateral offsets as 10 MUX indices x 4 offsets each. The camera repeats every index
+# LANE_PATH is a 40-point path: each point is a lateral offset from the car's center line at a
+# look-ahead distance (up to 100 m). All zeros = perfectly straight lane ahead.
+# The message encodes these 40 offsets as 10 MUX indices x 4 offsets each. The camera repeats every index
 # across 4 redundant banks: MUX = index + bank*16
 # We cycle all 40 MUX values bank-major at ~50 Hz so each index refreshes evenly.
 # MUX values: 1-10, 17-26, 33-42, 49-58
