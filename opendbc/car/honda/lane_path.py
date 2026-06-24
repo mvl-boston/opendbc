@@ -74,7 +74,7 @@ def create_lkas_hud_2(packer, bus, counter_2, reach=1.0, lane_cross=0, left_line
   values = {
     "COUNTER_2": counter_2,
     "SET_ME_X01": 1,
-    "LANE_WIDTH_MAYBE": LANE_WIDTH_DEFAULT,
+    "LANE_WIDTH": LANE_WIDTH_DEFAULT,
     "LEFT_LANE": LANE_LINE_ON if (shown and left_line) else 0,
     "RIGHT_LANE": LANE_LINE_ON if (shown and right_line) else 0,
     "LEFT_LANE_CROSSED": 1 if (shown and lane_cross < 0) else 0,
