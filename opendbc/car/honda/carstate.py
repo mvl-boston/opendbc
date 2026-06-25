@@ -9,6 +9,7 @@ from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HON
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_TJA_CONTROL, \
                                                  HondaFlags, CruiseButtons, CruiseSettings, GearShifter, CarControllerParams
 from opendbc.car.interfaces import CarStateBase
+from opendbc.car.honda.hud_objects import HudObjectTracker
 
 TransmissionType = structs.CarParams.TransmissionType
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -55,6 +56,8 @@ class CarState(CarStateBase):
 
     self.initial_accFault_cleared = False
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
+
+    self.hud_object_tracker = HudObjectTracker() if CP.carFingerprint in HONDA_BOSCH_RADARLESS else None
 
     self.abs_prior_FL = self.abs_prior_FR = self.abs_prior_RL = self.abs_prior_RR = 0
     self.abs_counter_prev = self.abs_checksum_prev = None
@@ -275,6 +278,9 @@ class CarState(CarStateBase):
       *create_button_events(self.cruise_buttons, prev_cruise_buttons, BUTTONS_DICT),
       *create_button_events(self.cruise_setting, prev_cruise_setting, SETTINGS_BUTTONS_DICT),
     ]
+
+    if self.hud_object_tracker is not None:
+      self.hud_object_tracker.update(cp_cam)
 
     return ret
 
