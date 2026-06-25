@@ -49,6 +49,7 @@ jobs:
     - name: Run opendbc tests in host env
       run: |
         cd opendbc_repo
+        cp -R ../opendbc/safety/tests/misra/cppcheck opendbc/safety/tests/misra/ || ./opendbc/safety/tests/misra/install.sh
         export UV_PROJECT_ENVIRONMENT="$GITHUB_WORKSPACE/.venv"
         uv sync --all-extras --inexact
         source "$UV_PROJECT_ENVIRONMENT/bin/activate"
