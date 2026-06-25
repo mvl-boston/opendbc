@@ -75,6 +75,7 @@ jobs:
 
   mutation:
     name: Safety mutation tests
+    if: github.repository == 'commaai/opendbc'
     runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-latest' }}
     timeout-minutes: 45
     env:
