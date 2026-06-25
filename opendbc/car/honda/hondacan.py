@@ -1,7 +1,7 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS,
-                                      HONDA_BOSCH_CANFD, CAR, CarControllerParams)
+                                      HONDA_BOSCH_CANFD, CarControllerParams)
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -78,7 +78,7 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
-def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, CP, gas_force):
+def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint, gas_force):
 
   commands = []
   min_gas_accel = CarControllerParams.BOSCH_GAS_LOOKUP_BP[0]
@@ -97,12 +97,9 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
     'BRAKE_REQUEST': braking,
   }
 
-  if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+  if car_fingerprint in HONDA_BOSCH_RADARLESS:
     acc_control_values.update({
       "CONTROL_ON": enabled,
-      # required whenever braking for Integra, Hybrid and Bosch Alt Brake vehicles, allow idle stop after 4 seconds (50 Hz) for other vehicles
-      "COMPUTER_BRAKE_ASSIST": braking if CP.flags & (HondaFlags.HYBRID | HondaFlags.BOSCH_ALT_BRAKE) or CP.carFingerprint == CAR.ACURA_INTEGRA
-      else stopping_counter > 200,
     })
   else:
     acc_control_values.update({
@@ -196,6 +193,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     # TODO: needed for Bosch CAN FD?
     if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
+      lkas_hud_values['DASHED_LANES'] = 1  # show gray lanes when disengaged
 
   if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
     lkas_hud_values['RDM_OFF'] = 1
@@ -243,6 +241,8 @@ def spam_buttons_command(packer, CAN, button_val, car_fingerprint):
 def honda_checksum(address: int, sig, d: bytearray) -> int:
   s = 0
   extended = address > 0x7FF
+  # Higher extended-ID range adds 10, lower adds 3. TODO: confirm the exact boundary.
+  high_extended = address > 0x100000
   addr = address
   while addr:
     s += addr & 0xF
@@ -254,5 +254,5 @@ def honda_checksum(address: int, sig, d: bytearray) -> int:
     s += (x & 0xF) + (x >> 4)
   s = 8 - s
   if extended:
-    s += 3
+    s += 10 if high_extended else 3
   return s & 0xF

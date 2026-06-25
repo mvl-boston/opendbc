@@ -108,11 +108,11 @@ class HondaButtonEnableBase(common.CarSafetyTest):
         self.assertFalse(self.safety.get_controls_allowed())
 
     # counter
-    # Skip every other counter to trigger counter faults.
+    # reset wrong_counters to zero by sending valid messages
     for i in range(MAX_WRONG_COUNTERS + 1):
-      self._speed_msg(0)
-      self._button_msg(Btn.SET)
-      self._user_gas_msg(0)
+      self.__class__.cnt_speed += 1
+      self.__class__.cnt_button += 1
+      self.__class__.cnt_powertrain_data += 1
       if i < MAX_WRONG_COUNTERS:
         self.safety.set_controls_allowed(1)
         self._rx(self._button_msg(Btn.SET))
@@ -521,9 +521,10 @@ class TestHondaBoschRadarlessSafetyBase(TestHondaBoschSafetyBase):
   STEER_BUS = 0
   BUTTONS_BUS = 2  # camera controls ACC, need to send buttons on bus 2
 
-  TX_MSGS = [[0xE4, 0], [0x296, 2], [0x33D, 0]]
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}
-  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D)}  # STEERING_CONTROL
+  TX_MSGS = [[0xE4, 0], [0x296, 2], [0x33D, 0], [0x6CD5554, 0], [0xF31AA54, 0], [0x6CD5557, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D, 0x6CD5554, 0xF31AA54, 0x6CD5557]}
+  # STEERING_CONTROL, LANE_PATH, LKAS_HUD_2, HUD_OBJECTS
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D, 0x6CD5554, 0xF31AA54, 0x6CD5557)}
 
   def setUp(self):
     self.packer = CANPackerSafety("honda_bosch_radarless_generated")
@@ -557,9 +558,9 @@ class TestHondaBoschRadarlessLongSafety(common.LongitudinalAccelSafetyTest, Hond
   """
     Covers the Honda Bosch Radarless safety mode with longitudinal control
   """
-  TX_MSGS = [[0xE4, 0], [0x33D, 0], [0x1C8, 0], [0x30C, 0]]
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D, 0x1C8, 0x30C]}
-  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1C8, 0x30C, 0x33D)}
+  TX_MSGS = [[0xE4, 0], [0x33D, 0], [0x1C8, 0], [0x30C, 0], [0x6CD5554, 0], [0xF31AA54, 0], [0x6CD5557, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D, 0x1C8, 0x30C, 0x6CD5554, 0xF31AA54, 0x6CD5557]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1C8, 0x30C, 0x33D, 0x6CD5554, 0xF31AA54, 0x6CD5557)}
 
   def setUp(self):
     super().setUp()
@@ -575,30 +576,6 @@ class TestHondaBoschRadarlessLongSafety(common.LongitudinalAccelSafetyTest, Hond
   # Longitudinal doesn't need to send buttons
   def test_spam_cancel_safety_check(self):
     pass
-
-
-class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLongSafety):
-  """
-    Covers the Honda Bosch Radarless safety mode with longitudinal control and no engine_data message
-  """
-
-  def setUp(self):
-    super().setUp()
-    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch,
-                                 HondaSafetyFlags.RADARLESS | HondaSafetyFlags.BOSCH_LONG | HondaSafetyFlags.NO_ENGINE_DATA_MSG)
-    self.safety.init_tests()
-    self._abs_tick = 0
-
-  # ABS_SENSOR values increase with movement. Change in sum of units per message approximates units of XMISSION_SPEED.
-  def _speed_msg(self, speed):
-    self._abs_tick = getattr(self, '_abs_tick', 0) + speed
-    values = {
-      "ABS_SENSOR_FL": (self._abs_tick // 4) % 256,
-      "ABS_SENSOR_FR": (self._abs_tick // 4) % 256,
-      "ABS_SENSOR_RL": (self._abs_tick // 4) % 256,
-      "ABS_SENSOR_RR": ((self._abs_tick // 4) + (self._abs_tick % 4)) % 256,
-    }
-    return self.packer.make_can_msg_safety("ABS_SENSOR", self.PT_BUS, values)
 
 
 class TestHondaBoschCANFDSafetyBase(TestHondaBoschSafetyBase):
