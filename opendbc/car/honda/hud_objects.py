@@ -191,10 +191,11 @@ def lead_from_model(model, v_ego):
   """OP's lead from modelV2.leadsV3[0] for radarless cars (no radar lead). leadsV3 is device-frame (x +fwd, y +left)
   with absolute v; we keep the model's +left convention (matches the dash's LAT_DIST and the forwarded camera objects)
   and only make v relative (v - vEgo) for the smoother's feed-forward. Inactive when the lead is missing/below LEAD_PROB_ON."""
-  leads = model.leadsV3 if model is not None else ()
-  if len(leads) == 0 or leads[0].prob < LEAD_PROB_ON or len(leads[0].x) == 0:
+  if model is None or len(model.leadsV3) == 0:
     return ModelLead(False, 0.0, 0.0, 0.0)
-  lead = leads[0]
+  lead = model.leadsV3[0]
+  if lead.prob < LEAD_PROB_ON or len(lead.x) == 0:
+    return ModelLead(False, 0.0, 0.0, 0.0)
   return ModelLead(True, float(lead.x[0]), float(lead.y[0]), float(lead.v[0]) - v_ego)
 
 
