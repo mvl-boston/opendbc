@@ -25,6 +25,9 @@ jobs:
         repository: 'mvl-boston/openpilot'
         ref: ${{ env.PARENT_MVL_BRANCH }}
         submodules: true
+    - uses: actions/checkout@v4
+      with:
+        path: opendbc_repo
     - uses: commaai/timeout@v1
       with:
         timeout: ${{ github.repository == 'commaai/opendbc' && '90' || '999' }}
