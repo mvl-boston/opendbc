@@ -7,7 +7,7 @@ from opendbc.can import CANParser
 from opendbc.car import Bus, structs
 from opendbc.car.interfaces import RadarInterfaceBase
 from opendbc.car.honda.hondacan import CanBus
-from opendbc.car.honda.values import DBC, HondaFlags
+from opendbc.car.honda.values import DBC, HONDA_BOSCH_A_RADAR_CARS
 
 
 def _create_nidec_can_parser(car_fingerprint):
@@ -250,8 +250,10 @@ class RadarInterface(RadarInterfaceBase):
     self.radar_wrong_config = False
     self.radar_off_can = CP.radarUnavailable
 
-    # Bosch fine 0x280 track-table vs the legacy Nidec path
-    self.bosch_radar = (CP.flags & HondaFlags.HONDA_BOSCH_A_RADAR) and (Bus.radar in DBC[CP.carFingerprint])
+    # Bosch fine 0x280 track-table vs the legacy Nidec path. Derive from the platform's static flag set
+    # (keyed by fingerprint) rather than CP.flags so this holds even when a bare CarParams is constructed
+    # (e.g. unit tests that only set carFingerprint); the real interface populates CP.flags identically.
+    self.bosch_radar = CP.carFingerprint in HONDA_BOSCH_A_RADAR_CARS and (Bus.radar in DBC[CP.carFingerprint])
 
     # R1: per-SLOT [range, range_rate] KF (replaces the (last_dRel, nanos) derivative baseline).
     # NOTE: keyed by SLOT (0..5), not trackId. trackId now carries an incarnation (S1) so it changes on
@@ -317,7 +319,7 @@ class RadarInterface(RadarInterfaceBase):
           return self._bosch_stale_radardata()
       return None
 
-    rr = self._update_bosch(self.updated_messages) if self.bosch_radar else self._update(self.updated_messages)
+    rr = self._update(self.updated_messages)
     self.updated_messages.clear()
     return rr
 
@@ -531,6 +533,11 @@ class RadarInterface(RadarInterfaceBase):
     return ret
 
   def _update(self, updated_messages):
+    # Bosch fine 0x280 track-table radars use the dedicated parser path; dispatch here so the single
+    # entry point (and the generic radar test that calls _update(trigger_msg)) works for both radars.
+    if self.bosch_radar:
+      return self._update_bosch(updated_messages)
+
     ret = structs.RadarData()
 
     for ii in sorted(updated_messages):
