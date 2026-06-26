@@ -6,6 +6,7 @@ from opendbc.safety import LEN_TO_DLC
 from opendbc.safety.tests.libsafety.safety_helpers import PandaSafety, setup_safety_helpers
 
 libsafety_dir = os.path.dirname(os.path.abspath(__file__))
+libsafety_fn = os.path.join(libsafety_dir, "libsafety.so")
 
 ffi = FFI()
 
