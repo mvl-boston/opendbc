@@ -157,7 +157,7 @@ class TestR1RangeKF(BoschCase):
         last_vrel = rr.points[0].vRel
         if k >= 10:  # ramp complete; truth = -4.0
           worst_optimism = max(worst_optimism, rr.points[0].vRel - v)
-    self.assertIsNotNone(last_vrel)
+    assert last_vrel is not None
     self.assertAlmostEqual(last_vrel, -4.0, delta=1.0)
     self.assertLess(worst_optimism, 1.5, "post-ramp vRel must not read meaningfully less-closing than truth")
 

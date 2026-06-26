@@ -27,7 +27,6 @@ import unittest
 from opendbc.car import structs
 from opendbc.car.honda.radar_interface import (
   RadarInterface,
-  BOSCH_RADAR_HDR_MSGS,
   BOSCH_RADAR_HDR_TAG,        # 0x74 -- kept for DBC decode asserts and backward compat
   BOSCH_RADAR_HDR_TAG_SET,    # {0x74, 0x94} -- the allow-list
   BOSCH_RADAR_BORN_CYCLES,
@@ -189,8 +188,8 @@ class TestRejectedTags(BoschCase):
   def test_c_allow_list_exactly_0x74_and_0x94(self):
     # Confirm the allow-list constant itself is exactly {0x74, 0x94} -- no surprise admissions.
     self.assertEqual(BOSCH_RADAR_HDR_TAG_SET, frozenset({0x74, 0x94}))
-    self.assertIn(0x74, BOSCH_RADAR_HDR_TAG_SET)
-    self.assertIn(0x94, BOSCH_RADAR_HDR_TAG_SET)
+    self.assertTrue(0x74 in BOSCH_RADAR_HDR_TAG_SET)
+    self.assertTrue(0x94 in BOSCH_RADAR_HDR_TAG_SET)
     self.assertNotIn(0x34, BOSCH_RADAR_HDR_TAG_SET)
     self.assertNotIn(0x54, BOSCH_RADAR_HDR_TAG_SET)
     self.assertNotIn(0x64, BOSCH_RADAR_HDR_TAG_SET)
@@ -252,7 +251,7 @@ class TestDemuxClassification(BoschCase):
     }
     rec = self._pending_rec(0, [frame_dict])
     self.assertIsNone(rec.range_frame, "0x34 must NOT classify as range_frame")
-    self.assertIn(0x34, rec.meta_frames, "0x34 must land in meta_frames")
+    self.assertTrue(0x34 in rec.meta_frames, "0x34 must land in meta_frames")
 
   def test_d_0x94_single_sweep_no_clobber_flag(self):
     # (d) A 0x94 range_frame with no trailing meta should NOT set recovered_clobber.
@@ -321,7 +320,7 @@ class TestMixedWindow(BoschCase):
     rec = self.ri._bosch_assemble_record(0)
     self.assertIsNotNone(rec.range_frame)  # range_frame was set before the meta landed
     self.assertTrue(rec.recovered_clobber, "trailing meta after range_frame must set recovered_clobber")
-    self.assertIn(0x75, rec.meta_frames)
+    self.assertTrue(0x75 in rec.meta_frames)
 
   def test_e_mixed_end_to_end_0x94_slot_emits_point(self):
     # (e) end-to-end: two sweeps with 0x94 tags, interleaved with meta frames in the same window.

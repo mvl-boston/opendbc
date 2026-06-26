@@ -132,19 +132,21 @@ BOSCH_RADAR_PENDING_CAP = 8  # max harvested frames retained per slot between tr
 # chatter, and the S6 re-seed EMA-halving bug nrdrbranchdebug-6u8, which dies with the EMA).
 BOSCH_RADAR_KF_R = 0.012          # m^2; range measurement variance (0.00357 m/LSB quantization + jitter)
 BOSCH_RADAR_KF_Q_R = 0.05         # m^2/s; range process noise density
-BOSCH_RADAR_KF_Q_V = 4.0          # (m/s)^2/s; range-rate process noise density -- err RESPONSIVE so a
-                                  # hard-braking lead is never modeled optimistic (R1 ship gate).
-                                  # Sim-tuned 2026-06-10: at -6 m/s^2 lead braking, worst optimism
-                                  # 0.88 m/s (0.8 gave 1.77); realistic-noise vRel std 0.35 m/s vs the
-                                  # old d/dt+EMA's 1.00 -- still ~3x quieter while 2x more responsive.
-BOSCH_RADAR_KF_P0_V = 1.0e4       # (m/s)^2; (re)seed range-rate variance. Large on purpose: the second
-                                  # sample then reproduces the raw derivative (old-behavior parity),
-                                  # smoothing only engages from the third sample on.
-BOSCH_RADAR_KF_NIS_ADAPT = 4.0    # 2-sigma normalized innovation; above this Q_v is inflated this step
-                                  # (noise-floor NIS is ~1e-3 at the quantization level -- huge margin)
+# range-rate process noise density (m/s)^2/s -- err RESPONSIVE so a hard-braking lead is never modeled
+# optimistic (R1 ship gate). Sim-tuned 2026-06-10: at -6 m/s^2 lead braking, worst optimism 0.88 m/s
+# (0.8 gave 1.77); realistic-noise vRel std 0.35 m/s vs the old d/dt+EMA's 1.00 -- still ~3x quieter
+# while 2x more responsive.
+BOSCH_RADAR_KF_Q_V = 4.0
+# (m/s)^2; (re)seed range-rate variance. Large on purpose: the second sample then reproduces the raw
+# derivative (old-behavior parity), smoothing only engages from the third sample on.
+BOSCH_RADAR_KF_P0_V = 1.0e4
+# 2-sigma normalized innovation; above this Q_v is inflated this step (noise-floor NIS is ~1e-3 at the
+# quantization level -- huge margin)
+BOSCH_RADAR_KF_NIS_ADAPT = 4.0
 BOSCH_RADAR_KF_NIS_INFLATE = 10.0 # Q_v inflation factor on an adaptive step (maneuver onset)
-BOSCH_RADAR_KF_CONV_UPDATES = 2   # measurements absorbed before range_rate is published (S5 parity:
-                                  # the old path also had a derived vRel on the 2nd sighted cycle)
+# measurements absorbed before range_rate is published (S5 parity: the old path also had a derived vRel
+# on the 2nd sighted cycle)
+BOSCH_RADAR_KF_CONV_UPDATES = 2
 BOSCH_RADAR_ACCEL_EMA_ALPHA = 0.25  # smoothing on the packed aRel (consumer is K5, radard-side, later)
 
 _KF_OK, _KF_BREAK, _KF_RESEED = 0, 1, 2
@@ -156,9 +158,9 @@ class BoschTrackRecord:
   slot: int
   range_frame: dict[str, float] | None = None             # latest TRACK_TAG in {0x74,0x94} frame (kinematics)
   meta_frames: dict[int, dict[str, float]] = field(default_factory=dict)  # latest frame per other tag
-  recovered_clobber: bool = False  # a range-carrier (0x74/0x94) frame was present but a meta frame
-                                   # arrived after it (the exact window the old last-write-wins read
-                                   # would have mis-cleared)
+  # recovered_clobber: a range-carrier (0x74/0x94) frame was present but a meta frame arrived after it
+  # (the exact window the old last-write-wins read would have mis-cleared)
+  recovered_clobber: bool = False
 
 
 class _SlotRangeKF:
@@ -392,7 +394,7 @@ class RadarInterface(RadarInterfaceBase):
   def _update_bosch(self, updated_messages):
     # FINE per-track object table (0x280 block). Fixed slot map (0x280->slot0 ... 0x2DC->slot5).
     # RX-parse only; never takes 0x1DF / longitudinal authority, so factory AEB/CMBS stays fully live.
-    # Up to 6 RadarPoints are emitted; radard selects leadOne/leadTwo (we do NOT pre-select).
+    # Up to 6 RadarPoints are emitted; radard selects leadOne/leadTwo (we do NOT select in advance).
     #
     # trackId is slot*STRIDE + incarnation (S1, no-reuse). vRel is NOT published on these frames (rlog-
     # confirmed b4:b5 is azimuth, not range-rate), so it is DERIVED per-SLOT as d(dRel)/dt across cycles

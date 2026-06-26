@@ -101,7 +101,7 @@ class TestCivicBoschFineDBC(unittest.TestCase):
       names |= set(self.parser.vl[m].keys())
     self.assertNotIn("CHECKSUM", names)
     self.assertNotIn("COUNTER", names)
-    self.assertIn("CNTR", names)
+    self.assertTrue("CNTR" in names)
     self.parser.update(_can(0, [(0x280, _hdr_frame(5000, cntr=0xAB), self.bus)]))
     self.assertEqual(int(self.parser.vl[0x280]["CNTR"]), 0xAB)
     self.assertAlmostEqual(self.parser.vl[0x280]["RANGE"], 0.00357 * 5000 - 3.0, places=4)
@@ -185,6 +185,7 @@ class TestCivicBoschFineParser(unittest.TestCase):
 
   def test_multi_object_emission(self):
     dt_ns = int(0.05 * 1e9)
+
     def burst(ns, cntr):
       return self._emit(ns, [self._f(0x280, _hdr_frame(3000, cntr=cntr)),   # slot 0
                              self._f(0x284, _hdr_frame(4000, cntr=cntr)),   # slot 1
