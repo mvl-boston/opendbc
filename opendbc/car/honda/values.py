@@ -76,6 +76,7 @@ class HondaFlags(IntFlag):
 
   HAS_ALL_DOOR_STATES = 256  # Some Hondas have all door states, others only driver door
   BOSCH_ALT_RADAR = 512
+  # 1024 is available
   HYBRID = 2048
   BOSCH_TJA_CONTROL = 4096
   LKAS_MINSPEED_CUTOFF = 8192
@@ -227,7 +228,8 @@ class CAR(Platforms):
     # steerRatio: 12.3 is spec end-to-end
     CarSpecs(mass=3410 * CV.LB_TO_KG, wheelbase=2.66, steerRatio=16.0, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),
     {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated', Bus.body: 'honda_crv_ex_2017_body_generated'},
-    flags=HondaFlags.BOSCH_ALT_BRAKE | HondaFlags.LKAS_MINSPEED_CUTOFF)
+    flags=HondaFlags.BOSCH_ALT_BRAKE | HondaFlags.LKAS_MINSPEED_CUTOFF
+  )
   HONDA_CRV_6G = HondaBoschCANFDPlatformConfig(
     [
       HondaCarDocs("Honda CR-V 2023-26", "All"),
@@ -262,7 +264,8 @@ class CAR(Platforms):
     [HondaCarDocs("Acura RDX 2022-26", "All", min_steer_speed=70. * CV.KPH_TO_MS)],
     CarSpecs(mass=4079 * CV.LB_TO_KG, wheelbase=2.75, centerToFrontRatio=0.41, steerRatio=16.2),
     {Bus.pt: 'acura_rdx_2020_can_generated'},
-    flags=HondaFlags.BOSCH_ALT_BRAKE | HondaFlags.BOSCH_ALT_RADAR)
+    flags=HondaFlags.BOSCH_ALT_BRAKE | HondaFlags.BOSCH_ALT_RADAR
+  )
   HONDA_INSIGHT = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda Insight 2019-22", "All", min_steer_speed=3. * CV.MPH_TO_MS)],
     CarSpecs(mass=2987 * CV.LB_TO_KG, wheelbase=2.7, steerRatio=15.0, centerToFrontRatio=0.39, tireStiffnessFactor=0.82),  # as spec
@@ -294,7 +297,8 @@ class CAR(Platforms):
     [HondaCarDocs("Acura MDX 2022-24", "All", min_steer_speed=70. * CV.KPH_TO_MS)],
     CarSpecs(mass=4788 * CV.LB_TO_KG, wheelbase=2.89, steerRatio=15.8, centerToFrontRatio=0.428),  # as spec
     {Bus.pt: 'honda_common_canfd_generated'}, # not CANFD car but shares same dbc
-    flags=HondaFlags.BOSCH_ALT_RADAR | HondaFlags.BOSCH_TJA_CONTROL)
+    flags=HondaFlags.BOSCH_ALT_RADAR | HondaFlags.BOSCH_TJA_CONTROL
+  )
   # mid-model refresh
   ACURA_MDX_4G_MMR = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Acura MDX 2025-26", "All except Type S")],
@@ -309,7 +313,8 @@ class CAR(Platforms):
     [HondaCarDocs("Acura TLX 2021-23", "All")],
     CarSpecs(mass=3982 * CV.LB_TO_KG, wheelbase=2.87, steerRatio=14.0, centerToFrontRatio=0.43),
     {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated'},
-    flags=HondaFlags.BOSCH_ALT_RADAR)
+    flags=HondaFlags.BOSCH_ALT_RADAR
+  )
   # mid-model refresh
   ACURA_TLX_2G_MMR = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Acura TLX 2024-25", "All")],
@@ -482,12 +487,12 @@ HONDA_BOSCH = CAR.with_flags(HondaFlags.BOSCH)
 HONDA_BOSCH_RADARLESS = CAR.with_flags(HondaFlags.BOSCH_RADARLESS)
 HONDA_BOSCH_CANFD = CAR.with_flags(HondaFlags.BOSCH_CANFD)
 HONDA_BOSCH_ALT_RADAR = CAR.with_flags(HondaFlags.BOSCH_ALT_RADAR)
+HONDA_BOSCH_TJA_CONTROL = CAR.with_flags(HondaFlags.BOSCH_TJA_CONTROL)
+HONDA_LKAS_MINSPEED_CUTOFF = CAR.with_flags(HondaFlags.LKAS_MINSPEED_CUTOFF)
+
 # Bosch "A" radars (the 36802-TBA fine 0x280 track-table radar). Defined as the Bosch platforms that are
 # neither radarless nor CAN FD, rather than a per-car flag.
 HONDA_BOSCH_A = HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD
-
-HONDA_BOSCH_TJA_CONTROL = CAR.with_flags(HondaFlags.BOSCH_TJA_CONTROL)
-HONDA_LKAS_MINSPEED_CUTOFF = CAR.with_flags(HondaFlags.LKAS_MINSPEED_CUTOFF)
 
 
 DBC = CAR.create_dbc_map()
