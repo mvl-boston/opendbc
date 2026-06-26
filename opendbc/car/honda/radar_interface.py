@@ -251,7 +251,7 @@ class RadarInterface(RadarInterfaceBase):
     self.radar_off_can = CP.radarUnavailable
 
     # Bosch fine 0x280 track-table vs the legacy Nidec path
-    self.bosch_radar = (CP.flags & HondaFlags.HONDA_BOSCH_A_RADAR)
+    self.bosch_radar = (CP.flags & HondaFlags.HONDA_BOSCH_A_RADAR) and (Bus.radar in DBC[CP.carFingerprint])
 
     # R1: per-SLOT [range, range_rate] KF (replaces the (last_dRel, nanos) derivative baseline).
     # NOTE: keyed by SLOT (0..5), not trackId. trackId now carries an incarnation (S1) so it changes on
