@@ -179,8 +179,7 @@ LEAD_PROB_ON = 0.5   # modelV2 leadsV3 prob to treat a lead as present
 
 @dataclass
 class ModelLead:
-  """OP's lead from modelV2.leadsV3, in the model's device-frame convention (yRel +left) — same as the forwarded
-  camera objects and the dash's LAT_DIST, so the author packs it straight through."""
+  """OP's lead derived from modelV2.leadsV3"""
   status: bool
   dRel: float
   yRel: float   # +left
@@ -188,15 +187,16 @@ class ModelLead:
 
 
 def lead_from_model(model, v_ego):
-  """OP's lead from modelV2.leadsV3[0] for radarless cars (no radar lead). leadsV3 is device-frame (x +fwd, y +left)
-  with absolute v; we keep the model's +left convention (matches the dash's LAT_DIST and the forwarded camera objects)
-  and only make v relative (v - vEgo) for the smoother's feed-forward. Inactive when the lead is missing/below LEAD_PROB_ON."""
+  """OP's lead from modelV2.leadsV3[0] for radarless cars. modelV2's lateral is +right, so we negate it to match
+  the dash's +left. v is made relative (v - vEgo) for the smoother's feed-forward. Lead is inactive when the
+  lead is missing or below LEAD_PROB_ON.
+  """
   if model is None or len(model.leadsV3) == 0:
     return ModelLead(False, 0.0, 0.0, 0.0)
   lead = model.leadsV3[0]
   if lead.prob < LEAD_PROB_ON or len(lead.x) == 0:
     return ModelLead(False, 0.0, 0.0, 0.0)
-  return ModelLead(True, float(lead.x[0]), float(lead.y[0]), float(lead.v[0]) - v_ego)
+  return ModelLead(True, float(lead.x[0]), -float(lead.y[0]), float(lead.v[0]) - v_ego)
 
 
 def create_hud_object(packer, bus, mux, track):
