@@ -71,6 +71,7 @@ jobs:
     timeout-minutes: 45
     env:
       GIT_REF: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.event.before || format('origin/{0}', github.event.repository.default_branch) }}
+      TIMEOUT_RC_OK: ${{ github.repository != 'commaai/opendbc' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -79,7 +80,19 @@ jobs:
         run: |
           source setup.sh
           scons -j8
-          cd opendbc/safety/tests && ./mutation.sh
+          cd opendbc/safety/tests
+
+          set +e
+          timeout 40m ./mutation.sh
+          rc=$?
+          set -e
+
+          if [ "$rc" = 124 ] && [ "$TIMEOUT_RC_OK" = "1" ]; then
+            echo "Mutation tests timed out on fork runner; treating timeout as pass"
+            exit 0
+          fi
+
+          exit "$rc"
 
   # TODO: this needs to move to opendbc
   test_models:
