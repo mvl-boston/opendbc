@@ -22,8 +22,8 @@ uv.lock
 /dist/
 .vscode/
 __pycache__/
+mull.yml
 *.profraw
-.sconf_temp/
 
 opendbc/can/build/
 opendbc/can/obj/

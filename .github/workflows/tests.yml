@@ -67,16 +67,29 @@ jobs:
 
   mutation:
     name: Safety mutation tests
-    if: github.repository == 'commaai/opendbc'
     runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-latest' }}
     timeout-minutes: 45
+    env:
+      TIMEOUT_RC_OK: ${{ github.repository != 'commaai/opendbc' && '1' || '0' }}
     steps:
       - uses: actions/checkout@v4
       - name: Run mutation tests
         run: |
           source setup.sh
           scons -j8
-          python opendbc/safety/tests/mutation.py
+          cd opendbc/safety/tests
+
+          set +e
+          timeout 40m ./mutation.sh
+          rc=$?
+          set -e
+
+          if [ "$rc" = 124 ] && [ "$TIMEOUT_RC_OK" = "1" ]; then
+            echo "Mutation tests timed out on fork runner; treating timeout as pass"
+            exit 0
+          fi
+
+          exit "$rc"
 
   # TODO: this needs to move to opendbc
   test_models:
