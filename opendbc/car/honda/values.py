@@ -135,6 +135,12 @@ class Footnote(Enum):
 class HondaBoschPlatformConfig(PlatformConfig):
   def init(self):
     self.flags |= HondaFlags.BOSCH
+    # Bosch "A" cars (Bosch, not radarless, not CAN FD) all use the hand-written 36802-TBA Bosch FINE
+    # per-track radar DBC (0x280 block; range in B2:B3 of the b1 range-carrier header: 0x74 moving OR 0x94
+    # stationary -- see BOSCH_RADAR_HDR_TAG_SET). RX-parse only; AEB stays live. (Supersedes the dormant
+    # coarse 0x2C8/0x2C9 source.) Assigned here instead of itemizing Bus.radar on every platform.
+    if not self.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
+      self.dbc_dict[Bus.radar] = 'honda_civic_bosch_radar'
 
 
 @dataclass
@@ -142,8 +148,9 @@ class HondaBoschCANFDPlatformConfig(HondaBoschPlatformConfig):
   dbc_dict: DbcDict = field(default_factory=lambda: {Bus.pt: 'honda_common_canfd_generated'})
 
   def init(self):
-    super().init()
+    # set CAN FD before the base init so the Bosch "A" radar auto-assignment correctly skips this car
     self.flags |= HondaFlags.BOSCH_CANFD
+    super().init()
 
 
 @dataclass
@@ -483,6 +490,10 @@ HONDA_BOSCH_CANFD = CAR.with_flags(HondaFlags.BOSCH_CANFD)
 HONDA_BOSCH_ALT_RADAR = CAR.with_flags(HondaFlags.BOSCH_ALT_RADAR)
 HONDA_BOSCH_TJA_CONTROL = CAR.with_flags(HondaFlags.BOSCH_TJA_CONTROL)
 HONDA_LKAS_MINSPEED_CUTOFF = CAR.with_flags(HondaFlags.LKAS_MINSPEED_CUTOFF)
+
+# Bosch "A" radars (the 36802-TBA fine 0x280 track-table radar). Defined as the Bosch platforms that are
+# neither radarless nor CAN FD, rather than a per-car flag.
+HONDA_BOSCH_A = HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD
 
 
 DBC = CAR.create_dbc_map()
