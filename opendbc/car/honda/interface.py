@@ -137,9 +137,10 @@ class CarInterface(CarInterfaceBase):
         CarControllerParams.BOSCH_GAS_LOOKUP_BP = [-0.2, 2.0]
 
     elif candidate == CAR.HONDA_ACCORD_11G:
-      ret.steerActuatorDelay = 0.22
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 5200], [0, 2560, 12747]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
+      ret.steerActuatorDelay = 0.3
+      ret.lateralTuning.pid.kf = 0.000035
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     elif candidate == CAR.ACURA_ILX:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]  # TODO: determine if there is a dead zone at the top end
@@ -215,8 +216,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
     elif candidate == CAR.ACURA_MDX_4G_MMR:
-      # ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 4920], [0, 2560, 12000]]
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12000], [0, 12000]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
       ret.steerActuatorDelay = 0.3
       ret.lateralTuning.pid.kf = 0.000035
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
@@ -276,9 +276,10 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
     elif candidate == CAR.HONDA_PASSPORT_4G:
-      ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 5120], [0, 2560, 12789]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
+      ret.steerActuatorDelay = 0.3
+      ret.lateralTuning.pid.kf = 0.000035
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     else:
       ret.steerActuatorDelay = 0.15
