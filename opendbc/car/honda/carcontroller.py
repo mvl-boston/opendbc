@@ -108,6 +108,7 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.last_pcm_speed = 0.0
 
   def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
@@ -214,17 +215,20 @@ class CarController(CarControllerBase):
           apply_brake = max(self.apply_brake_last - 32, apply_brake)
 
           pcm_override = CC.longActive or CS.out.stockAeb
+          if self.CP.carFingerprint == CAR.HONDA_ACCORD_9G_AU and CS.stock_brake["COMPUTER_BRAKE"] > 0:
+            apply_brake = max(4, apply_brake)
           if apply_brake > 0: # prevent fault from concurrent gas + brake, accel at 198 while braking on stock camera
             pcm_speed = 0.0
             pcm_accel = 198
           elif CS.out.gasPressed: # prevent fault from user gas with a pcm_gas of 198
             pcm_accel = 198
+          if self.last_pcm_speed != 0.0: # wait for 0 pcm_speed to be sent on slower message
+            apply_brake = 0
 
-          can_sends.append(hondacan.create_brake_command(self.packer, self.CAN,
-                                                         0 if (self.apply_brake_last == 0) else apply_brake,
-                                                         pump_on,
+          acc_override_stop = (self.CP.carFingerprint == CAR.HONDA_ACCORD_9G_AU and pcm_override and (CS.out.standstill or CS.out.brakePressed))
+          can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
                                                          pcm_override, pcm_cancel_cmd, alert_fcw,
-                                                         self.CP.carFingerprint, CS.stock_brake))
+                                                         self.CP.carFingerprint, CS.stock_brake, acc_override_stop))
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
@@ -234,6 +238,7 @@ class CarController(CarControllerBase):
         # On Nidec, this also controls longitudinal positive acceleration
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
+        self.last_pcm_speed = pcm_speed
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > self.CP.minSteerSpeed
       reduced_steering = CS.out.steeringPressed
