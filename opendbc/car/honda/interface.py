@@ -215,7 +215,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
     elif candidate == CAR.ACURA_MDX_4G_MMR:
-#      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 4920], [0, 2560, 12000]]
+      # ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 4920], [0, 2560, 12000]]
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12000], [0, 12000]]
       ret.steerActuatorDelay = 0.3
       ret.lateralTuning.pid.kf = 0.000035
