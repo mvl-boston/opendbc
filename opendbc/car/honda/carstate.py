@@ -205,6 +205,8 @@ class CarState(CarStateBase):
         ret.stockAeb = (not self.CP.openpilotLongitudinalControl) and bool(cp.vl["ACC_CONTROL"]["AEB_STATUS"] and cp.vl["ACC_CONTROL"]["ACCEL_COMMAND"] < -1e-5)
     else:
       ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["FCW"] >= 2 and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE"] > 1e-5)
+      if ret.stockAeb and bool(cp_cam.vl["ACC_HUD"]["ACC_ON"] == 0)
+        ret.carFaultedNonCritical = True # disengage cruise if stock ACC disengages during AEB
 
     self.acc_hud = False
     self.lkas_hud = False
