@@ -210,8 +210,11 @@ class CarInterface(CarInterfaceBase):
           CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
 
     elif candidate == CAR.ACURA_MDX_4G_MMR:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 4920], [0, 2560, 12000]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+#      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 4920], [0, 2560, 12000]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12000], [0, 12000]]
+      ret.steerActuatorDelay = 0.3
+      ret.lateralTuning.pid.kf = 0.000035
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     elif candidate == CAR.ACURA_TLX_2G_MMR:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # start with 4096
