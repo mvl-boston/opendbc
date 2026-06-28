@@ -3,6 +3,13 @@ from dataclasses import dataclass
 
 from opendbc.can.parser import CANParser
 
+# HUD_OBJECTS represents the moving car icons on the dash.
+# The message is multiplexed. Mux values (1-10, 17-26, 33-42, 49-58) map to the same 10 slots.
+# A persistent object_id is minted for each identified car. The slots work as a stack with slot 0
+# (mux 1, 17, 33, 49) being the lead car if present. If lead not present, slot 0 can be an adjacent car.
+# For example, if there are 2 cars (one lead, one adjacent), the lead car would be slot 0 and
+# the adjacent car would be slot 1. If the lead car disappears, the adjacent car would move to slot 0.
+# At 50 Hz and 10 slots, each slot gets 5Hz updates.
 NUM_SLOTS = 10
 
 # ---- Receive: camera HUD_OBJECTS -> snapshot --------------------------------
@@ -32,10 +39,11 @@ class HudObjectTracker:
     ]
 
   def update(self, cp_cam: CANParser) -> None:
-    # HUD_OBJECTS is one message multiplexed over 10 slots x 4 banks (MUX = (bank<<4)|slot, slot 1..10),
-    # each frame carrying one slot at fixed bit positions. Using vl_all to catch any missed frames, though not strictly
-    # necessary since update() is called at 100Hz and this signal updates at 50Hz.
-    # (Touching vl first registers the message.)
+    # 'slot' is derived from MUX: (mux - 1) % 16 collapses the four bank ranges (1-10, 17-26, 33-42, 49-58)
+    # to 0-based indices 0-9.
+    # Using vl_all to catch any missed frames, though not strictly necessary since update() is called
+    # at 100Hz and this signal updates at 50Hz.
+    # Touching vl first registers the message.
     _ = cp_cam.vl["HUD_OBJECTS"]
     vla = cp_cam.vl_all["HUD_OBJECTS"]
 
