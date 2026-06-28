@@ -80,12 +80,12 @@ CM_ SG_ 114120023 MUX "1-10, 17-26, 33-42, 49-58 map to the same 10 objects for 
 CM_ SG_ 114120023 IS_LEAD_CAR "1 when this track is the lead car; the lead, when present, is always track index 1";
 CM_ SG_ 114120023 LAT_DIST "positive = left of ego, 204.7 (max value) when inactive";
 CM_ SG_ 114120023 ROTATION "0 straight, negative left, positive right. Range of -3 to 3 seen so far. -128 when inactive.";
-CM_ SG_ 114120024 MUX "1-10, 17-26, 33-42, 49-58 map to the same 10 objects for 5Hz frequency each";
-CM_ SG_ 114120024 IS_LEAD_CAR "1 when this track is the lead car; the lead, when present, is always track index 1";
-CM_ SG_ 114120024 LAT_DIST "positive = left of ego, 204.7 (max value) when inactive";
-CM_ SG_ 114120024 ROTATION "0 straight, negative left, positive right. Range of -3 to 3 seen so far. -128 when inactive.";
+CM_ SG_ 114120025 MUX "1-10, 17-26, 33-42, 49-58 map to the same 10 objects for 5Hz frequency each";
+CM_ SG_ 114120025 IS_LEAD_CAR "1 when this track is the lead car; the lead, when present, is always track index 1";
+CM_ SG_ 114120025 LAT_DIST "positive = left of ego, 204.7 (max value) when inactive";
+CM_ SG_ 114120025 ROTATION "0 straight, negative left, positive right. Range of -3 to 3 seen so far. -128 when inactive.";
 
 VAL_ 829 BEEP 5 "solid_beep" 4 "double_beep" 3 "single_beep" 2 "triple_beep" 1 "repeated_beep" 0 "no_beep";
 VAL_ 829 LANE_LINES 7 "both_lines_green" 6 "both_lines_white" 2 "left_line_white" 0 "no_lines";
 VAL_ 114120023 CAR_TYPE 7 "CAR" 6 "MOTORCYCLE" -7 "TRUCK" -1 "INACTIVE" 0 "UNKNOWN";
-VAL_ 114120024 CAR_TYPE 7 "CAR" 6 "MOTORCYCLE" -7 "TRUCK" -1 "INACTIVE" 0 "UNKNOWN";
+VAL_ 114120025 CAR_TYPE 7 "CAR" 6 "MOTORCYCLE" -7 "TRUCK" -1 "INACTIVE" 0 "UNKNOWN";
