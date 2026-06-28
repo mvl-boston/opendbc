@@ -76,11 +76,11 @@ BO_ 114120024 LANE_PATH_B: 8 XXX
 CM_ SG_ 829 BEEP "beeps are pleasant, chimes are for warnings etc...";
 CM_ SG_ 829 CAM_TEMP_HIGH "Some Driver Assist Systems Cannot Operate: Camera Temperature Too High";
 CM_ SG_ 829 CAMERA_OVERHEAT "Lane Keeping Assist Cannot Operate: Camera Too Hot";
-CM_ SG_ 114120023 MUX "1-10, 17-26, 33-42, 49-58 map to the same 10 objects for 5Hz frequency each";
+CM_ SG_ 114120023 MUX "1-10, 17-26, 33-42, 49-58 map to the same 10 slots for 5Hz frequency each";
 CM_ SG_ 114120023 IS_LEAD_CAR "1 when this track is the lead car; the lead, when present, is always track index 1";
 CM_ SG_ 114120023 LAT_DIST "positive = left of ego, 204.7 (max value) when inactive";
 CM_ SG_ 114120023 ROTATION "0 straight, negative left, positive right. Range of -3 to 3 seen so far. -128 when inactive.";
-CM_ SG_ 114120025 MUX "1-10, 17-26, 33-42, 49-58 map to the same 10 objects for 5Hz frequency each";
+CM_ SG_ 114120025 MUX "1-10, 17-26, 33-42, 49-58 map to the same 10 slots for 5Hz frequency each";
 CM_ SG_ 114120025 IS_LEAD_CAR "1 when this track is the lead car; the lead, when present, is always track index 1";
 CM_ SG_ 114120025 LAT_DIST "positive = left of ego, 204.7 (max value) when inactive";
 CM_ SG_ 114120025 ROTATION "0 straight, negative left, positive right. Range of -3 to 3 seen so far. -128 when inactive.";
