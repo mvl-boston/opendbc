@@ -208,6 +208,14 @@ class CarController(CarControllerBase):
       if self.frame % 10 == 0:
         bus = 0 if self.CP.carFingerprint in HONDA_BOSCH_CANFD else 1
         can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
+        can_sends.extend(hondacan.create_radar_hud(self.packer, self.CAN.pt))
+      if self.frame % 100 == 0:
+        can_sends.extend(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
+      if self.frame % 50 == 0:
+        can_sends.extend(hondacan.create_canfd_2hz_radar_messages(self.packer, self.CAN.pt))
+      if self.frame % 20 == 0:
+        can_sends.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt))
+        
 
     # Send steering command.
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
