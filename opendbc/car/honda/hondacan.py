@@ -237,6 +237,22 @@ def spam_buttons_command(packer, CAN, button_val, car_fingerprint):
   return packer.make_can_msg("SCM_BUTTONS", bus, values)
 
 
+def create_radar_hud_canfd(packer, bus, acc):
+  values = {
+    'CMBS_ENABLED_MAYBE': acc,
+    'ACC_ON': acc,
+  }
+  return packer.make_can_msg("RADAR_HUD", bus, values)
+
+
+def create_canfd_supplmeental(packer, bus):
+  values = {
+    'SET_ME_X01': 0x01,
+    'SET_ME_X41': 0x41,
+  }
+  return packer.make_can_msg("BOSCH_SUPPLEMENTAL_CANFD", bus, values)
+
+
 def honda_checksum(address: int, sig, d: bytearray) -> int:
   s = 0
   extended = address > 0x7FF
