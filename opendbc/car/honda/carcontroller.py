@@ -208,7 +208,7 @@ class CarController(CarControllerBase):
       if self.frame % 10 == 0:
         bus = 0 if self.CP.carFingerprint in HONDA_BOSCH_CANFD else 1
         can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
-        can_sends.extend(hondacan.create_radar_hud(self.packer, self.CAN.pt))
+        can_sends.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled))
       if self.frame % 100 == 0:
         can_sends.extend(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
       if self.frame % 50 == 0:
@@ -358,7 +358,7 @@ class CarController(CarControllerBase):
 
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
-        if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS):
+        if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD):
           can_sends.append(hondacan.create_radar_hud(self.packer, self.CAN.pt))
         if self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH:
           can_sends.append(hondacan.create_legacy_brake_command(self.packer, self.CAN.pt))
