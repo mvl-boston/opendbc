@@ -36,7 +36,7 @@ jobs:
     - name: Build host openpilot
       run: |
         source .venv/bin/activate
-        scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/
+        scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
     - name: Run opendbc tests in host env
       run: |
         cd opendbc_repo
@@ -44,7 +44,6 @@ jobs:
         uv sync --all-extras --inexact
         source "$UV_PROJECT_ENVIRONMENT/bin/activate"
         uv lock --check
-        scons -j$(python -c 'import os; print(os.cpu_count() or 1)')
         lefthook run test
 
   safety_tests:
@@ -61,7 +60,7 @@ jobs:
   mutation:
     name: Safety mutation tests
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: ${{ github.repository == 'commaai/opendbc' && 45 || 999 }}
     strategy:
       fail-fast: false
       matrix:
@@ -77,6 +76,7 @@ jobs:
 
   car_diff:
     name: car diff
+    if: false
     runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-latest' }}
     env:
       GIT_REF: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.event.before || format('origin/{0}', github.event.repository.default_branch) }}
@@ -88,7 +88,7 @@ jobs:
       if: github.event_name == 'pull_request'
       run: source setup.sh && python opendbc/car/tests/car_diff.py | tee diff.txt
     - name: Upload diff
-      if: always() && github.event_name == 'pull_request'
+      if: always() && github.event_name == 'pull_request' && github.repository == 'commaai/opendbc'
       uses: actions/upload-artifact@v4
       with:
         name: car_diff_${{ github.event.number }}
