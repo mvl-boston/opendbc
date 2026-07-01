@@ -56,6 +56,7 @@ class CarState(CarStateBase):
     self.initial_accFault_cleared = False
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
 
+
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
@@ -246,12 +247,15 @@ class CarState(CarStateBase):
 
     self.acc_hud = False
     self.lkas_hud = False
+    self.radar_ref_counter = 0
     if self.CP.carFingerprint not in HONDA_BOSCH:
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
-    if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
+    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      self.radar_ref_counter = cp_cam.vl["RADAR_REFERENCE"][COUNTER]
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
