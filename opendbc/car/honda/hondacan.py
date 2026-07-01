@@ -279,6 +279,26 @@ def create_canfd_50hz_radar_messages(packer, bus, radar_mux):
   return commands
 
 
+def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr):
+  commands = []
+
+  radar_lead_values = {
+    'CNTR_REF': radar_ref_cntr,
+    'TARGET_SPEED_MAYBE': 0,
+    'LEAD_DISTANCE_MAYBE': 0,
+  }
+  commands.append(packer.make_can_msg('RADAR_LEAD', bus, radar_lead_values))
+
+  radar_lead2__values = {
+    'SET_ME_X88': 0x88,
+    'SET_ME_X78': 0x78,
+    'LEAD_DISTANCE_MAYBE': 0,
+  }
+  commands.append(packer.make_can_msg('RADAR_LEAD2', bus, radar_lead2_values))
+
+  return commands
+
+
 def honda_checksum(address: int, sig, d: bytearray) -> int:
   s = 0
   extended = address > 0x7FF
