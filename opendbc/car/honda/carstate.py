@@ -255,7 +255,7 @@ class CarState(CarStateBase):
     if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
     if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
-      self.radar_ref_counter = cp_cam.vl["RADAR_REFERENCE"][COUNTER]
+      self.radar_ref_counter = cp_cam.vl["RADAR_REFERENCE"]["COUNTER"]
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
