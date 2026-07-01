@@ -7,7 +7,7 @@ on:
   pull_request:
 
 env:
-  PARENT_MVL_BRANCH: 0110-op-honda
+  PARENT_MVL_BRANCH: ee54e8209052b5726918c15ac2d54d64a56fa896
 
 jobs:
   tests:
