@@ -253,9 +253,37 @@ def create_canfd_supplmeental(packer, bus):
   return packer.make_can_msg("BOSCH_SUPPLEMENTAL_CANFD", bus, values)
 
 
+def create_canfd_50hz_radar_messages(packer, bus, radar_mux):
+  commands = []
+
+  lane_path_values = {
+    'MUX': radar_mux,
+    'PATH_OFFSET_1': 0,
+    'PATH_OFFSET_2': 0,
+    'PATH_OFFSET_3': 0,
+    'PATH_OFFSET_4': 0,
+  }
+  commands.append(packer.make_can_msg('LANE_PATH', bus, lane_path_values))
+
+  hud_objects_values = {
+    'MUX': radar_mux,
+    'OBJECT_ID': 0,
+    'IS_LEAD_CAR': 0,
+    'CAR_TYPE': 0,
+    'ROTATION': 0,
+    'LONG_DIST': 0,
+    'LAT_DIST': 0,
+  }
+  commands.append(packer.make_can_msg('HUD_OBJECTS', bus, hud_objects_values))
+
+  return commands
+
+
 def honda_checksum(address: int, sig, d: bytearray) -> int:
   s = 0
   extended = address > 0x7FF
+  # Higher extended-ID range adds 10, lower adds 3. TODO: confirm the exact boundary.
+  high_extended = address > 0x100000
   addr = address
   while addr:
     s += addr & 0xF
@@ -267,5 +295,6 @@ def honda_checksum(address: int, sig, d: bytearray) -> int:
     s += (x & 0xF) + (x >> 4)
   s = 8 - s
   if extended:
-    s += 3
+    s += 10 if high_extended else 3
   return s & 0xF
+  
