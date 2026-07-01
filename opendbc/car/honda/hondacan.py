@@ -242,7 +242,7 @@ def create_radar_hud_canfd(packer, bus, acc):
     'CMBS_ENABLED_MAYBE': acc,
     'ACC_ON': acc,
   }
-  return packer.make_can_msg("RADAR_HUD", bus, values)
+  return packer.make_can_msg("RADAR_HUD_CANFD", bus, values)
 
 
 def create_canfd_supplmeental(packer, bus):
