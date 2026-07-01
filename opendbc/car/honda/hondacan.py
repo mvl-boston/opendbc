@@ -245,7 +245,7 @@ def create_radar_hud_canfd(packer, bus, acc):
   return packer.make_can_msg("RADAR_HUD_CANFD", bus, values)
 
 
-def create_canfd_supplmental(packer, bus):
+def create_canfd_supplemental(packer, bus):
   values = {
     'SET_ME_X01': 0x01,
     'SET_ME_X41': 0x41,
