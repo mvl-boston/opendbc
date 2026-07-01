@@ -623,7 +623,7 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
   STEER_BUS = 0
   BUTTONS_BUS = 0
 
-  TX_MSGS = [[0xE4, 0], [0x1DF, 0],  [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x18DAB0F1, 0], [0x310, 0], [0x6CD5558, 0], [0x6CD5559, 0], [0xF31AA52, 0], [0xF31AA5C, 0], [0x1A45AA4E, 0]]
+  TX_MSGS = [[0xE4, 0], [0x1DF, 0],  [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x18DAB0F1, 0], [0x310, 0]]
   FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x1DF, 0x33D]}
   RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1DF, 0x33D)}  # STEERING_CONTROL / ACC_CONTROL / LKAS_HUD
 
