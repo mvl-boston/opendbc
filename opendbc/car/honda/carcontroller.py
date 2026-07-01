@@ -214,7 +214,7 @@ class CarController(CarControllerBase):
     # simulate canfd radar to prevent faults
     if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and self.CP.openpilotLongitudinalControl:
       if self.frame % 10 == 0:
-        can_sends.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled))      
+        can_sends.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled))
       if self.frame % 100 == 0:
         can_sends.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
       if self.frame % 2 == 0:
