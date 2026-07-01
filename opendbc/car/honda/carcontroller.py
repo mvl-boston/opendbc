@@ -147,6 +147,7 @@ class CarController(CarControllerBase):
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
     self.windfactor_before_maxgas = self.windfactor_before_brake = self.windfactor
     self.pitch = 0.0
+    self.radar_mux = 0
 
     # Bosch extra-brake controller
     self.brake_pid = PIDController(k_p=([0,], [0,]),
@@ -210,9 +211,19 @@ class CarController(CarControllerBase):
         can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
         can_sends.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled))
       if self.frame % 100 == 0:
-        can_sends.extend(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
-      if self.frame % 50 == 0:
-        can_sends.extend(hondacan.create_canfd_2hz_radar_messages(self.packer, self.CAN.pt))
+        can_sends.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
+      if self.frame % 2 == 0:
+        if self.radar_mux == 10:
+          self.radar_mux = 17
+        if self.radar_mux == 26:
+          self.radar_mux = 33
+        if self.radar_mux == 42:
+          self.radar_mux = 49
+        if self.radar_mux >= 58:
+          self.radar_mux = 1
+        else:
+          self.radar_mux += 1
+        can_sends.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.pt, self.radar_mux))
       if self.frame % 20 == 0:
         can_sends.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt))
         
