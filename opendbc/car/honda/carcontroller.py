@@ -225,7 +225,7 @@ class CarController(CarControllerBase):
           self.radar_mux += 1
         can_sends.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.pt, self.radar_mux))
       if self.frame % 20 == 0:
-        can_sends.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, self.radar_ref_counter))
+        can_sends.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter))
 
     # Send steering command.
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
