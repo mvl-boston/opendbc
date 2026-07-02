@@ -284,8 +284,8 @@ def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr):
 
   radar_lead_values = {
     'CNTR_REF': radar_ref_cntr,
-    'TARGET_SPEED_MAYBE': 0,
-    'LEAD_DISTANCE_MAYBE': 0,
+    'TARGET_SPEED_MAYBE': 120,
+    'LEAD_DISTANCE_MAYBE': 6,
   }
   commands.append(packer.make_can_msg('RADAR_LEAD', bus, radar_lead_values))
 
