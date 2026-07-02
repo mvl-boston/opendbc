@@ -360,7 +360,7 @@ class CarController(CarControllerBase):
           pcm_speed = 25.0 / 3.6
 
       if self.CP.openpilotLongitudinalControl:
-        if self.CP.carFingerpint in HONDA_BOSCH_CANFD:
+        if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
           pcm_accel = actuators.accel
         # On Nidec, this also controls longitudinal positive acceleration
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
