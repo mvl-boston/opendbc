@@ -153,8 +153,11 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     'HUD_DISTANCE': hud_control.leadDistanceBars,  # wraps to 0 at 4 bars
     'IMPERIAL_UNIT': int(not is_metric),
     'HUD_LEAD': 2 if enabled and hud_control.leadVisible else 1 if enabled else 0,
-    'SET_ME_X01_2': int(not alphalong),
+    'SET_ME_X01_2': 1,
   }
+
+  if CP.carFingerprint in HONDA_BOSCH_CANFD:
+    acc_hud_values['SET_ME_X01_2'] = int(enabled and (bool(acc_hud_values.['HUD_LEAD']) or (pcm_accel < 0.2)))
 
   if CP.carFingerprint in HONDA_BOSCH:
     acc_hud_values['ACC_ON'] = int(enabled)
