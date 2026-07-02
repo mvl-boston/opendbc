@@ -196,7 +196,7 @@ class CarController(CarControllerBase):
     # **** process the car messages ****
 
     # steer torque is converted back to CAN reference (positive when steering right)
-    apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX + 100,
+    apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX + 200,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
     speed_control = 1 if ((accel <= 0.0) and (CS.out.vEgo == 0)) else 0
