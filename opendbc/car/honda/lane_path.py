@@ -28,8 +28,7 @@ LANE_LINE_ON = 3            # LEFT_LANE / RIGHT_LANE shown value
 LANE_LENGTH_MAX_VALUE = 33  # full dash reach (have not seen/tested higher)
 LANE_WIDTH_DEFAULT = 32
 
-# Dash lane fit (from modelV2): per-side line confidence -> lane-center cubic + draw length
-DASH_PATH_FIT_MAX = 110.0        # m, fit horizon
+# Dash lane (from modelV2): per-side line confidence -> lane center + draw length
 DASH_PATH_PROB_ON = 0.25         # lane-line existence prob to start drawing
 DASH_PATH_PROB_OFF = 0.10        # ... and to keep drawing (hysteresis)
 DASH_HALF_OFFSET = 1.65          # m, half lane width when only one line is confident
@@ -51,13 +50,6 @@ def encode_lane_path(x, y):
   if x.size < 2 or x.max() < D_MAX:
     return [OFFSET_UNAVAILABLE] * NUM_PTS
   return _encode(np.interp(LOOKAHEAD, x, y))
-
-
-def encode_lane_path_poly(poly, valid=True):
-  """OP lane-center cubic [c0, c1, c2, c3] (m, +left) -> 40 raw offsets. On-car path, fit upstream in controlsd."""
-  if not valid or len(poly) == 0:
-    return [OFFSET_UNAVAILABLE] * NUM_PTS
-  return _encode(np.polyval(list(poly)[::-1], LOOKAHEAD))  # polyval wants highest-degree-first
 
 
 def create_lane_path(packer, bus, offsets, mux):
@@ -97,33 +89,25 @@ def _line_trusted(prob, was_on):
   return prob >= (DASH_PATH_PROB_OFF if was_on else DASH_PATH_PROB_ON)
 
 
-def _fit_cubic(x, y):
-  # cubic [c0..c3] over x <= DASH_PATH_FIT_MAX; None if too few points in range
-  m = x <= DASH_PATH_FIT_MAX
-  if m.sum() < 4:
-    return None
-  return [float(v) for v in np.polyfit(x[m], y[m], 3)[::-1]]
-
-
 def select_lane_render(model, prev_left, prev_right):
-  """Dash center cubic + which ego lines to draw, from per-side model confidence. `model` = modelV2."""
+  """Dash lane-center (x, y arrays) + which ego lines to draw, from per-side model confidence. `model` = modelV2."""
   lls, probs = model.laneLines, model.laneLineProbs
   if len(lls) < 3 or len(probs) < 3 or len(lls[1].x) == 0:
-    return None, False, False
+    return None, None, False, False
 
   left = _line_trusted(probs[1], prev_left)
   right = _line_trusted(probs[2], prev_right)
   x = np.array(lls[1].x)
   yl, yr = np.array(lls[1].y), np.array(lls[2].y)
   if left and right:
-    poly = _fit_cubic(x, (yl + yr) / 2.0)
+    y = (yl + yr) / 2.0
   elif right:
-    poly = _fit_cubic(x, yr - DASH_HALF_OFFSET)
+    y = yr - DASH_HALF_OFFSET
   elif left:
-    poly = _fit_cubic(x, yl + DASH_HALF_OFFSET)
+    y = yl + DASH_HALF_OFFSET
   else:
-    return None, False, False
-  return (poly, left, right) if poly is not None else (None, False, False)
+    return None, None, False, False
+  return x, y, left, right
 
 
 @dataclass
@@ -136,7 +120,7 @@ class DashLane:
 
 
 class LanePathFitter:
-  """Fits OP's lane-center path from modelV2 for the radarless dash, holding per-side line hysteresis."""
+  """Builds OP's lane-center path from modelV2 for the radarless dash, holding per-side line hysteresis."""
   def __init__(self):
     self._left_on = False
     self._right_on = False
@@ -148,14 +132,15 @@ class LanePathFitter:
     the model's lane lines tend to be less accurate/confident on busy non-highway streets."""
     blank = DashLane([OFFSET_UNAVAILABLE] * NUM_PTS, 0.0, False, False)
 
-    poly, left_on, right_on = (None, False, False)
+    x = y = None
+    left_on = right_on = False
     if model is not None:
-      poly, left_on, right_on = select_lane_render(model, self._left_on, self._right_on)
-    if poly is None:
+      x, y, left_on, right_on = select_lane_render(model, self._left_on, self._right_on)
+    if x is None:
       return blank
     self._left_on, self._right_on = left_on, right_on
 
     reach = float(np.clip(max(v_ego / DASH_PATH_FULL_LEN_SPEED, lead_d / DASH_PATH_LEAD_FULL_DIST, DASH_PATH_MIN_REACH), 0.0, 1.0))
     if round(reach * LANE_LENGTH_MAX_VALUE) <= 0:
       return blank
-    return DashLane(encode_lane_path_poly(poly), reach, left_on, right_on)
+    return DashLane(encode_lane_path(x, y), reach, left_on, right_on)
