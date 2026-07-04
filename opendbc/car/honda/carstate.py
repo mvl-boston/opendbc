@@ -255,7 +255,7 @@ class CarState(CarStateBase):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
     if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
       self.radar_ref_counter = cp.vl["RADAR_REFERENCE"]["COUNTER"]
-      # self.delay_until_heartbeat = cp.vl["BOSCH_SUPPLEMENTAL_CANFD"]["COUNTER"]
+      self.delay_until_heartbeat = cp.vl["BOSCH_SUPPLEMENTAL_CANFD"]["COUNTER"]
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
