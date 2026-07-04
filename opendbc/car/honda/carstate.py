@@ -59,6 +59,7 @@ class CarState(CarStateBase):
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
+    cp_radar = can_parsers[1]
     if self.CP.enableBsm:
       cp_body = can_parsers[Bus.body]
 
@@ -255,6 +256,7 @@ class CarState(CarStateBase):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
     if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
       self.radar_ref_counter = cp.vl["RADAR_REFERENCE"]["COUNTER"]
+      self.supp_tick = bool(len(cp_radar.vl_all[0x580]) > 0)
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
