@@ -214,7 +214,7 @@ class CarController(CarControllerBase):
     if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and self.CP.openpilotLongitudinalControl:
       if self.frame % 10 == 0:
         can_sends.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled))
-      if self.supp_tick:
+      if CS.supp_tick:
         can_sends.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
       if self.frame % 2 == 0:
         if self.radar_mux == 10:
