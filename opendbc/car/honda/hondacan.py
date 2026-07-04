@@ -157,7 +157,7 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
   }
 
   if CP.carFingerprint in HONDA_BOSCH_CANFD:
-    acc_hud_values['SET_ME_X01_2'] = int(enabled and (bool(acc_hud_values['HUD_LEAD']) or (pcm_accel < 0.2)))
+    acc_hud_values['SET_ME_X01_2'] = 0 # int(enabled and (bool(acc_hud_values['HUD_LEAD']) or (pcm_accel < 0.2)))
 
   if CP.carFingerprint in HONDA_BOSCH:
     acc_hud_values['ACC_ON'] = int(enabled)
@@ -182,7 +182,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
 
   lkas_hud_values = {
     'LKAS_READY': 1,
-    'LKAS_STATE_CHANGE': 1,
+    'LKAS_STATE_CHANGE': 0,
     'STEERING_REQUIRED': alert_steer_required,
     'SOLID_LANES': hud_control.lanesVisible and not steer_maxed,
     'DASHED_LANES': lat_active,
@@ -245,6 +245,8 @@ def create_radar_hud_canfd(packer, bus, acc):
   values = {
     'CMBS_ENABLED_MAYBE': acc,
     'ACC_ON': acc,
+    'SET_ME_X01': 0x01,
+    'SET_ME_X01_2': 0x01,
   }
   return packer.make_can_msg("RADAR_HUD_CANFD", bus, values)
 
@@ -273,10 +275,10 @@ def create_canfd_50hz_radar_messages(packer, bus, radar_mux):
     'MUX': radar_mux,
     'OBJECT_ID': 0,
     'IS_LEAD_CAR': 0,
-    'CAR_TYPE': -1,
-    'ROTATION': -128,
-    'LONG_DIST': 196.907,
-    'LAT_DIST': 204.7,
+    'CAR_TYPE': 0,
+    'ROTATION': 0,
+    'LONG_DIST': 0,
+    'LAT_DIST': 0,
   }
   commands.append(packer.make_can_msg('HUD_OBJECTS', bus, hud_objects_values))
 
