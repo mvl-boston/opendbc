@@ -161,8 +161,11 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
 
   if CP.carFingerprint in HONDA_BOSCH:
     acc_hud_values['ACC_ON'] = int(enabled)
-    acc_hud_values['FCM_OFF'] = 1
-    acc_hud_values['FCM_OFF_2'] = 1
+    # acc_hud_values['FCM_OFF'] = 1
+    # acc_hud_values['FCM_OFF_2'] = 1
+    acc_hud_values['FCM_OFF'] = acc_hud['FCM_OFF']
+    acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
+    acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
   else:
     # Shows the distance bars, TODO: stock camera shows updates temporarily while disabled
     acc_hud_values['ACC_ON'] = int(enabled)
@@ -182,7 +185,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
 
   lkas_hud_values = {
     'LKAS_READY': 1,
-    'LKAS_STATE_CHANGE': 0,
+    'LKAS_STATE_CHANGE': 1,
     'STEERING_REQUIRED': alert_steer_required,
     'SOLID_LANES': hud_control.lanesVisible and not steer_maxed,
     'DASHED_LANES': lat_active,
