@@ -273,10 +273,10 @@ def create_canfd_50hz_radar_messages(packer, bus, radar_mux):
     'MUX': radar_mux,
     'OBJECT_ID': 0,
     'IS_LEAD_CAR': 0,
-    'CAR_TYPE': 0,
-    'ROTATION': 0,
-    'LONG_DIST': 0,
-    'LAT_DIST': 0,
+    'CAR_TYPE': -1,
+    'ROTATION': -128,
+    'LONG_DIST': 196.907,
+    'LAT_DIST': 204.7,
   }
   commands.append(packer.make_can_msg('HUD_OBJECTS', bus, hud_objects_values))
 
@@ -294,9 +294,10 @@ def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr):
   commands.append(packer.make_can_msg('RADAR_LEAD', bus, radar_lead_values))
 
   radar_lead2_values = {
-    'SET_ME_X88': 0x88,
-    'SET_ME_X78': 0x78,
+    'SET_ME_X88': 136,
+    'SET_ME_X78': 120,
     'LEAD_DISTANCE_MAYBE': 0,
+    'UNKNOWN_MESSAGE': 0,    
   }
   commands.append(packer.make_can_msg('RADAR_LEAD2', bus, radar_lead2_values))
 
