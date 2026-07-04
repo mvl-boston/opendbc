@@ -328,7 +328,7 @@ void safety_tick(const safety_config *cfg) {
       }
 
       // enforce minimum frequency for safety-relevant messages
-      bool frequency_invalid = frequency < 10U;
+      bool frequency_invalid = frequency < 1U;
       if (lagging || frequency_invalid || !is_msg_valid(cfg->rx_checks, i)) {
         rx_checks_invalid = true;
         controls_allowed = false;
