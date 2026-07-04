@@ -297,7 +297,7 @@ def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr):
     'SET_ME_X88': 136,
     'SET_ME_X78': 120,
     'LEAD_DISTANCE_MAYBE': 0,
-    'UNKNOWN_MESSAGE': 0,    
+    'UNKNOWN_MESSAGE': 0,
   }
   commands.append(packer.make_can_msg('RADAR_LEAD2', bus, radar_lead2_values))
 
