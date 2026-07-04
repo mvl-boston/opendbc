@@ -59,7 +59,7 @@ class CarState(CarStateBase):
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
-    cp_radar = can_parsers[1]
+    cp_radar = can_parsers[Bus.radar]
     if self.CP.enableBsm:
       cp_body = can_parsers[Bus.body]
 
