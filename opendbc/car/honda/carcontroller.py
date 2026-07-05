@@ -219,11 +219,11 @@ class CarController(CarControllerBase):
       if self.frame % 2 == 0:
         if self.radar_mux == 10:
           self.radar_mux = 17
-        if self.radar_mux == 26:
+        elif self.radar_mux == 26:
           self.radar_mux = 33
-        if self.radar_mux == 42:
+        elif self.radar_mux == 42:
           self.radar_mux = 49
-        if self.radar_mux >= 58:
+        elif self.radar_mux >= 58:
           self.radar_mux = 1
         else:
           self.radar_mux += 1
