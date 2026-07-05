@@ -285,6 +285,8 @@ class CarState(CarStateBase):
     if CP.enableBsm:
       parsers[Bus.body] = CANParser(DBC[CP.carFingerprint][Bus.body], [], CanBus(CP).radar)
     if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
-      parsers[Bus.radar] = CANParser(DBC[CP.carFingerprint][Bus.radar], [], CanBus(CP).radar)
+      # RADAR_SUPP_TICK_REFERENCE (0x710) must be explicitly subscribed: it is only read via vl_all,
+      # which (unlike vl) does not auto-subscribe messages, so without this it is never parsed.
+      parsers[Bus.radar] = CANParser(DBC[CP.carFingerprint][Bus.radar], [("RADAR_SUPP_TICK_REFERENCE", 0)], CanBus(CP).radar)
 
     return parsers
