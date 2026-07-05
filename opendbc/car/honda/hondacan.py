@@ -157,7 +157,7 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
   }
 
   if CP.carFingerprint in HONDA_BOSCH_CANFD:
-    acc_hud_values['SET_ME_X01_2'] = 0 # int(enabled and (bool(acc_hud_values['HUD_LEAD']) or (pcm_accel < 0.2)))
+    acc_hud_values['SET_ME_X01_2'] = int(enabled and (bool(acc_hud_values['HUD_LEAD']) or (pcm_accel < 0.2)))
 
   if CP.carFingerprint in HONDA_BOSCH:
     acc_hud_values['ACC_ON'] = int(enabled)
@@ -177,7 +177,7 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
   return packer.make_can_msg("ACC_HUD", bus, acc_hud_values)
 
 
-def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed):
+def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed, CS):
   commands = []
 
   lkas_hud_values = {
@@ -196,7 +196,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
     # TODO: needed for Bosch CAN FD?
     if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
-      lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
+      lkas_hud_values['LKAS_PROBLEM'] = CS.steerFaultPermanent # CS.lkas_hud['LKAS_PROBLEM']
 
   if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
     lkas_hud_values['RDM_OFF'] = 1
