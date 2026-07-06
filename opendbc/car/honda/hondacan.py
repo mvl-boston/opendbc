@@ -259,26 +259,46 @@ def create_canfd_supplemental(packer, bus):
   return packer.make_can_msg("BOSCH_SUPPLEMENTAL_CANFD", bus, values)
 
 
+# Radar MUX banks: 1-10, 17-26, 33-42, 49-58. Each bank is a fresh sweep of path points.
+RADAR_MUX_BANK_STARTS = (1, 17, 33, 49)
+# "no detection" sentinel the stock radar uses for an empty path point / object slot
+PATH_OFFSET_INVALID = 2047
+
+
+def _lane_path_offsets(radar_mux):
+  # The stock radar reports path points as a sweep within each MUX bank: the first point (bank start)
+  # is 0, the second has the first two offsets valid (0) and the rest invalid, and the remaining points
+  # are fully invalid. Match that exact per-MUX pattern so the camera sees a consistent empty path.
+  pos = next((radar_mux - start for start in RADAR_MUX_BANK_STARTS if start <= radar_mux <= start + 9), 0)
+  if pos == 0:
+    return (0, 0, 0, 0)
+  if pos == 1:
+    return (0, 0, PATH_OFFSET_INVALID, PATH_OFFSET_INVALID)
+  return (PATH_OFFSET_INVALID,) * 4
+
+
 def create_canfd_50hz_radar_messages(packer, bus, radar_mux):
   commands = []
 
+  offsets = _lane_path_offsets(radar_mux)
   lane_path_values = {
     'MUX': radar_mux,
-    'PATH_OFFSET_1': 0,
-    'PATH_OFFSET_2': 0,
-    'PATH_OFFSET_3': 0,
-    'PATH_OFFSET_4': 0,
+    'PATH_OFFSET_1': offsets[0],
+    'PATH_OFFSET_2': offsets[1],
+    'PATH_OFFSET_3': offsets[2],
+    'PATH_OFFSET_4': offsets[3],
   }
   commands.append(packer.make_can_msg('LANE_PATH', bus, lane_path_values))
 
+  # Empty-object-slot sentinel the stock radar transmits (no lead/object): max distances, CAR_TYPE=-1.
   hud_objects_values = {
     'MUX': radar_mux,
     'OBJECT_ID': 0,
     'IS_LEAD_CAR': 0,
-    'CAR_TYPE': 0,
-    'ROTATION': 0,
-    'LONG_DIST': 0,
-    'LAT_DIST': 0,
+    'CAR_TYPE': -1,
+    'ROTATION': -128,
+    'LONG_DIST': 196.9,
+    'LAT_DIST': 204.7,
   }
   commands.append(packer.make_can_msg('HUD_OBJECTS', bus, hud_objects_values))
 
