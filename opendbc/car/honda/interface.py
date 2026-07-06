@@ -2,7 +2,7 @@
 import numpy as np
 from opendbc.car import get_safety_config, structs, uds
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.disable_ecu import disable_ecu
+from opendbc.car.disable_ecu import disable_ecu, clear_all_dtcs
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HondaSafetyFlags
@@ -332,10 +332,18 @@ class CarInterface(CarInterfaceBase):
   def init(CP, can_recv, can_send, communication_control=None):
     if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and CP.openpilotLongitudinalControl:
       # 0x80 silences response
+      clear_dtc = False
       if communication_control is None:
         communication_control = bytes([uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
                                        uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT])
-      disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1, com_cont_req=communication_control)
+        # The CAN FD radar stores DTCs while disabled; clear them on disable so stale codes from a
+        # previous drive don't fault the brake module at startup.
+        clear_dtc = CP.carFingerprint in HONDA_BOSCH_CANFD
+      disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1, com_cont_req=communication_control, clear_dtc=clear_dtc)
+      if clear_dtc:
+        # Also clear DTCs on the other ECUs (powertrain and camera buses) that may have latched a
+        # fault from the missing radar, so they don't report stale codes on a later drive.
+        clear_all_dtcs(can_send, [CanBus(CP).pt, CanBus(CP).camera])
 
   @staticmethod
   def deinit(CP, can_recv, can_send):

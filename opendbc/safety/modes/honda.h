@@ -356,7 +356,9 @@ static safety_config honda_bosch_init(uint16_t param) {
                                               {0x310, 0, 8, .check_relay = false}, {0x6CD5558, 0, 8, .check_relay = true}, {0x6CD5559, 0, 8, .check_relay = false},
                                               {0xF31AA52, 0, 8, .check_relay = false}, {0xF31AA5C, 0, 8, .check_relay = true}, {0x1A45AA4E, 0, 8, .check_relay = false},
                                               {0x310, 2, 8, .check_relay = false}, {0x6CD5558, 2, 8, .check_relay = true}, {0x6CD5559, 2, 8, .check_relay = false},
-                                              {0xF31AA52, 2, 8, .check_relay = false}, {0xF31AA5C, 2, 8, .check_relay = true}, {0x1A45AA4E, 2, 8, .check_relay = false}};
+                                              {0xF31AA52, 2, 8, .check_relay = false}, {0xF31AA5C, 2, 8, .check_relay = true}, {0x1A45AA4E, 2, 8, .check_relay = false},
+                                              // functional (broadcast) diagnostic address, used to clear stale DTCs on radar disable (both buses)
+                                              {0x18DB33F1, 0, 8, .check_relay = false}, {0x18DB33F1, 2, 8, .check_relay = false}};
 
   const uint16_t HONDA_PARAM_ALT_BRAKE = 1;
   const uint16_t HONDA_PARAM_RADARLESS = 8;
@@ -444,6 +446,19 @@ static bool honda_nidec_fwd_hook(int bus_num, int addr) {
   return block_msg;
 }
 
+static bool honda_bosch_fwd_hook(int bus_num, int addr) {
+  bool block_msg = false;
+
+  // On CAN FD Bosch, openpilot disables the radar by holding it in a diagnostic session. Don't forward
+  // the radar's diagnostic responses (0x18DAF1B0, radar 0xB0 -> tester 0xF1) from the radar bus to the
+  // camera bus, so the camera can't observe openpilot silencing the radar and raise a radar (RDM) fault.
+  if (honda_bosch_canfd && (bus_num == 0) && (addr == 0x18DAF1B0)) {
+    block_msg = true;
+  }
+
+  return block_msg;
+}
+
 const safety_hooks honda_nidec_hooks = {
   .init = honda_nidec_init,
   .rx = honda_rx_hook,
@@ -458,6 +473,7 @@ const safety_hooks honda_bosch_hooks = {
   .init = honda_bosch_init,
   .rx = honda_rx_hook,
   .tx = honda_tx_hook,
+  .fwd = honda_bosch_fwd_hook,
   .get_counter = honda_get_counter,
   .get_checksum = honda_get_checksum,
   .compute_checksum = honda_compute_checksum,
