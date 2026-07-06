@@ -217,14 +217,17 @@ class CarController(CarControllerBase):
       if CS.supp_tick:
         can_sends.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
       if self.frame % 2 == 0:
-        if self.radar_mux == 10:
-          self.radar_mux = 17
-        if self.radar_mux == 26:
-          self.radar_mux = 33
-        if self.radar_mux == 42:
-          self.radar_mux = 49
+        # Cycle the radar MUX through the same banks the stock radar uses: 1-10, 17-26, 33-42, 49-58.
+        # These must be elif (not sequential if): a bare `if` that sets the bank start would fall
+        # through to the `else` increment, skipping the bank-start values (17, 33, 49).
         if self.radar_mux >= 58:
           self.radar_mux = 1
+        elif self.radar_mux == 10:
+          self.radar_mux = 17
+        elif self.radar_mux == 26:
+          self.radar_mux = 33
+        elif self.radar_mux == 42:
+          self.radar_mux = 49
         else:
           self.radar_mux += 1
         can_sends.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.pt, self.radar_mux))
