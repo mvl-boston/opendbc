@@ -211,11 +211,14 @@ class CarController(CarControllerBase):
         can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
 
     # simulate canfd radar to prevent faults
+    # These radar look-alikes are consumed by the camera ECU, which sits behind the relay on the
+    # camera bus. openpilot's own transmissions are not forwarded across the open relay, so they
+    # must be sent directly on the camera bus (not the powertrain/radar bus) to reach the camera.
     if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and self.CP.openpilotLongitudinalControl:
       if self.frame % 10 == 0:
-        can_sends.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled))
+        can_sends.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.camera, CC.enabled))
       if CS.supp_tick:
-        can_sends.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
+        can_sends.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.camera))
       if self.frame % 2 == 0:
         # Cycle the radar MUX through the same banks the stock radar uses: 1-10, 17-26, 33-42, 49-58.
         # These must be elif (not sequential if): a bare `if` that sets the bank start would fall
@@ -230,9 +233,9 @@ class CarController(CarControllerBase):
           self.radar_mux = 49
         else:
           self.radar_mux += 1
-        can_sends.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.pt, self.radar_mux))
+        can_sends.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.camera, self.radar_mux))
       if self.frame % 20 == 0:
-        can_sends.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter))
+        can_sends.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.camera, CS.radar_ref_counter))
 
     # Send steering command.
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
