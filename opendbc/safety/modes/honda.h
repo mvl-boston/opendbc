@@ -444,6 +444,19 @@ static bool honda_nidec_fwd_hook(int bus_num, int addr) {
   return block_msg;
 }
 
+static bool honda_bosch_fwd_hook(int bus_num, int addr) {
+  bool block_msg = false;
+
+  // On CAN FD Bosch, openpilot disables the radar by holding it in a diagnostic session. Don't forward
+  // the radar's diagnostic responses (0x18DAF1B0, radar 0xB0 -> tester 0xF1) from the radar bus to the
+  // camera bus, so the camera can't observe openpilot silencing the radar and raise a radar (RDM) fault.
+  if (honda_bosch_canfd && (bus_num == 0) && (addr == 0x18DAF1B0)) {
+    block_msg = true;
+  }
+
+  return block_msg;
+}
+
 const safety_hooks honda_nidec_hooks = {
   .init = honda_nidec_init,
   .rx = honda_rx_hook,
@@ -458,6 +471,7 @@ const safety_hooks honda_bosch_hooks = {
   .init = honda_bosch_init,
   .rx = honda_rx_hook,
   .tx = honda_tx_hook,
+  .fwd = honda_bosch_fwd_hook,
   .get_counter = honda_get_counter,
   .get_checksum = honda_get_checksum,
   .compute_checksum = honda_compute_checksum,
