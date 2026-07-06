@@ -291,7 +291,8 @@ def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr):
   radar_lead_values = {
     'CNTR_REF': radar_ref_cntr,
     'SET_ME_X01': 0x01,
-    'TARGET_SPEED_MAYBE': 120,
+    # stock radar transmits a constant 140 here (confirmed from logs); 120 causes a camera mismatch
+    'TARGET_SPEED_MAYBE': 140,
     'LEAD_DISTANCE_MAYBE': 6,
   }
   commands.append(packer.make_can_msg('RADAR_LEAD', bus, radar_lead_values))
