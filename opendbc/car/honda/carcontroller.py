@@ -409,7 +409,13 @@ class CarController(CarControllerBase):
       self.dash_lane = self.lane_path_fitter.update(self.model, CS.out.vEgo, lead_d)
       # Important: same mux for lane_path and hud_objects. Lane display freezes if muxes don't match.
       mux = lane_path.MUX_CYCLE[(self.frame // 2) % len(lane_path.MUX_CYCLE)]
-      can_sends.append(lane_path.create_lane_path(self.packer, self.CAN.lkas, self.dash_lane.offsets, mux))
+      if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+        # No LKAS_HUD_2 on CAN FD: the dash reads the lane length from the stock radar's in-band
+        # terminator, so reshape the path into the terminated-prefix form (see lane_path.py).
+        lane_offsets = lane_path.canfd_lane_offsets(self.dash_lane)
+      else:
+        lane_offsets = self.dash_lane.offsets
+      can_sends.append(lane_path.create_lane_path(self.packer, self.CAN.lkas, lane_offsets, mux))
 
       # CAN FD cars have no camera HUD_OBJECTS to poll (the disabled radar owned it), so there are no
       # secondary vehicle locations: author OP's lead in slot 0 with the other slots blank (tracks=None).

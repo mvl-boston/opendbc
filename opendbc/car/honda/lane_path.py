@@ -52,6 +52,25 @@ def encode_lane_path(x, y):
   return _encode(np.interp(LOOKAHEAD, x, y))
 
 
+# Stock CAN FD radar LANE_PATH behavior (decoded from MDX factory ACC logs with lane lines displayed):
+# the path is always a contiguous valid prefix terminated in-band with OFFSET_UNAVAILABLE, at most 24 of
+# the 40 points are ever valid (typically 22-23), and the "no lane" idle is 6 valid zero offsets — never
+# all-unavailable. There is no LKAS_HUD_2 on this platform, so the dash derives the drawn lane length
+# from the in-band terminator; a never-terminated 40-point path renders nothing.
+CANFD_MAX_VALID_PTS = 23
+CANFD_MIN_VALID_PTS = 6
+CANFD_IDLE_OFFSETS = [0] * CANFD_MIN_VALID_PTS + [OFFSET_UNAVAILABLE] * (NUM_PTS - CANFD_MIN_VALID_PTS)
+
+
+def canfd_lane_offsets(dash_lane) -> list[int]:
+  """Reshape a DashLane's 40 offsets into the stock CAN FD radar form: a terminated valid prefix whose
+  length scales with reach, or the stock idle pattern when there is nothing to draw."""
+  if dash_lane.reach <= 0.0 or dash_lane.offsets[0] == OFFSET_UNAVAILABLE:
+    return CANFD_IDLE_OFFSETS
+  n_valid = max(CANFD_MIN_VALID_PTS, min(CANFD_MAX_VALID_PTS, round(dash_lane.reach * CANFD_MAX_VALID_PTS)))
+  return list(dash_lane.offsets[:n_valid]) + [OFFSET_UNAVAILABLE] * (NUM_PTS - n_valid)
+
+
 def create_lane_path(packer, bus, offsets, mux):
   """Pack one LANE_PATH frame for `mux` (one of MUX_CYCLE) from the 40-offset array."""
   base = ((mux - 1) % 16) * OFFSETS_PER_INDEX
