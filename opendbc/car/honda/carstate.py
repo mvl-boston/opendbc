@@ -59,7 +59,7 @@ class CarState(CarStateBase):
     self.radar_ref_counter = 0
     self.supp_tick = False
 
-    self.hud_object_tracker = HudObjectTracker() if CP.carFingerprint in HONDA_BOSCH_RADARLESS else None
+    self.hud_object_tracker = HudObjectTracker() if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD) else None
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
