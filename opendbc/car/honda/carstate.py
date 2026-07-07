@@ -59,7 +59,9 @@ class CarState(CarStateBase):
     self.radar_ref_counter = 0
     self.supp_tick = False
 
-    self.hud_object_tracker = HudObjectTracker() if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD) else None
+    # Only radarless cars have a camera that emits HUD_OBJECTS to poll for secondary vehicle locations.
+    # On CAN FD cars the radar owned HUD_OBJECTS and it is disabled, so there is nothing to track.
+    self.hud_object_tracker = HudObjectTracker() if CP.carFingerprint in HONDA_BOSCH_RADARLESS else None
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -284,16 +286,9 @@ class CarState(CarStateBase):
     return ret
 
   def get_can_parsers(self, CP):
-    cam_messages = []
-    if CP.carFingerprint in HONDA_BOSCH_CANFD:
-      # On CAN FD cars, HUD_OBJECTS is a radar look-alike that openpilot itself authors, so it may not be
-      # on the bus at all (e.g. with 50Hz radar message creation disabled). Subscribe with nan frequency so
-      # HudObjectTracker can read it when present without its absence tripping canValid/canError.
-      cam_messages.append(("HUD_OBJECTS", float("nan")))
-
     parsers = {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).pt),
-      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_messages, CanBus(CP).camera),
+      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).camera),
     }
     if CP.enableBsm:
       parsers[Bus.body] = CANParser(DBC[CP.carFingerprint][Bus.body], [], CanBus(CP).radar)

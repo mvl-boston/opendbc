@@ -411,7 +411,9 @@ class CarController(CarControllerBase):
       mux = lane_path.MUX_CYCLE[(self.frame // 2) % len(lane_path.MUX_CYCLE)]
       can_sends.append(lane_path.create_lane_path(self.packer, self.CAN.lkas, self.dash_lane.offsets, mux))
 
-      tracks = CS.hud_object_tracker.snapshot()
+      # CAN FD cars have no camera HUD_OBJECTS to poll (the disabled radar owned it), so there are no
+      # secondary vehicle locations: author OP's lead in slot 0 with the other slots blank (tracks=None).
+      tracks = CS.hud_object_tracker.snapshot() if CS.hud_object_tracker is not None else None
       if self.CP.openpilotLongitudinalControl:
         # For OP long, replace lead car and forward rest of objects
         can_sends.append(self.hud_object_author.create(self.packer, self.CAN.lkas, lead, tracks, mux, now_nanos * 1e-9))
