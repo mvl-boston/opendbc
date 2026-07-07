@@ -241,7 +241,7 @@ class CarController(CarControllerBase):
           self.radar_mux = 49
         else:
           self.radar_mux += 1
-        pass # radar_msgs.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.pt, self.radar_mux))
+        # radar_msgs.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.pt, self.radar_mux))
       if self.frame % 20 == 0:
         radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter))
 
