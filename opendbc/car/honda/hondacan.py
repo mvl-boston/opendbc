@@ -157,6 +157,7 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
   }
 
   if CP.carFingerprint in HONDA_BOSCH_CANFD:
+    acc_hud_values['SET_ME_X01'] = int(enabled and (bool(acc_hud_values['HUD_LEAD']) or (pcm_accel < 0.2)))
     acc_hud_values['SET_ME_X01_2'] = int(enabled and (bool(acc_hud_values['HUD_LEAD']) or (pcm_accel < 0.2)))
 
   if CP.carFingerprint in HONDA_BOSCH:
