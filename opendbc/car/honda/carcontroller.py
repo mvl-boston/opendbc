@@ -130,6 +130,8 @@ class CarController(CarControllerBase):
     self.hud_object_author = hud_objects.HudObjectAuthor()
     self.lane_path_fitter = lane_path.LanePathFitter()
     self.dash_lane = lane_path.DashLane([lane_path.OFFSET_UNAVAILABLE] * lane_path.NUM_PTS, 0.0, False, False)
+    self.lkas_hud_key = None
+    self.lkas_state_change_frames = 0
     self.tja_control = CP.carFingerprint in HONDA_BOSCH_TJA_CONTROL
     self.param_writer = HondaParamWriter()
 
@@ -389,8 +391,22 @@ class CarController(CarControllerBase):
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       reduced_steering = CS.out.steeringPressed
       steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
+
+      lkas_state_change = None
+      if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+        # The stock camera holds LKAS_STATE_CHANGE low and pulses it high for ~3s around HUD state
+        # changes; holding it high permanently (the default below) suppresses the dash lane lines.
+        hud_key = (bool(hud_control.lanesVisible) and not steer_maxed, bool(CC.latActive),
+                   bool(alert_steer_required), bool(CS.out.steerFaultPermanent))
+        if hud_key != self.lkas_hud_key:
+          self.lkas_hud_key = hud_key
+          self.lkas_state_change_frames = 30  # 3s at the 10Hz LKAS_HUD rate, matching stock pulse length
+        lkas_state_change = self.lkas_state_change_frames > 0
+        self.lkas_state_change_frames = max(0, self.lkas_state_change_frames - 1)
+
       can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
-                                                steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed, CS))
+                                                steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed, CS,
+                                                lkas_state_change=lkas_state_change))
 
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
