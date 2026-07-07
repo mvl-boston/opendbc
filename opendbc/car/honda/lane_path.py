@@ -62,12 +62,20 @@ CANFD_MIN_VALID_PTS = 6
 CANFD_IDLE_OFFSETS = [0] * CANFD_MIN_VALID_PTS + [OFFSET_UNAVAILABLE] * (NUM_PTS - CANFD_MIN_VALID_PTS)
 
 
+def canfd_lane_length(dash_lane) -> int:
+  """Valid-point count of the stock-form path. The stock radar mirrors this in RADAR_LEAD's
+  LANE_PATH_LENGTH signal (6 when idle), which the dash cross-checks against the in-band terminator."""
+  if dash_lane.reach <= 0.0 or dash_lane.offsets[0] == OFFSET_UNAVAILABLE:
+    return CANFD_MIN_VALID_PTS
+  return max(CANFD_MIN_VALID_PTS, min(CANFD_MAX_VALID_PTS, round(dash_lane.reach * CANFD_MAX_VALID_PTS)))
+
+
 def canfd_lane_offsets(dash_lane) -> list[int]:
   """Reshape a DashLane's 40 offsets into the stock CAN FD radar form: a terminated valid prefix whose
   length scales with reach, or the stock idle pattern when there is nothing to draw."""
   if dash_lane.reach <= 0.0 or dash_lane.offsets[0] == OFFSET_UNAVAILABLE:
     return CANFD_IDLE_OFFSETS
-  n_valid = max(CANFD_MIN_VALID_PTS, min(CANFD_MAX_VALID_PTS, round(dash_lane.reach * CANFD_MAX_VALID_PTS)))
+  n_valid = canfd_lane_length(dash_lane)
   return list(dash_lane.offsets[:n_valid]) + [OFFSET_UNAVAILABLE] * (NUM_PTS - n_valid)
 
 

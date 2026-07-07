@@ -245,7 +245,10 @@ class CarController(CarControllerBase):
           self.radar_mux += 1
         # radar_msgs.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.pt, self.radar_mux))
       if self.frame % 20 == 0:
-        radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter))
+        # RADAR_LEAD's LANE_PATH_LENGTH must track the valid-point count of the LANE_PATH sweep we are
+        # authoring; the stock radar keeps the two in lockstep and the dash won't draw lanes otherwise.
+        radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter,
+                                                                   lane_path.canfd_lane_length(self.dash_lane)))
 
       # mirror each packed frame onto both the powertrain bus and the camera bus
       for addr, dat, _ in radar_msgs:

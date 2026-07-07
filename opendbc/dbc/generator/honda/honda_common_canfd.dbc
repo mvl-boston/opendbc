@@ -49,7 +49,7 @@ BO_ 254913116 RADAR_LEAD: 8 XXX
  SG_ SET_ME_X01 : 5|1@0+ (1,0) [0|1] "" XXX
  SG_ CNTR_REF : 7|2@0+ (1,0) [0|3] "" XXX
  SG_ TARGET_SPEED_MAYBE : 15|8@0+ (1,0) [0|255] "" XXX
- SG_ LEAD_DISTANCE_MAYBE : 31|6@0+ (1,0) [0|63] "" XXX
+ SG_ LANE_PATH_LENGTH : 31|6@0+ (1,0) [0|63] "" XXX
  SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" XXX
  SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
 
@@ -61,3 +61,5 @@ BO_ 440773198 BOSCH_SUPPLEMENTAL_CANFD: 8 XXX
 
 BO_ 1808 RADAR_SUPP_TICK_REFERENCE: 32 XXX
  SG_ IGNORE : 11|1@0+ (1,0) [0|1] "" XXX
+
+CM_ SG_ 254913116 LANE_PATH_LENGTH "number of valid LANE_PATH points in the current sweep (6 = idle/no lane, up to 23-24); the dash needs this to match the in-band 2047 terminator to draw the lane lines";

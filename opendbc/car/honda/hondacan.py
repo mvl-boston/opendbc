@@ -316,7 +316,7 @@ def create_canfd_50hz_radar_messages(packer, bus, radar_mux):
   return commands
 
 
-def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr):
+def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr, lane_path_length=6):
   commands = []
 
   radar_lead_values = {
@@ -324,7 +324,9 @@ def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr):
     'SET_ME_X01': 0x01,
     # stock radar transmits a constant 140 here (confirmed from logs); 120 causes a camera mismatch
     'TARGET_SPEED_MAYBE': 140,
-    'LEAD_DISTANCE_MAYBE': 6,
+    # stock: number of valid points in the current LANE_PATH sweep (6 = idle). The dash cross-checks
+    # this against the path's in-band 2047 terminator; a mismatch suppresses the lane-line rendering.
+    'LANE_PATH_LENGTH': lane_path_length,
   }
   commands.append(packer.make_can_msg('RADAR_LEAD', bus, radar_lead_values))
 
