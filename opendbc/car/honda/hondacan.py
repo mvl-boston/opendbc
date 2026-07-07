@@ -178,7 +178,8 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
   return packer.make_can_msg("ACC_HUD", bus, acc_hud_values)
 
 
-def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed, CS):
+def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed, CS,
+                    lkas_state_change=None):
   commands = []
 
   lkas_hud_values = {
@@ -189,6 +190,11 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     'DASHED_LANES': lat_active,
     'BEEP': 0,
   }
+
+  # MDX CAN FD factory logs show the stock camera holds LKAS_STATE_CHANGE low, pulsing it high for ~3s
+  # only when the HUD state changes; holding it high permanently suppresses the dash lane-line rendering.
+  if lkas_state_change is not None:
+    lkas_hud_values['LKAS_STATE_CHANGE'] = int(lkas_state_change)
 
   if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
     lkas_hud_values['LANE_LINES'] = 3
