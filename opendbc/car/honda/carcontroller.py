@@ -259,10 +259,11 @@ class CarController(CarControllerBase):
 
       # Self-heal a brake-module cruise fault latched during the radar-disable handoff: the module
       # faults if ACC_CONTROL (0x1DF) goes silent >~120ms between the radar disable in CarInterface.init
-      # and panda's switch to car safety, and stays latched for the ignition cycle. Once our look-alike
-      # stream has been up for a few seconds (fault condition gone), clear its DTCs to reset the latch.
-      # Only at standstill while disengaged, retried a few times at 1s spacing.
-      if CS.brake_cruise_fault and self.frame >= 500 and self.brake_fault_clear_attempts < 5 and not CC.enabled \
+      # and panda's switch to car safety, and stays latched for the ignition cycle. Carstate signals
+      # brake_fault_clear_pending while it holds cruiseState.available low waiting for the fault to
+      # clear; once our look-alike stream has been up for a few seconds (fault condition gone), clear
+      # the module's DTCs to reset the latch. Only at standstill while disengaged, retried at 1s spacing.
+      if CS.brake_fault_clear_pending and self.frame >= 500 and self.brake_fault_clear_attempts < 5 and not CC.enabled \
          and CS.out.vEgoRaw < 0.1 and (self.frame - self.brake_fault_clear_frame) >= 100:
         can_sends.extend(hondacan.create_brake_fault_clear_msgs(self.CAN.pt))
         self.brake_fault_clear_attempts += 1
