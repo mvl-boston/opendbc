@@ -58,6 +58,7 @@ class CarState(CarStateBase):
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
     self.radar_ref_counter = 0
     self.supp_tick = False
+    self.brake_fault_clear_pending = False
 
     # Only radarless cars have a camera that emits HUD_OBJECTS to poll for secondary vehicle locations.
     # On CAN FD cars the radar owned HUD_OBJECTS and it is disabled, so there is nothing to track.
@@ -227,11 +228,16 @@ class CarState(CarStateBase):
     ret.cruiseState.available = bool(cp.vl[self.car_state_scm_msg]["MAIN_ON"])
 
     # Bosch cars take a few minutes after startup to clear prior faults
+    self.brake_fault_clear_pending = False
     if ret.accFaulted:
       if (self.CP.carFingerprint in HONDA_BOSCH) and not self.initial_accFault_cleared:
         # block via cruiseState since accFaulted is not reversible until offroad
         ret.accFaulted = False
         ret.cruiseState.available = False
+        # CAN FD: the brake module latches CRUISE_FAULT if the radar-disable handoff left ACC_CONTROL
+        # silent too long, and never clears on its own. While in this wait-for-clear state, ask the
+        # carcontroller to actively clear the latch (UDS DTC clear) once its look-alike stream is up.
+        self.brake_fault_clear_pending = self.CP.carFingerprint in HONDA_BOSCH_CANFD
     elif self.initial_accFault_cleared_timer == 0:
       self.initial_accFault_cleared = True
 

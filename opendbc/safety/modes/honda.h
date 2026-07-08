@@ -282,6 +282,16 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     }
   }
 
+  // Only extended-diag session ("\x02\x10\x03") and clear-DTC ("\x04\x14\xFF\xFF\xFF") allowed on the
+  // brake module diagnostics address, used to clear a cruise fault latched during the radar-disable handoff
+  if (msg->addr == 0x18DA28F1U) {
+    const bool ext_diag_session = (GET_BYTES(msg, 0, 4) == 0x00031002U) && (GET_BYTES(msg, 4, 4) == 0x0U);
+    const bool clear_dtc = (GET_BYTES(msg, 0, 4) == 0xFFFF1404U) && (GET_BYTES(msg, 4, 4) == 0x000000FFU);
+    if (!ext_diag_session && !clear_dtc) {
+      tx = false;
+    }
+  }
+
   return tx;
 }
 
@@ -356,6 +366,7 @@ static safety_config honda_bosch_init(uint16_t param) {
   // forwarded across the open relay, so each is sent on both buses; the control messages stay on bus 0.
   static CanMsg HONDA_CANFD_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x1DF, 0, 8, .check_relay = true}, {0x1EF, 0, 8, .check_relay = false},
                                               {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}, {0x18DAB0F1, 0, 8, .check_relay = false},
+                                              {0x18DA28F1, 0, 8, .check_relay = false},
                                               {0x310, 0, 8, .check_relay = false}, {0x6CD5558, 0, 8, .check_relay = true}, {0x6CD5559, 0, 8, .check_relay = false},
                                               {0xF31AA52, 0, 8, .check_relay = false}, {0xF31AA5C, 0, 8, .check_relay = true}, {0x1A45AA4E, 0, 8, .check_relay = false},
                                               {0x310, 2, 8, .check_relay = false}, {0x6CD5558, 2, 8, .check_relay = true}, {0x6CD5559, 2, 8, .check_relay = false},

@@ -1,4 +1,4 @@
-from opendbc.car import CanBusBase
+from opendbc.car import CanBusBase, CanData, uds
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS,
                                       HONDA_BOSCH_CANFD, CarControllerParams)
@@ -268,6 +268,22 @@ def create_canfd_supplemental(packer, bus):
     'SET_ME_X41': 0x41,
   }
   return packer.make_can_msg("BOSCH_SUPPLEMENTAL_CANFD", bus, values)
+
+
+# Brake module (VSA) UDS address; response address is 0x18DAF128
+BRAKE_MODULE_DIAG_ADDR = 0x18DA28F1
+
+
+def create_brake_fault_clear_msgs(bus):
+  """UDS extended-diagnostic session + ClearDiagnosticInformation (all DTC groups) to the brake module.
+
+  If the radar's 50Hz ACC_CONTROL stream goes silent for more than ~120ms during the radar-disable
+  handoff, the brake module latches CRUISE_FAULT for the rest of the ignition cycle. Once openpilot's
+  radar look-alike stream is up (so the fault condition is gone), clearing DTCs resets the latch.
+  Fire-and-forget single frames; the carcontroller checks BRAKE_MODULE.CRUISE_FAULT for success."""
+  ext_diag = bytes([0x02, uds.SERVICE_TYPE.DIAGNOSTIC_SESSION_CONTROL, uds.SESSION_TYPE.EXTENDED_DIAGNOSTIC, 0, 0, 0, 0, 0])
+  clear_dtc = bytes([0x04, uds.SERVICE_TYPE.CLEAR_DIAGNOSTIC_INFORMATION, 0xFF, 0xFF, 0xFF, 0, 0, 0])
+  return [CanData(BRAKE_MODULE_DIAG_ADDR, ext_diag, bus), CanData(BRAKE_MODULE_DIAG_ADDR, clear_dtc, bus)]
 
 
 # Radar MUX banks: 1-10, 17-26, 33-42, 49-58. Each bank is a fresh sweep of path points.

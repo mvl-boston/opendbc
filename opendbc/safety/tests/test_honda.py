@@ -624,7 +624,7 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
   STEER_BUS = 0
   BUTTONS_BUS = 0
 
-  TX_MSGS = [[0xE4, 0], [0x1DF, 0],  [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x18DAB0F1, 0], [0x310, 0], [0x310, 2]]
+  TX_MSGS = [[0xE4, 0], [0x1DF, 0],  [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x18DAB0F1, 0], [0x18DA28F1, 0], [0x310, 0], [0x310, 2]]
   FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x1DF, 0x33D]}
   RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1DF, 0x33D)}  # STEERING_CONTROL / ACC_CONTROL / LKAS_HUD
 
@@ -632,6 +632,21 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
     super().setUp()
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG)
     self.safety.init_tests()
+
+  def test_brake_module_diagnostics(self):
+    # only the extended-diag session and clear-DTC frames are allowed on the brake module diag address
+    ext_diag = libsafety_py.make_CANPacket(0x18DA28F1, self.PT_BUS, b"\x02\x10\x03\x00\x00\x00\x00\x00")
+    self.assertTrue(self._tx(ext_diag))
+
+    clear_dtc = libsafety_py.make_CANPacket(0x18DA28F1, self.PT_BUS, b"\x04\x14\xff\xff\xff\x00\x00\x00")
+    self.assertTrue(self._tx(clear_dtc))
+
+    for bad in (b"\x02\x3e\x80\x00\x00\x00\x00\x00",   # tester present
+                b"\x02\x10\x01\x00\x00\x00\x00\x00",   # default session
+                b"\x04\x14\xff\xff\xff\x00\x00\x01",   # trailing garbage
+                b"\x02\x11\x01\x00\x00\x00\x00\x00"):  # ECU reset
+      msg = libsafety_py.make_CANPacket(0x18DA28F1, self.PT_BUS, bad)
+      self.assertFalse(self._tx(msg), bad)
 
 
 if __name__ == "__main__":
