@@ -132,6 +132,8 @@ class CarController(CarControllerBase):
     self.dash_lane = lane_path.DashLane([lane_path.OFFSET_UNAVAILABLE] * lane_path.NUM_PTS, 0.0, False, False)
     self.lkas_hud_key = None
     self.lkas_state_change_frames = 0
+    self.brake_fault_clear_attempts = 0
+    self.brake_fault_clear_frame = 0
     self.tja_control = CP.carFingerprint in HONDA_BOSCH_TJA_CONTROL
     self.param_writer = HondaParamWriter()
 
@@ -254,6 +256,17 @@ class CarController(CarControllerBase):
       for addr, dat, _ in radar_msgs:
         can_sends.append((addr, dat, self.CAN.pt))
         can_sends.append((addr, dat, self.CAN.camera))
+
+      # Self-heal a brake-module cruise fault latched during the radar-disable handoff: the module
+      # faults if ACC_CONTROL (0x1DF) goes silent >~120ms between the radar disable in CarInterface.init
+      # and panda's switch to car safety, and stays latched for the ignition cycle. Once our look-alike
+      # stream has been up for a few seconds (fault condition gone), clear its DTCs to reset the latch.
+      # Only at standstill while disengaged, retried a few times at 1s spacing.
+      if CS.brake_cruise_fault and self.frame >= 500 and self.brake_fault_clear_attempts < 5 and not CC.enabled \
+         and CS.out.vEgoRaw < 0.1 and (self.frame - self.brake_fault_clear_frame) >= 100:
+        can_sends.extend(hondacan.create_brake_fault_clear_msgs(self.CAN.pt))
+        self.brake_fault_clear_attempts += 1
+        self.brake_fault_clear_frame = self.frame
 
     # Send steering command.
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))

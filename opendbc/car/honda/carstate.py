@@ -58,6 +58,7 @@ class CarState(CarStateBase):
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
     self.radar_ref_counter = 0
     self.supp_tick = False
+    self.brake_cruise_fault = False
 
     # Only radarless cars have a camera that emits HUD_OBJECTS to poll for secondary vehicle locations.
     # On CAN FD cars the radar owned HUD_OBJECTS and it is disabled, so there is nothing to track.
@@ -141,6 +142,11 @@ class CarState(CarStateBase):
       # TODO: better handle delayed steering enablement on ALT_RADAR cars
       self.low_speed_alert = False
     ret.lowSpeedAlert = self.low_speed_alert
+
+    # Raw latched brake-module fault; the carcontroller uses this to self-heal a cruise fault
+    # latched during the radar-disable handoff (see create_brake_fault_clear_msgs).
+    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      self.brake_cruise_fault = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
 
     # Log non-critical stock ACC/LKAS faults if Nidec (camera) or longitudinal CANFD alt-brake
     if self.CP.carFingerprint not in HONDA_BOSCH:
