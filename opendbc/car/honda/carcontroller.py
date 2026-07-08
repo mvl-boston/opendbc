@@ -1,11 +1,19 @@
+import math
+import threading
+from queue import Empty, Queue
+
 import numpy as np
+from openpilot.common.params import Params
 
 from opendbc.can import CANPacker
-from opendbc.car import Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
+from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
+from opendbc.car.common.pid import PIDController
+from opendbc.car.honda import lane_path
+from opendbc.car.honda import hud_objects
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -88,13 +96,46 @@ def process_hud_alert(hud_alert):
   return alert_fcw, alert_steer_required
 
 
+class HondaParamWriter:
+  def __init__(self):
+    self._params = Params()
+    self._queue = Queue()
+    self._thread = threading.Thread(target=self._run, name="honda-param-writer", daemon=True)
+    self._thread.start()
+
+  def put_many(self, values):
+    self._queue.put({key: float(value) for key, value in values.items()})
+
+  def _run(self):
+    while True:
+      pending = self._queue.get()
+
+      # Collapse queued snapshots so delayed writes keep only the newest value per key.
+      try:
+        while True:
+          pending.update(self._queue.get_nowait())
+      except Empty:
+        pass
+
+      for key, value in pending.items():
+        self._params.put(key, value)
+
+
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
     super().__init__(dbc_names, CP)
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.params = CarControllerParams(CP)
     self.CAN = hondacan.CanBus(CP)
+    self.hud_object_author = hud_objects.HudObjectAuthor()
+    self.lane_path_fitter = lane_path.LanePathFitter()
+    self.dash_lane = lane_path.DashLane([lane_path.OFFSET_UNAVAILABLE] * lane_path.NUM_PTS, 0.0, False, False)
+    self.lkas_hud_key = None
+    self.lkas_state_change_frames = 0
+    self.brake_fault_clear_attempts = 0
+    self.brake_fault_clear_frame = 0
     self.tja_control = CP.carFingerprint in HONDA_BOSCH_TJA_CONTROL
+    self.param_writer = HondaParamWriter()
 
     self.braking = False
     self.brake_steady = 0.
@@ -108,16 +149,40 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.bosch_last_gas = 0
+
+    self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
+    self.gasfactor_before_maxgas = self.gasfactor
+    self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
+    self.windfactor_before_maxgas = self.windfactor_before_brake = self.windfactor
+    self.pitch = 0.0
+    self.radar_mux = 0
+
+    # Bosch extra-brake controller
+    self.brake_pid = PIDController(k_p=([0,], [0,]),
+                                   k_i=([0.], [0.5]),
+                                   pos_limit=0.0,
+                                   neg_limit=-2.0,
+                                   rate=50)
+    self.brake_pid.reset()
 
   def update(self, CC, CS, now_nanos):
+    gas_pedal_force = 0.0
+    min_gas = self.params.BOSCH_GAS_LOOKUP_BP[0]
     actuators = CC.actuators
     hud_control = CC.hudControl
     hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
+    if len(CC.orientationNED) == 3:
+      self.pitch = CC.orientationNED[1]
+    hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
+
     if CC.longActive:
       accel = actuators.accel
-      gas, brake = compute_gas_brake(actuators.accel, CS.out.vEgo, self.CP.carFingerprint)
+      if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)) and (accel > max(0, CS.out.aEgo) + 0.1):
+        accel = 10000.0 # help with lagged accel until pedal tuning is inserted
+      gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP.carFingerprint)
     else:
       accel = 0.0
       gas, brake = 0.0, 0.0
@@ -132,7 +197,7 @@ class CarController(CarControllerBase):
                                                                            CS.out.vEgo, self.CP.carFingerprint)
 
     # *** rate limit after the enable check ***
-    self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., DT_CTRL)
+    self.brake_last = rate_limit(pre_limit_brake, self.brake_last, -2., 3 * DT_CTRL)
 
     # vehicle hud display, wait for one update from 10Hz 0x304 msg
     alert_fcw, alert_steer_required = process_hud_alert(hud_control.visualAlert)
@@ -140,8 +205,10 @@ class CarController(CarControllerBase):
     # **** process the car messages ****
 
     # steer torque is converted back to CAN reference (positive when steering right)
-    apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
+    apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX + 200,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
+
+    speed_control = 1 if ((accel <= 0.0) and (CS.out.vEgo == 0)) else 0
 
     # Send CAN commands
     can_sends = []
@@ -149,14 +216,68 @@ class CarController(CarControllerBase):
     # tester present - w/ no response (keeps radar disabled)
     if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
       if self.frame % 10 == 0:
-        can_sends.append(make_tester_present_msg(0x18DAB0F1, 1, suppress_response=True))
+        bus = 0 if self.CP.carFingerprint in HONDA_BOSCH_CANFD else 1
+        can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
+
+    # simulate canfd radar to prevent faults
+    # These radar look-alikes are consumed by both the camera ECU (behind the relay, on the camera
+    # bus) and the powertrain (radar bus). openpilot's own transmissions are not forwarded across the
+    # open relay, so they must be sent explicitly on both buses. Each message is packed exactly once
+    # so the packer's counter/checksum only advance once per cycle, then the identical bytes are
+    # mirrored onto both buses (re-packing would double-increment the counter and desync the buses).
+    if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and self.CP.openpilotLongitudinalControl:
+      radar_msgs = []
+      if self.frame % 10 == 0:
+        radar_msgs.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled))
+      if CS.supp_tick:
+        radar_msgs.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
+      if self.frame % 2 == 0:
+        # Cycle the radar MUX through the same banks the stock radar uses: 1-10, 17-26, 33-42, 49-58.
+        # These must be elif (not sequential if): a bare `if` that sets the bank start would fall
+        # through to the `else` increment, skipping the bank-start values (17, 33, 49).
+        if self.radar_mux >= 58:
+          self.radar_mux = 1
+        elif self.radar_mux == 10:
+          self.radar_mux = 17
+        elif self.radar_mux == 26:
+          self.radar_mux = 33
+        elif self.radar_mux == 42:
+          self.radar_mux = 49
+        else:
+          self.radar_mux += 1
+        # radar_msgs.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.pt, self.radar_mux))
+      if self.frame % 20 == 0:
+        # RADAR_LEAD's LANE_PATH_LENGTH must track the valid-point count of the LANE_PATH sweep we are
+        # authoring; the stock radar keeps the two in lockstep and the dash won't draw lanes otherwise.
+        radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter,
+                                                                   lane_path.canfd_lane_length(self.dash_lane)))
+
+      # mirror each packed frame onto both the powertrain bus and the camera bus
+      for addr, dat, _ in radar_msgs:
+        can_sends.append((addr, dat, self.CAN.pt))
+        can_sends.append((addr, dat, self.CAN.camera))
+
+      # Self-heal a brake-module cruise fault latched during the radar-disable handoff: the module
+      # faults if ACC_CONTROL (0x1DF) goes silent >~120ms between the radar disable in CarInterface.init
+      # and panda's switch to car safety, and stays latched for the ignition cycle. Carstate signals
+      # brake_fault_clear_pending while it holds cruiseState.available low waiting for the fault to
+      # clear; once our look-alike stream has been up for a few seconds (fault condition gone), clear
+      # the module's DTCs to reset the latch. Only at standstill while disengaged, retried at 1s spacing.
+      if CS.brake_fault_clear_pending and self.frame >= 500 and self.brake_fault_clear_attempts < 5 and not CC.enabled \
+         and CS.out.vEgoRaw < 0.1 and (self.frame - self.brake_fault_clear_frame) >= 100:
+        can_sends.extend(hondacan.create_brake_fault_clear_msgs(self.CAN.pt))
+        self.brake_fault_clear_attempts += 1
+        self.brake_fault_clear_frame = self.frame
 
     # Send steering command.
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
 
     # wind brake from air resistance decel at high speed
-    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15])
+    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
+    wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
+
     # all of this is only relevant for HONDA NIDEC
+    speed_control = 0
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
     # TODO this 1.44 is just to maintain previous behavior
     pcm_speed_BP = [-wind_brake,
@@ -175,6 +296,15 @@ class CarController(CarControllerBase):
                      np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
       pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
       pcm_accel = int(1.0 * self.params.NIDEC_GAS_MAX)
+    elif (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)):
+      pcm_speed_V = [0.0,
+                     np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
+                     np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
+                     np.clip(CS.out.vEgo + 20.0, 0.0, 100.0)]
+      pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
+      pcm_accel = int(np.clip((accel / 1.44) / max_accel, 10.0 / self.params.NIDEC_GAS_MAX, 1.0) * self.params.NIDEC_GAS_MAX)
+      if speed_control == 1 and CC.longActive:
+        pcm_accel = 198
     else:
       pcm_speed_V = [0.0,
                      np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
@@ -198,13 +328,56 @@ class CarController(CarControllerBase):
         ts = self.frame * DT_CTRL
 
         if self.CP.carFingerprint in HONDA_BOSCH:
-          self.accel = float(np.clip(accel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
-          self.gas = float(np.interp(accel, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+          if (accel < min_gas) and (CS.out.vEgo > 1e-3):
+            brake_addon = self.brake_pid.update(error = accel - CS.out.aEgo, speed = CS.out.vEgo)
+            targetaccel = min(accel,accel + brake_addon)
+          else:
+            self.brake_pid.reset()
+            targetaccel = accel
+
+          self.accel = float(np.clip(targetaccel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
+          gas_pedal_force = accel + wind_brake_ms2 * self.windfactor + hill_brake # not using self.accel since pid resets w gas pedal
+
+          # live-learn gas pedal adjustments when openpilot is controlling gas
+          if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
+            gas_error = self.accel - CS.out.aEgo
+            if gas_error != 0.0 and gas_pedal_force > min_gas:
+              if self.CP.carFingerprint == CAR.HONDA_INSIGHT: # Insight gas pedal reacts too slowly
+                learn_speed = 150
+              elif self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Prevent overreacting to turbo lag
+                learn_speed = 300
+              else:
+                learn_speed = 50
+              self.gasfactor = np.clip(self.gasfactor + gas_error / learn_speed * (gas_pedal_force - min_gas), 0.01, 3.0)
+            if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
+              if self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Faster reaction
+                wind_learn_speed = 100
+              else:
+                wind_learn_speed = 1000
+              wind_adjust = 1 + wind_brake_ms2 / wind_learn_speed
+              self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
+            if gas_pedal_force <= min_gas: # don't reduce windfactor while braking, allow increases
+              self.windfactor = max(self.windfactor, self.windfactor_before_brake)
+            else:
+              self.windfactor_before_brake = self.windfactor
+            if gas_pedal_force >= self.params.BOSCH_ACCEL_MAX: # don't increase gasfactor nor windfactor at accel max, allow decreases
+              self.gasfactor = min(self.gasfactor, self.gasfactor_before_gasmax)
+              self.windfactor = min(self.windfactor, self.windfactor_before_gasmax)
+            else:
+              self.gasfactor_before_gasmax = self.gasfactor
+              self.windfactor_before_gasmax = self.windfactor
+          self.gas = float(np.interp((gas_pedal_force - min_gas) * self.gasfactor + min_gas,
+                                     self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+
+          # limit gas ramp to 60 units per frame, matches stock.  Higher sometimes causes powertrain to ignore gas command.
+          max_gas = max(60, self.bosch_last_gas + 60)
+          self.gas = min(self.gas, max_gas)
+          self.bosch_last_gas = self.gas
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
           can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                        self.stopping_counter, self.CP.carFingerprint))
+                                                        self.stopping_counter, self.CP.carFingerprint, gas_pedal_force))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
@@ -213,24 +386,48 @@ class CarController(CarControllerBase):
           pcm_override = True
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
                                                          pcm_override, pcm_cancel_cmd, alert_fcw,
-                                                         self.CP.carFingerprint, CS.stock_brake))
+                                                         self.CP, CS.stock_brake))
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
     # Send dashboard UI commands.
     if self.frame % 10 == 0:
+      if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)):
+        # standstill disengage
+        if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
+          pcm_speed = 25.0 / 3.6
+
       if self.CP.openpilotLongitudinalControl:
+        if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+          pcm_accel = actuators.accel
         # On Nidec, this also controls longitudinal positive acceleration
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
-                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
+                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
+                                                 self.CP.openpilotLongitudinalControl))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
+      reduced_steering = CS.out.steeringPressed
+      steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
+
+      lkas_state_change = None
+      if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+        # The stock camera holds LKAS_STATE_CHANGE low and pulses it high for ~3s around HUD state
+        # changes; holding it high permanently (the default below) suppresses the dash lane lines.
+        hud_key = (bool(hud_control.lanesVisible) and not steer_maxed, bool(CC.latActive),
+                   bool(alert_steer_required), bool(CS.out.steerFaultPermanent))
+        if hud_key != self.lkas_hud_key:
+          self.lkas_hud_key = hud_key
+          self.lkas_state_change_frames = 30  # 3s at the 10Hz LKAS_HUD rate, matching stock pulse length
+        lkas_state_change = self.lkas_state_change_frames > 0
+        self.lkas_state_change_frames = max(0, self.lkas_state_change_frames - 1)
+
       can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
-                                                steering_available, alert_steer_required, CS.lkas_hud))
+                                                steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed, CS,
+                                                lkas_state_change=lkas_state_change))
 
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
-        if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS):
+        if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD):
           can_sends.append(hondacan.create_radar_hud(self.packer, self.CAN.pt))
         if self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH:
           can_sends.append(hondacan.create_legacy_brake_command(self.packer, self.CAN.pt))
@@ -238,13 +435,50 @@ class CarController(CarControllerBase):
           self.speed = pcm_speed
           self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
+    # Render OP's lane and lead car on the dash
+    if self.frame % 2 == 0 and self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
+      lead = hud_objects.lead_from_model(self.model, CS.out.vEgo)
+      lead_d = lead.dRel if lead.status else 0.0  # extend the lane out to the lead (0 = no lead)
+      self.dash_lane = self.lane_path_fitter.update(self.model, CS.out.vEgo, lead_d)
+      # Important: same mux for lane_path and hud_objects. Lane display freezes if muxes don't match.
+      mux = lane_path.MUX_CYCLE[(self.frame // 2) % len(lane_path.MUX_CYCLE)]
+      if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+        # No LKAS_HUD_2 on CAN FD: the dash reads the lane length from the stock radar's in-band
+        # terminator, so reshape the path into the terminated-prefix form (see lane_path.py).
+        lane_offsets = lane_path.canfd_lane_offsets(self.dash_lane)
+      else:
+        lane_offsets = self.dash_lane.offsets
+      can_sends.append(lane_path.create_lane_path(self.packer, self.CAN.lkas, lane_offsets, mux))
+
+      # CAN FD cars have no camera HUD_OBJECTS to poll (the disabled radar owned it), so there are no
+      # secondary vehicle locations: author OP's lead in slot 0 with the other slots blank (tracks=None).
+      tracks = CS.hud_object_tracker.snapshot() if CS.hud_object_tracker is not None else None
+      if self.CP.openpilotLongitudinalControl:
+        # For OP long, replace lead car and forward rest of objects
+        can_sends.append(self.hud_object_author.create(self.packer, self.CAN.lkas, lead, tracks, mux, now_nanos * 1e-9))
+      else:
+        # For ACC, forward objects but with our mux
+        can_sends.append(hud_objects.forward_hud_object(self.packer, self.CAN.lkas, mux, tracks))
+
+    if self.frame % 20 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      # COUNTER_2 trails the packer's COUNTER (frame//20 % 4) by one. TODO: do we need the - 1 trail?
+      dl = self.dash_lane
+      can_sends.append(lane_path.create_lkas_hud_2(self.packer, self.CAN.lkas, (self.frame // 20 - 1) % 4,
+                                                   dl.reach, dl.lane_cross, dl.left_line, dl.right_line))
+
     new_actuators = actuators.as_builder()
     new_actuators.speed = self.speed
     new_actuators.accel = self.accel
-    new_actuators.gas = self.gas
-    new_actuators.brake = self.brake
+    new_actuators.gas = float(self.gasfactor)
+    new_actuators.brake = float(self.windfactor)
     new_actuators.torque = self.last_torque
     new_actuators.torqueOutputCan = apply_torque
+
+    if self.frame % 6000 == 0:
+      self.param_writer.put_many({
+        "HondaGasFactorParams": self.gasfactor,
+        "HondaWindFactorParams": self.windfactor,
+      })
 
     self.frame += 1
     return new_actuators, can_sends

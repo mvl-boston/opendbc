@@ -110,9 +110,12 @@ class CarInterfaceBase(ABC):
     dbc_names = {bus: cp.dbc_name for bus, cp in self.can_parsers.items()}
     self.CC: CarControllerBase = self.CarController(dbc_names, CP)
 
-  def apply(self, c: structs.CarControl, now_nanos: int | None = None) -> tuple[structs.CarControl.Actuators, list[CanData]]:
+  def apply(self, c: structs.CarControl, now_nanos: int | None = None,
+            model=None) -> tuple[structs.CarControl.Actuators, list[CanData]]:
     if now_nanos is None:
       now_nanos = int(time.monotonic() * 1e9)
+    # modelV2 for cars that render it; set as an attr to avoid touching every CarController.update
+    self.CC.model = model
     return self.CC.update(c, self.CS, now_nanos)
 
   @staticmethod
@@ -365,6 +368,7 @@ class CarControllerBase(ABC):
     self.CP = CP
     self.frame = 0
     self.secoc_key: bytes = b"00" * 16
+    self.model = None
 
   @abstractmethod
   def update(self, CC: structs.CarControl, CS: CarStateBase, now_nanos: int) -> tuple[structs.CarControl.Actuators, list[CanData]]:

@@ -360,6 +360,22 @@ class TestHondaNidecPcmAltSafety(TestHondaNidecPcmSafety):
     return self.packer.make_can_msg_safety("SCM_BUTTONS", bus, values)
 
 
+class TestHondaNidecPcmHybridSafety(TestHondaNidecPcmAltSafety):
+  """
+    Covers the Honda Nidec safety mode with alt SCM messages and hybrid brake
+  """
+
+  def setUp(self):
+    self.packer = CANPackerSafety("acura_ilx_2016_can_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_ALT | HondaSafetyFlags.NIDEC_HYBRID)
+    self.safety.init_tests()
+
+  def _send_brake_msg(self, brake, aeb_req=0, bus=0):
+    values = {"COMPUTER_BRAKE_HYBRID": brake, "AEB_REQ_1": aeb_req}
+    return self.packer.make_can_msg_safety("BRAKE_COMMAND", bus, values)
+
+
 # ********************* Honda Bosch **********************
 
 
@@ -505,9 +521,10 @@ class TestHondaBoschRadarlessSafetyBase(TestHondaBoschSafetyBase):
   STEER_BUS = 0
   BUTTONS_BUS = 2  # camera controls ACC, need to send buttons on bus 2
 
-  TX_MSGS = [[0xE4, 0], [0x296, 2], [0x33D, 0]]
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}
-  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D)}  # STEERING_CONTROL
+  TX_MSGS = [[0xE4, 0], [0x296, 2], [0x33D, 0], [0x6CD5554, 0], [0xF31AA54, 0], [0x6CD5557, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D, 0x6CD5554, 0xF31AA54, 0x6CD5557]}
+  # STEERING_CONTROL, LANE_PATH, LKAS_HUD_2, HUD_OBJECTS
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D, 0x6CD5554, 0xF31AA54, 0x6CD5557)}
 
   def setUp(self):
     self.packer = CANPackerSafety("honda_bosch_radarless_generated")
@@ -541,9 +558,9 @@ class TestHondaBoschRadarlessLongSafety(common.LongitudinalAccelSafetyTest, Hond
   """
     Covers the Honda Bosch Radarless safety mode with longitudinal control
   """
-  TX_MSGS = [[0xE4, 0], [0x33D, 0], [0x1C8, 0], [0x30C, 0]]
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D, 0x1C8, 0x30C]}
-  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1C8, 0x30C, 0x33D)}
+  TX_MSGS = [[0xE4, 0], [0x33D, 0], [0x1C8, 0], [0x30C, 0], [0x6CD5554, 0], [0xF31AA54, 0], [0x6CD5557, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D, 0x1C8, 0x30C, 0x6CD5554, 0xF31AA54, 0x6CD5557]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1C8, 0x30C, 0x33D, 0x6CD5554, 0xF31AA54, 0x6CD5557)}
 
   def setUp(self):
     super().setUp()
@@ -596,6 +613,40 @@ class TestHondaBoschCANFDAltBrakeSafety(HondaPcmEnableBase, TestHondaBoschCANFDS
     super().setUp()
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.ALT_BRAKE)
     self.safety.init_tests()
+
+
+class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANFDSafetyBase):
+  """
+    Covers the Honda Bosch CANFD safety mode with longitudinal control
+  """
+
+  PT_BUS = 0
+  STEER_BUS = 0
+  BUTTONS_BUS = 0
+
+  TX_MSGS = [[0xE4, 0], [0x1DF, 0],  [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x18DAB0F1, 0], [0x18DA28F1, 0], [0x310, 0], [0x310, 2]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x1DF, 0x33D]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1DF, 0x33D)}  # STEERING_CONTROL / ACC_CONTROL / LKAS_HUD
+
+  def setUp(self):
+    super().setUp()
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG)
+    self.safety.init_tests()
+
+  def test_brake_module_diagnostics(self):
+    # only the extended-diag session and clear-DTC frames are allowed on the brake module diag address
+    ext_diag = libsafety_py.make_CANPacket(0x18DA28F1, self.PT_BUS, b"\x02\x10\x03\x00\x00\x00\x00\x00")
+    self.assertTrue(self._tx(ext_diag))
+
+    clear_dtc = libsafety_py.make_CANPacket(0x18DA28F1, self.PT_BUS, b"\x04\x14\xff\xff\xff\x00\x00\x00")
+    self.assertTrue(self._tx(clear_dtc))
+
+    for bad in (b"\x02\x3e\x80\x00\x00\x00\x00\x00",   # tester present
+                b"\x02\x10\x01\x00\x00\x00\x00\x00",   # default session
+                b"\x04\x14\xff\xff\xff\x00\x00\x01",   # trailing garbage
+                b"\x02\x11\x01\x00\x00\x00\x00\x00"):  # ECU reset
+      msg = libsafety_py.make_CANPacket(0x18DA28F1, self.PT_BUS, bad)
+      self.assertFalse(self._tx(msg), bad)
 
 
 if __name__ == "__main__":
