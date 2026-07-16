@@ -174,8 +174,9 @@ class CarController(CarControllerBase):
     self.average_factor = 0.95 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
     self.creep_factor = 1.0 if (Params().get("HondaCreepFactorParams") is None) else Params().get("HondaCreepFactorParams")
     self.gas_alpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
+    self.gas_alpha_nomaxspeed = self.gas_alpha
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
-    self.gasfactor_before_gasmax = self.gasfactor
+    self.gasfactor_before_gasmax = self.gasfactor_nomaxspeed = self.gasfactor
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
     self.new_accel = 0.0
@@ -227,13 +228,24 @@ class CarController(CarControllerBase):
           self.windfactor = max(self.windfactor, self.windfactor_before_brake)
         else:
           self.windfactor_before_brake = self.windfactor
-        if (gas_pedal_force >= self.params.BOSCH_ACCEL_MAX) or (CS.out.vEgo >= CS.out.cruiseState.speed - 2.):
+        if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
+          # drop to max values when not near speed limit
+          self.gasfactor = self.gasfactor_nomaxspeed
+          self.gasalpha = self.gasfactor_nomaxspeed
+        if (gas_pedal_force >= self.params.BOSCH_ACCEL_MAX):
           # don't increase gasfactor nor windfactor at accel max, allow decreases
           self.gasfactor = min(self.gasfactor, self.gasfactor_before_gasmax)
           self.windfactor = min(self.windfactor, self.windfactor_before_gasmax)
         else:
           self.gasfactor_before_gasmax = self.gasfactor
           self.windfactor_before_gasmax = self.windfactor
+        if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
+          self.gasfactor_nomaxspeed = self.gasfactor
+          self.gasalpha_nomaxspeed = self.gasalpha
+        else:
+          # store lower than low max speed or current
+          self.gasfactor_nomaxspeed = min(self.gasfactor_nomaxspeed, self.gasfactor)
+          self.gasalpha_nomaxspeed = min(self.gasalpha_nomaxspeed, self.gasalpha)
 
       else:
         self.accel = actuators.accel + self.nidec_pid_factor
@@ -481,8 +493,8 @@ class CarController(CarControllerBase):
         "HondaFeedForwardParams": self.average_factor,
         "HondaBrakePIDParams": self.brake_pid_factor_non_lowspeed,
         "HondaCreepFactorParams": self.creep_factor,
-        "HondaGasAlphaParams": self.gas_alpha,
-        "HondaGasFactorParams": self.gasfactor,
+        "HondaGasAlphaParams": self.gas_alpha_nomaxspeed,
+        "HondaGasFactorParams": self.gasfactor_nomaxspeed,
         "HondaWindFactorParams": self.windfactor,
       })
 
