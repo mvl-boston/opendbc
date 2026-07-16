@@ -231,7 +231,7 @@ class CarController(CarControllerBase):
         if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
           # drop to max values when not near speed limit
           self.gasfactor = self.gasfactor_nomaxspeed
-          self.gasalpha = self.gasfactor_nomaxspeed
+          self.gas_alpha = self.gas_alpha_nomaxspeed
         if (gas_pedal_force >= self.params.BOSCH_ACCEL_MAX):
           # don't increase gasfactor nor windfactor at accel max, allow decreases
           self.gasfactor = min(self.gasfactor, self.gasfactor_before_gasmax)
@@ -239,13 +239,6 @@ class CarController(CarControllerBase):
         else:
           self.gasfactor_before_gasmax = self.gasfactor
           self.windfactor_before_gasmax = self.windfactor
-        if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
-          self.gasfactor_nomaxspeed = self.gasfactor
-          self.gasalpha_nomaxspeed = self.gasalpha
-        else:
-          # store lower than low max speed or current
-          self.gasfactor_nomaxspeed = min(self.gasfactor_nomaxspeed, self.gasfactor)
-          self.gasalpha_nomaxspeed = min(self.gasalpha_nomaxspeed, self.gasalpha)
 
       else:
         self.accel = actuators.accel + self.nidec_pid_factor
@@ -451,6 +444,14 @@ class CarController(CarControllerBase):
                                                          self.CP, CS.stock_brake))
           if (apply_brake > 0) or CS.out.gasPressed: # set zero for feedforward
             self.new_accel = 0
+
+          if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
+            self.gasfactor_nomaxspeed = self.gasfactor
+            self.gas_alpha_nomaxspeed = self.gas_alpha
+          else:
+            # store lower than low max speed or current
+            self.gasfactor_nomaxspeed = min(self.gasfactor_nomaxspeed, self.gasfactor)
+            self.gas_alpha_nomaxspeed = min(self.gas_alpha_nomaxspeed, self.gas_alpha)
 
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
