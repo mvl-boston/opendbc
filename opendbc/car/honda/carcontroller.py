@@ -306,21 +306,10 @@ class CarController(CarControllerBase):
     # all of this is only relevant for HONDA NIDEC
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
     # TODO this 1.44 is just to maintain previous behavior
-    pcm_speed_BP = [-wind_brake,
-                    -wind_brake * (3 / 4),
-                    0.0,
-                    0.5]
-    # The Honda ODYSSEY seems to have different PCM_ACCEL
-    # msgs, is it other cars too?
     if not CC.longActive:
       pcm_speed = 0.0
       pcm_accel = int(0.0)
     else:
-      pcm_speed_V = [0.0,
-                     np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo + 10.0, 0.0, 100.0)]
-      # pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
       pcm_speed = float(np.clip(CS.out.vEgo + 2 * actuators.accel, 0.0, 100.0))
       pcm_accel = int(np.clip((self.gas_alpha + adjust_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
