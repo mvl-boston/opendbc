@@ -327,7 +327,8 @@ class CarController(CarControllerBase):
                      np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 10.0, 0.0, 100.0)]
-      pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
+      # pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
+      pcm_speed = float(np.clip(CS.out.vEgo + 2 * actuators.accel, 0.0, 100.0))
       pcm_accel = int(np.clip((self.gas_alpha + adjust_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
     # feedforward for Nidec decaying-average gas pedal
