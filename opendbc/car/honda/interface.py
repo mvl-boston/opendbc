@@ -210,7 +210,7 @@ class CarInterface(CarInterfaceBase):
       if candidate == CAR.HONDA_PILOT_4G:
           CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
 
-    elif candidate == CAR.ACURA_MDX_4G_MMR:
+    elif candidate in (CAR.ACURA_MDX_4G_MMR, CAR.HONDA_PILOT_4G_MMR):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
       ret.steerActuatorDelay = 0.3
       ret.lateralTuning.pid.kf = 0.000035
