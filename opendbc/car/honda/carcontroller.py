@@ -326,7 +326,11 @@ class CarController(CarControllerBase):
       # Lead the setpoint with PID-corrected accel; cap at +6 m/s (covers NIDEC_ACCEL_MAX).
       speed_lead = float(np.clip(4.0 * adjust_accel, -8.0, 6.0))
       pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
-      pcm_accel = int(np.clip((self.gas_alpha + adjust_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+      # road load (aero + rolling) belongs on the gas channel, like Bosch's gas_pedal_force:
+      # without it the gasfactor learner covers the load by inflating gain until gas saturates.
+      # Stock holds mid-range gas (~100-130) at steady cruise, consistent with a load term.
+      gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
+      pcm_accel = int(np.clip((self.gas_alpha + gas_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
     # feedforward for Nidec decaying-average gas pedal
     # NOTE: this clip runs at 100Hz but ACC_HUD is sent at 10Hz, so up to ~200 units can
