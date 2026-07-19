@@ -253,7 +253,7 @@ class CarController(CarControllerBase):
     else:
       self.accel = 0.0
       adjust_accel = self.accel
-      brake = 0.0, 0.0
+      brake = 0.0
 
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
