@@ -94,7 +94,6 @@ class CarInterface(CarInterfaceBase):
         ret.longitudinalActuatorDelay = 0.05 # set to near zero, canfd seems to have stock feedforward correction
       else:
         ret.longitudinalActuatorDelay = 0.5 # s
-      
     else:
       # default longitudinal tuning for all Nidec hondas
       ret.longitudinalTuning.kiBP = [0., 5., 35.]
