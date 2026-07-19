@@ -180,6 +180,7 @@ class CarController(CarControllerBase):
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
     self.speedfactor = 4.0 if (Params().get("HondaSpeedFactorParams") is None) else Params().get("HondaSpeedFactorParams")
+    self.speedalpha = 0.0 if (Params().get("HondaSpeedAlphaParams") is None) else Params().get("HondaSpeedAlphaParams")
     self.new_accel = 0.0
 
     self.latFactors = {
@@ -311,7 +312,7 @@ class CarController(CarControllerBase):
       pcm_speed = 0.0
       pcm_accel = int(0.0)
     else:
-      speed_lead = float(self.speedfactor * adjust_accel)
+      speed_lead = float(self.speedfactor * adjust_accel + self.speedalpha)
       pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
       gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
       pcm_accel = int(np.clip((self.gas_alpha + gas_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
@@ -342,6 +343,7 @@ class CarController(CarControllerBase):
            (self.apply_brake_last == 0): # adjust speedfactor
         speedfactor_error = (self.accel - CS.out.aEgo)
         self.speedfactor *= (1 + 0.0001 * speedfactor_error * adjust_accel)
+        self.speedalpha *= (1 + 0.001 * speedfactor_error)
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
@@ -475,7 +477,7 @@ class CarController(CarControllerBase):
     new_actuators.speed = float(self.nidec_pid_factor)
     new_actuators.accel = float(adjust_accel)
     new_actuators.gas = float(self.gasfactor)
-    new_actuators.brake = float(self.brake_pid.i)
+    new_actuators.brake = float(self.speedalpha)
     new_actuators.torque = self.last_torque
     # new_actuators.torqueOutputCan = float(self.average_factor)
     new_actuators.torqueOutputCan = float(self.speedfactor)
@@ -488,6 +490,7 @@ class CarController(CarControllerBase):
         "HondaGasAlphaParams": self.gas_alpha_nomaxspeed,
         "HondaGasFactorParams": self.gasfactor_nomaxspeed,
         "HondaWindFactorParams": self.windfactor,
+        "HondaSpeedAlphaParams": self.speedalpha,
         "HondaSpeedFactorParams": self.speedfactor,
       })
 
