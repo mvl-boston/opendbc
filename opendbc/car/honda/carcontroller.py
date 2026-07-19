@@ -310,11 +310,18 @@ class CarController(CarControllerBase):
       pcm_speed = 0.0
       pcm_accel = int(0.0)
     else:
-      pcm_speed = float(np.clip(CS.out.vEgo + 2 * actuators.accel, 0.0, 100.0))
+      # The PCM acts as a speed servo: with PCM_GAS saturated, measured accel scales with
+      # (PCM_SPEED - vEgo) at roughly 0.25 (m/s^2) per m/s of speed lead, saturating around
+      # +2.5 m/s of lead. Lead the setpoint by ~4s of PID-corrected accel so the servo
+      # carries the commanded accel, and cap the lead where the response saturates.
+      speed_lead = float(np.clip(4.0 * adjust_accel, -8.0, 2.5))
+      pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
       pcm_accel = int(np.clip((self.gas_alpha + adjust_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
     # feedforward for Nidec decaying-average gas pedal
-    max_increase = 20
+    # stock camera slews PCM_GAS at up to ~560 units/s; 20/frame (200/s) added up to
+    # 1s of ramp delay on large steps
+    max_increase = 60
     prior_accel = int(self.new_accel)
     self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - self.average_factor)) / self.average_factor)
     self.new_accel = int(np.clip(self.new_accel, 0, min(prior_accel + max_increase, self.params.NIDEC_GAS_MAX)))
@@ -326,12 +333,14 @@ class CarController(CarControllerBase):
          (self.apply_brake_last == 0):
       gasfactor_error = (self.accel - CS.out.aEgo)
       self.gas_alpha = np.clip(self.gas_alpha + 0.0001 * gasfactor_error / 4.8, -3.0, 3.0)
-      self.gasfactor *= (1 + 0.0001 * gasfactor_error * adjust_accel)
+      # keep the learner from saturating pcm_gas into a 0/198 square wave: the PCM
+      # low-passes PCM_GAS (~1.4s), so bang-bang commands add over a second of gas lag
+      self.gasfactor = float(np.clip(self.gasfactor * (1 + 0.0001 * gasfactor_error * adjust_accel), 0.1, 1.5))
       more_new_accel_needed = (self.new_accel > pcm_accel and self.accel > CS.out.aEgo) or \
                               (self.new_accel < pcm_accel and self.accel < CS.out.aEgo)
       new_accel_factor = abs(gasfactor_error * (self.new_accel - pcm_accel))
       if more_new_accel_needed:
-        self.average_factor /= (1 + 0.0001 * new_accel_factor)
+        self.average_factor = max(0.5, self.average_factor / (1 + 0.0001 * new_accel_factor))
       else:
         self.average_factor = min(1.0, self.average_factor * (1 + 0.0001 * new_accel_factor))
 

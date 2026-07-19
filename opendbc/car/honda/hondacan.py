@@ -164,7 +164,11 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     acc_hud_values['ACC_ON'] = int(enabled)
     acc_hud_values['PCM_SPEED'] = pcm_speed * CV.MS_TO_KPH
     acc_hud_values['PCM_GAS'] = pcm_accel
-    acc_hud_values['SET_ME_X01'] = 1 if (pcm_accel == 0 or pcm_accel == 198) else 0
+    # stock camera raises this bit while the ACC speed servo is ramping to the set speed
+    # (resume, gas override, accelerating with no lead). With bang-bang gas the old
+    # (pcm_accel == 0 or 198) condition was 1 on ~99% of frames; keep it high whenever
+    # engaged so smoother gas commands don't flip the PCM out of speed-servo mode.
+    acc_hud_values['SET_ME_X01'] = 1 if enabled else 0
     acc_hud_values['FCM_OFF'] = acc_hud['FCM_OFF']
     acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
     acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
