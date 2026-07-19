@@ -324,7 +324,7 @@ class CarController(CarControllerBase):
 
     if self.CP.carFingerprint in HONDA_BOSCH:
       self.new_accel = pcm_accel
-    else
+    else:
       if (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
            (self.apply_brake_last == 0):
         gasfactor_error = (self.accel - CS.out.aEgo)
