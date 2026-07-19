@@ -241,6 +241,12 @@ class CarController(CarControllerBase):
           self.windfactor_before_gasmax = self.windfactor
 
       else:
+        # the integrator is frozen at standstill; unwind a stale negative integral when
+        # the planner commands positive accel, otherwise it cancels the resume command
+        # (logs show it stuck at -0.2..-0.5 m/s2 for the first 1-2s of every pull-away)
+        if (CS.out.vEgo <= 1e-5) and (actuators.accel > 0) and (self.nidec_pid.i < 0):
+          self.nidec_pid.i *= 1.0 - 2.0 * DT_CTRL  # ~0.5s time constant
+          self.nidec_pid_factor = float(self.nidec_pid.i)
         self.accel = actuators.accel + self.nidec_pid_factor
         adjust_accel = self.accel + hill_brake
 
