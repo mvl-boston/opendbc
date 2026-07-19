@@ -171,6 +171,7 @@ class CarController(CarControllerBase):
     self.brake_pid.i = self.brake_pid_factor_non_lowspeed
 
     self.prior_gas_average = 0.0
+    self.pcm_gas_sent = 0
     self.average_factor = 0.95 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
     self.creep_factor = 1.0 if (Params().get("HondaCreepFactorParams") is None) else Params().get("HondaCreepFactorParams")
     self.gas_alpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
@@ -241,6 +242,12 @@ class CarController(CarControllerBase):
           self.windfactor_before_gasmax = self.windfactor
 
       else:
+        # the integrator is frozen at standstill; unwind a stale negative integral when
+        # the planner commands positive accel, otherwise it cancels the resume command
+        # (logs show it stuck at -0.2..-0.5 m/s2 for the first 1-2s of every pull-away)
+        if (CS.out.vEgo <= 1e-5) and (actuators.accel > 0) and (self.nidec_pid.i < 0):
+          self.nidec_pid.i *= 1.0 - 2.0 * DT_CTRL  # ~0.5s time constant
+          self.nidec_pid_factor = float(self.nidec_pid.i)
         self.accel = actuators.accel + self.nidec_pid_factor
         adjust_accel = self.accel + hill_brake
 
@@ -310,10 +317,17 @@ class CarController(CarControllerBase):
       pcm_speed = 0.0
       pcm_accel = int(0.0)
     else:
-      pcm_speed = float(np.clip(CS.out.vEgo + 2 * actuators.accel, 0.0, 100.0))
+      # The PCM acts as a speed servo: with PCM_GAS saturated, measured accel scales with
+      # (PCM_SPEED - vEgo) at roughly 0.25 (m/s^2) per m/s of speed lead, so ~4s of lead
+      # yields the commanded accel (stock uses up to +8 m/s during resume/override ramps).
+      # Lead the setpoint with PID-corrected accel; cap at +6 m/s (covers NIDEC_ACCEL_MAX).
+      speed_lead = float(np.clip(4.0 * adjust_accel, -8.0, 6.0))
+      pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
       pcm_accel = int(np.clip((self.gas_alpha + adjust_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
     # feedforward for Nidec decaying-average gas pedal
+    # NOTE: this clip runs at 100Hz but ACC_HUD is sent at 10Hz, so up to ~200 units can
+    # still pass between sent frames; the real slew limit is applied at the send point
     max_increase = 20
     prior_accel = int(self.new_accel)
     self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - self.average_factor)) / self.average_factor)
@@ -326,12 +340,14 @@ class CarController(CarControllerBase):
          (self.apply_brake_last == 0):
       gasfactor_error = (self.accel - CS.out.aEgo)
       self.gas_alpha = np.clip(self.gas_alpha + 0.0001 * gasfactor_error / 4.8, -3.0, 3.0)
-      self.gasfactor *= (1 + 0.0001 * gasfactor_error * adjust_accel)
+      # keep the learner from saturating pcm_gas into a 0/198 square wave: the PCM
+      # low-passes PCM_GAS (~1.4s), so bang-bang commands add over a second of gas lag
+      self.gasfactor = float(np.clip(self.gasfactor * (1 + 0.0001 * gasfactor_error * adjust_accel), 0.1, 1.5))
       more_new_accel_needed = (self.new_accel > pcm_accel and self.accel > CS.out.aEgo) or \
                               (self.new_accel < pcm_accel and self.accel < CS.out.aEgo)
       new_accel_factor = abs(gasfactor_error * (self.new_accel - pcm_accel))
       if more_new_accel_needed:
-        self.average_factor /= (1 + 0.0001 * new_accel_factor)
+        self.average_factor = max(0.5, self.average_factor / (1 + 0.0001 * new_accel_factor))
       else:
         self.average_factor = min(1.0, self.average_factor * (1 + 0.0001 * new_accel_factor))
 
@@ -444,7 +460,16 @@ class CarController(CarControllerBase):
 
       if self.CP.openpilotLongitudinalControl:
         # On Nidec, this also controls longitudinal positive acceleration
-        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, self.new_accel,
+        send_gas = int(self.new_accel)
+        if self.CP.carFingerprint not in HONDA_BOSCH:
+          # limit rise of the transmitted PCM_GAS to stock's observed envelope: stock moves
+          # <=7/frame p90 while engaged but jumps +74/frame at launch and up to +114 during
+          # ramps. Falls are left unlimited (stock drops up to -100/frame, and the brake
+          # path zeroes new_accel immediately)
+          if not CS.out.gasPressed:  # gasPressed forces 198 to prevent a PCM fault; don't slew that
+            send_gas = min(send_gas, self.pcm_gas_sent + 60)
+          self.pcm_gas_sent = send_gas
+        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, send_gas,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
