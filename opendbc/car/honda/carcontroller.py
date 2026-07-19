@@ -311,10 +311,10 @@ class CarController(CarControllerBase):
       pcm_accel = int(0.0)
     else:
       # The PCM acts as a speed servo: with PCM_GAS saturated, measured accel scales with
-      # (PCM_SPEED - vEgo) at roughly 0.25 (m/s^2) per m/s of speed lead, saturating around
-      # +2.5 m/s of lead. Lead the setpoint by ~4s of PID-corrected accel so the servo
-      # carries the commanded accel, and cap the lead where the response saturates.
-      speed_lead = float(np.clip(4.0 * adjust_accel, -8.0, 2.5))
+      # (PCM_SPEED - vEgo) at roughly 0.25 (m/s^2) per m/s of speed lead, so ~4s of lead
+      # yields the commanded accel (stock uses up to +8 m/s during resume/override ramps).
+      # Lead the setpoint with PID-corrected accel; cap at +6 m/s (covers NIDEC_ACCEL_MAX).
+      speed_lead = float(np.clip(4.0 * adjust_accel, -8.0, 6.0))
       pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
       pcm_accel = int(np.clip((self.gas_alpha + adjust_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
