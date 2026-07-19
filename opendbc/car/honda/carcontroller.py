@@ -31,7 +31,7 @@ def compute_gb_honda_nidec(accel, speed, creep_factor):
     creep_brake = (creep_speed - speed) / creep_speed * creep_brake_value
   gb = float(accel) / 4.8 - creep_brake * creep_factor
   creep_impact = -creep_brake
-  return np.clip(gb, 0.0, 1.0), np.clip(-gb, 0.0, 1.0), creep_impact
+  return np.clip(-gb, 0.0, 1.0), creep_impact
 
 
 def compute_gas_brake(accel, speed, fingerprint):
@@ -244,7 +244,7 @@ class CarController(CarControllerBase):
         self.accel = actuators.accel + self.nidec_pid_factor
         adjust_accel = self.accel + hill_brake
 
-      gas, brake, creep_impact = compute_gb_honda_nidec(adjust_accel, CS.out.vEgo, self.creep_factor)
+      brake, creep_impact = compute_gb_honda_nidec(adjust_accel, CS.out.vEgo, self.creep_factor)
       gas_error = self.accel - CS.out.aEgo
       if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed) \
              and (1e-5 <= CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
@@ -253,7 +253,7 @@ class CarController(CarControllerBase):
     else:
       self.accel = 0.0
       adjust_accel = self.accel
-      gas, brake = 0.0, 0.0
+      brake = 0.0, 0.0
 
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
