@@ -156,7 +156,10 @@ class CarController(CarControllerBase):
     self.nidec_pid = PIDController(k_p=([0,], [0,]),
                                    k_i=([0., 5., 35.], [1.2, 0.8, 0.5]),
                                    k_f=1,
-                                   pos_limit=0., # self.params.NIDEC_ACCEL_MAX,
+                                   # pos_limit=0 made feedback subtract-only: with chronic undershoot the
+                                   # integral pins at/below zero and drags the command further down
+                                   # (route 162: mean correction -0.11 while cmd > 0.2, worst -0.94)
+                                   pos_limit=1.0,
                                    neg_limit=self.params.NIDEC_ACCEL_MIN)
     self.nidec_pid.reset()
 
