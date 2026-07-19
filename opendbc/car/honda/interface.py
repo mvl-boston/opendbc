@@ -93,10 +93,9 @@ class CarInterface(CarInterfaceBase):
       if candidate in HONDA_BOSCH_RADARLESS:
         ret.stopAccel = CarControllerParams.BOSCH_ACCEL_MIN  # stock uses -4.0 m/s^2 once stopped but limited by safety model
         ret.longitudinalActuatorDelay = 0.25 # s
-      elif candidate in HONDA_BOSCH_CANFD:
-        ret.longitudinalActuatorDelay = 0.05 # set to near zero, canfd seems to have stock feedforward correction
       else:
         ret.longitudinalActuatorDelay = 0.5 # s
+      
     else:
       # default longitudinal tuning for all Nidec hondas
       ret.longitudinalTuning.kiBP = [0., 5., 35.]
