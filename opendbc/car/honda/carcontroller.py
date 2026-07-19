@@ -179,6 +179,7 @@ class CarController(CarControllerBase):
     self.gasfactor_before_gasmax = self.gasfactor_nomaxspeed = self.gasfactor
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
+    self.speedfactor = 4.0 if (Params().get("HondaSpeedFactorParams") is None) else Params().get("HondaSpeedFactorParams")
     self.new_accel = 0.0
 
     self.latFactors = {
@@ -310,7 +311,8 @@ class CarController(CarControllerBase):
       pcm_speed = 0.0
       pcm_accel = int(0.0)
     else:
-      pcm_speed = float(np.clip(CS.out.vEgo + 2 * actuators.accel, 0.0, 100.0))
+      speed_lead = float(self.speedfactor * adjust_accel)
+      pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
       pcm_accel = int(np.clip((self.gas_alpha + adjust_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
     # feedforward for Nidec decaying-average gas pedal
@@ -322,18 +324,23 @@ class CarController(CarControllerBase):
 
     if self.CP.carFingerprint in HONDA_BOSCH:
       self.new_accel = pcm_accel
-    elif (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
-         (self.apply_brake_last == 0):
-      gasfactor_error = (self.accel - CS.out.aEgo)
-      self.gas_alpha = np.clip(self.gas_alpha + 0.0001 * gasfactor_error / 4.8, -3.0, 3.0)
-      self.gasfactor *= (1 + 0.0001 * gasfactor_error * adjust_accel)
-      more_new_accel_needed = (self.new_accel > pcm_accel and self.accel > CS.out.aEgo) or \
-                              (self.new_accel < pcm_accel and self.accel < CS.out.aEgo)
-      new_accel_factor = abs(gasfactor_error * (self.new_accel - pcm_accel))
-      if more_new_accel_needed:
-        self.average_factor /= (1 + 0.0001 * new_accel_factor)
-      else:
-        self.average_factor = min(1.0, self.average_factor * (1 + 0.0001 * new_accel_factor))
+    else
+      if (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
+           (self.apply_brake_last == 0):
+        gasfactor_error = (self.accel - CS.out.aEgo)
+        self.gas_alpha = np.clip(self.gas_alpha + 0.0001 * gasfactor_error / 4.8, -3.0, 3.0)
+        self.gasfactor *= (1 + 0.0001 * gasfactor_error * adjust_accel)
+        more_new_accel_needed = (self.new_accel > pcm_accel and self.accel > CS.out.aEgo) or \
+                                (self.new_accel < pcm_accel and self.accel < CS.out.aEgo)
+        new_accel_factor = abs(gasfactor_error * (self.new_accel - pcm_accel))
+        if more_new_accel_needed:
+          self.average_factor /= (1 + 0.0001 * new_accel_factor)
+        else:
+          self.average_factor = min(1.0, self.average_factor * (1 + 0.0001 * new_accel_factor))
+      if (self.new_accel == self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
+           (self.apply_brake_last == 0): # adjust speedfactor
+        speedfactor_error = (self.accel - CS.out.aEgo)
+        self.speedfactor *= (1 + 0.0001 * speedfactor_error * adjust_accel)
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
@@ -470,7 +477,7 @@ class CarController(CarControllerBase):
     new_actuators.brake = float(self.brake_pid.i)
     new_actuators.torque = self.last_torque
     # new_actuators.torqueOutputCan = float(self.average_factor)
-    new_actuators.torqueOutputCan = float(self.brake_pid_factor)
+    new_actuators.torqueOutputCan = float(self.speedfactor)
 
     if self.frame % 6000 == 0:
       self.param_writer.put_many({
@@ -480,6 +487,7 @@ class CarController(CarControllerBase):
         "HondaGasAlphaParams": self.gas_alpha_nomaxspeed,
         "HondaGasFactorParams": self.gasfactor_nomaxspeed,
         "HondaWindFactorParams": self.windfactor,
+        "HondaSpeedFactorParams": self.speedfactor,
       })
 
     if self.frame % 12000 == 30:
