@@ -312,7 +312,7 @@ class CarController(CarControllerBase):
       pcm_speed = 0.0
       pcm_accel = int(0.0)
     else:
-      speed_lead = float(self.speedfactor * adjust_accel + self.speedalpha)
+      speed_lead = float(self.speedfactor * self.accel + self.speedalpha)
       pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
       gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
       pcm_accel = int(np.clip((self.gas_alpha + gas_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
@@ -342,7 +342,7 @@ class CarController(CarControllerBase):
       if (self.new_accel == self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
            (self.apply_brake_last == 0): # adjust speedfactor
         speedfactor_error = (self.accel - CS.out.aEgo)
-        self.speedfactor *= (1 + 0.0001 * speedfactor_error * adjust_accel)
+        self.speedfactor *= (1 + 0.0001 * speedfactor_error * self.accel)
         self.speedalpha += (0.001 * speedfactor_error)
 
     if not self.CP.openpilotLongitudinalControl:
