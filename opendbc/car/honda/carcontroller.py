@@ -343,7 +343,7 @@ class CarController(CarControllerBase):
            (self.apply_brake_last == 0): # adjust speedfactor
         speedfactor_error = (self.accel - CS.out.aEgo)
         self.speedfactor *= (1 + 0.0001 * speedfactor_error * adjust_accel)
-        self.speedalpha += 0.001 * speedfactor_error)
+        self.speedalpha += (0.001 * speedfactor_error)
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
