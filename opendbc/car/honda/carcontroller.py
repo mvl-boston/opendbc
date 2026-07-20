@@ -321,10 +321,13 @@ class CarController(CarControllerBase):
       pcm_accel = int(0.0)
     else:
       # The PCM acts as a speed servo: with PCM_GAS saturated, measured accel scales with
-      # (PCM_SPEED - vEgo) at roughly 0.25 (m/s^2) per m/s of speed lead, so ~4s of lead
-      # yields the commanded accel (stock uses up to +8 m/s during resume/override ramps).
+      # (PCM_SPEED - vEgo) at ~0.4-0.5 (m/s^2) per m/s of speed lead, saturating ~+0.9 m/s^2.
       # Lead the setpoint with PID-corrected accel; cap at +6 m/s (covers NIDEC_ACCEL_MAX).
-      speed_lead = float(np.clip(4.0 * adjust_accel, -8.0, 6.0))
+      # No hill term here: the servo rejects grade internally (residual grade pass-through
+      # only -0.07..+0.17 across routes without compensation), and hill-in-dv on route 162
+      # double-compensated (wasted dv uphill, starved dv downhill, err +0.32). Grade
+      # compensation lives on the gas channel, where it raises the servo's authority ceiling.
+      speed_lead = float(np.clip(4.0 * self.accel, -8.0, 6.0))
       pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
       # road load (aero + rolling) belongs on the gas channel, like Bosch's gas_pedal_force:
       # without it the gasfactor learner covers the load by inflating gain until gas saturates.
