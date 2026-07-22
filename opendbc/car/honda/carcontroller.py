@@ -426,9 +426,11 @@ class CarController(CarControllerBase):
           self.speed = pcm_speed
           self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
-    # Render OP's lane and lead car on the dash
+    # Render OP's lane and lead car on the dash. On CAN FD these are radar look-alikes that only exist
+    # (and are only allowed by panda safety) when the radar is disabled, i.e. openpilot longitudinal;
+    # in stock ACC the real radar still owns LANE_PATH/HUD_OBJECTS, so don't author them.
     if ((self.frame % 2 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS) or
-        (CS.radar_50hz_tick and self.CP.carFingerprint in HONDA_BOSCH_CANFD)):
+        (CS.radar_50hz_tick and self.CP.carFingerprint in HONDA_BOSCH_CANFD and self.CP.openpilotLongitudinalControl)):
       lead = hud_objects.lead_from_model(self.model, CS.out.vEgo)
       lead_d = lead.dRel if lead.status else 0.0  # extend the lane out to the lead (0 = no lead)
       self.dash_lane = self.lane_path_fitter.update(self.model, CS.out.vEgo, lead_d)
