@@ -59,8 +59,11 @@ class CarState(CarStateBase):
     self.radar_ref_counter = 0
     self.radar_5hz_tick_counter = 0
     self.radar_5hz_tick = False
+    self.supp_tick_counter = 0
     self.supp_tick = False
+    self.hud_tick_counter = 0
     self.hud_tick = False
+    self.radar_50hz_tick_counter = 0
     self.radar_50hz_tick = False
 
     # Only radarless cars have a camera that emits HUD_OBJECTS to poll for secondary vehicle locations.
@@ -267,31 +270,48 @@ class CarState(CarStateBase):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
     if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
       # The radar emits low-rate "tick reference" messages that keep running even while the radar's
-      # data messages are disabled, so we use them to phase our look-alikes to the stock cadence.
-      # Measured from stock logs: RADAR_HUD_CANFD, LANE_PATH/HUD_OBJECTS and BOSCH_SUPPLEMENTAL_CANFD
-      # ride in the same frame as their tick, so pulse on tick arrival. RADAR_LEAD lags RADAR_REFERENCE
-      # by ~120 ms (~12 frames at 100 Hz), so delay that one with a counter.
+      # data messages are disabled, so we phase our look-alikes to the stock cadence off of them.
+      #
+      # There is a one-frame (10 ms) delay between reading a tick here in carstate and transmitting the
+      # response in carcontroller. The stock radar sends each data message in the SAME frame as its
+      # tick, so we pulse one frame BEFORE the next tick (counter == period-1): the +1 transmit delay
+      # then lands the message on the next tick frame, matching stock.
+      #   period (frames @100Hz): 0x710=100, 0x730=10, 0x750=2, RADAR_REFERENCE=20
       self.radar_ref_counter = cp.vl["RADAR_REFERENCE"]["COUNTER"]
 
       # 5 Hz: RADAR_REFERENCE (0x3A1) is on the powertrain bus (cp), not the radar bus (cp_radar).
+      # RADAR_LEAD does NOT ride with the reference; stock sends it ~120 ms (12 frames) after, so fire
+      # at frame 11 (+1 transmit delay -> ~120 ms).
       ref_tick_vals = cp.vl_all.get("RADAR_REFERENCE", {}).get("COUNTER", [])
       if len(ref_tick_vals) > 0:
         self.radar_5hz_tick_counter = 0
       else:
         self.radar_5hz_tick_counter += 1
-      self.radar_5hz_tick = (self.radar_5hz_tick_counter == 12)
+      self.radar_5hz_tick = (self.radar_5hz_tick_counter == 11)
 
-      # 1 Hz: 0x710, send BOSCH_SUPPLEMENTAL_CANFD with the tick
+      # 1 Hz: 0x710 -> BOSCH_SUPPLEMENTAL_CANFD, one frame before the next tick
       supp_tick_vals = cp_radar.vl_all.get("RADAR_SUPP_TICK_REFERENCE", {}).get("IGNORE", [])
-      self.supp_tick = len(supp_tick_vals) > 0
+      if len(supp_tick_vals) > 0:
+        self.supp_tick_counter = 0
+      else:
+        self.supp_tick_counter += 1
+      self.supp_tick = (self.supp_tick_counter == 99)
 
-      # 10 Hz: 0x730, send RADAR_HUD_CANFD with the tick
+      # 10 Hz: 0x730 -> RADAR_HUD_CANFD, one frame before the next tick
       hud_tick_vals = cp_radar.vl_all.get("RADAR_HUD_TICK_REFERENCE", {}).get("IGNORE", [])
-      self.hud_tick = len(hud_tick_vals) > 0
+      if len(hud_tick_vals) > 0:
+        self.hud_tick_counter = 0
+      else:
+        self.hud_tick_counter += 1
+      self.hud_tick = (self.hud_tick_counter == 9)
 
-      # 50 Hz: 0x750, send LANE_PATH/HUD_OBJECTS with the tick
+      # 50 Hz: 0x750 -> LANE_PATH/HUD_OBJECTS, one frame before the next tick
       tick_50hz_vals = cp_radar.vl_all.get("RADAR_50HZ_TICK_REFERENCE", {}).get("IGNORE", [])
-      self.radar_50hz_tick = len(tick_50hz_vals) > 0
+      if len(tick_50hz_vals) > 0:
+        self.radar_50hz_tick_counter = 0
+      else:
+        self.radar_50hz_tick_counter += 1
+      self.radar_50hz_tick = (self.radar_50hz_tick_counter == 1)
     else:
       self.supp_tick = False
       self.hud_tick = False
