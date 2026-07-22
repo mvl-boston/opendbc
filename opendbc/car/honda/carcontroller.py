@@ -376,8 +376,10 @@ class CarController(CarControllerBase):
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
-    # Send dashboard UI commands.
-    if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and CS.hud_tick:
+    # Send dashboard UI commands. On CAN FD, ACC_HUD is a radar/ADAS look-alike that openpilot only
+    # owns when it has disabled the radar (op longitudinal); in stock ACC the real system sends it and
+    # the non-long safety config doesn't allowlist it.
+    if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl:
         pcm_accel = actuators.accel
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
