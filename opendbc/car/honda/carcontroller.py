@@ -391,10 +391,10 @@ class CarController(CarControllerBase):
 
       if self.CP.openpilotLongitudinalControl:
         if self.CP.carFingerprint not in HONDA_BOSCH_CANFD:
-        # On Nidec, this also controls longitudinal positive acceleration
-        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
-                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
-                                                 self.CP.openpilotLongitudinalControl))
+          # On Nidec, this also controls longitudinal positive acceleration
+          can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
+                                                   hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
+                                                   self.CP.openpilotLongitudinalControl))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       reduced_steering = CS.out.steeringPressed
@@ -427,8 +427,8 @@ class CarController(CarControllerBase):
           self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
     # Render OP's lane and lead car on the dash
-    if (self.frame % 2 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS) or
-       (CS.radar_50hz_tick and self.CP.carFingerprint in HONDA_BOSCH_CANFD):
+    if ((self.frame % 2 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS) or
+        (CS.radar_50hz_tick and self.CP.carFingerprint in HONDA_BOSCH_CANFD)):
       lead = hud_objects.lead_from_model(self.model, CS.out.vEgo)
       lead_d = lead.dRel if lead.status else 0.0  # extend the lane out to the lead (0 = no lead)
       self.dash_lane = self.lane_path_fitter.update(self.model, CS.out.vEgo, lead_d)
