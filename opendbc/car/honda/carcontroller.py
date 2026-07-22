@@ -225,11 +225,11 @@ class CarController(CarControllerBase):
     # mirrored onto both buses (re-packing would double-increment the counter and desync the buses).
     if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and self.CP.openpilotLongitudinalControl:
       radar_msgs = []
-      if self.frame % 10 == 0:
+      if CS.hud_tick:
         radar_msgs.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled))
       if CS.supp_tick:
         radar_msgs.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
-      if self.frame % 2 == 0:
+      if CS.radar_50hz_tick:
         # Cycle the radar MUX through the same banks the stock radar uses: 1-10, 17-26, 33-42, 49-58.
         # These must be elif (not sequential if): a bare `if` that sets the bank start would fall
         # through to the `else` increment, skipping the bank-start values (17, 33, 49).
@@ -244,7 +244,7 @@ class CarController(CarControllerBase):
         else:
           self.radar_mux += 1
         # radar_msgs.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.pt, self.radar_mux))
-      if self.frame % 20 == 0:
+      if CS.radar_5hz_tick:
         # RADAR_LEAD's LANE_PATH_LENGTH must track the valid-point count of the LANE_PATH sweep we are
         # authoring; the stock radar keeps the two in lockstep and the dash won't draw lanes otherwise.
         radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter,
@@ -377,6 +377,12 @@ class CarController(CarControllerBase):
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
     # Send dashboard UI commands.
+    if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and CS.hud_tick:
+        pcm_accel = actuators.accel
+        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
+                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
+                                                 self.CP.openpilotLongitudinalControl))
+
     if self.frame % 10 == 0:
       if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)):
         # standstill disengage
@@ -384,8 +390,7 @@ class CarController(CarControllerBase):
           pcm_speed = 25.0 / 3.6
 
       if self.CP.openpilotLongitudinalControl:
-        if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
-          pcm_accel = actuators.accel
+        if self.CP.carFingerprint not in HONDA_BOSCH_CANFD:
         # On Nidec, this also controls longitudinal positive acceleration
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
@@ -422,7 +427,8 @@ class CarController(CarControllerBase):
           self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
     # Render OP's lane and lead car on the dash
-    if self.frame % 2 == 0 and self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
+    if (self.frame % 2 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS) or
+       (CS.radar_50hz_tick and self.CP.carFingerprint in HONDA_BOSCH_CANFD):
       lead = hud_objects.lead_from_model(self.model, CS.out.vEgo)
       lead_d = lead.dRel if lead.status else 0.0  # extend the lane out to the lead (0 = no lead)
       self.dash_lane = self.lane_path_fitter.update(self.model, CS.out.vEgo, lead_d)
