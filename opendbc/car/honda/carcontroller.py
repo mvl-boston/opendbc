@@ -442,17 +442,26 @@ class CarController(CarControllerBase):
         lane_offsets = lane_path.canfd_lane_offsets(self.dash_lane)
       else:
         lane_offsets = self.dash_lane.offsets
-      can_sends.append(lane_path.create_lane_path(self.packer, self.CAN.lkas, lane_offsets, mux))
+      lane_msg = lane_path.create_lane_path(self.packer, self.CAN.lkas, lane_offsets, mux)
+      can_sends.append(lane_msg)
 
       # CAN FD cars have no camera HUD_OBJECTS to poll (the disabled radar owned it), so there are no
       # secondary vehicle locations: author OP's lead in slot 0 with the other slots blank (tracks=None).
       tracks = CS.hud_object_tracker.snapshot() if CS.hud_object_tracker is not None else None
       if self.CP.openpilotLongitudinalControl:
         # For OP long, replace lead car and forward rest of objects
-        can_sends.append(self.hud_object_author.create(self.packer, self.CAN.lkas, lead, tracks, mux, now_nanos * 1e-9))
+        hud_msg = self.hud_object_author.create(self.packer, self.CAN.lkas, lead, tracks, mux, now_nanos * 1e-9)
       else:
         # For ACC, forward objects but with our mux
-        can_sends.append(hud_objects.forward_hud_object(self.packer, self.CAN.lkas, mux, tracks))
+        hud_msg = hud_objects.forward_hud_object(self.packer, self.CAN.lkas, mux, tracks)
+      can_sends.append(hud_msg)
+
+      # On CAN FD the camera (behind the relay) also consumes these radar look-alikes, and openpilot's
+      # own TX is not forwarded across the open relay. Mirror the identical packed bytes onto the camera
+      # bus (packed once above, so the counter/checksum don't double-increment and both buses match).
+      if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+        for addr, dat, _ in (lane_msg, hud_msg):
+          can_sends.append((addr, dat, self.CAN.camera))
 
     if self.frame % 20 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       # COUNTER_2 trails the packer's COUNTER (frame//20 % 4) by one. TODO: do we need the - 1 trail?
