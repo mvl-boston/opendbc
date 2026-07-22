@@ -65,4 +65,7 @@ BO_ 1808 RADAR_SUPP_TICK_REFERENCE: 32 XXX
 BO_ 1840 RADAR_HUD_TICK_REFERENCE: 6 XXX
  SG_ IGNORE : 11|1@0+ (1,0) [0|1] "" XXX
 
+BO_ 1872 RADAR_50HZ_TICK_REFERENCE: 16 XXX
+ SG_ IGNORE : 11|1@0+ (1,0) [0|1] "" XXX
+
 CM_ SG_ 254913116 LANE_PATH_LENGTH "number of valid LANE_PATH points in the current sweep (6 = idle/no lane, up to 23-24); the dash needs this to match the in-band 2047 terminator to draw the lane lines";
