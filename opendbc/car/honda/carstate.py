@@ -57,7 +57,13 @@ class CarState(CarStateBase):
     self.initial_accFault_cleared = False
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
     self.radar_ref_counter = 0
+    self.supp_tick_counter = 0
     self.supp_tick = False
+    self.hud_tick_counter = 0
+    self.hud_tick = False
+    self.radar_5hz_tick = False
+    self.50hz_tick_counter
+    self.radar_50hz_tick = False
 
     # Only radarless cars have a camera that emits HUD_OBJECTS to poll for secondary vehicle locations.
     # On CAN FD cars the radar owned HUD_OBJECTS and it is disabled, so there is nothing to track.
@@ -261,13 +267,37 @@ class CarState(CarStateBase):
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
     if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
-    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+    if self.CP.carFingerprint in HONDA_BOSCH_CANFD: # set pulses on exact 100hz frames as stock radar
       self.radar_ref_counter = cp.vl["RADAR_REFERENCE"]["COUNTER"]
-      # Pulse true only on update cycles where a new 0x710 frame was received.
+      # Pulse true after RADAR_REFERENCE frame was received.
+      ref_tick_vals = cp_radar.vl_all.get("RADAR_REFERENCE", {}).get("COUNTER", [])
+      self.radar_5hz_tick = len(ref_tick_vals) > 0
+      # Pulse true prior to next 0x710 frame at 1hz.
       supp_tick_vals = cp_radar.vl_all.get("RADAR_SUPP_TICK_REFERENCE", {}).get("IGNORE", [])
-      self.supp_tick = len(supp_tick_vals) > 0
+      if len(supp_tick_vals) > 0:
+        self.supp_tick_counter = 0
+      else:
+        self.supp_tick_counter += 1
+      self.supp_tick = (self.supp_tick_counter == 99)
+      # Pulse true prior to next 0x730 frame at 10hz.
+      hud_tick_vals = cp_radar.vl_all.get("RADAR_HUD_TICK_REFERENCE", {}).get("IGNORE", [])
+      if len(hud_tick_vals) > 0:
+        self.hud_tick_counter = 0:
+      else:
+        self.hud_tick_counter += 1:
+      self.hud_tick = (self.hud_tick_counter == 9)
+      # Pulse true prior to next 0x750 frame at 50hz.
+      50hz_tick_vals = cp_radar.vl_all.get("RADAR_50HZ_TICK_REFERENCE", {}).get("IGNORE", [])
+      if len(50hz_tick_vals) > 0:
+        self.50hz_tick_counter = 0:
+      else:
+        self.50hz_tick_counter += 1:
+      self.50hz_tick = (self.50hz_tick_counter == 1)
     else:
       self.supp_tick = False
+      self.hud_tick = False
+      self.radar_5hz_tick = False
+      self.radar_50hz_tick = False
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
