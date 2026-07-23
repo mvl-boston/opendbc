@@ -209,6 +209,12 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
       lkas_hud_values['LKAS_PROBLEM'] = CS.out.steerFaultPermanent # CS.lkas_hud['LKAS_PROBLEM']
       lkas_hud_values['DASHED_LANES'] = 1  # show gray lanes when disengaged
 
+    if CP.carFingerprint in HONDA_BOSCH_CANFD:
+      # Don't let steer saturation flicker SOLID_LANES: every payload change must coincide with an
+      # LKAS_STATE_CHANGE pulse (see carcontroller), and a 10Hz flicker would keep the pulse
+      # re-triggering, which suppresses the dash lane lines.
+      lkas_hud_values['SOLID_LANES'] = hud_control.lanesVisible
+
   if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
     lkas_hud_values['RDM_OFF'] = 1
     lkas_hud_values['LANE_ASSIST_BEEP_OFF'] = 1

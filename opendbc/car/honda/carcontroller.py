@@ -231,6 +231,10 @@ class CarController(CarControllerBase):
         radar_msgs.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
       if CS.radar_50hz_tick:
         # Cycle the radar MUX through the same banks the stock radar uses: 1-10, 17-26, 33-42, 49-58.
+        # This counter also drives the LANE_PATH/HUD_OBJECTS mux below: it advances exactly one step
+        # per transmitted frame, so the sweep stays contiguous even when a tick is missed (deriving
+        # the mux from the frame counter skipped a mux on every missed tick, leaving holes in the
+        # sweep the stock radar never produces).
         # These must be elif (not sequential if): a bare `if` that sets the bank start would fall
         # through to the `else` increment, skipping the bank-start values (17, 33, 49).
         if self.radar_mux >= 58:
@@ -406,8 +410,13 @@ class CarController(CarControllerBase):
       if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
         # The stock camera holds LKAS_STATE_CHANGE low and pulses it high for ~3s around HUD state
         # changes; holding it high permanently (the default below) suppresses the dash lane lines.
-        hud_key = (bool(hud_control.lanesVisible) and not steer_maxed, bool(CC.latActive),
-                   bool(alert_steer_required), bool(CS.out.steerFaultPermanent))
+        # The key must contain exactly the signals that change the LKAS_HUD payload, nothing more:
+        # steer_maxed used to be in here (via SOLID_LANES) and its 10Hz flicker during city-speed
+        # steering re-triggered the pulse continuously, keeping LKAS_STATE_CHANGE high whenever a
+        # real lane path was being sent - which suppressed the dash lane lines entirely.
+        # (latActive isn't in the key: DASHED_LANES is overridden to 1 on CAN FD, so it doesn't
+        # affect the payload.)
+        hud_key = (bool(hud_control.lanesVisible), bool(alert_steer_required), bool(CS.out.steerFaultPermanent))
         if hud_key != self.lkas_hud_key:
           self.lkas_hud_key = hud_key
           self.lkas_state_change_frames = 30  # 3s at the 10Hz LKAS_HUD rate, matching stock pulse length
@@ -437,12 +446,15 @@ class CarController(CarControllerBase):
       lead_d = lead.dRel if lead.status else 0.0  # extend the lane out to the lead (0 = no lead)
       self.dash_lane = self.lane_path_fitter.update(self.model, CS.out.vEgo, lead_d)
       # Important: same mux for lane_path and hud_objects. Lane display freezes if muxes don't match.
-      mux = lane_path.MUX_CYCLE[(self.frame // 2) % len(lane_path.MUX_CYCLE)]
       if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+        # self.radar_mux advances one step per 50Hz tick (above), so the mux sweep stays contiguous
+        # across missed ticks, unlike a frame-derived mux.
+        mux = self.radar_mux
         # No LKAS_HUD_2 on CAN FD: the dash reads the lane length from the stock radar's in-band
         # terminator, so reshape the path into the terminated-prefix form (see lane_path.py).
         lane_offsets = lane_path.canfd_lane_offsets(self.dash_lane)
       else:
+        mux = lane_path.MUX_CYCLE[(self.frame // 2) % len(lane_path.MUX_CYCLE)]
         lane_offsets = self.dash_lane.offsets
       lane_msg = lane_path.create_lane_path(self.packer, self.CAN.lkas, lane_offsets, mux)
       can_sends.append(lane_msg)
