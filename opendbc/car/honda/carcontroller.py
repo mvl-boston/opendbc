@@ -251,8 +251,12 @@ class CarController(CarControllerBase):
       if CS.radar_5hz_tick:
         # RADAR_LEAD's LANE_PATH_LENGTH must track the valid-point count of the LANE_PATH sweep we are
         # authoring; the stock radar keeps the two in lockstep and the dash won't draw lanes otherwise.
+        # LEFT_LANE/RIGHT_LANE carry the per-side line-detected status (3/0) the same way the stock
+        # radar mirrors the camera's LANE_LINES bits; the dash draws no lane lines while both are 0.
         radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter,
-                                                                   lane_path.canfd_lane_length(self.dash_lane)))
+                                                                   lane_path.canfd_lane_length(self.dash_lane),
+                                                                   lane_path.LANE_LINE_ON if self.dash_lane.left_line else 0,
+                                                                   lane_path.LANE_LINE_ON if self.dash_lane.right_line else 0))
 
       # mirror each packed frame onto both the powertrain bus and the camera bus
       for addr, dat, _ in radar_msgs:
