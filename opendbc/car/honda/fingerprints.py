@@ -522,6 +522,7 @@ FW_VERSIONS = {
   },
   CAR.HONDA_FIT_4G: {
     (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'36161-TZK-P140\x00\x00',
       b'8S102-TZK-PA20\x00\x00',
       b'8S102-TZK-PB10\x00\x00',
     ],
@@ -917,6 +918,7 @@ FW_VERSIONS = {
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'36161-T6Z-A020\x00\x00',
+      b'36161-T6Z-A220\x00\x00',
       b'36161-T6Z-A310\x00\x00',
       b'36161-T6Z-A420\x00\x00',
       b'36161-T6Z-A520\x00\x00',
@@ -930,6 +932,7 @@ FW_VERSIONS = {
     ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-T6Z-A020\x00\x00',
+      b'77959-T6Z-A030\x00\x00',
     ],
     (Ecu.vsa, 0x18da28f1, None): [
       b'57114-T6Z-A120\x00\x00',
@@ -1079,6 +1082,7 @@ FW_VERSIONS = {
   CAR.HONDA_CIVIC_2022: {
     (Ecu.eps, 0x18da30f1, None): [
       b'39990-T24-T120\x00\x00',
+      b'39990-T24-T520\x00\x00',
       b'39990-T38-A040\x00\x00',
       b'39990-T39-A130\x00\x00',
       b'39990-T43-J020\x00\x00',
@@ -1101,6 +1105,7 @@ FW_VERSIONS = {
       b'38897-T50-EA10\x00\x00',
       b'38897-T60-A110\x00\x00',
       b'38897-T61-A320\x00\x00',
+      b'38897-T61-Z110\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-T20-A970\x00\x00',
@@ -1111,6 +1116,7 @@ FW_VERSIONS = {
       b'77959-T47-A950\x00\x00',
       b'77959-T50-G010\x00\x00',
       b'77959-T50-G930\x00\x00',
+      b'77959-T54-Z120\x00\x00',
       b'77959-T60-A920\x00\x00',
       b'77959-T61-A920\x00\x00',
       b'77959-T65-A920\x00\x00',
@@ -1121,11 +1127,13 @@ FW_VERSIONS = {
       b'36161-T20-A080\x00\x00',
       b'36161-T24-T070\x00\x00',
       b'36161-T38-A060\x00\x00',
+      b'8S102-T38-AA10\x00\x00',
       b'36161-T47-A050\x00\x00',
       b'36161-T47-A060\x00\x00',
       b'36161-T47-A070\x00\x00',
       b'8S102-T20-AA10\x00\x00',
       b'8S102-T20-AA20\x00\x00',
+      b'8S102-T29-T020\x00\x00',
       b'8S102-T38-A040\x00\x00',
       b'8S102-T43-J540\x00\x00',
       b'8S102-T47-AA10\x00\x00',
@@ -1144,6 +1152,7 @@ FW_VERSIONS = {
       b'57114-T43-JA30\x00\x00',
       b'57114-T43-JB30\x00\x00',
       b'57114-T50-JC20\x00\x00',
+      b'57114-T54-TJ20\x00\x00',
       b'57114-T60-AA20\x00\x00',
       b'57114-T61-AJ30\x00\x00',
     ],
@@ -1165,6 +1174,14 @@ FW_VERSIONS = {
       b'8S302-T90-A040\x00\x00',
     ],
   },
+  CAR.HONDA_PILOT_4G_MMR: {
+    (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'8S102-T90-A120\x00\x00',
+    ],
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'8S302-T90-A120\x00\x00',
+    ],
+  },
   CAR.HONDA_ACCORD_11G: {
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'8S302-30A-A040\x00\x00',
@@ -1173,6 +1190,7 @@ FW_VERSIONS = {
       b'8S102-30A-A050\x00\x00',
       b'8S102-30A-A060\x00\x00',
       b'8S102-30A-A070\x00\x00',
+      b'8S102-30A-A080\x00\x00',
     ],
     (Ecu.gateway, 0x18daeff1, None): [
       b'5J802-30A-AA10\x00\x00',
@@ -1206,6 +1224,7 @@ FW_VERSIONS = {
       b'8S302-3A0-A220\x00\x00',
       b'8S302-3C0-Q050\x00\x00',
       b'8S302-3D4-A050\x00\x00',
+      b'8S302-3D4-A060\x00\x00',
     ],
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'8S102-3A0-A070\x00\x00',

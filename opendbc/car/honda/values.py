@@ -112,6 +112,9 @@ class HondaCarDocs(CarDocs):
 
     self.car_parts = CarParts.common([harness])
 
+    if CP.alphaLongitudinalAvailable:
+      self.footnotes.append(Footnote.HONDA_ALPHALONG)
+
     if CP.carFingerprint in (CAR.HONDA_CLARITY,):
       self.car_parts = CarParts.common([CarHarness.honda_clarity])
       self.car_parts.custom_parts_url = "https://shop.retropilot.org/product/honda-clarity-proxy-board-kit"
@@ -123,9 +126,9 @@ class Footnote(Enum):
   CIVIC_DIESEL = CarFootnote(
     "2019 Honda Civic 1.6L Diesel Sedan does not have ALC below 12mph.",
     Column.FSR_STEERING)
-  TRAFFIC_JAM_ASSIST = CarFootnote(
-    "ALC is supported below 45mph only when following a lead car.",
-    Column.FSR_STEERING)
+  HONDA_ALPHALONG = CarFootnote(
+    "Enabling longitudinal control (alpha) will disable all CMBS functionality, including AEB and FCW.",
+    Column.LONGITUDINAL)
 
 
 @dataclass
@@ -272,8 +275,12 @@ class CAR(Platforms):
     {Bus.pt: 'honda_e_advance_2020_can_generated'}, # 8 bit LKAS_HUD in Advance trim
   )
   HONDA_PILOT_4G = HondaBoschCANFDPlatformConfig(
-    [HondaCarDocs("Honda Pilot 2023-26", "All")],
+    [HondaCarDocs("Honda Pilot 2023-25", "All")],
     CarSpecs(mass=4660 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=17.5),
+  )
+  HONDA_PILOT_4G_MMR = HondaBoschCANFDPlatformConfig( # Mid-Model Refresh has more powerful EPS
+    [HondaCarDocs("Honda Pilot 2026", "All")],
+    CarSpecs(mass=4528 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=17.5),
   )
   HONDA_PASSPORT_4G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Passport 2026", "All")],
@@ -288,7 +295,7 @@ class CAR(Platforms):
   # mid-model refresh
   ACURA_MDX_4G_MMR = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Acura MDX 2025-26", "All except Type S")],
-    CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.2),
+    CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.7),
   )
   HONDA_ODYSSEY_5G_MMR = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda Odyssey 2021-26", "All", min_steer_speed=70. * CV.KPH_TO_MS)],
@@ -308,7 +315,11 @@ class CAR(Platforms):
     CarSpecs(mass=3990 * CV.LB_TO_KG, wheelbase=2.87, centerToFrontRatio=0.43, steerRatio=13.7),
   )
   HONDA_FIT_4G = HondaBoschPlatformConfig(
-    [HondaCarDocs("Honda Fit (Taiwan) 2024-25", "All")],
+    [
+      HondaCarDocs("Honda Fit (Taiwan) 2021", "All"),
+      # TODO: add 2022-2023 fingerprints
+      HondaCarDocs("Honda Fit (Taiwan) 2024-25", "All"),
+    ],
     CarSpecs(mass=1229, wheelbase=2.53, steerRatio=19.7, centerToFrontRatio=0.39, minSteerSpeed=23. * CV.KPH_TO_MS),
     {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS | HondaFlags.LKAS_MINSPEED_CUTOFF
@@ -483,6 +494,7 @@ STEER_THRESHOLD = {
   CAR.HONDA_CRV_EU: 400,
   CAR.HONDA_ACCORD_11G: 600,
   CAR.HONDA_PILOT_4G: 600,
+  CAR.HONDA_PILOT_4G_MMR: 600,
   CAR.HONDA_PASSPORT_4G: 600,
   CAR.ACURA_MDX_4G_MMR: 600,
   CAR.HONDA_CRV_6G: 600,

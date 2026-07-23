@@ -32,6 +32,7 @@ non_tested_cars = [
   HONDA.ACURA_TLX_2G, # need new route - expired
   HONDA.HONDA_CRV_SA, # need new route - expired
   HONDA.ACURA_TLX_2G_MMR, # need to fix Integra bug causing error
+  HONDA.HONDA_PILOT_4G_MMR, # awaiting driver for testroute
 
   # These had their DSUs unplugged, need new routes
   # TOYOTA.LEXUS_ES  # hybrid
@@ -376,7 +377,7 @@ routes = [
   CarTestRoute("6a7075a4fdd765ee/0000004e--1f612006dd", PSA.PSA_PEUGEOT_208),
 
   CarTestRoute("bc095dc92e101734/000000db--ee9fe46e57", RIVIAN.RIVIAN_R1),
-  # CarTestRoute("c70d59e4150956fc/0000006e--48bfbfda01", RIVIAN.RIVIAN_R1), # GEN2 - EXPIRED
+  CarTestRoute("c70d59e4150956fc/0000006e--48bfbfda01", RIVIAN.RIVIAN_R1), # GEN2
 
   CarTestRoute("7dc058789994da80/00000112--adb970f6a8", TESLA.TESLA_MODEL_3),
   CarTestRoute("c8a98e58647765ad/00000002--84e4746136", TESLA.TESLA_MODEL_Y),
