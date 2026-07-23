@@ -155,6 +155,10 @@ class CarController(CarControllerBase):
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
     self.pitch = 0.0
     self.radar_mux = 0
+    # stock RADAR_HUD_CANFD raises its CMBS bit only for a short burst after ACC engages (see
+    # create_radar_hud_canfd); counted in 10 Hz hud ticks
+    self.radar_hud_pulse = 0
+    self.last_acc_enabled = False
 
     # Bosch extra-brake controller
     self.brake_pid = PIDController(k_p=([0,], [0,]),
@@ -224,9 +228,14 @@ class CarController(CarControllerBase):
     # so the packer's counter/checksum only advance once per cycle, then the identical bytes are
     # mirrored onto both buses (re-packing would double-increment the counter and desync the buses).
     if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and self.CP.openpilotLongitudinalControl:
+      if CC.enabled and not self.last_acc_enabled:
+        self.radar_hud_pulse = 30  # ~3 s at 10 Hz, matching the stock 2-6 s engage burst
+      self.last_acc_enabled = CC.enabled
       radar_msgs = []
       if CS.hud_tick:
-        radar_msgs.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled))
+        radar_msgs.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled, self.radar_hud_pulse > 0))
+        if self.radar_hud_pulse > 0:
+          self.radar_hud_pulse -= 1
       if CS.supp_tick:
         radar_msgs.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
       if CS.radar_50hz_tick:
@@ -251,8 +260,12 @@ class CarController(CarControllerBase):
       if CS.radar_5hz_tick:
         # RADAR_LEAD's LANE_PATH_LENGTH must track the valid-point count of the LANE_PATH sweep we are
         # authoring; the stock radar keeps the two in lockstep and the dash won't draw lanes otherwise.
+        # LEFT_LANE/RIGHT_LANE carry the per-side line-detected status (3/0) the same way the stock
+        # radar mirrors the camera's LANE_LINES bits; the dash draws no lane lines while both are 0.
         radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter,
-                                                                   lane_path.canfd_lane_length(self.dash_lane)))
+                                                                   lane_path.canfd_lane_length(self.dash_lane),
+                                                                   lane_path.LANE_LINE_ON if self.dash_lane.left_line else 0,
+                                                                   lane_path.LANE_LINE_ON if self.dash_lane.right_line else 0))
 
       # mirror each packed frame onto both the powertrain bus and the camera bus
       for addr, dat, _ in radar_msgs:

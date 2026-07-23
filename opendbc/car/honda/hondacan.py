@@ -258,9 +258,11 @@ def spam_buttons_command(packer, CAN, button_val, car_fingerprint):
   return packer.make_can_msg("SCM_BUTTONS", bus, values)
 
 
-def create_radar_hud_canfd(packer, bus, acc):
+def create_radar_hud_canfd(packer, bus, acc, acc_pulse=False):
   values = {
-    'CMBS_ENABLED_MAYBE': acc,
+    # The stock radar only raises this bit in short (~2-6 s) bursts right after ACC engages/resumes,
+    # then drops it for the rest of the drive; it is never held for a whole engagement.
+    'CMBS_ENABLED_MAYBE': 1 if (acc and acc_pulse) else 0,
     'ACC_ON': acc,
     'SET_ME_X01': 0x01,
     'SET_ME_X01_2': 0x01,
@@ -322,7 +324,7 @@ def create_canfd_50hz_radar_messages(packer, bus, radar_mux):
   return commands
 
 
-def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr, lane_path_length=6):
+def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr, lane_path_length=6, left_lane=0, right_lane=0):
   commands = []
 
   radar_lead_values = {
@@ -330,6 +332,11 @@ def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr, lane_path_lengt
     'SET_ME_X01': 0x01,
     # stock radar transmits a constant 140 here (confirmed from logs); 120 causes a camera mismatch
     'TARGET_SPEED_MAYBE': 140,
+    # stock: per-side lane-line detection status (3 = line present, 0 = none), in lockstep with the
+    # camera's LKAS_HUD LANE_LINES bits. This is the CAN FD counterpart of radarless LKAS_HUD_2's
+    # LEFT_LANE/RIGHT_LANE; the dash does not draw lane lines while both are 0.
+    'LEFT_LANE': left_lane,
+    'RIGHT_LANE': right_lane,
     # stock: number of valid points in the current LANE_PATH sweep (6 = idle). The dash cross-checks
     # this against the path's in-band 2047 terminator; a mismatch suppresses the lane-line rendering.
     'LANE_PATH_LENGTH': lane_path_length,
