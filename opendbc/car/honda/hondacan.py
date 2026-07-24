@@ -248,10 +248,12 @@ def create_legacy_brake_command(packer, bus):
   return packer.make_can_msg("LEGACY_BRAKE_COMMAND", bus, {})
 
 
-def spam_buttons_command(packer, CAN, cruise_button, cruise_setting, car_fingerprint, bus=None):
+def spam_buttons_command(packer, CAN, cruise_button, cruise_setting, ambient_light, car_fingerprint, bus=None):
   values = {
     'CRUISE_BUTTONS': cruise_button,
     'CRUISE_SETTING': cruise_setting,
+    # the camera consumes this byte too (adaptive high beam); echo the SCM's live value
+    'AMBIENT_LIGHT_MAYBE': ambient_light,
   }
   if bus is None:
     # send buttons to camera on radarless (camera does ACC) cars

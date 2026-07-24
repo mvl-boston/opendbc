@@ -151,6 +151,7 @@ class CarController(CarControllerBase):
 
     self.lkas_button_send_remaining = 0
     self.last_lkas_button_frame = 0
+    self.radar_disable_counter = 0
 
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
     self.gasfactor_before_gasmax = self.gasfactor
@@ -218,9 +219,27 @@ class CarController(CarControllerBase):
     # Send CAN commands
     can_sends = []
 
-    # tester present - w/ no response (keeps radar disabled)
     if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
-      if self.frame % 10 == 0:
+      if self.CP.carFingerprint in HONDA_BOSCH_CANFD and CS.stock_acc_alive:
+        # CAN FD: the radar is still transmitting. It is silenced from here rather than from
+        # CarInterface.init(), and only once the comma relay is confirmed open: init() ran while the
+        # panda was still in the ELM327 safety mode, so the replacement ACC_CONTROL stream was blocked
+        # until the safety-mode switch landed, and whenever the switch took longer than ~110 ms after
+        # the radar went silent the brake module latched CRUISE_FAULT (accFaulted) for the whole drive.
+        # With the relay already open the stock radar keeps feeding the brake module (and, via panda
+        # forwarding, the camera) right up to the switchover, and the replacement stream starts within
+        # a few frames of radar silence (see CS.stock_acc_alive), well inside the fault threshold.
+        if CS.canfd_relay_open:
+          if self.radar_disable_counter % 50 == 0:
+            # UDS extended diagnostic session, required before CommunicationControl
+            can_sends.append((0x18DAB0F1, b'\x02\x10\x03\x00\x00\x00\x00\x00', self.CAN.pt))
+          elif self.radar_disable_counter % 50 == 5:
+            # UDS CommunicationControl disableRxAndTx (0x80 suppresses the response); the same request
+            # CarInterface.init() used to send, retried every 0.5 s until the radar goes silent
+            can_sends.append((0x18DAB0F1, b'\x03\x28\x83\x03\x00\x00\x00\x00', self.CAN.pt))
+          self.radar_disable_counter += 1
+      elif self.frame % 10 == 0:
+        # tester present - w/ no response (keeps radar disabled)
         bus = 0 if self.CP.carFingerprint in HONDA_BOSCH_CANFD else 1
         can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
 
@@ -230,7 +249,9 @@ class CarController(CarControllerBase):
     # open relay, so they must be sent explicitly on both buses. Each message is packed exactly once
     # so the packer's counter/checksum only advance once per cycle, then the identical bytes are
     # mirrored onto both buses (re-packing would double-increment the counter and desync the buses).
-    if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and self.CP.openpilotLongitudinalControl:
+    # While the stock radar is still transmitting (drive start, before the deferred disable above has
+    # silenced it), it authors all of these itself: sending look-alikes too would double them up.
+    if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
       if CC.enabled and not self.last_acc_enabled:
         self.radar_hud_pulse = 30  # ~3 s at 10 Hz, matching the stock 2-6 s engage burst
       self.last_acc_enabled = CC.enabled
@@ -324,9 +345,9 @@ class CarController(CarControllerBase):
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
       # If using stock ACC, spam cancel command to kill gas when OP disengages.
       if pcm_cancel_cmd:
-        can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.CANCEL, 0, self.CP.carFingerprint))
+        can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.CANCEL, 0, CS.scm_ambient_light, self.CP.carFingerprint))
       elif CC.cruiseControl.resume:
-        can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, 0, self.CP.carFingerprint))
+        can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, 0, CS.scm_ambient_light, self.CP.carFingerprint))
 
     else:
       # Send gas and brake commands.
@@ -382,8 +403,11 @@ class CarController(CarControllerBase):
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
-          can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                        self.stopping_counter, self.CP.carFingerprint, gas_pedal_force))
+          # CAN FD: never overlap the stock radar's own ACC_CONTROL stream; ours starts within a few
+          # frames of the radar going silent (see the deferred radar disable above)
+          if not (self.CP.carFingerprint in HONDA_BOSCH_CANFD and CS.stock_acc_alive):
+            can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
+                                                          self.stopping_counter, self.CP.carFingerprint, gas_pedal_force))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
@@ -399,7 +423,7 @@ class CarController(CarControllerBase):
     # Send dashboard UI commands. On CAN FD, ACC_HUD is a radar/ADAS look-alike that openpilot only
     # owns when it has disabled the radar (op longitudinal); in stock ACC the real system sends it and
     # the non-long safety config doesn't allowlist it.
-    if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl:
+    if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
         pcm_accel = actuators.accel
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
@@ -457,7 +481,8 @@ class CarController(CarControllerBase):
     # (and are only allowed by panda safety) when the radar is disabled, i.e. openpilot longitudinal;
     # in stock ACC the real radar still owns LANE_PATH/HUD_OBJECTS, so don't author them.
     if ((self.frame % 2 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS) or
-        (CS.radar_50hz_tick and self.CP.carFingerprint in HONDA_BOSCH_CANFD and self.CP.openpilotLongitudinalControl)):
+        (CS.radar_50hz_tick and self.CP.carFingerprint in HONDA_BOSCH_CANFD and self.CP.openpilotLongitudinalControl
+         and not CS.stock_acc_alive)):
       lead = hud_objects.lead_from_model(self.model, CS.out.vEgo)
       lead_d = lead.dRel if lead.status else 0.0  # extend the lane out to the lead (0 = no lead)
       self.dash_lane = self.lane_path_fitter.update(self.model, CS.out.vEgo, lead_d)
@@ -519,7 +544,7 @@ class CarController(CarControllerBase):
         cruise_setting = CS.cruise_setting
 
       can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CS.cruise_buttons, cruise_setting,
-                                                     self.CP.carFingerprint, bus=self.CAN.camera))
+                                                     CS.scm_ambient_light, self.CP.carFingerprint, bus=self.CAN.camera))
 
     new_actuators = actuators.as_builder()
     new_actuators.speed = self.speed

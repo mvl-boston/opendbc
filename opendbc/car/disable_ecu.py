@@ -32,6 +32,31 @@ def clear_all_dtcs(can_send, buses, functional_addr=FUNCTIONAL_ADDR_29BIT):
     can_send([CanData(functional_addr, CLEAR_DTC_ISOTP_SF, bus)])
 
 
+def clear_ecu_dtcs(can_recv, can_send, bus=0, addr=0x7d0, sub_addr=None, timeout=0.1, retry=10):
+  """Enter the extended diagnostic session and clear an ECU's stored DTCs (UDS 0x14), without
+  disabling its communication."""
+  carlog.warning(f"ecu clear DTCs {hex(addr), sub_addr} ...")
+
+  for i in range(retry):
+    try:
+      query = IsoTpParallelQuery(can_send, can_recv, bus, [(addr, sub_addr)], [EXT_DIAG_REQUEST], [EXT_DIAG_RESPONSE])
+
+      for _, _ in query.get_data(timeout).items():
+        carlog.warning("clear diagnostic information ...")
+        query = IsoTpParallelQuery(can_send, can_recv, bus, [(addr, sub_addr)], [CLEAR_DTC_REQUEST], [CLEAR_DTC_RESPONSE])
+        query.get_data(timeout)
+
+        carlog.warning("ecu DTCs cleared")
+        return True
+
+    except Exception:
+      carlog.exception("ecu clear DTCs exception")
+
+    carlog.error(f"ecu clear DTCs retry ({i + 1}) ...")
+  carlog.error("ecu clear DTCs failed")
+  return False
+
+
 def disable_ecu(can_recv, can_send, bus=0, addr=0x7d0, sub_addr=None, com_cont_req=b'\x28\x83\x01', timeout=0.1, retry=10, clear_dtc=False):
   """Silence an ECU by disabling sending and receiving messages using UDS 0x28.
   The ECU will stay silent as long as openpilot keeps sending Tester Present.
