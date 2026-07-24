@@ -32,6 +32,7 @@ static bool honda_fwd_brake = false;
 static bool honda_bosch_long = false;
 static bool honda_bosch_radarless = false;
 static bool honda_bosch_canfd = false;
+static bool honda_nidec_brakegrind_override = false;
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
 static HondaHw honda_hw = HONDA_NIDEC;
 
@@ -124,8 +125,17 @@ static void honda_rx_hook(const CANPacket_t *msg) {
   // and crv, which prevents the usual brake safety from working correctly. these
   // cars have a signal on 0x1BE which only detects user's brake being applied so
   // in these cases, this is used instead.
+  // pilot and ridgeline have additional override if brake_pressure > 0.1
   // most hondas: 0x17C
   // accord, crv: 0x1BE
+  // pilot, ridgeline override: 0x1A4
+  static bool brake_pressed_override = false;
+  if (honda_nidec_brakegrind_override) {
+    if (msg->addr == 0x1A4U) {
+      // 109.4 is equal to 0.1 cutoff before scaling
+      brake_pressed_override = (GET_BYTES(msg, 0U, 2U) > 110);
+    }
+  }
   if (honda_alt_brake_msg) {
     if (msg->addr == 0x1BEU) {
       brake_pressed = GET_BIT(msg, 4U);
@@ -137,6 +147,9 @@ static void honda_rx_hook(const CANPacket_t *msg) {
       brake_pressed = (GET_BIT(msg, 53U)) || (brake_switch && honda_brake_switch_prev);
       honda_brake_switch_prev = brake_switch;
     }
+  }
+  if (brake_pressed_override) {
+    brake_pressed = true;
   }
 
   if (msg->addr == 0x17CU) {
@@ -280,6 +293,7 @@ static safety_config honda_nidec_init(uint16_t param) {
                                      {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
 
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
+  const uint16_t HONDA_PARAM_BRAKEGRIND_OVER = 32;
 
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
@@ -293,6 +307,7 @@ static safety_config honda_nidec_init(uint16_t param) {
   safety_config ret;
 
   bool enable_nidec_alt = GET_FLAG(param, HONDA_PARAM_NIDEC_ALT);
+  honda_nidec_brakegrind_override = GET_FLAG(param, HONDA_PARAM_BRAKEGRIND_OVER);
 
   if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
