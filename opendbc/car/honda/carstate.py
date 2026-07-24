@@ -9,6 +9,7 @@ from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HON
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_TJA_CONTROL, \
                                                  HondaFlags, CruiseButtons, CruiseSettings, GearShifter, CarControllerParams
 from opendbc.car.interfaces import CarStateBase
+from opendbc.car.honda.hud_objects import HudObjectTracker
 
 TransmissionType = structs.CarParams.TransmissionType
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -55,12 +56,27 @@ class CarState(CarStateBase):
 
     self.initial_accFault_cleared = False
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
+    self.radar_ref_counter = 0
+    self.radar_5hz_tick_counter = 0
+    self.radar_5hz_tick = False
+    self.supp_tick_counter = 0
+    self.supp_tick = False
+    self.hud_tick_counter = 0
+    self.hud_tick = False
+    self.radar_50hz_tick_counter = 0
+    self.radar_50hz_tick = False
+
+    # Only radarless cars have a camera that emits HUD_OBJECTS to poll for secondary vehicle locations.
+    # On CAN FD cars the radar owned HUD_OBJECTS and it is disabled, so there is nothing to track.
+    self.hud_object_tracker = HudObjectTracker() if CP.carFingerprint in HONDA_BOSCH_RADARLESS else None
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
     if self.CP.enableBsm:
       cp_body = can_parsers[Bus.body]
+    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      cp_radar = can_parsers[Bus.radar]
 
     ret = structs.CarState()
 
@@ -137,7 +153,7 @@ class CarState(CarStateBase):
     if self.CP.carFingerprint not in HONDA_BOSCH:
       ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
 
-    elif self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    elif self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD):
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
     else:
       if self.CP.openpilotLongitudinalControl:
@@ -250,8 +266,57 @@ class CarState(CarStateBase):
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
-    if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
+    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      # The radar emits low-rate "tick reference" messages that keep running even while the radar's
+      # data messages are disabled, so we phase our look-alikes to the stock cadence off of them.
+      #
+      # There is a one-frame (10 ms) delay between reading a tick here in carstate and transmitting the
+      # response in carcontroller. The stock radar sends each data message in the SAME frame as its
+      # tick, so we pulse one frame BEFORE the next tick (counter == period-1): the +1 transmit delay
+      # then lands the message on the next tick frame, matching stock.
+      #   period (frames @100Hz): 0x710=100, 0x730=10, 0x750=2, RADAR_REFERENCE=20
+      self.radar_ref_counter = cp.vl["RADAR_REFERENCE"]["COUNTER"]
+
+      # 5 Hz: RADAR_REFERENCE (0x3A1) is on the powertrain bus (cp), not the radar bus (cp_radar).
+      # RADAR_LEAD does NOT ride with the reference; stock sends it ~120 ms (12 frames) after, so fire
+      # at frame 11 (+1 transmit delay -> ~120 ms).
+      ref_tick_vals = cp.vl_all.get("RADAR_REFERENCE", {}).get("COUNTER", [])
+      if len(ref_tick_vals) > 0:
+        self.radar_5hz_tick_counter = 0
+      else:
+        self.radar_5hz_tick_counter += 1
+      self.radar_5hz_tick = (self.radar_5hz_tick_counter == 11)
+
+      # 1 Hz: 0x710 -> BOSCH_SUPPLEMENTAL_CANFD, one frame before the next tick
+      supp_tick_vals = cp_radar.vl_all.get("RADAR_SUPP_TICK_REFERENCE", {}).get("IGNORE", [])
+      if len(supp_tick_vals) > 0:
+        self.supp_tick_counter = 0
+      else:
+        self.supp_tick_counter += 1
+      self.supp_tick = (self.supp_tick_counter == 99)
+
+      # 10 Hz: 0x730 -> RADAR_HUD_CANFD, one frame before the next tick
+      hud_tick_vals = cp_radar.vl_all.get("RADAR_HUD_TICK_REFERENCE", {}).get("IGNORE", [])
+      if len(hud_tick_vals) > 0:
+        self.hud_tick_counter = 0
+      else:
+        self.hud_tick_counter += 1
+      self.hud_tick = (self.hud_tick_counter == 9)
+
+      # 50 Hz: 0x750 -> LANE_PATH/HUD_OBJECTS, one frame before the next tick
+      tick_50hz_vals = cp_radar.vl_all.get("RADAR_50HZ_TICK_REFERENCE", {}).get("IGNORE", [])
+      if len(tick_50hz_vals) > 0:
+        self.radar_50hz_tick_counter = 0
+      else:
+        self.radar_50hz_tick_counter += 1
+      self.radar_50hz_tick = (self.radar_50hz_tick_counter == 1)
+    else:
+      self.supp_tick = False
+      self.hud_tick = False
+      self.radar_5hz_tick = False
+      self.radar_50hz_tick = False
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
@@ -264,6 +329,9 @@ class CarState(CarStateBase):
       *create_button_events(self.cruise_setting, prev_cruise_setting, SETTINGS_BUTTONS_DICT),
     ]
 
+    if self.hud_object_tracker is not None:
+      self.hud_object_tracker.update(cp_cam)
+
     return ret
 
   def get_can_parsers(self, CP):
@@ -273,5 +341,15 @@ class CarState(CarStateBase):
     }
     if CP.enableBsm:
       parsers[Bus.body] = CANParser(DBC[CP.carFingerprint][Bus.body], [], CanBus(CP).radar)
+    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      # These radar tick-reference messages are only read via vl_all, which (unlike vl) does not
+      # auto-subscribe messages, so they must be listed explicitly or they are never parsed.
+      #   0x710 RADAR_SUPP_TICK_REFERENCE (1 Hz), 0x730 RADAR_HUD_TICK_REFERENCE (10 Hz),
+      #   0x750 RADAR_50HZ_TICK_REFERENCE (50 Hz)
+      parsers[Bus.radar] = CANParser(DBC[CP.carFingerprint][Bus.radar], [
+        ("RADAR_SUPP_TICK_REFERENCE", 0),
+        ("RADAR_HUD_TICK_REFERENCE", 0),
+        ("RADAR_50HZ_TICK_REFERENCE", 0),
+      ], CanBus(CP).radar)
 
     return parsers

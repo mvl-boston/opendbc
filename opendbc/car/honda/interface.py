@@ -2,7 +2,7 @@
 import numpy as np
 from opendbc.car import get_safety_config, structs, uds
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.disable_ecu import disable_ecu
+from opendbc.car.disable_ecu import disable_ecu, clear_all_dtcs
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HondaSafetyFlags
@@ -130,9 +130,10 @@ class CarInterface(CarInterfaceBase):
         CarControllerParams.BOSCH_GAS_LOOKUP_BP = [-0.2, 2.0]
 
     elif candidate == CAR.HONDA_ACCORD_11G:
-      ret.steerActuatorDelay = 0.22
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 5200], [0, 2560, 12747]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
+      ret.steerActuatorDelay = 0.3
+      ret.lateralTuning.pid.kf = 0.000035
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     elif candidate == CAR.ACURA_ILX:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]  # TODO: determine if there is a dead zone at the top end
@@ -210,8 +211,10 @@ class CarInterface(CarInterfaceBase):
           CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
 
     elif candidate == CAR.ACURA_MDX_4G_MMR:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 4920], [0, 2560, 12000]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
+      ret.steerActuatorDelay = 0.3
+      ret.lateralTuning.pid.kf = 0.000035
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     elif candidate == CAR.ACURA_TLX_2G_MMR:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # start with 4096
@@ -268,14 +271,16 @@ class CarInterface(CarInterfaceBase):
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.ACURA_MDX_4G:
-      ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 4209], [0, 2560, 9150]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
+      ret.steerActuatorDelay = 0.3
+      ret.lateralTuning.pid.kf = 0.000035
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     elif candidate == CAR.HONDA_PASSPORT_4G:
-      ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 5120], [0, 2560, 12789]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
+      ret.steerActuatorDelay = 0.3
+      ret.lateralTuning.pid.kf = 0.000035
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     else:
       ret.steerActuatorDelay = 0.15
@@ -327,10 +332,27 @@ class CarInterface(CarInterfaceBase):
   def init(CP, can_recv, can_send, communication_control=None):
     if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and CP.openpilotLongitudinalControl:
       # 0x80 silences response
+      clear_dtc = False
       if communication_control is None:
         communication_control = bytes([uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
                                        uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT])
-      disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1, com_cont_req=communication_control)
+        # The CAN FD radar stores DTCs while disabled; clear them on disable so stale codes from a
+        # previous drive don't fault the brake module at startup.
+        clear_dtc = CP.carFingerprint in HONDA_BOSCH_CANFD
+      if clear_dtc:
+        # The brake module (VSA) latches a radar lost-communication DTC when the radar goes silent for
+        # more than ~0.1 s at cutover. The DTC matures over trips (Honda two-trip detection): once it is
+        # confirmed from a previous drive, the very next comm-loss detection trips BRAKE_MODULE.CRUISE_FAULT
+        # (accFaulted) ~0.16 s after the radar is silenced, and it stays set for the whole drive. Only a
+        # drive with the radar alive (openpilot longitudinal off) heals it.
+        # Broadcast-clear stored DTCs on all ECUs (powertrain and camera buses) BEFORE silencing the radar:
+        # the maturation counter is reset every drive, so this drive's comm-loss stays a first-trip pending
+        # code that never faults. Clearing must happen before the disable because the fault trips ~0.16 s
+        # after radar silence while a DTC clear can take an ECU several hundred ms to process.
+        # NOTE: init() runs while the panda is still in the ELM327 safety mode, which allows the 29-bit
+        # functional diagnostic address on every bus, so the car safety mode needs no TX allowlist entry.
+        clear_all_dtcs(can_send, [CanBus(CP).pt, CanBus(CP).camera])
+      disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1, com_cont_req=communication_control, clear_dtc=clear_dtc)
 
   @staticmethod
   def deinit(CP, can_recv, can_send):

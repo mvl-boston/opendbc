@@ -144,7 +144,8 @@ def create_bosch_supplemental_1(packer, CAN):
   return packer.make_can_msg("BOSCH_SUPPLEMENTAL_1", CAN.lkas, values)
 
 
-def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, hud_v_cruise, is_metric, acc_hud, speed_control):
+def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, hud_v_cruise, is_metric, acc_hud, speed_control,
+                   alphalong):
   acc_hud_values = {
     'CRUISE_SPEED': hud_v_cruise,
     'ENABLE_MINI_CAR': 1 if enabled else 0,
@@ -155,10 +156,14 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     'SET_ME_X01_2': 1,
   }
 
+  if CP.carFingerprint in HONDA_BOSCH_CANFD:
+    acc_hud_values['SET_ME_X01'] = int(enabled and (bool(acc_hud_values['HUD_LEAD']) or (pcm_accel < 0.2)))
+    acc_hud_values['SET_ME_X01_2'] = int(enabled and (bool(acc_hud_values['HUD_LEAD']) or (pcm_accel < 0.2)))
+
   if CP.carFingerprint in HONDA_BOSCH:
     acc_hud_values['ACC_ON'] = int(enabled)
-    acc_hud_values['FCM_OFF'] = 1
-    acc_hud_values['FCM_OFF_2'] = 1
+    acc_hud_values['FCM_OFF'] = bool(0)
+    acc_hud_values['FCM_OFF_2'] = bool(0)
   else:
     # Shows the distance bars, TODO: stock camera shows updates temporarily while disabled
     acc_hud_values['ACC_ON'] = int(enabled)
@@ -173,7 +178,8 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
   return packer.make_can_msg("ACC_HUD", bus, acc_hud_values)
 
 
-def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed):
+def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed, CS,
+                    lkas_state_change=None):
   commands = []
 
   lkas_hud_values = {
@@ -185,6 +191,11 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     'BEEP': 0,
   }
 
+  # MDX CAN FD factory logs show the stock camera holds LKAS_STATE_CHANGE low, pulsing it high for ~3s
+  # only when the HUD state changes; holding it high permanently suppresses the dash lane-line rendering.
+  if lkas_state_change is not None:
+    lkas_hud_values['LKAS_STATE_CHANGE'] = int(lkas_state_change)
+
   if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
     lkas_hud_values['LANE_LINES'] = 3
     lkas_hud_values['DASHED_LANES'] = hud_control.lanesVisible
@@ -193,6 +204,16 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     # TODO: needed for Bosch CAN FD?
     if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
+
+    if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
+      lkas_hud_values['LKAS_PROBLEM'] = CS.out.steerFaultPermanent # CS.lkas_hud['LKAS_PROBLEM']
+      lkas_hud_values['DASHED_LANES'] = 1  # show gray lanes when disengaged
+
+    if CP.carFingerprint in HONDA_BOSCH_CANFD:
+      # Don't let steer saturation flicker SOLID_LANES: every payload change must coincide with an
+      # LKAS_STATE_CHANGE pulse (see carcontroller), and a 10Hz flicker would keep the pulse
+      # re-triggering, which suppresses the dash lane lines.
+      lkas_hud_values['SOLID_LANES'] = hud_control.lanesVisible
 
   if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
     lkas_hud_values['RDM_OFF'] = 1
@@ -227,19 +248,117 @@ def create_legacy_brake_command(packer, bus):
   return packer.make_can_msg("LEGACY_BRAKE_COMMAND", bus, {})
 
 
-def spam_buttons_command(packer, CAN, button_val, car_fingerprint):
+def spam_buttons_command(packer, CAN, cruise_button, cruise_setting, car_fingerprint, bus=None):
   values = {
-    'CRUISE_BUTTONS': button_val,
-    'CRUISE_SETTING': 0,
+    'CRUISE_BUTTONS': cruise_button,
+    'CRUISE_SETTING': cruise_setting,
   }
-  # send buttons to camera on radarless (camera does ACC) cars
-  bus = CAN.camera if car_fingerprint in HONDA_BOSCH_RADARLESS else CAN.pt
+  if bus is None:
+    # send buttons to camera on radarless (camera does ACC) cars
+    bus = CAN.camera if car_fingerprint in HONDA_BOSCH_RADARLESS else CAN.pt
   return packer.make_can_msg("SCM_BUTTONS", bus, values)
+
+
+def create_radar_hud_canfd(packer, bus, acc, acc_pulse=False):
+  values = {
+    # The stock radar only raises this bit in short (~2-6 s) bursts right after ACC engages/resumes,
+    # then drops it for the rest of the drive; it is never held for a whole engagement.
+    'CMBS_ENABLED_MAYBE': 1 if (acc and acc_pulse) else 0,
+    'ACC_ON': acc,
+    'SET_ME_X01': 0x01,
+    'SET_ME_X01_2': 0x01,
+  }
+  return packer.make_can_msg("RADAR_HUD_CANFD", bus, values)
+
+
+def create_canfd_supplemental(packer, bus):
+  values = {
+    'SET_ME_X01': 0x01,
+    'SET_ME_X41': 0x41,
+  }
+  return packer.make_can_msg("BOSCH_SUPPLEMENTAL_CANFD", bus, values)
+
+
+# Radar MUX banks: 1-10, 17-26, 33-42, 49-58. Each bank is a fresh sweep of path points.
+RADAR_MUX_BANK_STARTS = (1, 17, 33, 49)
+# "no detection" sentinel the stock radar uses for an empty path point / object slot
+PATH_OFFSET_INVALID = 2047
+
+
+def _lane_path_offsets(radar_mux):
+  # The stock radar reports path points as a sweep within each MUX bank: the first point (bank start)
+  # is 0, the second has the first two offsets valid (0) and the rest invalid, and the remaining points
+  # are fully invalid. Match that exact per-MUX pattern so the camera sees a consistent empty path.
+  pos = next((radar_mux - start for start in RADAR_MUX_BANK_STARTS if start <= radar_mux <= start + 9), 0)
+  if pos == 0:
+    return (0, 0, 0, 0)
+  if pos == 1:
+    return (0, 0, PATH_OFFSET_INVALID, PATH_OFFSET_INVALID)
+  return (PATH_OFFSET_INVALID,) * 4
+
+
+def create_canfd_50hz_radar_messages(packer, bus, radar_mux):
+  commands = []
+
+  offsets = _lane_path_offsets(radar_mux)
+  lane_path_values = {
+    'MUX': radar_mux,
+    'PATH_OFFSET_1': offsets[0],
+    'PATH_OFFSET_2': offsets[1],
+    'PATH_OFFSET_3': offsets[2],
+    'PATH_OFFSET_4': offsets[3],
+  }
+  commands.append(packer.make_can_msg('LANE_PATH', bus, lane_path_values))
+
+  # Empty-object-slot sentinel the stock radar transmits (no lead/object): max distances, CAR_TYPE=-1.
+  hud_objects_values = {
+    'MUX': radar_mux,
+    'OBJECT_ID': 0,
+    'IS_LEAD_CAR': 0,
+    'CAR_TYPE': -1,
+    'ROTATION': -128,
+    'LONG_DIST': 196.9,
+    'LAT_DIST': 204.7,
+  }
+  commands.append(packer.make_can_msg('HUD_OBJECTS', bus, hud_objects_values))
+
+  return commands
+
+
+def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr, lane_path_length=6, left_lane=0, right_lane=0):
+  commands = []
+
+  radar_lead_values = {
+    'CNTR_REF': radar_ref_cntr,
+    'SET_ME_X01': 0x01,
+    # stock radar transmits a constant 140 here (confirmed from logs); 120 causes a camera mismatch
+    'TARGET_SPEED_MAYBE': 140,
+    # stock: per-side lane-line detection status (3 = line present, 0 = none), in lockstep with the
+    # camera's LKAS_HUD LANE_LINES bits. This is the CAN FD counterpart of radarless LKAS_HUD_2's
+    # LEFT_LANE/RIGHT_LANE; the dash does not draw lane lines while both are 0.
+    'LEFT_LANE': left_lane,
+    'RIGHT_LANE': right_lane,
+    # stock: number of valid points in the current LANE_PATH sweep (6 = idle). The dash cross-checks
+    # this against the path's in-band 2047 terminator; a mismatch suppresses the lane-line rendering.
+    'LANE_PATH_LENGTH': lane_path_length,
+  }
+  commands.append(packer.make_can_msg('RADAR_LEAD', bus, radar_lead_values))
+
+  radar_lead2_values = {
+    'SET_ME_X88': 136,
+    'SET_ME_X78': 120,
+    'LEAD_DISTANCE_MAYBE': 0,
+  }
+  commands.append(packer.make_can_msg('RADAR_LEAD2', bus, radar_lead2_values))
+
+  return commands
 
 
 def honda_checksum(address: int, sig, d: bytearray) -> int:
   s = 0
   extended = address > 0x7FF
+  # Higher extended-ID range adds 10, lower adds 3. TODO: confirm the exact boundary.
+  high_extended = address > 0x100000
   addr = address
   while addr:
     s += addr & 0xF
@@ -251,5 +370,5 @@ def honda_checksum(address: int, sig, d: bytearray) -> int:
     s += (x & 0xF) + (x >> 4)
   s = 8 - s
   if extended:
-    s += 3
+    s += 10 if high_extended else 3
   return s & 0xF
