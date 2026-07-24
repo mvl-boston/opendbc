@@ -12,6 +12,8 @@ from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSC
                                      HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
+from opendbc.car.honda import lane_path
+from opendbc.car.honda import hud_objects
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -125,6 +127,9 @@ class CarController(CarControllerBase):
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.params = CarControllerParams(CP)
     self.CAN = hondacan.CanBus(CP)
+    self.hud_object_author = hud_objects.HudObjectAuthor()
+    self.lane_path_fitter = lane_path.LanePathFitter()
+    self.dash_lane = lane_path.DashLane([lane_path.OFFSET_UNAVAILABLE] * lane_path.NUM_PTS, 0.0, False, False)
     self.tja_control = CP.carFingerprint in HONDA_BOSCH_TJA_CONTROL
     self.param_writer = HondaParamWriter()
 
@@ -147,6 +152,7 @@ class CarController(CarControllerBase):
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
     self.pitch = 0.0
+    self.radar_mux = 0
 
     # Bosch extra-brake controller
     self.brake_pid = PIDController(k_p=([0,], [0,]),
@@ -195,7 +201,7 @@ class CarController(CarControllerBase):
     # **** process the car messages ****
 
     # steer torque is converted back to CAN reference (positive when steering right)
-    apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
+    apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX + 200,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
     speed_control = 1 if ((accel <= 0.0) and (CS.out.vEgo == 0)) else 0
@@ -208,6 +214,41 @@ class CarController(CarControllerBase):
       if self.frame % 10 == 0:
         bus = 0 if self.CP.carFingerprint in HONDA_BOSCH_CANFD else 1
         can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
+
+    # simulate canfd radar to prevent faults
+    # These radar look-alikes are consumed by both the camera ECU (behind the relay, on the camera
+    # bus) and the powertrain (radar bus). openpilot's own transmissions are not forwarded across the
+    # open relay, so they must be sent explicitly on both buses. Each message is packed exactly once
+    # so the packer's counter/checksum only advance once per cycle, then the identical bytes are
+    # mirrored onto both buses (re-packing would double-increment the counter and desync the buses).
+    if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and self.CP.openpilotLongitudinalControl:
+      radar_msgs = []
+      if self.frame % 10 == 0:
+        radar_msgs.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled))
+      if CS.supp_tick:
+        radar_msgs.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
+      if self.frame % 2 == 0:
+        # Cycle the radar MUX through the same banks the stock radar uses: 1-10, 17-26, 33-42, 49-58.
+        # These must be elif (not sequential if): a bare `if` that sets the bank start would fall
+        # through to the `else` increment, skipping the bank-start values (17, 33, 49).
+        if self.radar_mux >= 58:
+          self.radar_mux = 1
+        elif self.radar_mux == 10:
+          self.radar_mux = 17
+        elif self.radar_mux == 26:
+          self.radar_mux = 33
+        elif self.radar_mux == 42:
+          self.radar_mux = 49
+        else:
+          self.radar_mux += 1
+        radar_msgs.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.pt, self.radar_mux))
+      if self.frame % 20 == 0:
+        radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter))
+
+      # mirror each packed frame onto both the powertrain bus and the camera bus
+      for addr, dat, _ in radar_msgs:
+        can_sends.append((addr, dat, self.CAN.pt))
+        can_sends.append((addr, dat, self.CAN.camera))
 
     # Send steering command.
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
@@ -338,25 +379,51 @@ class CarController(CarControllerBase):
           pcm_speed = 25.0 / 3.6
 
       if self.CP.openpilotLongitudinalControl:
+        if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+          pcm_accel = actuators.accel
         # On Nidec, this also controls longitudinal positive acceleration
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
-                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control))
+                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
+                                                 self.CP.openpilotLongitudinalControl))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       reduced_steering = CS.out.steeringPressed
       steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
       can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
-                                                steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed))
+                                                steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed, CS))
 
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
-        if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS):
+        if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD):
           can_sends.append(hondacan.create_radar_hud(self.packer, self.CAN.pt))
         if self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH:
           can_sends.append(hondacan.create_legacy_brake_command(self.packer, self.CAN.pt))
         if self.CP.carFingerprint not in HONDA_BOSCH:
           self.speed = pcm_speed
           self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
+
+    # Render OP's lane and lead car on the dash
+    if self.frame % 2 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      lead = hud_objects.lead_from_model(self.model, CS.out.vEgo)
+      lead_d = lead.dRel if lead.status else 0.0  # extend the lane out to the lead (0 = no lead)
+      self.dash_lane = self.lane_path_fitter.update(self.model, CS.out.vEgo, lead_d)
+      # Important: same mux for lane_path and hud_objects. Lane display freezes if muxes don't match.
+      mux = lane_path.MUX_CYCLE[(self.frame // 2) % len(lane_path.MUX_CYCLE)]
+      can_sends.append(lane_path.create_lane_path(self.packer, self.CAN.lkas, self.dash_lane.offsets, mux))
+
+      tracks = CS.hud_object_tracker.snapshot()
+      if self.CP.openpilotLongitudinalControl:
+        # For OP long, replace lead car and forward rest of objects
+        can_sends.append(self.hud_object_author.create(self.packer, self.CAN.lkas, lead, tracks, mux, now_nanos * 1e-9))
+      else:
+        # For ACC, forward objects but with our mux
+        can_sends.append(hud_objects.forward_hud_object(self.packer, self.CAN.lkas, mux, tracks))
+
+    if self.frame % 20 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      # COUNTER_2 trails the packer's COUNTER (frame//20 % 4) by one. TODO: do we need the - 1 trail?
+      dl = self.dash_lane
+      can_sends.append(lane_path.create_lkas_hud_2(self.packer, self.CAN.lkas, (self.frame // 20 - 1) % 4,
+                                                   dl.reach, dl.lane_cross, dl.left_line, dl.right_line))
 
     new_actuators = actuators.as_builder()
     new_actuators.speed = self.speed
