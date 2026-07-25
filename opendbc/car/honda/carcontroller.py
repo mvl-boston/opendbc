@@ -416,8 +416,8 @@ class CarController(CarControllerBase):
             self.brake_pid_factor = self.brake_pid.update(error = -(self.accel - CS.out.aEgo) * apply_brake, speed = CS.out.vEgo)
           if (CS.out.vEgo >= 2): # save pid above 2m/s
             self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
-          if (CS.out.vEgo < 1e-3): # restore 2m/s pid after stopped
-            self.brake_pid.i = self.brake_pid_factor_non_lowspeed
+          if (CS.out.vEgo < 1e-3) and (CS.out.aEgo < 0): # restore 2m/s pid after stopped if lowspeed was stronger
+            self.brake_pid.i = min(self.brake_pid_factor_non_lowspeed, self.brake_pid.i)
           brakefactor = 1 + self.brake_pid_factor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
