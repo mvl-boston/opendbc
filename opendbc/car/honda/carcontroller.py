@@ -317,6 +317,9 @@ class CarController(CarControllerBase):
       pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
       gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
       pcm_accel = int(np.clip((self.gas_alpha + gas_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+    max_speedcontrol = (pcm_speed > 99.999)
+    prior_speedfactor = self.speedfactor
+    prior_speedalpha = self.speedalpha
 
     # feedforward for Nidec decaying-average gas pedal
     max_increase = 2  # equivalent to 20 units per 10hz frame
@@ -345,6 +348,9 @@ class CarController(CarControllerBase):
         speedfactor_error = (self.accel - CS.out.aEgo)
         self.speedfactor *= (1 + 0.0001 * speedfactor_error * self.accel)
         self.speedalpha += (0.001 * speedfactor_error)
+        if max_speedcontrol: # only allow learning reductions
+          self.speedfactor = min(prior_speedfactor, self.speedfactor)
+          self.speedalpha = min(prior_speedalpha, self.speedalpha)
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
