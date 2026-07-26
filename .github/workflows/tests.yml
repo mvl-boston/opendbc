@@ -3,11 +3,11 @@ name: tests
 on:
   push:
     branches:
-      - 0111-op-honda-dev
+      - master
   pull_request:
 
 env:
-  PARENT_MVL_BRANCH: o
+  PARENT_MVL_BRANCH: 0111-op-honda-dev
 
 jobs:
   tests:
