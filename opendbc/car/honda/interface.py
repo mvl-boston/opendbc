@@ -291,8 +291,9 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
-    # These cars use alternate user brake msg (0x1BE)
-    if 0x1BE in fingerprint[CAN.pt]:
+    # These cars use alternate user brake msg (0x1BE). Only Bosch DBCs define BRAKE_MODULE,
+    # so the autodetect must not trigger on other platforms (e.g. a Nidec fingerprint containing 0x1BE).
+    if candidate in HONDA_BOSCH and 0x1BE in fingerprint[CAN.pt]:
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
 
     if ret.flags & HondaFlags.BOSCH_ALT_BRAKE:
