@@ -43,8 +43,8 @@ class HudObjectTracker:
     # to 0-based indices 0-9.
     # Using vl_all to catch any missed frames, though not strictly necessary since update() is called
     # at 100Hz and this signal updates at 50Hz.
-    # Touching vl first registers the message.
-    _ = cp_cam.vl["HUD_OBJECTS"]
+    # The message is subscribed with NaN frequency in get_can_parsers: not every radarless camera
+    # emits it, so it must not gate the parser's validity.
     vla = cp_cam.vl_all["HUD_OBJECTS"]
 
     muxes = vla["MUX"]
