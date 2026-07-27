@@ -483,7 +483,8 @@ class CarController(CarControllerBase):
     if ((self.frame % 2 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS) or
         (CS.radar_50hz_tick and self.CP.carFingerprint in HONDA_BOSCH_CANFD and self.CP.openpilotLongitudinalControl
          and not CS.stock_acc_alive)):
-      lead = hud_objects.lead_from_model(self.model, CS.out.vEgo)
+      leads = hud_objects.leads_from_model(self.model, CS.out.vEgo)
+      lead = leads[0]
       lead_d = lead.dRel if lead.status else 0.0  # extend the lane out to the lead (0 = no lead)
       self.dash_lane = self.lane_path_fitter.update(self.model, CS.out.vEgo, lead_d)
       # Important: same mux for lane_path and hud_objects. Lane display freezes if muxes don't match.
@@ -505,7 +506,8 @@ class CarController(CarControllerBase):
       tracks = CS.hud_object_tracker.snapshot() if CS.hud_object_tracker is not None else None
       if self.CP.openpilotLongitudinalControl:
         # For OP long, replace lead car and forward rest of objects
-        hud_msg = self.hud_object_author.create(self.packer, self.CAN.lkas, lead, tracks, mux, now_nanos * 1e-9)
+        hud_msg = self.hud_object_author.create(self.packer, self.CAN.lkas, lead, tracks, mux, now_nanos * 1e-9,
+                                                extra_leads=leads[1:])
       else:
         # For ACC, forward objects but with our mux
         hud_msg = hud_objects.forward_hud_object(self.packer, self.CAN.lkas, mux, tracks)
