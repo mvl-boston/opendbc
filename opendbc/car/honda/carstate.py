@@ -168,7 +168,7 @@ class CarState(CarStateBase):
     if self.CP.carFingerprint not in HONDA_BOSCH:
       ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
 
-    elif self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD):
+    elif self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
     else:
       if self.CP.openpilotLongitudinalControl:
@@ -371,14 +371,19 @@ class CarState(CarStateBase):
 
   def get_can_parsers(self, CP):
     pt_messages = []
+    cam_messages = []
     if CP.carFingerprint in HONDA_BOSCH_CANFD:
       # Radar-alive and relay-open detection for the deferred radar disable (see carcontroller).
       # Both messages intentionally go silent (the radar is disabled, the camera ends up behind the
       # open relay), so subscribe with NaN frequency to skip the alive/timeout checks.
       pt_messages += [("ACC_CONTROL", float('nan')), ("STEERING_CONTROL", float('nan'))]
+    if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      # HUD_OBJECTS is polled by the HudObjectTracker, but not every radarless camera emits it,
+      # so subscribe with NaN frequency to skip the alive/timeout checks.
+      cam_messages += [("HUD_OBJECTS", float('nan'))]
     parsers = {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).pt),
-      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).camera),
+      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_messages, CanBus(CP).camera),
     }
     if CP.enableBsm:
       parsers[Bus.body] = CANParser(DBC[CP.carFingerprint][Bus.body], [], CanBus(CP).radar)
