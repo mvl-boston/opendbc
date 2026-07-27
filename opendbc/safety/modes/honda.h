@@ -47,6 +47,9 @@ static bool honda_bosch_radarless = false;
 static bool honda_bosch_canfd = false;
 static bool honda_nidec_hybrid = false;
 static bool honda_stock_longitudinal = false;
+// counts down on each stock SCM_BUTTONS rx, topped up on each OP SCM_BUTTONS tx to the camera:
+// the stock buttons are only blocked from forwarding while OP's replacement stream is actually flowing
+static int honda_op_buttons_fresh = 0;
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
 static HondaHw honda_hw = HONDA_NIDEC;
 
@@ -134,6 +137,11 @@ static void honda_rx_hook(const CANPacket_t *msg) {
   // state machine to enter and exit controls for button enabling
   // 0x1A6 for the ILX, 0x296 for the Civic Touring
   if (((msg->addr == 0x1A6U) || (msg->addr == 0x296U)) && (msg->bus == pt_bus)) {
+    // stock buttons act as the clock for the OP button takeover freshness (see honda_bosch_fwd_hook)
+    if (honda_op_buttons_fresh > 0) {
+      honda_op_buttons_fresh--;
+    }
+
     int button = (msg->data[0] & 0xE0U) >> 5;
 
     int cruise_setting = (msg->data[(msg->addr == 0x296U) ? 0U : 5U] & 0x0CU) >> 2U;
@@ -318,15 +326,38 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   // FORCE CANCEL: safety check only relevant when spamming the cancel button in Bosch HW
   // ensuring that only the cancel button press is sent (VAL 2) when controls are off.
   // This avoids unintended engagements while still allowing resume spam
-  if (((msg->addr == 0x1A6U) || (msg->addr == 0x296U)) && !controls_allowed && (msg->bus == bus_buttons)) {
+  // On CAN FD, buttons are also sent to the camera (bus 2) to take over SCM_BUTTONS while engaged,
+  // so the same check applies there.
+  const bool is_buttons_bus = (msg->bus == bus_buttons) || (honda_bosch_canfd && (msg->bus == 2U));
+  if (((msg->addr == 0x1A6U) || (msg->addr == 0x296U)) && !controls_allowed && is_buttons_bus) {
     if (((msg->data[0] >> 5) & 0x7U) != 2U) {
       tx = false;
     }
   }
 
+  // OP is streaming SCM_BUTTONS to the camera: block the stock buttons from forwarding while this
+  // stream stays fresh (see honda_bosch_fwd_hook). Topped up here so the block fails safe: if OP
+  // stops sending (e.g. it refuses to engage while the panda's button state machine allowed controls),
+  // the stock buttons resume forwarding within ~10 button frames (~0.4 s).
+  if (tx && (msg->addr == 0x296U) && (msg->bus == 2U)) {
+    honda_op_buttons_fresh = 10;
+  }
+
   // Only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
+  // On CAN FD the radar is silenced from CarController once the comma relay is open (rather than from
+  // CarInterface.init() under the ELM327 mode, which raced the safety-mode switch and could leave the
+  // brake module without ACC_CONTROL long enough to latch CRUISE_FAULT), so additionally allow exactly
+  // the extended-diagnostic-session request and the suppressed-response CommunicationControl
+  // disableRxAndTx request. The corresponding enable stays blocked: re-enabling the radar into OP's
+  // ACC_CONTROL stream would double up control messages while driving.
   if (msg->addr == 0x18DAB0F1U) {
-    if ((GET_BYTES(msg, 0, 4) != 0x00803E02U) || (GET_BYTES(msg, 4, 4) != 0x0U)) {
+    const uint32_t first_bytes = GET_BYTES(msg, 0, 4);
+    bool allowed = (first_bytes == 0x00803E02U);
+    if (honda_bosch_canfd) {
+      allowed = allowed || (first_bytes == 0x00031002U);  // 02 10 03: extended diagnostic session
+      allowed = allowed || (first_bytes == 0x03832803U);  // 03 28 83 03: CommunicationControl disable rx/tx
+    }
+    if (!allowed || (GET_BYTES(msg, 4, 4) != 0x0U)) {
       tx = false;
     }
   }
@@ -377,6 +408,7 @@ static safety_config honda_nidec_init(uint16_t param) {
   honda_bosch_long = false;
   honda_bosch_radarless = false;
   honda_bosch_canfd = false;
+  honda_op_buttons_fresh = 0;
 
   safety_config ret;
 
@@ -449,14 +481,24 @@ static safety_config honda_bosch_init(uint16_t param) {
                                              {0x6CD5557, 0, 8, .check_relay = true}};  // Bosch radarless (HUD_OBJECTS authored in stock ACC too)
 
   static CanMsg HONDA_RADARLESS_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x33D, 0, 8, .check_relay = true}, {0x1C8, 0, 8, .check_relay = true},
-                                                  {0x30C, 0, 8, .check_relay = true}, {0x6CD5554, 0, 8, .check_relay = true}, {0xF31AA54, 0, 8, .check_relay = true},
-                                                  {0x6CD5557, 0, 8, .check_relay = true}};  // Bosch radarless w/ gas and brakes
+                                                  {0x30C, 0, 8, .check_relay = true}, {0x296, 2, 4, .check_relay = false}, {0x6CD5554, 0, 8, .check_relay = true},
+                                                  {0xF31AA54, 0, 8, .check_relay = true}, {0x6CD5557, 0, 8, .check_relay = true}};  // Bosch radarless w/ gas and brakes
 
-  static CanMsg HONDA_CANFD_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x296, 0, 4, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}}; // Bosch CANFD
+  // 0x296 on bus 2: OP takes over SCM_BUTTONS towards the camera to auto-disable stock LKAS and to block
+  // the driver's LKAS button while engaged (the physical SCM_BUTTONS is blocked from forwarding, see fwd hook)
+  static CanMsg HONDA_CANFD_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x296, 0, 4, .check_relay = false}, {0x296, 2, 4, .check_relay = false},
+                                         {0x33D, 0, 8, .check_relay = true}}; // Bosch CANFD
 
-  static CanMsg HONDA_CANFD_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x1DF, 0, 8, .check_relay = false}, {0x1EF, 0, 8, .check_relay = false},
-                                              {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}, {0x18DAB0F1, 0, 8, .check_relay = false},
-                                              {0x39F, 0, 8, .check_relay = false}};
+  // The radar look-alikes (0x310, 0x6CD5558, 0x6CD5559, 0xF31AA52, 0xF31AA5C, 0x1A45AA4E) are consumed by both
+  // the camera (behind the relay on the camera bus, 2) and the powertrain (radar bus, 0). openpilot TX is not
+  // forwarded across the open relay, so each is sent on both buses; the control messages stay on bus 0.
+  static CanMsg HONDA_CANFD_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x1DF, 0, 8, .check_relay = true}, {0x1EF, 0, 8, .check_relay = false},
+                                              {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}, {0x296, 2, 4, .check_relay = false},
+                                              {0x39F, 0, 8, .check_relay = false}, {0x18DAB0F1, 0, 8, .check_relay = false},
+                                              {0x310, 0, 8, .check_relay = false}, {0x6CD5558, 0, 8, .check_relay = true}, {0x6CD5559, 0, 8, .check_relay = false},
+                                              {0xF31AA52, 0, 8, .check_relay = false}, {0xF31AA5C, 0, 8, .check_relay = true}, {0x1A45AA4E, 0, 8, .check_relay = false},
+                                              {0x310, 2, 8, .check_relay = false}, {0x6CD5558, 2, 8, .check_relay = true}, {0x6CD5559, 2, 8, .check_relay = false},
+                                              {0xF31AA52, 2, 8, .check_relay = false}, {0xF31AA5C, 2, 8, .check_relay = true}, {0x1A45AA4E, 2, 8, .check_relay = false}};
 
   const uint16_t HONDA_PARAM_ALT_BRAKE = 1;
   const uint16_t HONDA_PARAM_RADARLESS = 8;
@@ -484,6 +526,7 @@ static safety_config honda_bosch_init(uint16_t param) {
 
   honda_hw = HONDA_BOSCH;
   honda_brake_switch_prev = false;
+  honda_op_buttons_fresh = 0;
   honda_bosch_radarless = GET_FLAG(param, HONDA_PARAM_RADARLESS);
   honda_bosch_canfd = GET_FLAG(param, HONDA_PARAM_BOSCH_CANFD);
   // Checking for alternate brake override from safety parameter
@@ -558,8 +601,20 @@ const safety_hooks honda_nidec_hooks = {
 static bool honda_bosch_fwd_hook(int bus_num, int addr) {
   bool block_msg = false;
 
-  // For radarless, OP sends SCM_BUTTONS (0x296) when engaged. Only forward when disengaged.
-  if (honda_bosch_radarless && controls_allowed && (bus_num == 0) && (addr == 0x296)) {
+  // On radarless and CAN FD, OP takes over SCM_BUTTONS (0x296) towards the camera when engaged, to
+  // auto-disable stock LKAS and block the driver's LKAS button (the touch-steering-wheel timer would
+  // otherwise force a disengagement). Only block the stock buttons while OP's replacement stream is
+  // actually flowing (honda_op_buttons_fresh): the camera needs SCM_BUTTONS content beyond the buttons
+  // (it raises an adaptive high beam error when the message goes missing), so a bare controls_allowed
+  // gate would starve it whenever the panda allows controls but OP refuses to engage.
+  if ((honda_bosch_radarless || honda_bosch_canfd) && controls_allowed && (honda_op_buttons_fresh > 0) &&
+      (bus_num == 0) && (addr == 0x296)) {
+    block_msg = true;
+  }
+
+  // CAN FD: the radar disable handshake happens after the relay is open, so block the radar's UDS
+  // responses from forwarding to the camera (the camera doesn't need them)
+  if (honda_bosch_canfd && (bus_num == 0) && (addr == 0x18DAF1B0)) {
     block_msg = true;
   }
 
