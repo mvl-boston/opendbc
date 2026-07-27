@@ -183,7 +183,9 @@ def lead_rotation(lateral_left_m: float) -> int:
   return -magnitude if lateral_left_m > 0 else magnitude
 
 
-LEAD_PROB_ON = 0.5   # modelV2 leadsV3 prob to treat a lead as present
+LEAD_PROB_ON = 0.5    # modelV2 leadsV3 prob to start rendering a lead
+LEAD_PROB_OFF = 0.35  # ...and to keep rendering it (hysteresis against threshold flapping)
+LEAD_HOLD_S = 0.6     # s: bridge a dropped lead briefly so single-frame prob dips don't blink the marker
 
 # modelV2.leadsV3's three entries are the model's lead prediction at time horizons t = 0 s, +2 s and
 # +4 s -- NOT three simultaneous cars. All three usually describe the same physical vehicle, so the
@@ -203,6 +205,7 @@ class ModelLead:
   dRel: float
   yRel: float   # +left
   vRel: float
+  prob: float = 0.0   # model lead prob; carried so the author can apply on/off hysteresis
 
 
 def leads_from_model(model, v_ego, n=3):
@@ -223,8 +226,19 @@ def leads_from_model(model, v_ego, n=3):
 
 
 def lead_from_model(model, v_ego):
-  """OP's lead from modelV2.leadsV3[0] (see leads_from_model)."""
-  return leads_from_model(model, v_ego, n=1)[0]
+  """OP's lead from modelV2.leadsV3[0] for radarless cars. modelV2's lateral is +right, so we negate it to match
+  the dash's +left. v is made relative (v - vEgo) for the smoother's feed-forward. Lead is inactive when the
+  lead is missing or below LEAD_PROB_ON.
+  """
+  if model is None or len(model.leadsV3) == 0:
+    return ModelLead(False, 0.0, 0.0, 0.0)
+  lead = model.leadsV3[0]
+  if len(lead.x) == 0:
+    return ModelLead(False, 0.0, 0.0, 0.0)
+  # data is populated below LEAD_PROB_ON too (status False): the HUD author's hysteresis keeps an
+  # already-rendered lead alive down to LEAD_PROB_OFF instead of blinking it at the 0.5 threshold
+  return ModelLead(bool(lead.prob >= LEAD_PROB_ON), float(lead.x[0]), -float(lead.y[0]),
+                   float(lead.v[0]) - v_ego, prob=float(lead.prob))
 
 
 def create_hud_object(packer, bus, mux, track):
@@ -267,38 +281,26 @@ class HudObjectAuthor:
     self._smoother = LeadSmoother()
     self._lead_id = 0       # OBJECT_ID currently emitted for OP's lead (0 = none)
     self._prev_op_id = 0    # last LeadObjectId id, to detect a fresh lead / handoff
-    # distinct leadsV3[1]/[2] rendered as non-lead cars in slots 1-2 (CAN FD, where tracks is None)
-    self._extra_ids = {slot: LeadObjectId() for slot in EXTRA_LEAD_SLOTS}
-    self._extra_smooth = {slot: LeadSmoother() for slot in EXTRA_LEAD_SLOTS}
-    self._extra_emit = dict.fromkeys(EXTRA_LEAD_SLOTS, 0)   # emitted OBJECT_ID per extra slot
+    self._lead_on = False   # hysteresis state for the rendered lead
+    self._lead_hold: ModelLead | None = None   # last rendered lead, for the drop-hold bridge
+    self._lead_seen_t = -1e9
 
-  def _update_extras(self, extra_leads, lead, in_use, now):
-    """Per-tick state update for the extra leads; returns {slot: track-dict-or-None}. Extras must
-    stay distinct from the primary lead and from each other, and their OBJECT_IDs must not collide
-    with the primary's or one another's."""
-    rendered = [(lead.dRel, lead.yRel)] if lead.status else []
-    out = {}
-    for slot, ex in zip(EXTRA_LEAD_SLOTS, extra_leads or (), strict=False):
-      distinct = ex.status and all(abs(ex.dRel - d) >= EXTRA_LEAD_MIN_SEP_D or
-                                   abs(ex.yRel - y) >= EXTRA_LEAD_MIN_SEP_Y
-                                   for d, y in rendered)
-      op_id = self._extra_ids[slot].update(distinct, ex.dRel, ex.vRel, now)
-      if not distinct:
-        self._extra_emit[slot] = 0
-        out[slot] = None
-        continue
-      emit = self._extra_emit[slot]
-      if emit == 0 or emit in in_use:
-        emit = op_id
-        while emit in in_use:
-          emit = emit % MAX_OBJECT_ID + 1
-        self._extra_emit[slot] = emit
-      in_use.add(emit)
-      d_rel, y_rel = self._extra_smooth[slot].update(ex.dRel, LAT_SCALE * ex.yRel, ex.vRel, emit, now)
-      rendered.append((ex.dRel, ex.yRel))
-      out[slot] = {"d_rel": d_rel, "y_rel": y_rel, "object_id": emit, "is_lead_car": 0,
-                   "car_type": CAR_TYPE_CAR, "rotation": lead_rotation(y_rel / LAT_SCALE)}
-    return out
+  def _gate_lead(self, lead: ModelLead, now: float) -> ModelLead:
+    """On/off hysteresis + short drop-hold for the rendered lead. leadsV3[0].prob hovers around the
+    0.5 threshold in real traffic, which blinked the dash marker at a sub-second cadence the stock
+    radar never produces; render from LEAD_PROB_ON, keep rendering down to LEAD_PROB_OFF, and bridge
+    a full drop for LEAD_HOLD_S (dead-reckoned on vRel) before blanking the slot."""
+    if lead.prob >= (LEAD_PROB_OFF if self._lead_on else LEAD_PROB_ON):
+      self._lead_on = True
+      self._lead_hold = lead
+      self._lead_seen_t = now
+      return lead if lead.status else ModelLead(True, lead.dRel, lead.yRel, lead.vRel, lead.prob)
+    if self._lead_on and self._lead_hold is not None and now - self._lead_seen_t < LEAD_HOLD_S:
+      h = self._lead_hold
+      return ModelLead(True, h.dRel + h.vRel * (now - self._lead_seen_t), h.yRel, h.vRel, h.prob)
+    self._lead_on = False
+    self._lead_hold = None
+    return ModelLead(False, 0.0, 0.0, 0.0)
 
   def _lead_object_id(self, status: bool, op_id: int, stock_lead_id: int | None, in_use: set[int]) -> int:
     """OBJECT_ID to emit for OP's lead: prefer the camera's own lead id, else hold a minted id, re-picking out of
@@ -308,7 +310,15 @@ class HudObjectAuthor:
     elif stock_lead_id is not None:
       self._lead_id = stock_lead_id
     elif self._lead_id == 0 or op_id != self._prev_op_id or self._lead_id in in_use:
-      self._lead_id = next((i for i in range(1, MAX_OBJECT_ID + 1) if i not in in_use), MAX_OBJECT_ID)
+      # advance from the current id instead of picking the lowest free one: with no camera ids in
+      # use (CAN FD, tracks is None) lowest-free always yielded 1, so a handoff to a different car
+      # kept OBJECT_ID 1 and rendered as the same object teleporting -- and the smoother, keyed on
+      # the emitted id, slid between the two cars instead of snapping. A fresh id per handoff
+      # matches the stock radar and makes the snap take effect.
+      nxt = self._lead_id % MAX_OBJECT_ID + 1
+      while nxt in in_use:
+        nxt = nxt % MAX_OBJECT_ID + 1
+      self._lead_id = nxt
     self._prev_op_id = op_id
     return self._lead_id
 
@@ -317,6 +327,7 @@ class HudObjectAuthor:
     LANE_PATH/HUD_OBJECTS multiplexor for this frame. Returns one packed HUD_OBJECTS frame for the slot the mux lands
     on (OP's lead in slot 0, else a forwarded camera adjacent car — including in slot 0 when OP has no lead — else
     inactive). re-ID + smoothing run every tick so their state stays continuous across the non-lead frames."""
+    lead = self._gate_lead(lead, now)
     op_id = self._track_id.update(lead.status, lead.dRel, lead.vRel, now)
     stock_lead, in_use = None, set()
     for t in (tracks or ()):
