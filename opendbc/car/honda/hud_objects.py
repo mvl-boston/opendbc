@@ -185,6 +185,16 @@ def lead_rotation(lateral_left_m: float) -> int:
 
 LEAD_PROB_ON = 0.5   # modelV2 leadsV3 prob to treat a lead as present
 
+# modelV2.leadsV3's three entries are the model's lead prediction at time horizons t = 0 s, +2 s and
+# +4 s -- NOT three simultaneous cars. All three usually describe the same physical vehicle, so the
+# extra entries are only rendered when spatially distinct from every already-rendered object (a
+# genuinely different car: the one ahead of the lead, or a cut-in the model already resolves at the
+# longer horizon). Only used when there are no camera tracks to forward (CAN FD), so slots 1-2 are
+# otherwise blank.
+EXTRA_LEAD_SLOTS = (1, 2)     # dash slots for distinct leadsV3[1]/[2]; slot 0 stays OP's lead
+EXTRA_LEAD_MIN_SEP_D = 5.0    # m: closer than this longitudinally...
+EXTRA_LEAD_MIN_SEP_Y = 1.5    # m: ...and this laterally = the same car, don't render it twice
+
 
 @dataclass
 class ModelLead:
@@ -195,17 +205,26 @@ class ModelLead:
   vRel: float
 
 
+def leads_from_model(model, v_ego, n=3):
+  """Up to n ModelLeads from modelV2.leadsV3 (index 0 = the lead OP acts on). modelV2's lateral is
+  +right, so it is negated to match the dash's +left. v is made relative (v - vEgo) for the
+  smoother's feed-forward. An entry is inactive when missing or below LEAD_PROB_ON."""
+  out = []
+  for i in range(n):
+    if model is None or len(model.leadsV3) <= i:
+      out.append(ModelLead(False, 0.0, 0.0, 0.0))
+      continue
+    lead = model.leadsV3[i]
+    if lead.prob < LEAD_PROB_ON or len(lead.x) == 0:
+      out.append(ModelLead(False, 0.0, 0.0, 0.0))
+      continue
+    out.append(ModelLead(True, float(lead.x[0]), -float(lead.y[0]), float(lead.v[0]) - v_ego))
+  return out
+
+
 def lead_from_model(model, v_ego):
-  """OP's lead from modelV2.leadsV3[0] for radarless cars. modelV2's lateral is +right, so we negate it to match
-  the dash's +left. v is made relative (v - vEgo) for the smoother's feed-forward. Lead is inactive when the
-  lead is missing or below LEAD_PROB_ON.
-  """
-  if model is None or len(model.leadsV3) == 0:
-    return ModelLead(False, 0.0, 0.0, 0.0)
-  lead = model.leadsV3[0]
-  if lead.prob < LEAD_PROB_ON or len(lead.x) == 0:
-    return ModelLead(False, 0.0, 0.0, 0.0)
-  return ModelLead(True, float(lead.x[0]), -float(lead.y[0]), float(lead.v[0]) - v_ego)
+  """OP's lead from modelV2.leadsV3[0] (see leads_from_model)."""
+  return leads_from_model(model, v_ego, n=1)[0]
 
 
 def create_hud_object(packer, bus, mux, track):
@@ -248,6 +267,38 @@ class HudObjectAuthor:
     self._smoother = LeadSmoother()
     self._lead_id = 0       # OBJECT_ID currently emitted for OP's lead (0 = none)
     self._prev_op_id = 0    # last LeadObjectId id, to detect a fresh lead / handoff
+    # distinct leadsV3[1]/[2] rendered as non-lead cars in slots 1-2 (CAN FD, where tracks is None)
+    self._extra_ids = {slot: LeadObjectId() for slot in EXTRA_LEAD_SLOTS}
+    self._extra_smooth = {slot: LeadSmoother() for slot in EXTRA_LEAD_SLOTS}
+    self._extra_emit = dict.fromkeys(EXTRA_LEAD_SLOTS, 0)   # emitted OBJECT_ID per extra slot
+
+  def _update_extras(self, extra_leads, lead, in_use, now):
+    """Per-tick state update for the extra leads; returns {slot: track-dict-or-None}. Extras must
+    stay distinct from the primary lead and from each other, and their OBJECT_IDs must not collide
+    with the primary's or one another's."""
+    rendered = [(lead.dRel, lead.yRel)] if lead.status else []
+    out = {}
+    for slot, ex in zip(EXTRA_LEAD_SLOTS, extra_leads or (), strict=False):
+      distinct = ex.status and all(abs(ex.dRel - d) >= EXTRA_LEAD_MIN_SEP_D or
+                                   abs(ex.yRel - y) >= EXTRA_LEAD_MIN_SEP_Y
+                                   for d, y in rendered)
+      op_id = self._extra_ids[slot].update(distinct, ex.dRel, ex.vRel, now)
+      if not distinct:
+        self._extra_emit[slot] = 0
+        out[slot] = None
+        continue
+      emit = self._extra_emit[slot]
+      if emit == 0 or emit in in_use:
+        emit = op_id
+        while emit in in_use:
+          emit = emit % MAX_OBJECT_ID + 1
+        self._extra_emit[slot] = emit
+      in_use.add(emit)
+      d_rel, y_rel = self._extra_smooth[slot].update(ex.dRel, LAT_SCALE * ex.yRel, ex.vRel, emit, now)
+      rendered.append((ex.dRel, ex.yRel))
+      out[slot] = {"d_rel": d_rel, "y_rel": y_rel, "object_id": emit, "is_lead_car": 0,
+                   "car_type": CAR_TYPE_CAR, "rotation": lead_rotation(y_rel / LAT_SCALE)}
+    return out
 
   def _lead_object_id(self, status: bool, op_id: int, stock_lead_id: int | None, in_use: set[int]) -> int:
     """OBJECT_ID to emit for OP's lead: prefer the camera's own lead id, else hold a minted id, re-picking out of
@@ -261,7 +312,7 @@ class HudObjectAuthor:
     self._prev_op_id = op_id
     return self._lead_id
 
-  def create(self, packer, bus, lead, tracks, mux: int, now: float):
+  def create(self, packer, bus, lead, tracks, mux: int, now: float, extra_leads=None):
     """`lead` = carControlSP.leadOne; `tracks` = the camera's HudObject snapshot (may be None); `mux` = the shared
     LANE_PATH/HUD_OBJECTS multiplexor for this frame. Returns one packed HUD_OBJECTS frame for the slot the mux lands
     on (OP's lead in slot 0, else a forwarded camera adjacent car — including in slot 0 when OP has no lead — else
@@ -277,11 +328,16 @@ class HudObjectAuthor:
         in_use.add(t.object_id)       # ids of the adjacent cars we forward -> OP's lead id must avoid these
     stock_lead_id = stock_lead.object_id if stock_lead is not None else None
     lead_id = self._lead_object_id(lead.status, op_id, stock_lead_id, in_use)
+    if lead.status:
+      in_use.add(lead_id)
 
     # scale the lateral by the lane-gain correction at the lead's distance so the marker tracks the
     # lane rendering (LAT_SCALE was tuned against the previous, flatter lane gain law)
     lat_scale = LAT_SCALE * lane_path.curve_boost(lead.dRel)
     d_rel, y_rel = self._smoother.update(lead.dRel, lat_scale * lead.yRel, lead.vRel, lead_id, now)
+
+    # extra distinct leadsV3 entries only render where the camera provides no cars to forward
+    extras = self._update_extras(extra_leads, lead, in_use, now) if tracks is None else {}
 
     slot = (mux - 1) % 16
     if slot == 0 and lead.status:
@@ -289,6 +345,8 @@ class HudObjectAuthor:
                "car_type": stock_lead.car_type if stock_lead is not None else CAR_TYPE_CAR,
                # disengaged -> no camera rotation; calculate one from the lead's lateral
                "rotation": stock_lead.rotation if stock_lead is not None else lead_rotation(y_rel / lat_scale)}
+    elif slot in extras:
+      track = extras[slot]
     # forward slots 1-9 and slot 0 when not a lead
     else:
       st = tracks[slot] if (tracks and slot < len(tracks)) else None
