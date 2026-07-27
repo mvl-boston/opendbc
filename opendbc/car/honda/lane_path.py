@@ -22,7 +22,25 @@ OFFSET_VALID_MAX = 2046    # clamp real offsets below the sentinel
 D_NEAR = 2.0
 D_MAX = 100.0
 LOOKAHEAD = np.linspace(D_NEAR, D_MAX, NUM_PTS)               # look-ahead distance of each offset
-GAIN = 6.27 + 0.0106 * LOOKAHEAD + 0.000354 * LOOKAHEAD ** 2  # raw units per meter of lateral, fit to the stock encoding
+# raw units per meter of lateral. Fit per look-ahead index by regressing the stock radar's raw
+# offsets against modelV2's lane-center lateral over the same drive (factory ACC lanes route
+# 3792d010590cb83a|00000107, 187 paired sweeps, lane-line probs >= 0.4): the stock encoding uses
+# ~29-37 raw/m over the rendered 2-55 m, ~4.6-5.1x the previous law, which is why openpilot's lanes
+# rendered noticeably flatter than factory. Correlation with the model lateral rises 0.6 -> 0.96
+# with distance; the quadratic below is the correlation-weighted fit of the per-index gains.
+GAIN = 29.3 + 0.243 * LOOKAHEAD - 0.00228 * LOOKAHEAD ** 2
+# previous law, kept for the HUD-lead lateral consistency ratio in curve_boost()
+GAIN_PREV = 6.27 + 0.0106 * LOOKAHEAD + 0.000354 * LOOKAHEAD ** 2
+
+def curve_boost(d: float) -> float:
+  """Ratio of the corrected stock-fit gain law to the previous one at look-ahead distance d.
+
+  The HUD lead marker's LAT_SCALE was tuned on-car against lanes rendered with the previous
+  (too-flat) law; scaling the lead's lateral by this ratio at the lead's distance keeps the
+  marker on the lane now that the lanes carry the full stock curvature."""
+  d = min(max(float(d), D_NEAR), D_MAX)
+  return (29.3 + 0.243 * d - 0.00228 * d ** 2) / (6.27 + 0.0106 * d + 0.000354 * d ** 2)
+
 
 LANE_LINE_ON = 3            # LEFT_LANE / RIGHT_LANE shown value
 LANE_LENGTH_MAX_VALUE = 33  # full dash reach (have not seen/tested higher)
@@ -50,6 +68,42 @@ def encode_lane_path(x, y):
   if x.size < 2 or x.max() < D_MAX:
     return [OFFSET_UNAVAILABLE] * NUM_PTS
   return _encode(np.interp(LOOKAHEAD, x, y))
+
+
+# Stock CAN FD radar LANE_PATH behavior (decoded from MDX factory ACC logs with lane lines displayed):
+# the path is always a contiguous valid prefix terminated in-band with OFFSET_UNAVAILABLE, at most 24 of
+# the 40 points are ever valid (typically 22-23), and the "no lane" idle is 6 valid zero offsets — never
+# all-unavailable. There is no LKAS_HUD_2 on this platform, so the dash derives the drawn lane length
+# from the in-band terminator; a never-terminated 40-point path renders nothing.
+CANFD_MAX_VALID_PTS = 23
+CANFD_MIN_VALID_PTS = 6
+CANFD_IDLE_OFFSETS = [0] * CANFD_MIN_VALID_PTS + [OFFSET_UNAVAILABLE] * (NUM_PTS - CANFD_MIN_VALID_PTS)
+
+# Stock valid-point count is a linear function of ego speed alone: len = 6.74 + 0.862*vEgo (m/s), clamped
+# to [6, 23]. Fit from the factory lanes-on route (~1200 RADAR_LEAD frames vs wheel speed; residuals flat
+# against lead distance, so no lead term). At city speed this is roughly double a plain 23*vEgo/27 ramp
+# (e.g. 16 points at 38 km/h where the ramp gives 9); matching it matters because the dash never rendered
+# openpilot's shorter-than-stock paths.
+CANFD_LEN_INTERCEPT = 6.74
+CANFD_LEN_SLOPE = 0.862  # points per m/s
+
+
+def canfd_lane_length(dash_lane) -> int:
+  """Valid-point count of the stock-form path. The stock radar mirrors this in RADAR_LEAD's
+  LANE_PATH_LENGTH signal (6 when idle), which the dash cross-checks against the in-band terminator."""
+  if dash_lane.reach <= 0.0 or dash_lane.offsets[0] == OFFSET_UNAVAILABLE:
+    return CANFD_MIN_VALID_PTS
+  n = round(CANFD_LEN_INTERCEPT + CANFD_LEN_SLOPE * dash_lane.v_ego)
+  return max(CANFD_MIN_VALID_PTS, min(CANFD_MAX_VALID_PTS, n))
+
+
+def canfd_lane_offsets(dash_lane) -> list[int]:
+  """Reshape a DashLane's 40 offsets into the stock CAN FD radar form: a terminated valid prefix whose
+  length scales with reach, or the stock idle pattern when there is nothing to draw."""
+  if dash_lane.reach <= 0.0 or dash_lane.offsets[0] == OFFSET_UNAVAILABLE:
+    return CANFD_IDLE_OFFSETS
+  n_valid = canfd_lane_length(dash_lane)
+  return list(dash_lane.offsets[:n_valid]) + [OFFSET_UNAVAILABLE] * (NUM_PTS - n_valid)
 
 
 def create_lane_path(packer, bus, offsets, mux):
@@ -117,6 +171,7 @@ class DashLane:
   left_line: bool
   right_line: bool
   lane_cross: int = 0
+  v_ego: float = 0.0   # m/s at fit time; drives the CAN FD valid-point count (stock law is speed-only)
 
 
 class LanePathFitter:
@@ -143,4 +198,4 @@ class LanePathFitter:
     reach = float(np.clip(max(v_ego / DASH_PATH_FULL_LEN_SPEED, lead_d / DASH_PATH_LEAD_FULL_DIST, DASH_PATH_MIN_REACH), 0.0, 1.0))
     if round(reach * LANE_LENGTH_MAX_VALUE) <= 0:
       return blank
-    return DashLane(encode_lane_path(x, y), reach, left_on, right_on)
+    return DashLane(encode_lane_path(x, y), reach, left_on, right_on, v_ego=v_ego)

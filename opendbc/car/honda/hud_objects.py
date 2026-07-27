@@ -2,6 +2,7 @@ import math
 from dataclasses import dataclass
 
 from opendbc.can.parser import CANParser
+from opendbc.car.honda import lane_path
 
 # HUD_OBJECTS represents the moving car icons on the dash.
 # The message is multiplexed. Mux values (1-10, 17-26, 33-42, 49-58) map to the same 10 slots.
@@ -43,8 +44,8 @@ class HudObjectTracker:
     # to 0-based indices 0-9.
     # Using vl_all to catch any missed frames, though not strictly necessary since update() is called
     # at 100Hz and this signal updates at 50Hz.
-    # Touching vl first registers the message.
-    _ = cp_cam.vl["HUD_OBJECTS"]
+    # The message is subscribed with NaN frequency in get_can_parsers: not every radarless camera
+    # emits it, so it must not gate the parser's validity.
     vla = cp_cam.vl_all["HUD_OBJECTS"]
 
     muxes = vla["MUX"]
@@ -277,14 +278,17 @@ class HudObjectAuthor:
     stock_lead_id = stock_lead.object_id if stock_lead is not None else None
     lead_id = self._lead_object_id(lead.status, op_id, stock_lead_id, in_use)
 
-    d_rel, y_rel = self._smoother.update(lead.dRel, LAT_SCALE * lead.yRel, lead.vRel, lead_id, now)
+    # scale the lateral by the lane-gain correction at the lead's distance so the marker tracks the
+    # lane rendering (LAT_SCALE was tuned against the previous, flatter lane gain law)
+    lat_scale = LAT_SCALE * lane_path.curve_boost(lead.dRel)
+    d_rel, y_rel = self._smoother.update(lead.dRel, lat_scale * lead.yRel, lead.vRel, lead_id, now)
 
     slot = (mux - 1) % 16
     if slot == 0 and lead.status:
       track = {"d_rel": d_rel, "y_rel": y_rel, "object_id": lead_id, "is_lead_car": 1,
                "car_type": stock_lead.car_type if stock_lead is not None else CAR_TYPE_CAR,
                # disengaged -> no camera rotation; calculate one from the lead's lateral
-               "rotation": stock_lead.rotation if stock_lead is not None else lead_rotation(y_rel / LAT_SCALE)}
+               "rotation": stock_lead.rotation if stock_lead is not None else lead_rotation(y_rel / lat_scale)}
     # forward slots 1-9 and slot 0 when not a lead
     else:
       st = tracks[slot] if (tracks and slot < len(tracks)) else None
