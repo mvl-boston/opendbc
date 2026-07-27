@@ -22,7 +22,25 @@ OFFSET_VALID_MAX = 2046    # clamp real offsets below the sentinel
 D_NEAR = 2.0
 D_MAX = 100.0
 LOOKAHEAD = np.linspace(D_NEAR, D_MAX, NUM_PTS)               # look-ahead distance of each offset
-GAIN = 6.27 + 0.0106 * LOOKAHEAD + 0.000354 * LOOKAHEAD ** 2  # raw units per meter of lateral, fit to the stock encoding
+# raw units per meter of lateral. Fit per look-ahead index by regressing the stock radar's raw
+# offsets against modelV2's lane-center lateral over the same drive (factory ACC lanes route
+# 3792d010590cb83a|00000107, 187 paired sweeps, lane-line probs >= 0.4): the stock encoding uses
+# ~29-37 raw/m over the rendered 2-55 m, ~4.6-5.1x the previous law, which is why openpilot's lanes
+# rendered noticeably flatter than factory. Correlation with the model lateral rises 0.6 -> 0.96
+# with distance; the quadratic below is the correlation-weighted fit of the per-index gains.
+GAIN = 29.3 + 0.243 * LOOKAHEAD - 0.00228 * LOOKAHEAD ** 2
+# previous law, kept for the HUD-lead lateral consistency ratio in curve_boost()
+GAIN_PREV = 6.27 + 0.0106 * LOOKAHEAD + 0.000354 * LOOKAHEAD ** 2
+
+def curve_boost(d: float) -> float:
+  """Ratio of the corrected stock-fit gain law to the previous one at look-ahead distance d.
+
+  The HUD lead marker's LAT_SCALE was tuned on-car against lanes rendered with the previous
+  (too-flat) law; scaling the lead's lateral by this ratio at the lead's distance keeps the
+  marker on the lane now that the lanes carry the full stock curvature."""
+  d = min(max(float(d), D_NEAR), D_MAX)
+  return (29.3 + 0.243 * d - 0.00228 * d ** 2) / (6.27 + 0.0106 * d + 0.000354 * d ** 2)
+
 
 LANE_LINE_ON = 3            # LEFT_LANE / RIGHT_LANE shown value
 LANE_LENGTH_MAX_VALUE = 33  # full dash reach (have not seen/tested higher)
