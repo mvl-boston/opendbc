@@ -108,7 +108,7 @@ class CarState(CarStateBase, CarStateExt):
     steer_status = self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
     ret.steerFaultPermanent = steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TJA_LOW_SPEED_LOCKOUT",
                                                    "TMP_FAULT")
-    if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
+    if self.CP.carFingerprint in (HONDA_BOSCH_ALT_RADAR | HONDA_BOSCH_CANFD):
       # TODO: See if this logic works for all other Honda
       min_steer_speed = max(CarControllerParams.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       expected_low_speed_lockout = steer_status == "LOW_SPEED_LOCKOUT" and ret.vEgo < min_steer_speed
@@ -208,7 +208,7 @@ class CarState(CarStateBase, CarStateExt):
         self.brake_switch_prev = brake_switch
       ret.brakePressed = (cp.vl["POWERTRAIN_DATA"]["BRAKE_PRESSED"] != 0) or self.brake_switch_active
 
-    ret.brake = cp.vl["VSA_STATUS"]["USER_BRAKE"]
+    ret.brakeDEPRECATED = cp.vl["VSA_STATUS"]["USER_BRAKE"]
     ret.cruiseState.enabled = cp.vl["POWERTRAIN_DATA"]["ACC_STATUS"] != 0
     ret.cruiseState.available = bool(cp.vl[self.car_state_scm_msg]["MAIN_ON"])
 
@@ -226,7 +226,7 @@ class CarState(CarStateBase, CarStateExt):
 
     # Gets rid of Pedal Grinding noise when brake is pressed at slow speeds for some models
     if self.CP.carFingerprint in (CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE):
-      if ret.brake > 0.1:
+      if ret.brakeDEPRECATED > 0.1:
         ret.brakePressed = True
 
     if self.CP.carFingerprint in HONDA_BOSCH:

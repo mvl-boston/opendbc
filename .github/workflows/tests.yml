@@ -7,7 +7,7 @@ on:
   pull_request:
 
 env:
-  PARENT_MVL_BRANCH: sp-honda-dev-202604
+  PARENT_MVL_BRANCH: sp-honda-dev-202606
 
 jobs:
   tests:
@@ -41,7 +41,7 @@ jobs:
       run: |
         cd opendbc_repo
         export UV_PROJECT_ENVIRONMENT="$GITHUB_WORKSPACE/.venv"
-        uv sync --all-extras --inexact
+        uv sync --all-extras --inexact || (sleep 300 && uv sync --all-extras --inexact)
         source "$UV_PROJECT_ENVIRONMENT/bin/activate"
         uv lock --check
         lefthook run test
@@ -63,6 +63,7 @@ jobs:
     timeout-minutes: ${{ github.repository == 'commaai/opendbc' && 45 || 999 }}
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         include:
           - os: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-latest' }}
@@ -147,8 +148,8 @@ jobs:
     - name: Build openpilot
       run: scons -j$(nproc) common/ cereal/ selfdrive/pandad/ sunnypilot/ msgq_repo/ opendbc_repo
     - name: Test car models
-      timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 6 }}
-      run: MAX_EXAMPLES=1 pytest --continue-on-collection-errors --durations=0 --durations-min=5 -n logical selfdrive/car/tests/test_models.py
+      timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 999 }}
+      run: MAX_EXAMPLES=1 pytest --continue-on-collection-errors --durations=0 --durations-min=5 -n ${{ contains(runner.name, 'nsc') && 'logical' || '0' }} selfdrive/car/tests/test_models.py
       env:
         NUM_JOBS: 4
         JOB_ID: ${{ matrix.job }}

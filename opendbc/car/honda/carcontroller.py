@@ -1,12 +1,15 @@
-import numpy as np
 import math
+import threading
+from queue import Empty, Queue
+
+import numpy as np
 from openpilot.common.params import Params
 
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
-                                     HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams
+                                     HONDA_BOSCH_TJA_CONTROL, HONDA_NIDEC_ALT_PCM_ACCEL, CarControllerParams, HondaFlags
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 
@@ -95,6 +98,31 @@ def process_hud_alert(hud_alert):
   return alert_fcw, alert_steer_required
 
 
+class HondaParamWriter:
+  def __init__(self):
+    self._params = Params()
+    self._queue = Queue()
+    self._thread = threading.Thread(target=self._run, name="honda-param-writer", daemon=True)
+    self._thread.start()
+
+  def put_many(self, values):
+    self._queue.put({key: float(value) for key, value in values.items()})
+
+  def _run(self):
+    while True:
+      pending = self._queue.get()
+
+      # Collapse queued snapshots so delayed writes keep only the newest value per key.
+      try:
+        while True:
+          pending.update(self._queue.get_nowait())
+      except Empty:
+        pass
+
+      for key, value in pending.items():
+        self._params.put(key, value)
+
+
 class CarController(CarControllerBase, MadsCarController, GasInterceptorCarController, IntelligentCruiseButtonManagementInterface):
   def __init__(self, dbc_names, CP, CP_SP):
     CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
@@ -105,6 +133,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.params = CarControllerParams(CP)
     self.CAN = hondacan.CanBus(CP)
     self.tja_control = CP.carFingerprint in HONDA_BOSCH_TJA_CONTROL
+    self.param_writer = HondaParamWriter()
 
     self.braking = False
     self.brake_steady = 0.
@@ -121,22 +150,27 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.bosch_last_gas = 0
 
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
-    self.gasfactor_before_maxgas = self.gasfactor
+    self.gasfactor_before_gasmax = self.gasfactor
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
-    self.windfactor_before_maxgas = self.windfactor_before_brake = self.windfactor
+    self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
     self.pitch = 0.0
 
     # Bosch extra-brake controller
-    self.brake_pid = PIDController(k_p=([0,], [0,]),
-                                   k_i=([0.], [0.5]),
+    self.brake_pid = PIDController(k_p=0.0,
+                                   k_i=1.0,
                                    pos_limit=0.0,
                                    neg_limit=-2.0,
                                    rate=50)
     self.brake_pid.reset()
+    self.temp_errorlogging = 0.0
+    self.temp_errorlogging2 = 0.0
+    self.temp_errorlogging3 = 0.0
+    self.temp_errorlogging4 = 0.0
 
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
     gas_pedal_force = 0.0
+    min_gas = self.params.BOSCH_GAS_LOOKUP_BP[0]
     actuators = CC.actuators
     hud_control = CC.hudControl
     hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
@@ -231,7 +265,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
     if not self.CP.openpilotLongitudinalControl:
-      if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
+      if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD and not self.CP.flags & HondaFlags.NIDEC:
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
       # If using stock ACC, spam cancel command to kill gas when OP disengages.
       if pcm_cancel_cmd:
@@ -245,7 +279,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         ts = self.frame * DT_CTRL
 
         if self.CP.carFingerprint in HONDA_BOSCH:
-          if (accel < 0) and (CS.out.vEgo > 1e-3):
+          if (accel < min_gas) and (1e-3 < CS.out.vEgo < 3.0):
             brake_addon = self.brake_pid.update(error = accel - CS.out.aEgo, speed = CS.out.vEgo)
             targetaccel = min(accel,accel + brake_addon)
           else:
@@ -253,27 +287,31 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             targetaccel = accel
 
           self.accel = float(np.clip(targetaccel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
-          gas_pedal_force = self.accel + wind_brake_ms2 * self.windfactor + hill_brake
+          gas_pedal_force = accel + wind_brake_ms2 * self.windfactor + hill_brake # not using self.accel since pid resets w gas pedal
+          self.temp_errorlogging = float(gas_pedal_force)
+          self.temp_errorlogging2 = float(accel)
+          self.temp_errorlogging3 = float(wind_brake_ms2 * self.windfactor)
+          self.temp_errorlogging4 = float(hill_brake)
 
           # live-learn gas pedal adjustments when openpilot is controlling gas
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
-            gas_error = self.accel - CS.out.aEgo
-            if gas_error != 0.0 and gas_pedal_force > 0.0:
-              if self.CP.carFingerprint == CAR.HONDA_INSIGHT: # Insight gas pedal reacts too slowly
-                learn_speed = 150
+            gas_error = accel - CS.out.aEgo
+            if gas_error != 0.0 and gas_pedal_force > min_gas:
+              if self.CP.carFingerprint in (CAR.HONDA_INSIGHT, CAR.HONDA_CIVIC_BOSCH): # gas pedal reacts too slowly
+                learn_speed = 150.0
               elif self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Prevent overreacting to turbo lag
-                learn_speed = 300
+                learn_speed = 300.0
               else:
-                learn_speed = 50
-              self.gasfactor = np.clip(self.gasfactor + gas_error / learn_speed * gas_pedal_force, 0.1, 3.0)
+                learn_speed = 50.0
+              self.gasfactor = np.clip(self.gasfactor + gas_error / learn_speed * (gas_pedal_force - min_gas), 0.01, 3.0)
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
               if self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Faster reaction
-                wind_learn_speed = 100
+                wind_learn_speed = 100.0
               else:
-                wind_learn_speed = 1000
-              wind_adjust = 1 + wind_brake_ms2 / wind_learn_speed
-              self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
-            if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
+                wind_learn_speed = 1000.0
+              wind_adjust = 1.0 + wind_brake_ms2 / wind_learn_speed
+              self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0.0) else 1.0/wind_adjust), 0.1, 3.0)
+            if gas_pedal_force <= min_gas: # don't reduce windfactor while braking, allow increases
               self.windfactor = max(self.windfactor, self.windfactor_before_brake)
             else:
               self.windfactor_before_brake = self.windfactor
@@ -283,7 +321,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             else:
               self.gasfactor_before_gasmax = self.gasfactor
               self.windfactor_before_gasmax = self.windfactor
-          self.gas = float(np.interp(gas_pedal_force * self.gasfactor, self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
+          self.gas = float(np.interp((gas_pedal_force - min_gas) * self.gasfactor + min_gas,
+                                     self.params.BOSCH_GAS_LOOKUP_BP, self.params.BOSCH_GAS_LOOKUP_V))
 
           # limit gas ramp to 60 units per frame, matches stock.  Higher sometimes causes powertrain to ignore gas command.
           max_gas = max(60, self.bosch_last_gas + 60)
@@ -309,10 +348,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           gas_error = actuators.accel - CS.out.aEgo
           if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and self.CP_SP.enableGasInterceptor:
             if gas_error != 0.0 and gas > 0.0:
-              self.gasfactor = np.clip(self.gasfactor + gas_error / 150 * (gas * 4.8), 0.1, 3.0)
+              self.gasfactor = np.clip(self.gasfactor + gas_error / 150.0 * (gas * 4.8), 0.1, 3.0)
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
-              wind_adjust = 1 + (wind_brake * 4.8) / 1000
-              self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
+              wind_adjust = 1.0 + (wind_brake * 4.8) / 1000.0
+              self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0.0) else 1.0/wind_adjust), 0.1, 5.0)
             if gas <= 0.0: # don't reduce windfactor while braking, allow increases
               self.windfactor = max(self.windfactor, self.windfactor_before_brake)
             else:
@@ -355,16 +394,19 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                                        self.last_button_frame, self.CAN))
 
     new_actuators = actuators.as_builder()
-    new_actuators.speed = self.speed
+    new_actuators.speed = float(self.temp_errorlogging)
+    # new_actuators.speed = self.speed
     new_actuators.accel = self.accel
-    new_actuators.gas = float(self.gasfactor)
-    new_actuators.brake = float(self.windfactor)
+    new_actuators.gas = float(self.temp_errorlogging2)
+    new_actuators.brake = float(self.temp_errorlogging3)
     new_actuators.torque = self.last_torque
-    new_actuators.torqueOutputCan = apply_torque
+    new_actuators.torqueOutputCan = float(self.temp_errorlogging4)
 
     if self.frame % 6000 == 0:
-      Params().put_nonblocking("HondaGasFactorParams", float(self.gasfactor))
-      Params().put_nonblocking("HondaWindFactorParams", float(self.windfactor))
+      self.param_writer.put_many({
+        "HondaGasFactorParams": self.gasfactor,
+        "HondaWindFactorParams": self.windfactor,
+      })
 
     self.frame += 1
     return new_actuators, can_sends
