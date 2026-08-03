@@ -333,10 +333,7 @@ class CAR(Platforms):
     flags=HondaFlags.BOSCH_RADARLESS | HondaFlags.LKAS_MINSPEED_CUTOFF
   )
   ACURA_INTEGRA = HondaBoschPlatformConfig(
-    [
-      HondaCarDocs("Acura Integra 2023-26", "All"),
-      HondaCarDocs("Honda Prelude 2026", "All"),
-    ],
+    [HondaCarDocs("Acura Integra 2023-26", "All")],
     CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=16.71, tireStiffnessFactor=0.82),
     {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS
