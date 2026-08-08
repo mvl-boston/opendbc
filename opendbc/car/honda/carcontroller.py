@@ -500,7 +500,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
     # Intelligent Cruise Button Management
-    can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CC_SP, self.packer, self.frame,
+    can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CC_SP, CS, self.packer, self.frame,
                                                                        self.last_button_frame, self.CAN))
 
     # Render OP's lane and lead car on the dash. On CAN FD these are radar look-alikes that only exist
