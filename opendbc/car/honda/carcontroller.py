@@ -476,9 +476,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         # steering re-triggered the pulse continuously, keeping LKAS_STATE_CHANGE high whenever a
         # real lane path was being sent - which suppressed the dash lane lines entirely.
         # latActive drives SOLID_LANES (under sunnypilot MADS the lateral control stays engaged
-        # when ACC disengages, and the dash LKAS indication follows it); DASHED_LANES is overridden
-        # to 1 on CAN FD, so hud_control.lanesVisible no longer affects the payload.
-        hud_key = (bool(CC.latActive), bool(alert_steer_required), bool(CS.out.steerFaultPermanent))
+        # when ACC disengages, and the dash LKAS indication follows it); dashed_lanes (MADS armed,
+        # from MadsCarController) drives DASHED_LANES so parked LKAS presses get cluster feedback.
+        hud_key = (bool(CC.latActive), bool(self.dashed_lanes), bool(alert_steer_required), bool(CS.out.steerFaultPermanent))
         if hud_key != self.lkas_hud_key:
           self.lkas_hud_key = hud_key
           self.lkas_state_change_frames = 30  # 3s at the 10Hz LKAS_HUD rate, matching stock pulse length
