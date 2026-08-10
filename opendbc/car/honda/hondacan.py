@@ -212,7 +212,12 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
       # Don't let steer saturation flicker SOLID_LANES: every payload change must coincide with an
       # LKAS_STATE_CHANGE pulse (see carcontroller), and a 10Hz flicker would keep the pulse
       # re-triggering, which suppresses the dash lane lines.
-      lkas_hud_values['SOLID_LANES'] = hud_control.lanesVisible
+      # Keyed on lat_active, NOT hud_control.lanesVisible (== CC.enabled): under sunnypilot MADS
+      # the lateral control stays engaged when a brake press disengages ACC, and the dash LKAS
+      # indication must follow the lateral state or the driver can't tell MADS is still steering
+      # (drivers pressing the LKAS button to "re-engage" silently toggled MADS off). On forks
+      # without MADS, lat_active == enabled while moving, so this stays equivalent there.
+      lkas_hud_values['SOLID_LANES'] = lat_active
 
   if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
     lkas_hud_values['RDM_OFF'] = 1
