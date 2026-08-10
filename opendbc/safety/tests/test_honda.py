@@ -182,6 +182,7 @@ class HondaBase(common.CarSafetyTest):
   cnt_brake = 0
   cnt_powertrain_data = 0
   cnt_acc_state = 0
+  cnt_gearbox = 0
 
   def _powertrain_data_msg(self, cruise_on=None, brake_pressed=None, gas_pressed=None):
     # preserve the state
@@ -235,10 +236,57 @@ class HondaBase(common.CarSafetyTest):
     # must be implemented when inherited
     raise NotImplementedError
 
+  def _gearbox_msg(self, gear, gearbox_msg):
+    values = {"GEAR_SHIFTER": gear, "COUNTER": self.cnt_gearbox % 4}
+    self.__class__.cnt_gearbox += 1
+    return self.packer.make_can_msg_safety(gearbox_msg, self.PT_BUS, values)
+
   def test_disengage_on_brake(self):
     self.safety.set_controls_allowed(1)
     self._rx(self._user_brake_msg(1))
     self.assertFalse(self.safety.get_controls_allowed())
+
+  def test_regen_brake_gear(self):
+    """
+      With the GEARBOX_MSG param (non-manual transmissions), the regen braking gear ('B') holds
+      brake_pressed to match carstate: longitudinal disengages, like the factory system in downhill
+      mode, while lateral (MADS) stays available. Covers GEARBOX_CVT (0x191) and GEARBOX_AUTO (0x1A3).
+    """
+    GEAR_B = 11
+
+    # without the GEARBOX_MSG param (manual transmissions), gearbox messages are not monitored
+    self.safety.set_controls_allowed(1)
+    self._rx(self._gearbox_msg(GEAR_B, "GEARBOX_AUTO"))
+    self._rx(self._user_brake_msg(False))
+    self.assertFalse(self.safety.get_brake_pressed_prev())
+    self.assertTrue(self.safety.get_controls_allowed())
+
+    mode = self.safety.get_current_safety_mode()
+    param = self.safety.get_current_safety_param()
+    for gearbox_msg in ("GEARBOX_CVT", "GEARBOX_AUTO"):
+      with self.subTest(gearbox_msg=gearbox_msg):
+        # re-init with the gearbox message monitored
+        self.safety.set_current_safety_param_sp(HondaSafetyFlagsSP.GEARBOX_MSG)
+        self.safety.set_safety_hooks(mode, param)
+        self.safety.init_tests()
+        self.safety.set_mads_params(True, False, False)
+
+        # brake is only held in the regen braking gear
+        for gear in (1, 2, 3, 4, 7, 10, GEAR_B):  # P, R, N, D, L, S, B
+          self.safety.set_controls_allowed(1)
+          self.safety.set_controls_allowed_lateral(True)
+          self._rx(self._gearbox_msg(gear, gearbox_msg))
+          self._rx(self._user_brake_msg(False))
+          self.assertEqual(gear == GEAR_B, self.safety.get_brake_pressed_prev(), msg=f"{gear=}")
+
+          # longitudinal disengages in the regen braking gear, lateral (MADS) stays engaged
+          self.assertEqual(gear != GEAR_B, self.safety.get_controls_allowed(), msg=f"{gear=}")
+          self.assertTrue(self.safety.get_controls_allowed_lateral(), msg=f"{gear=}")
+
+        # shifting out of the regen braking gear releases the brake
+        self._rx(self._gearbox_msg(4, gearbox_msg))  # D
+        self._rx(self._user_brake_msg(False))
+        self.assertFalse(self.safety.get_brake_pressed_prev())
 
   def test_steer_safety_check(self):
     self.safety.set_controls_allowed(0)

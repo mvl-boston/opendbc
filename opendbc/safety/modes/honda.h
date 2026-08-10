@@ -21,6 +21,12 @@
 #define HONDA_GAS_INTERCEPTOR_ADDR_CHECK \
   {.msg = {{0x201, 0, 6, 50U, .max_counter = 15U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}}, \
 
+// Gear position is used to detect the regen braking gear ('B'), only broadcast by non-manual transmissions.
+// This check MUST stay the last entry of every rx config: it is dropped on manual transmissions (see the init hooks)
+#define HONDA_GEARBOX_ADDR_CHECK(pt_bus)                                                                                                \
+  {.msg = {{0x191, (pt_bus), 8, 100U, .max_counter = 3U, .ignore_quality_flag = true},                 /* GEARBOX_CVT */   \
+           {0x1A3, (pt_bus), 8, 100U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }}},        /* GEARBOX_AUTO */  \
+
 #define HONDA_N_COMMON_TX_MSGS \
   {0xE4,  0, 5, .check_relay = true},   \
   {0x194, 0, 4, .check_relay = true},   \
@@ -40,6 +46,8 @@ enum {
 
 static int honda_brake = 0;
 static bool honda_brake_switch_prev = false;
+static bool honda_regen_gear = false;
+static bool honda_gearbox_msg = false;
 static bool honda_alt_brake_msg = false;
 static bool honda_fwd_brake = false;
 static bool honda_bosch_long = false;
@@ -166,6 +174,15 @@ static void honda_rx_hook(const CANPacket_t *msg) {
     cruise_button_prev = button;
   }
 
+  // while the regen braking gear ('B') is selected, hold brake_pressed to match carstate:
+  // like the factory system in downhill mode, this blocks longitudinal control
+  // while LKAS (and thus MADS) stays available
+  if ((msg->addr == 0x191U) || (msg->addr == 0x1A3U)) {
+    // Signal: GEAR_SHIFTER (11 = B) on GEARBOX_CVT (0x191) / GEARBOX_AUTO (0x1A3)
+    const uint8_t gear = (msg->addr == 0x191U) ? (msg->data[5] & 0x1FU) : (msg->data[4] & 0x0FU);
+    honda_regen_gear = (gear == 11U);
+  }
+
   // user brake signal on 0x17C reports applied brake from computer brake on accord
   // and crv, which prevents the usual brake safety from working correctly. these
   // cars have a signal on 0x1BE which only detects user's brake being applied so
@@ -174,13 +191,13 @@ static void honda_rx_hook(const CANPacket_t *msg) {
   // accord, crv: 0x1BE
   if (honda_alt_brake_msg) {
     if (msg->addr == 0x1BEU) {
-      brake_pressed = GET_BIT(msg, 4U);
+      brake_pressed = GET_BIT(msg, 4U) || honda_regen_gear;
     }
   } else {
     if (msg->addr == 0x17CU) {
       // also if brake switch is 1 for two CAN frames, as brake pressed is delayed
       const bool brake_switch = GET_BIT(msg, 32U);
-      brake_pressed = (GET_BIT(msg, 53U)) || (brake_switch && honda_brake_switch_prev);
+      brake_pressed = (GET_BIT(msg, 53U)) || (brake_switch && honda_brake_switch_prev) || honda_regen_gear;
       honda_brake_switch_prev = brake_switch;
     }
   }
@@ -399,10 +416,12 @@ static safety_config honda_nidec_init(uint16_t param) {
   const uint16_t HONDA_PARAM_SP_NIDEC_HYBRID = 1;
   const uint16_t HONDA_PARAM_GAS_INTERCEPTOR = 2;
   const uint16_t HONDA_PARAM_STOCK_LONGITUDINAL = 4;
+  const uint16_t HONDA_PARAM_SP_GEARBOX_MSG = 8;
 
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
   honda_brake_switch_prev = false;
+  honda_regen_gear = false;
   honda_fwd_brake = false;
   honda_alt_brake_msg = false;
   honda_bosch_long = false;
@@ -417,12 +436,14 @@ static safety_config honda_nidec_init(uint16_t param) {
   honda_nidec_hybrid = GET_FLAG(current_safety_param_sp, HONDA_PARAM_SP_NIDEC_HYBRID);
   enable_gas_interceptor = GET_FLAG(current_safety_param_sp, HONDA_PARAM_GAS_INTERCEPTOR);
   honda_stock_longitudinal = GET_FLAG(current_safety_param_sp, HONDA_PARAM_STOCK_LONGITUDINAL);
+  honda_gearbox_msg = GET_FLAG(current_safety_param_sp, HONDA_PARAM_SP_GEARBOX_MSG);
 
   if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
     static RxCheck honda_nidec_alt_rx_checks[] = {
       HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(0)
       {.msg = {{0x1FA, 2, 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // BRAKE_COMMAND
+      HONDA_GEARBOX_ADDR_CHECK(0)
     };
 
     SET_RX_CHECKS(honda_nidec_alt_rx_checks, ret);
@@ -431,6 +452,7 @@ static safety_config honda_nidec_init(uint16_t param) {
     static RxCheck honda_nidec_common_rx_checks[] = {
       HONDA_COMMON_RX_CHECKS(0)
       {.msg = {{0x1FA, 2, 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // BRAKE_COMMAND
+      HONDA_GEARBOX_ADDR_CHECK(0)
     };
 
     SET_RX_CHECKS(honda_nidec_common_rx_checks, ret);
@@ -448,6 +470,7 @@ static safety_config honda_nidec_init(uint16_t param) {
         HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(0)
         {.msg = {{0x1FA, 2, 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // BRAKE_COMMAND
         HONDA_GAS_INTERCEPTOR_ADDR_CHECK
+        HONDA_GEARBOX_ADDR_CHECK(0)
       };
 
       SET_RX_CHECKS(honda_nidec_alt_interceptor_rx_checks, ret);
@@ -456,12 +479,19 @@ static safety_config honda_nidec_init(uint16_t param) {
         HONDA_COMMON_RX_CHECKS(0)
         {.msg = {{0x1FA, 2, 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // BRAKE_COMMAND
         HONDA_GAS_INTERCEPTOR_ADDR_CHECK
+        HONDA_GEARBOX_ADDR_CHECK(0)
       };
 
       SET_RX_CHECKS(honda_nidec_common_interceptor_rx_checks, ret);
     }
 
     SET_TX_MSGS(HONDA_N_INTERCEPTOR_TX_MSGS, ret);
+  }
+
+  // the gearbox check is the last entry of every rx config: drop it on
+  // manual transmissions, which don't broadcast a gearbox message
+  if (!honda_gearbox_msg) {
+    ret.rx_checks_len -= 1;
   }
 
   return ret;
@@ -504,34 +534,42 @@ static safety_config honda_bosch_init(uint16_t param) {
   const uint16_t HONDA_PARAM_RADARLESS = 8;
   const uint16_t HONDA_PARAM_BOSCH_CANFD = 16;
 
+  const uint16_t HONDA_PARAM_SP_GEARBOX_MSG = 8;
+
   // Bosch radarless and CAN-FD have the powertrain bus on bus 0
   static RxCheck honda_bosch_pt0_rx_checks[] = {
     HONDA_COMMON_RX_CHECKS(0)
+    HONDA_GEARBOX_ADDR_CHECK(0)
   };
 
   static RxCheck honda_bosch_pt0_alt_brake_rx_checks[] = {
     HONDA_COMMON_RX_CHECKS(0)
     HONDA_ALT_BRAKE_ADDR_CHECK(0)
+    HONDA_GEARBOX_ADDR_CHECK(0)
   };
 
   // Bosch has powertrain on bus 1, verified 0x1A6 does not exist
   static RxCheck honda_bosch_pt1_rx_checks[] = {
     HONDA_COMMON_RX_CHECKS(1)
+    HONDA_GEARBOX_ADDR_CHECK(1)
   };
 
   static RxCheck honda_bosch_pt1_alt_brake_rx_checks[] = {
     HONDA_COMMON_RX_CHECKS(1)
     HONDA_ALT_BRAKE_ADDR_CHECK(1)
+    HONDA_GEARBOX_ADDR_CHECK(1)
   };
 
   honda_hw = HONDA_BOSCH;
   honda_brake_switch_prev = false;
+  honda_regen_gear = false;
   honda_op_buttons_fresh = 0;
   honda_bosch_radarless = GET_FLAG(param, HONDA_PARAM_RADARLESS);
   honda_bosch_canfd = GET_FLAG(param, HONDA_PARAM_BOSCH_CANFD);
   // Checking for alternate brake override from safety parameter
   honda_alt_brake_msg = GET_FLAG(param, HONDA_PARAM_ALT_BRAKE);
   honda_stock_longitudinal = false;
+  honda_gearbox_msg = GET_FLAG(current_safety_param_sp, HONDA_PARAM_SP_GEARBOX_MSG);
 
   // radar disabled so allow gas/brakes
 #ifdef ALLOW_DEBUG
@@ -552,6 +590,12 @@ static safety_config honda_bosch_init(uint16_t param) {
    } else {
      SET_RX_CHECKS(honda_bosch_pt1_rx_checks, ret);
    }
+  }
+
+  // the gearbox check is the last entry of every rx config: drop it on
+  // manual transmissions, which don't broadcast a gearbox message
+  if (!honda_gearbox_msg) {
+    ret.rx_checks_len -= 1;
   }
 
   if (honda_bosch_radarless) {

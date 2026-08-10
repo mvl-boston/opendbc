@@ -339,6 +339,11 @@ class CarInterface(CarInterfaceBase):
     if 0x35E in fingerprint[CAN.pt]:
       ret.flags |= HondaFlagsSP.HAS_CAMERA_MESSAGES.value
 
+    if stock_cp.transmissionType != TransmissionType.manual:
+      # non-manual transmissions broadcast GEARBOX_CVT (0x191) or GEARBOX_AUTO (0x1A3): the safety
+      # monitors it to treat the regen braking gear ('B') as a user brake press, matching carstate
+      ret.safetyParam |= HondaSafetyFlagsSP.GEARBOX_MSG
+
     if candidate == CAR.HONDA_CIVIC:
       if ret.flags & HondaFlagsSP.EPS_MODIFIED:
         # stock request input values:     0x0000, 0x00DE, 0x014D, 0x01EF, 0x0290, 0x0377, 0x0454, 0x0610, 0x06EE
