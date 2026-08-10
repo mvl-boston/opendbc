@@ -181,6 +181,12 @@ class CarController(CarControllerBase):
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
     self.speedfactor = 4.0 if (Params().get("HondaSpeedFactorParams") is None) else Params().get("HondaSpeedFactorParams")
     self.speedalpha = 0.0 if (Params().get("HondaSpeedAlphaParams") is None) else Params().get("HondaSpeedAlphaParams")
+    # learned ceiling of the pcm_speed servo channel (m/s2): the most accel the plant delivers
+    # no matter how large the speed lead gets. The servo's responsive band ends at
+    # dv_sat = speedfactor * sat_accel, where the responsive line (accel = dv/speedfactor)
+    # meets this ceiling.
+    self.sat_accel = 0.9 if (Params().get("HondaSatAccelParams") is None) else Params().get("HondaSatAccelParams")
+    self.deficit_frames = 0
     self.new_accel = 0.0
 
     self.latFactors = {
@@ -346,7 +352,30 @@ class CarController(CarControllerBase):
       if (self.new_accel == self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
            (self.apply_brake_last == 0): # adjust speedfactor
         speedfactor_error = (self.accel - CS.out.aEgo)
-        self.speedfactor *= (1 + 0.0001 * speedfactor_error * self.accel)
+        dv_sent = self.speedfactor * self.accel + self.speedalpha
+        dv_sat = max(0.1, self.speedfactor * self.sat_accel)
+
+        # ceiling learner (sat_accel): owns the saturated regime, learns by direct measurement.
+        # Asymmetric on purpose: a ceiling is a max-type quantity, so learn UP quickly whenever the
+        # plant demonstrably beats the estimate, and drift DOWN only under persistent deficit
+        # (undershooting for well past the ~1s plant lag with everything maxed means whatever aEgo
+        # we observe IS the ceiling). Raw aEgo, no hill term: the ceiling is a servo logic cap that
+        # is grade-compensated downstream (hill belongs on the gas channel only).
+        self.deficit_frames = self.deficit_frames + 1 if (speedfactor_error > 0.1 and CS.out.vEgo > 1.0) else 0
+        if (CS.out.aEgo > self.sat_accel) and (dv_sent > dv_sat):
+          self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
+        elif self.deficit_frames > 150:
+          self.sat_accel = float(np.clip(self.sat_accel + 0.0002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
+
+        # speedfactor: only move it where moving it changes the output. Error feedback is only
+        # sign-correct below the knee; beyond it the surplus speed lead provably does nothing
+        # (measured: ~0.03 (m/s2)/(m/s) response above the knee vs ~0.2 below), so bleed toward
+        # the knee instead of growing on an error that can never respond. The min() is a per-tick
+        # rate limit (0.5%/tick max), same family as the gas/brake slew limits.
+        if dv_sent > dv_sat:
+          self.speedfactor *= (1 - min(0.0005 * (dv_sent - dv_sat), 0.005))
+        else:
+          self.speedfactor *= (1 + 0.0001 * speedfactor_error * self.accel)
         self.speedalpha += (0.001 * speedfactor_error)
         if max_speedcontrol: # only allow learning reductions
           self.speedfactor = min(prior_speedfactor, self.speedfactor)
@@ -499,6 +528,7 @@ class CarController(CarControllerBase):
         "HondaWindFactorParams": self.windfactor,
         "HondaSpeedAlphaParams": self.speedalpha,
         "HondaSpeedFactorParams": self.speedfactor,
+        "HondaSatAccelParams": self.sat_accel,
       })
 
     if self.frame % 12000 == 30:
