@@ -454,9 +454,10 @@ class CarController(CarControllerBase):
         # steer_maxed used to be in here (via SOLID_LANES) and its 10Hz flicker during city-speed
         # steering re-triggered the pulse continuously, keeping LKAS_STATE_CHANGE high whenever a
         # real lane path was being sent - which suppressed the dash lane lines entirely.
-        # (latActive isn't in the key: DASHED_LANES is overridden to 1 on CAN FD, so it doesn't
-        # affect the payload.)
-        hud_key = (bool(hud_control.lanesVisible), bool(alert_steer_required), bool(CS.out.steerFaultPermanent))
+        # latActive drives SOLID_LANES (MADS keeps lateral engaged when ACC disengages, and the dash
+        # LKAS indication must follow it); DASHED_LANES is overridden to 1 on CAN FD, so lanesVisible
+        # no longer affects the payload.
+        hud_key = (bool(CC.latActive), bool(alert_steer_required), bool(CS.out.steerFaultPermanent))
         if hud_key != self.lkas_hud_key:
           self.lkas_hud_key = hud_key
           self.lkas_state_change_frames = 30  # 3s at the 10Hz LKAS_HUD rate, matching stock pulse length
