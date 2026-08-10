@@ -41,5 +41,5 @@ class CarStateExt:
       gas = (cp.vl["GAS_SENSOR"]["INTERCEPTOR_GAS"] + cp.vl["GAS_SENSOR"]["INTERCEPTOR_GAS2"]) // 2
       ret.gasPressed = gas > 492
 
-    if ret.gearShifter == GearShifter.brake
+    if ret.gearShifter == GearShifter.brake:
       ret.brakePressed = True # allows MADS in B (regen braking) mode
