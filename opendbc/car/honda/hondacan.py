@@ -197,7 +197,6 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
 
   if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
     lkas_hud_values['LANE_LINES'] = 3
-    lkas_hud_values['DASHED_LANES'] = lat_active
 
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
     # TODO: needed for Bosch CAN FD?
@@ -206,7 +205,15 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
 
     if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       lkas_hud_values['LKAS_PROBLEM'] = CS.out.steerFaultPermanent # CS.lkas_hud['LKAS_PROBLEM']
-      lkas_hud_values['DASHED_LANES'] = 1  # show gray lanes when disengaged
+      if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+        lkas_hud_values['DASHED_LANES'] = 1  # show gray lanes when disengaged
+      else:
+        # CAN FD: dashed lanes are the MADS armed indication (MadsCarController sets dashed_lanes to
+        # mads.enabled and not latActive, which is not standstill-gated - so parked/standstill LKAS
+        # button presses produce cluster feedback; latActive alone stays 0 below 0.3 m/s and armed
+        # toggles would render nothing). ORed with lat_active while steering so the engaged payload
+        # keeps SOLID and DASHED set together (0x44), byte-matching the stock camera's lanes-on state.
+        lkas_hud_values['DASHED_LANES'] = dashed_lanes or lat_active
 
     if CP.carFingerprint in HONDA_BOSCH_CANFD:
       # Don't let steer saturation flicker SOLID_LANES: every payload change must coincide with an
