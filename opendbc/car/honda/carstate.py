@@ -56,6 +56,7 @@ class CarState(CarStateBase):
 
     self.initial_accFault_cleared = False
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
+    self.lkas_hud2_lane_display = False
     self.radar_ref_counter = 0
     self.radar_5hz_tick_counter = 0
     self.radar_5hz_tick = False
@@ -284,6 +285,15 @@ class CarState(CarStateBase):
     if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
     if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      # Newer CAN FD radar firmware (e.g. CR-V 6G with 8S302-3A0-A220) authors LKAS_HUD_2 (0xF31AA54)
+      # on the powertrain bus, streaming nonzero LANE_WIDTH/LANE_LENGTH whenever the cluster's moving
+      # lane-line display is armed -- including when the state persisted across an ignition cycle and
+      # the camera never asserts LKAS_READY. That armed state runs the stock touch-steering-wheel
+      # timer, which openpilot's blocked camera actuation can never satisfy, so ~3-4 min later the
+      # radar latches an FCM/LKAS/RDM fault and ACC locks out for the drive. Both signals read 0 on
+      # radars that don't emit the message (e.g. MDX 4G), and the radar blanks them once faulted.
+      self.lkas_hud2_lane_display = cp.vl["LKAS_HUD_2"]["LANE_WIDTH"] != 0 or cp.vl["LKAS_HUD_2"]["LANE_LENGTH"] != 0
+
       # The radar emits low-rate "tick reference" messages that keep running even while the radar's
       # data messages are disabled, so we phase our look-alikes to the stock cadence off of them.
       #
@@ -377,6 +387,10 @@ class CarState(CarStateBase):
       # Both messages intentionally go silent (the radar is disabled, the camera ends up behind the
       # open relay), so subscribe with NaN frequency to skip the alive/timeout checks.
       pt_messages += [("ACC_CONTROL", float('nan')), ("STEERING_CONTROL", float('nan'))]
+      # Stock-radar-authored lane-display state (see update); not all CAN FD radars emit it (the
+      # MDX 4G doesn't), so subscribe with NaN frequency to skip the alive/timeout checks. Verified
+      # against CR-V 6G A220 radar logs: the stock stream passes the Honda checksum/counter checks.
+      pt_messages += [("LKAS_HUD_2", float('nan'))]
     if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       # HUD_OBJECTS is polled by the HudObjectTracker, but not every radarless camera emits it,
       # so subscribe with NaN frequency to skip the alive/timeout checks.
