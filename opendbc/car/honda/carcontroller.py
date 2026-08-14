@@ -154,7 +154,7 @@ class CarController(CarControllerBase):
     self.brake_pid_factor = 0.0
 
     self.nidec_pid = PIDController(k_p=([0,], [0,]),
-                                   k_i=([0., 0.01, 5., 35.], [30.0, 1.2, 0.8, 0.5]),
+                                   k_i=([0.01, 5., 35.], [1.2, 0.8, 0.5]),
                                    k_f=1,
                                    pos_limit=0., # self.params.NIDEC_ACCEL_MAX,
                                    neg_limit=self.params.NIDEC_ACCEL_MIN)
@@ -252,6 +252,9 @@ class CarController(CarControllerBase):
       else:
         self.accel = actuators.accel + self.nidec_pid_factor
         adjust_accel = self.accel + hill_brake
+
+      if (CS.out.brakePressed or CS.out.gasPressed or CS.out.vEgo < 1e-5) and (self.nidec_pid.i <= 0.01):
+        self.nidec_pid.i += 0.01 # clear out nidec pid integral while acc not controlling car
 
       brake, creep_impact = compute_gb_honda_nidec(adjust_accel, CS.out.vEgo, self.creep_factor)
       gas_error = self.accel - CS.out.aEgo
