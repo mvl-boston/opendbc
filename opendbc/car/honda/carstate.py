@@ -107,7 +107,7 @@ class CarState(CarStateBase):
     steer_status = self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
     ret.steerFaultPermanent = steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TJA_LOW_SPEED_LOCKOUT",
                                                    "TMP_FAULT")
-    if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
+    if self.CP.carFingerprint in (HONDA_BOSCH_ALT_RADAR | HONDA_BOSCH_CANFD):
       # TODO: See if this logic works for all other Honda
       min_steer_speed = max(CarControllerParams.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       expected_low_speed_lockout = steer_status == "LOW_SPEED_LOCKOUT" and ret.vEgo < min_steer_speed
@@ -118,7 +118,15 @@ class CarState(CarStateBase):
       # FIXME: the stock camera stops steering on NO_TORQUE_ALERT_1
       ret.steerFaultTemporary = steer_status not in ("NORMAL", "LOW_SPEED_LOCKOUT", "TJA_LOW_SPEED_LOCKOUT", "NO_TORQUE_ALERT_2")
 
-    self.steerControlOn = bool(cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"])
+    if (self.CP.carFingerprint == CAR.ACURA_MDX_4G) and (steer_status == "TJA_LOW_SPEED_LOCKOUT"):
+      ret.steerFaultPermanent = False
+      ret.steerFaultTemporary = False
+
+    if (self.CP.carFingerprint == CAR.ACURA_MDX_4G) and (steer_status == "TJA_LOW_SPEED_LOCKOUT"):
+      ret.steerFaultPermanent = False
+      ret.steerFaultTemporary = False
+
+      self.steerControlOn = bool(cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"])
 
     # All Honda EPS cut off slightly above standstill, some much higher
     # Don't alert in the near-standstill range, but alert for per-vehicle configured minimums above that
@@ -137,6 +145,11 @@ class CarState(CarStateBase):
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
     else:
       if self.CP.openpilotLongitudinalControl:
+        if (self.CP.carFingerprint in (CAR.ACURA_MDX_4G, *HONDA_BOSCH_CANFD)) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
+          ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
+        else:
+          ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
+
         if self.CP.carFingerprint in (HONDA_BOSCH_CANFD | HONDA_BOSCH_TJA_CONTROL) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
           ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
         else:
@@ -162,8 +175,7 @@ class CarState(CarStateBase):
       ret.blockPcmEnable = ret.brakeHoldActive # Nidec Hybrids fault if resuming cruise from brake hold
 
     if self.CP.transmissionType == TransmissionType.manual:
-      reverse_light_msg = cp.vl["SCM_FEEDBACK"] if self.CP.carFingerprint in HONDA_BOSCH else cp.vl["SCM_BUTTONS"]
-      ret.gearShifter = GearShifter.reverse if bool(reverse_light_msg["REVERSE_LIGHT"]) else GearShifter.drive
+      ret.gearShifter = GearShifter.reverse if bool(cp.vl[self.car_state_scm_msg]["REVERSE_LIGHT"]) else GearShifter.drive
     else:
       gear_position = self.shifter_values.get(cp.vl[self.gearbox_msg]["GEAR_SHIFTER"], None)
       ret.gearShifter = self.parse_gear_shifter(gear_position)

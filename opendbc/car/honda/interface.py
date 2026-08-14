@@ -48,7 +48,6 @@ class CarInterface(CarInterfaceBase):
       # Disable the radar and let openpilot control longitudinal
       # WARNING: THIS DISABLES AEB!
       # If Bosch radarless, this blocks ACC messages from the camera
-      # TODO: get radar disable working on Bosch CANFD
       ret.alphaLongitudinalAvailable = True
       ret.openpilotLongitudinalControl = True
       ret.pcmCruise = not ret.openpilotLongitudinalControl
@@ -57,9 +56,6 @@ class CarInterface(CarInterfaceBase):
       ret.openpilotLongitudinalControl = True
 
       ret.pcmCruise = True
-
-    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR):
-      ret.stoppingDecelRate = 0.3
 
     if candidate == CAR.HONDA_CRV_5G:
       ret.enableBsm = 0x12f8bfa7 in fingerprint[CAN.radar]
@@ -77,8 +73,7 @@ class CarInterface(CarInterfaceBase):
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID):
       ret.stoppingDecelRate = 0.3
 
-    if ret.flags & HondaFlags.ALLOW_MANUAL_TRANS and all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
-      # Manual transmission support for allowlisted cars only, to prevent silent fall-through on auto-detection failures
+    if all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
       ret.transmissionType = TransmissionType.manual
     elif 0x191 in fingerprint[CAN.pt] and candidate != CAR.ACURA_RDX:
       # Traditional CVTs, gearshift position in GEARBOX_CVT
@@ -93,11 +88,14 @@ class CarInterface(CarInterfaceBase):
     ret.steerActuatorDelay = 0.1
 
     if candidate in HONDA_BOSCH:
-      ret.longitudinalActuatorDelay = 0.5 # s
       # longitudinal gas-only tuning for Bosch hondas is in carcontroller
-      ret.stoppingDecelRate = 0.4  # drivers reporting braking was too harsh before standstill
       if candidate in HONDA_BOSCH_RADARLESS:
         ret.stopAccel = CarControllerParams.BOSCH_ACCEL_MIN  # stock uses -4.0 m/s^2 once stopped but limited by safety model
+        ret.longitudinalActuatorDelay = 0.25 # s
+      elif candidate in HONDA_BOSCH_CANFD:
+        ret.longitudinalActuatorDelay = 0.05 # set to near zero, canfd seems to have stock feedforward correction
+      else:
+        ret.longitudinalActuatorDelay = 0.5 # s
     else:
       # default longitudinal tuning for all Nidec hondas
       ret.longitudinalTuning.kiBP = [0., 5., 35.]
@@ -105,8 +103,11 @@ class CarInterface(CarInterfaceBase):
 
     if candidate == CAR.HONDA_CITY_7G:
       ret.vEgoStopping = 2.0
-      ret.vEgoStarting = ret.vEgoStopping
       ret.stoppingDecelRate = 0.3
+    else:
+      ret.vEgoStopping = 0.5
+      ret.stoppingDecelRate = 0.1
+    ret.vEgoStarting = ret.vEgoStopping
 
     # Disable control if EPS mod detected
     for fw in car_fw:
@@ -120,22 +121,27 @@ class CarInterface(CarInterfaceBase):
     elif candidate in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.ACURA_INTEGRA):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
-      if candidate == CAR.HONDA_CIVIC_BOSCH:
-          CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 750]
 
     elif candidate == CAR.HONDA_CIVIC_2022:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5120], [0, 5120]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
+    elif candidate == CAR.HONDA_PRELUDE_6G:
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
+      ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
+      ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
+
     elif candidate == CAR.HONDA_ACCORD:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
+      if ret.transmissionType == TransmissionType.manual:
+        CarControllerParams.BOSCH_GAS_LOOKUP_BP = [-0.2, 2.0]
 
     elif candidate == CAR.HONDA_ACCORD_11G:
       ret.steerActuatorDelay = 0.22
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12747], [0, 12747]]
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.18]]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560, 5200], [0, 2560, 12747]]
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.ACURA_ILX:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]  # TODO: determine if there is a dead zone at the top end
@@ -160,6 +166,8 @@ class CarInterface(CarInterfaceBase):
       ret.steerActuatorDelay = 0.15
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5120], [0, 5120]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      if (ret.flags & HondaFlags.HYBRID):
+        CarControllerParams.BOSCH_GAS_LOOKUP_BP = [-0.3, 2.0]
 
     elif candidate == CAR.HONDA_FIT:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
@@ -184,11 +192,15 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.ACURA_RDX_3G:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
+      CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
 
     elif candidate == CAR.ACURA_RDX_3G_MMR:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
+      if not ret.openpilotLongitudinalControl:
+        # When using stock ACC, the radar intercepts and filters steering commands the EPS would otherwise accept
+        ret.minSteerSpeed = 70. * CV.KPH_TO_MS
 
     elif candidate == CAR.HONDA_ODYSSEY:
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.28], [0.08]]
@@ -290,8 +302,7 @@ class CarInterface(CarInterfaceBase):
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     # These cars use alternate user brake msg (0x1BE)
-    if 0x1BE in fingerprint[CAN.pt] and candidate in (CAR.HONDA_ACCORD, CAR.HONDA_HRV_3G, CAR.ACURA_ADX, CAR.ACURA_MDX_4G,
-                                                      CAR.ACURA_RDX_3G, *HONDA_BOSCH_CANFD):
+    if 0x1BE in fingerprint[CAN.pt] and candidate in HONDA_BOSCH:
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
 
     if ret.flags & HondaFlags.BOSCH_ALT_BRAKE:
