@@ -344,7 +344,7 @@ class CarController(CarControllerBase):
            (self.apply_brake_last == 0):
         gasfactor_error = (self.accel - CS.out.aEgo)
         self.gas_alpha = np.clip(self.gas_alpha + 0.0001 * gasfactor_error / 4.8, -3.0, 3.0)
-        self.gasfactor *= (1 + 0.0001 * gasfactor_error * adjust_accel)
+        self.gasfactor *= (1 + 0.0001 * gasfactor_error *  gas_accel)
         more_new_accel_needed = (self.new_accel > pcm_accel and self.accel > CS.out.aEgo) or \
                                 (self.new_accel < pcm_accel and self.accel < CS.out.aEgo)
         new_accel_factor = abs(gasfactor_error * (self.new_accel - pcm_accel))
