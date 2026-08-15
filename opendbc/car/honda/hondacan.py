@@ -96,7 +96,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
     'STANDSTILL': standstill,
   }
 
-  if CP.car_fingerprint in HONDA_BOSCH_RADARLESS:
+  if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
     acc_control_values.update({
       "CONTROL_ON": enabled,
       # required whenever braking for Hybrid and Bosch Alt Brake vehicles, allow idle stop after 4 seconds (50 Hz) for other vehicles
