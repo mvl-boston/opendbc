@@ -256,7 +256,7 @@ class CarInterface(CarInterfaceBase):
       ):
       pass
 
-    elif candidate in CAR.HONDA_FIT_4G:
+    elif candidate == CAR.HONDA_FIT_4G:
       ret.steerActuatorDelay = 0.15
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
