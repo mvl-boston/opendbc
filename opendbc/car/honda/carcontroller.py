@@ -407,7 +407,7 @@ class CarController(CarControllerBase):
           # frames of the radar going silent (see the deferred radar disable above)
           if not (self.CP.carFingerprint in HONDA_BOSCH_CANFD and CS.stock_acc_alive):
             can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                          self.stopping_counter, self.CP.carFingerprint, gas_pedal_force))
+                                                          self.stopping_counter, self.CP, gas_pedal_force))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
