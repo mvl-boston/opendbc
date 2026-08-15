@@ -151,7 +151,7 @@ class CarState(CarStateBase):
           ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
         else:
           ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
-
+    ret.accfaulted = False
     ret.espDisabled = cp.vl["VSA_STATUS"]["ESP_DISABLED"] != 0
 
     if self.CP.carFingerprint not in (CAR.HONDA_ODYSSEY_TWN,):
