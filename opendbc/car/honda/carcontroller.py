@@ -371,7 +371,7 @@ class CarController(CarControllerBase):
             self.sat_accel = float(np.clip(self.sat_accel + 0.0002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
 
         self.speedfactor *= (1 + 0.001 * speedfactor_error * self.accel)
-        self.speedalpha += (0.001 * speedfactor_error)
+        self.speedalpha += (0.0001 * speedfactor_error)
         if max_speedcontrol or (self.new_accel < self.params.NIDEC_GAS_MAX) or (dv_sent > dv_sat): # only allow learning reductions
           self.speedfactor = min(prior_speedfactor, self.speedfactor)
           self.speedalpha = min(prior_speedalpha, self.speedalpha)
