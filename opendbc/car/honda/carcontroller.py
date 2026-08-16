@@ -220,6 +220,9 @@ class CarController(CarControllerBase):
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
 
     prior_windfactor = self.windfactor
+    prior_gasfactor = self.gasfactor
+    prior_gas_alpha = self.gas_alpha
+    prior_average_factor = self.average_factor
     if CC.longActive:
       if (actuators.longControlState in (LongCtrlState.pid, LongCtrlState.stopping)) and \
          (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
@@ -377,7 +380,10 @@ class CarController(CarControllerBase):
           self.speedfactor = min(prior_speedfactor, self.speedfactor)
           self.speedalpha = min(prior_speedalpha, self.speedalpha)
           self.windfactor = min(prior_windfactor, self.windfactor)
-
+          self.gasfactor = min(prior_gasfactor, self.gasfactor)
+          self.gas_alpha = min(prior_gas_alpha, self.gas_alpha)
+          self.average_factor = prior_average_factor # no feedforward adjustment in either direction in this range
+    
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
