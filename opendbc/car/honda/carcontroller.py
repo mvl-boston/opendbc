@@ -219,6 +219,7 @@ class CarController(CarControllerBase):
     # wind brake from air resistance decel at high speed
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
 
+    prior_windfactor = self.windfactor
     if CC.longActive:
       if (actuators.longControlState in (LongCtrlState.pid, LongCtrlState.stopping)) and \
          (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
@@ -231,7 +232,6 @@ class CarController(CarControllerBase):
         gas_error = self.accel - CS.out.aEgo
         wind_learn_speed = 1000
         wind_adjust = 1 + wind_brake / wind_learn_speed
-        prior_windfactor = self.windfactor
         self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
         gas_pedal_force = self.accel
         if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
