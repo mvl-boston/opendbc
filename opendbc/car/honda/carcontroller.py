@@ -352,8 +352,7 @@ class CarController(CarControllerBase):
           self.average_factor /= (1 + 0.0001 * new_accel_factor)
         else:
           self.average_factor = min(1.0, self.average_factor * (1 + 0.0001 * new_accel_factor))
-      if (self.new_accel == self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
-           (self.apply_brake_last == 0): # adjust speedfactor
+      if (not CS.out.gasPressed) and (self.apply_brake_last == 0): # adjust speedfactor
         speedfactor_error = (self.accel - CS.out.aEgo)
         dv_sent = self.speedfactor * self.accel + self.speedalpha
         dv_sat = max(0.1, self.speedfactor * self.sat_accel)
@@ -364,23 +363,16 @@ class CarController(CarControllerBase):
         # (undershooting for well past the ~1s plant lag with everything maxed means whatever aEgo
         # we observe IS the ceiling). Raw aEgo, no hill term: the ceiling is a servo logic cap that
         # is grade-compensated downstream (hill belongs on the gas channel only).
-        self.deficit_frames = self.deficit_frames + 1 if (speedfactor_error > 0.1 and CS.out.vEgo > 1.0) else 0
-        if (CS.out.aEgo > self.sat_accel) and (dv_sent > dv_sat):
-          self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
-        elif self.deficit_frames > 150:
-          self.sat_accel = float(np.clip(self.sat_accel + 0.0002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
+        if (self.new_accel == self.params.NIDEC_GAS_MAX):
+          self.deficit_frames = self.deficit_frames + 1 if (speedfactor_error > 0.1 and CS.out.vEgo > 1.0) else 0
+          if (CS.out.aEgo > self.sat_accel) and (dv_sent > dv_sat):
+            self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
+          elif self.deficit_frames > 150:
+            self.sat_accel = float(np.clip(self.sat_accel + 0.0002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
 
-        # speedfactor: only move it where moving it changes the output. Error feedback is only
-        # sign-correct below the knee; beyond it the surplus speed lead provably does nothing
-        # (measured: ~0.03 (m/s2)/(m/s) response above the knee vs ~0.2 below), so bleed toward
-        # the knee instead of growing on an error that can never respond. The min() is a per-tick
-        # rate limit (0.5%/tick max), same family as the gas/brake slew limits.
-        if dv_sent > dv_sat:
-          self.speedfactor *= (1 - min(0.0005 * (dv_sent - dv_sat), 0.005))
-        else:
-          self.speedfactor *= (1 + 0.0001 * speedfactor_error * self.accel)
+        self.speedfactor *= (1 + 0.001 * speedfactor_error * self.accel)
         self.speedalpha += (0.001 * speedfactor_error)
-        if max_speedcontrol: # only allow learning reductions
+        if max_speedcontrol or (self.new_accel < self.params.NIDEC_GAS_MAX) or (dv_sent > dv_sat): # only allow learning reductions
           self.speedfactor = min(prior_speedfactor, self.speedfactor)
           self.speedalpha = min(prior_speedalpha, self.speedalpha)
 
