@@ -328,7 +328,6 @@ class CarController(CarControllerBase):
       pcm_accel = int(np.clip((self.gas_alpha + gas_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
     max_speedcontrol = (pcm_speed > 99.999)
     prior_speedfactor = self.speedfactor
-    prior_speedalpha = self.speedalpha
 
     # feedforward for Nidec decaying-average gas pedal
     max_increase = 10 # used to be: 2  # equivalent to 20 units per 10hz frame
@@ -352,6 +351,12 @@ class CarController(CarControllerBase):
           self.average_factor /= (1 + 0.0001 * new_accel_factor)
         else:
           self.average_factor = min(1.0, self.average_factor * (1 + 0.0001 * new_accel_factor))
+        # speedalpha: the zero-accel servo offset (dv needed to hold aEgo = 0). It is identifiable
+        # only near steady state with the gas channel in its linear band: there the command is
+        # ~zero, so the residual error IS the offset error and the feedback is sign-correct in
+        # both directions -> self-bounding around the true +-0.5 m/s servo offset, no clamp needed.
+        if (CS.out.vEgo > 1.0) and (abs(self.accel) < 0.1):
+          self.speedalpha += 0.001 * gasfactor_error
       if (self.new_accel == self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
            (self.apply_brake_last == 0): # adjust speedfactor
         speedfactor_error = (self.accel - CS.out.aEgo)
@@ -370,19 +375,37 @@ class CarController(CarControllerBase):
         elif self.deficit_frames > 150:
           self.sat_accel = float(np.clip(self.sat_accel + 0.0002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
 
-        # speedfactor: only move it where moving it changes the output. Error feedback is only
-        # sign-correct below the knee; beyond it the surplus speed lead provably does nothing
-        # (measured: ~0.03 (m/s2)/(m/s) response above the knee vs ~0.2 below), so bleed toward
-        # the knee instead of growing on an error that can never respond. The min() is a per-tick
-        # rate limit (0.5%/tick max), same family as the gas/brake slew limits.
-        if dv_sent > dv_sat:
-          self.speedfactor *= (1 - min(0.0005 * (dv_sent - dv_sat), 0.005))
+        # speedfactor: only move it where moving it changes the output, and never through a law
+        # with an absorbing state at zero. Beyond the ceiling (demand > sat_accel) surplus dv
+        # provably does nothing, so bleed -- but only speedfactor's OWN share of the surplus,
+        # speedfactor * (accel - sat_accel): surplus contributed by speedalpha must not punish
+        # speedfactor, and this bleed force vanishes as speedfactor -> 0 (route 218 arrived with
+        # speedfactor = 3e-166 because the old total-dv bleed kept firing against the 0.1 knee
+        # floor whenever speedalpha alone exceeded it). Within the ceiling the error is
+        # observable (err > 0 with demand <= sat_accel implies the plant is below its ceiling,
+        # i.e. dv is below the physical knee, so the gradient err*accel is sign-correct):
+        # grow ADDITIVELY so a collapsed value recovers and growth cannot compound
+        # exponentially (306 was multiplicative compounding); shrink multiplicatively so
+        # overshoot correction never crosses zero. 0.0004 additive == old 0.0001 multiplicative
+        # at the equilibrium speedfactor ~4.
+        if self.accel > self.sat_accel:
+          self.speedfactor *= (1 - min(0.0005 * self.speedfactor * (self.accel - self.sat_accel), 0.005))
         else:
-          self.speedfactor *= (1 + 0.0001 * speedfactor_error * self.accel)
-        self.speedalpha += (0.001 * speedfactor_error)
+          speedfactor_step = speedfactor_error * self.accel
+          if speedfactor_step > 0:
+            self.speedfactor += 0.0004 * speedfactor_step
+          else:
+            self.speedfactor *= (1 + 0.0001 * speedfactor_step)
         if max_speedcontrol: # only allow learning reductions
           self.speedfactor = min(prior_speedfactor, self.speedfactor)
-          self.speedalpha = min(prior_speedalpha, self.speedalpha)
+        # speedalpha is NOT error-integrated here: with gas pinned the error cannot respond to
+        # the offset, so += err only ratchets upward (route 218: +0.006/s of pinned-gas cruise,
+        # 2.3 -> 35.9 m/s in one drive). The only correction allowed in this regime is min-norm:
+        # an offset that BY ITSELF already exceeds the derived knee is provably surplus in
+        # either direction, so bleed it toward zero, rate-limited to 0.5%/tick. A healthy
+        # offset (|speedalpha| << dv_sat) never triggers this.
+        if abs(self.speedalpha) > dv_sat:
+          self.speedalpha *= (1 - min(0.0005 * (abs(self.speedalpha) - dv_sat), 0.005))
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
