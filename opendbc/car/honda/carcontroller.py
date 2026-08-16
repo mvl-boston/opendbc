@@ -383,7 +383,7 @@ class CarController(CarControllerBase):
           self.gasfactor = min(prior_gasfactor, self.gasfactor)
           self.gas_alpha = min(prior_gas_alpha, self.gas_alpha)
           self.average_factor = prior_average_factor # no feedforward adjustment in either direction in this range
-    
+
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
