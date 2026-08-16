@@ -231,6 +231,7 @@ class CarController(CarControllerBase):
         gas_error = self.accel - CS.out.aEgo
         wind_learn_speed = 1000
         wind_adjust = 1 + wind_brake / wind_learn_speed
+        prior_windfactor = self.windfactor
         self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
         gas_pedal_force = self.accel
         if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
@@ -375,6 +376,7 @@ class CarController(CarControllerBase):
         if max_speedcontrol or (self.new_accel < self.params.NIDEC_GAS_MAX) or (dv_sent > dv_sat): # only allow learning reductions
           self.speedfactor = min(prior_speedfactor, self.speedfactor)
           self.speedalpha = min(prior_speedalpha, self.speedalpha)
+          self.windfactor = min(prior_windfactor, self.windfactor)
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
