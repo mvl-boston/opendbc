@@ -514,7 +514,7 @@ class CarController(CarControllerBase):
 
     new_actuators = actuators.as_builder()
     new_actuators.speed = float(self.nidec_pid_factor)
-    new_actuators.accel = float(adjust_accel)
+    new_actuators.accel = float(self.accel)
     new_actuators.gas = float(self.gasfactor)
     new_actuators.brake = float(self.speedalpha)
     new_actuators.torque = self.last_torque
