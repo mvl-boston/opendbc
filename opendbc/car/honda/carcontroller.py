@@ -367,16 +367,16 @@ class CarController(CarControllerBase):
         # (undershooting for well past the ~1s plant lag with everything maxed means whatever aEgo
         # we observe IS the ceiling). Raw aEgo, no hill term: the ceiling is a servo logic cap that
         # is grade-compensated downstream (hill belongs on the gas channel only).
-        if (CS.out.aEgo > self.sat_accel) and (dv_sent > dv_sat):
+        if (CS.out.aEgo > self.sat_accel) and (dv_sent >= dv_sat):
           self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
-        if (self.new_accel == self.params.NIDEC_GAS_MAX):
+        if ((self.new_accel == self.params.NIDEC_GAS_MAX) or (self.accel > self.sat_accel + 0.1))  and (dv_sent >= dv_sat):
           self.deficit_frames = self.deficit_frames + 1 if (speedfactor_error > 0.1 and CS.out.vEgo > 1.0) else 0
           elif self.deficit_frames > 150:
             self.sat_accel = float(np.clip(self.sat_accel + 0.0002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
 
         self.speedfactor = max(0.001, self.speedfactor * (1 + 0.001 * speedfactor_error * self.accel))
         self.speedalpha = min(dv_sat, self.speedalpha * 0.0001 * speedfactor_error)
-        if max_speedcontrol or (self.new_accel < self.params.NIDEC_GAS_MAX) or (dv_sent > dv_sat): # only allow learning reductions
+        if max_speedcontrol or (dv_sent > dv_sat): # only allow learning reductions
           self.speedfactor = min(prior_speedfactor, self.speedfactor)
           self.speedalpha = min(prior_speedalpha, self.speedalpha)
           self.windfactor = min(prior_windfactor, self.windfactor)
