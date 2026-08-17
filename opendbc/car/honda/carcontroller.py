@@ -359,7 +359,7 @@ class CarController(CarControllerBase):
       if (not CS.out.gasPressed) and (self.apply_brake_last == 0): # adjust speedfactor
         speedfactor_error = (self.accel - CS.out.aEgo)
         dv_sent = self.speedfactor * self.accel + self.speedalpha
-        dv_sat = max(0.1, self.speedfactor * self.sat_accel)
+        dv_sat = max(0.1, self.speedfactor * self.sat_accel + self.speedalpha)
 
         # ceiling learner (sat_accel): owns the saturated regime, learns by direct measurement.
         # Asymmetric on purpose: a ceiling is a max-type quantity, so learn UP quickly whenever the
