@@ -369,7 +369,7 @@ class CarController(CarControllerBase):
         # is grade-compensated downstream (hill belongs on the gas channel only).
         if (CS.out.aEgo > self.sat_accel) and (dv_sent >= dv_sat):
           self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
-        if ((self.new_accel == self.params.NIDEC_GAS_MAX) or (self.accel > self.sat_accel + 0.1))  and (dv_sent >= dv_sat):
+        if ((self.new_accel == self.params.NIDEC_GAS_MAX) or (self.accel > self.sat_accel + 0.1)) and (dv_sent >= dv_sat):
           self.deficit_frames = self.deficit_frames + 1 if (speedfactor_error > 0.1 and CS.out.vEgo > 1.0) else 0
           if self.deficit_frames > 150:
             self.sat_accel = float(np.clip(self.sat_accel + 0.0002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
