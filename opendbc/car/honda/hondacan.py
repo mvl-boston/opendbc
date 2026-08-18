@@ -190,6 +190,9 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     'BEEP': 0,
   }
 
+  if lkas_state_change is not None:
+    lkas_hud_values['LKAS_STATE_CHANGE'] = int(lkas_state_change)
+
   if CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
     lkas_hud_values['LANE_LINES'] = 3
 
