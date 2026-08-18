@@ -190,6 +190,8 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     'BEEP': 0,
   }
 
+  # MDX CAN FD factory logs show the stock camera holds LKAS_STATE_CHANGE low, pulsing it high for ~3s
+  # only when the HUD state changes; holding it high permanently suppresses the dash lane-line rendering.
   if lkas_state_change is not None:
     lkas_hud_values['LKAS_STATE_CHANGE'] = int(lkas_state_change)
 
