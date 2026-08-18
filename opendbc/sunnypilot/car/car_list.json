@@ -599,6 +599,18 @@
     ],
     "package": "Adaptive Cruise Control (ACC) & Lane Assist"
   },
+  "CUPRA Born 2021-23": {
+    "platform": "CUPRA_BORN_MK1",
+    "make": "CUPRA",
+    "brand": "volkswagen",
+    "model": "Born",
+    "year": [
+      "2021",
+      "2022",
+      "2023"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
   "Dodge Durango 2020-21": {
     "platform": "DODGE_DURANGO",
     "make": "Dodge",
@@ -1167,13 +1179,15 @@
     ],
     "package": "All"
   },
-  "Honda City (Brazil only) 2023": {
+  "Honda City (Brazil only) 2023-25": {
     "platform": "HONDA_CITY_7G",
     "make": "Honda",
     "brand": "honda",
     "model": "City (Brazil only)",
     "year": [
-      "2023"
+      "2023",
+      "2024",
+      "2025"
     ],
     "package": "All"
   },
@@ -4404,6 +4418,29 @@
       "2022",
       "2023",
       "2024"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Volkswagen ID.4 2021-23": {
+    "platform": "VOLKSWAGEN_ID4_MK1",
+    "make": "Volkswagen",
+    "brand": "volkswagen",
+    "model": "ID.4",
+    "year": [
+      "2021",
+      "2022",
+      "2023"
+    ],
+    "package": "Adaptive Cruise Control (ACC) & Lane Assist"
+  },
+  "Volkswagen ID.4 2024-25": {
+    "platform": "VOLKSWAGEN_ID4_MK2",
+    "make": "Volkswagen",
+    "brand": "volkswagen",
+    "model": "ID.4",
+    "year": [
+      "2024",
+      "2025"
     ],
     "package": "Adaptive Cruise Control (ACC) & Lane Assist"
   },

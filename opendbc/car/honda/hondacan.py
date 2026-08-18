@@ -1,7 +1,6 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.values import (CAR, HondaFlags, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_RADARLESS,
-                                      HONDA_BOSCH_CANFD, CarControllerParams)
+from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH_ALT_RADAR, CarControllerParams)
 from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
 
 # CAN bus layout with relay
@@ -17,7 +16,7 @@ class CanBus(CanBusBase):
     super().__init__(CP if fingerprint is None else None, fingerprint)
 
     # powertrain bus is split instead of radar on radarless and CAN FD Bosch
-    if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD):
+    if CP is not None and CP.flags & HondaFlags.BOSCH and not (CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD)):
       self._pt, self._radar = self.offset + 1, self.offset
       # normally steering commands are sent to radar, which forwards them to powertrain bus
       # when radar is disabled, steering commands are sent directly to powertrain bus
@@ -78,7 +77,6 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
 
 
 def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, CP, gas_force):
-
   commands = []
   min_gas_accel = CarControllerParams.BOSCH_GAS_LOOKUP_BP[0]
 
@@ -95,7 +93,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
     'STANDSTILL': standstill,
   }
 
-  if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+  if CP.flags & HondaFlags.BOSCH_RADARLESS:
     acc_control_values.update({
       "CONTROL_ON": enabled,
       # required whenever braking for Hybrid and Bosch Alt Brake vehicles, allow idle stop after 4 seconds (50 Hz) for other vehicles
@@ -157,11 +155,11 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     'SET_ME_X01_2': 1,
   }
 
-  if CP.carFingerprint in HONDA_BOSCH_CANFD:
+  if CP.flags & HondaFlags.BOSCH_CANFD:
     acc_hud_values['SET_ME_X01'] = int(enabled and (bool(acc_hud_values['HUD_LEAD']) or (pcm_accel < 0.2)))
     acc_hud_values['SET_ME_X01_2'] = int(enabled and (bool(acc_hud_values['HUD_LEAD']) or (pcm_accel < 0.2)))
 
-  if CP.carFingerprint in HONDA_BOSCH:
+  if CP.flags & HondaFlags.BOSCH:
     acc_hud_values['ACC_ON'] = int(enabled)
     acc_hud_values['FCM_OFF'] = bool(0)
     acc_hud_values['FCM_OFF_2'] = bool(0)
@@ -192,17 +190,12 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     'BEEP': 0,
   }
 
-  # MDX CAN FD factory logs show the stock camera holds LKAS_STATE_CHANGE low, pulsing it high for ~3s
-  # only when the HUD state changes; holding it high permanently suppresses the dash lane-line rendering.
-  if lkas_state_change is not None:
-    lkas_hud_values['LKAS_STATE_CHANGE'] = int(lkas_state_change)
-
-  if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
+  if CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
     lkas_hud_values['LANE_LINES'] = 3
 
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
     # TODO: needed for Bosch CAN FD?
-    if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    if CP.flags & HondaFlags.BOSCH_RADARLESS:
       lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
 
     if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
@@ -269,7 +262,7 @@ def spam_buttons_command(packer, CAN, cruise_button, cruise_setting, ambient_lig
   }
   if bus is None:
     # send buttons to camera on radarless (camera does ACC) cars
-    bus = CAN.camera if car_fingerprint in HONDA_BOSCH_RADARLESS else CAN.pt
+    bus = CAN.camera if CP.flags & HondaFlags.BOSCH_RADARLESS else CAN.pt
   return packer.make_can_msg("SCM_BUTTONS", bus, values)
 
 
