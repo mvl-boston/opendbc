@@ -1,6 +1,6 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH_ALT_RADAR, CarControllerParams)
+from opendbc.car.honda.values import (CAR, HondaFlags, HONDA_BOSCH_ALT_RADAR, CarControllerParams)
 from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
 
 # CAN bus layout with relay
@@ -203,9 +203,9 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     if CP.flags & HondaFlags.BOSCH_RADARLESS:
       lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
 
-    if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
+    if (self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
       lkas_hud_values['LKAS_PROBLEM'] = CS.out.steerFaultPermanent # CS.lkas_hud['LKAS_PROBLEM']
-      if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      if self.CP.flags & HondaFlags.BOSCH_RADARLESS:
         lkas_hud_values['DASHED_LANES'] = 1  # show gray lanes when disengaged
       else:
         # CAN FD: dashed lanes are the MADS armed indication (MadsCarController sets dashed_lanes to
@@ -215,7 +215,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
         # keeps SOLID and DASHED set together (0x44), byte-matching the stock camera's lanes-on state.
         lkas_hud_values['DASHED_LANES'] = dashed_lanes or lat_active
 
-    if CP.carFingerprint in HONDA_BOSCH_CANFD:
+    if self.CP.flags & HondaFlags.BOSCH_CANFD:
       # Don't let steer saturation flicker SOLID_LANES: every payload change must coincide with an
       # LKAS_STATE_CHANGE pulse (see carcontroller), and a 10Hz flicker would keep the pulse
       # re-triggering, which suppresses the dash lane lines.
@@ -258,7 +258,7 @@ def create_legacy_brake_command(packer, bus):
   return packer.make_can_msg("LEGACY_BRAKE_COMMAND", bus, {})
 
 
-def spam_buttons_command(packer, CAN, cruise_button, cruise_setting, ambient_light, car_fingerprint, bus=None):
+def spam_buttons_command(packer, CAN, cruise_button, cruise_setting, ambient_light, CP, bus=None):
   values = {
     'CRUISE_BUTTONS': cruise_button,
     'CRUISE_SETTING': cruise_setting,
