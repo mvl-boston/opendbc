@@ -203,7 +203,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     if CP.flags & HondaFlags.BOSCH_RADARLESS:
       lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
 
-    if (self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
+    if self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
       lkas_hud_values['LKAS_PROBLEM'] = CS.out.steerFaultPermanent # CS.lkas_hud['LKAS_PROBLEM']
       if self.CP.flags & HondaFlags.BOSCH_RADARLESS:
         lkas_hud_values['DASHED_LANES'] = 1  # show gray lanes when disengaged
