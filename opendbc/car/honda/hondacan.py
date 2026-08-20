@@ -203,9 +203,9 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     if CP.flags & HondaFlags.BOSCH_RADARLESS:
       lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
 
-    if self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
+    if CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
       lkas_hud_values['LKAS_PROBLEM'] = CS.out.steerFaultPermanent # CS.lkas_hud['LKAS_PROBLEM']
-      if self.CP.flags & HondaFlags.BOSCH_RADARLESS:
+      if CP.flags & HondaFlags.BOSCH_RADARLESS:
         lkas_hud_values['DASHED_LANES'] = 1  # show gray lanes when disengaged
       else:
         # CAN FD: dashed lanes are the MADS armed indication (MadsCarController sets dashed_lanes to
@@ -215,7 +215,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
         # keeps SOLID and DASHED set together (0x44), byte-matching the stock camera's lanes-on state.
         lkas_hud_values['DASHED_LANES'] = dashed_lanes or lat_active
 
-    if self.CP.flags & HondaFlags.BOSCH_CANFD:
+    if CP.flags & HondaFlags.BOSCH_CANFD:
       # Don't let steer saturation flicker SOLID_LANES: every payload change must coincide with an
       # LKAS_STATE_CHANGE pulse (see carcontroller), and a 10Hz flicker would keep the pulse
       # re-triggering, which suppresses the dash lane lines.
