@@ -137,15 +137,24 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: opendbc_repo
+    - name: Sync opendbc dependencies
+      run: |
+        cd opendbc_repo
+        export UV_PROJECT_ENVIRONMENT="$GITHUB_WORKSPACE/.venv"
+        uv sync --all-extras --inexact || (sleep 300 && uv sync --all-extras --inexact)
     - name: Cache test routes
       id: routes-cache
       uses: actions/cache@v4
       with:
         path: /tmp/comma_download_cache
-        key: car_models-${{ hashFiles('opendbc/car/tests/test_models.py', 'opendbc/car/tests/routes.py') }}-${{ matrix.job }}
+        key: car_models-${{ hashFiles('opendbc_repo/opendbc/car/tests/test_models.py', 'opendbc_repo/opendbc/car/tests/routes.py') }}-${{ matrix.job }}
     - name: Test car models
       timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 6 }}
-      run: source .venv/bin/activate && MAX_EXAMPLES=1 opendbc/car/tests/test_models.py
+      run: |
+        source .venv/bin/activate
+        cd opendbc_repo
+        export PYTHONPATH="$PWD"
+        MAX_EXAMPLES=1 python opendbc/car/tests/test_models.py
       env:
         NUM_JOBS: 4
         JOB_ID: ${{ matrix.job }}
