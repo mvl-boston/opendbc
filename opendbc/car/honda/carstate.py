@@ -44,7 +44,8 @@ class CarState(CarStateBase, CarStateExt):
     self.brake_switch_active = False
     self.low_speed_alert = False
 
-    self.dynamic_v_cruise_units = bool(self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_ALT_RADAR | HondaFlags.BOSCH_CANFD | HondaFlags.BOSCH_TJA_CONTROL))
+    self.dynamic_v_cruise_units = bool(self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_ALT_RADAR |
+                                                        HondaFlags.BOSCH_CANFD | HondaFlags.BOSCH_TJA_CONTROL))
     self.cruise_setting = 0
     self.v_cruise_pcm_prev = 0
 
@@ -79,14 +80,14 @@ class CarState(CarStateBase, CarStateExt):
 
     # Only radarless cars have a camera that emits HUD_OBJECTS to poll for secondary vehicle locations.
     # On CAN FD cars the radar owned HUD_OBJECTS and it is disabled, so there is nothing to track.
-    self.hud_object_tracker = HudObjectTracker() if CP.carFingerprint in HONDA_BOSCH_RADARLESS else None
+    self.hud_object_tracker = HudObjectTracker() if (self.CP.flags & HondaFlags.BOSCH_RADARLESS) else None
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
     if self.CP.enableBsm:
       cp_body = can_parsers[Bus.body]
-    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+    if self.CP.flags & HondaFlags.BOSCH_CANFD:
       cp_radar = can_parsers[Bus.radar]
 
     ret = structs.CarState()
@@ -101,7 +102,7 @@ class CarState(CarStateBase, CarStateExt):
     prev_cruise_setting = self.cruise_setting
     self.cruise_setting = cp.vl["SCM_BUTTONS"]["CRUISE_SETTING"]
     self.cruise_buttons = cp.vl["SCM_BUTTONS"]["CRUISE_BUTTONS"]
-    if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
+    if self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
       # The camera consumes SCM_BUTTONS content beyond the buttons (losing/zeroing this byte raises an
       # adaptive high beam error), so it must be echoed on frames sent in the SCM's place.
       self.scm_ambient_light = cp.vl["SCM_BUTTONS"]["AMBIENT_LIGHT_MAYBE"]
@@ -168,7 +169,7 @@ class CarState(CarStateBase, CarStateExt):
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
     else:
       if self.CP.openpilotLongitudinalControl:
-        if self.CP.carFingerprint in (HONDA_BOSCH_CANFD | HONDA_BOSCH_TJA_CONTROL) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
+        if self.CP.flags & (HondaFlags.BOSCH_CANFD | HondaFlags.BOSCH_TJA_CONTROL) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
           ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
         else:
           ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
@@ -242,7 +243,7 @@ class CarState(CarStateBase, CarStateExt):
 
     # Bosch cars take a few minutes after startup to clear prior faults
     if ret.accFaulted:
-      if (self.CP.carFingerprint in HONDA_BOSCH) and not self.initial_accFault_cleared:
+      if (self.CP.flags & HondaFlags.BOSCH) and not self.initial_accFault_cleared:
         # block via cruiseState since accFaulted is not reversible until offroad
         ret.accFaulted = False
         ret.cruiseState.available = False
@@ -272,7 +273,7 @@ class CarState(CarStateBase, CarStateExt):
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
     if self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
-    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+    if self.CP.flags & HondaFlags.BOSCH_CANFD:
       # The radar emits low-rate "tick reference" messages that keep running even while the radar's
       # data messages are disabled, so we phase our look-alikes to the stock cadence off of them.
       #
@@ -363,12 +364,12 @@ class CarState(CarStateBase, CarStateExt):
   def get_can_parsers(self, CP, CP_SP):
     pt_messages = []
     cam_messages = []
-    if CP.carFingerprint in HONDA_BOSCH_CANFD:
+    if self.CP.flags & HondaFlags.BOSCH_CANFD:
       # Radar-alive and relay-open detection for the deferred radar disable (see carcontroller).
       # Both messages intentionally go silent (the radar is disabled, the camera ends up behind the
       # open relay), so subscribe with NaN frequency to skip the alive/timeout checks.
       pt_messages += [("ACC_CONTROL", float('nan')), ("STEERING_CONTROL", float('nan'))]
-    if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    if self.CP.flags & HondaFlags.BOSCH_RADARLESS:
       # HUD_OBJECTS is polled by the HudObjectTracker, but not every radarless camera emits it,
       # so subscribe with NaN frequency to skip the alive/timeout checks.
       cam_messages += [("HUD_OBJECTS", float('nan'))]
@@ -378,7 +379,7 @@ class CarState(CarStateBase, CarStateExt):
     }
     if CP.enableBsm:
       parsers[Bus.body] = CANParser(DBC[CP.carFingerprint][Bus.body], [], CanBus(CP).radar)
-    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+    if self.CP.flags & HondaFlags.BOSCH_CANFD:
       # These radar tick-reference messages are only read via vl_all, which (unlike vl) does not
       # auto-subscribe messages, so they must be listed explicitly or they are never parsed.
       #   0x710 RADAR_SUPP_TICK_REFERENCE (1 Hz), 0x730 RADAR_HUD_TICK_REFERENCE (10 Hz),
