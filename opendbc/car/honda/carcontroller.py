@@ -506,7 +506,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # Render OP's lane and lead car on the dash. On CAN FD these are radar look-alikes that only exist
     # (and are only allowed by panda safety) when the radar is disabled, i.e. openpilot longitudinal;
     # in stock ACC the real radar still owns LANE_PATH/HUD_OBJECTS, so don't author them.
-    if ((self.frame % 2 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS) or
+    if ((self.frame % 2 == 0 and self.CP.flags & HondaFlags.BOSCH_RADARLESS) or
         (CS.radar_50hz_tick and self.CP.flags & HondaFlags.BOSCH_CANFD and self.CP.openpilotLongitudinalControl
          and not CS.stock_acc_alive)):
       leads = hud_objects.leads_from_model(self.model, CS.out.vEgo)
@@ -546,7 +546,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         for addr, dat, _ in (lane_msg, hud_msg):
           can_sends.append((addr, dat, self.CAN.camera))
 
-    if self.frame % 20 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    if self.frame % 20 == 0 and self.CP.flags & HondaFlags.BOSCH_RADARLESS:
       # COUNTER_2 trails the packer's COUNTER (frame//20 % 4) by one. TODO: do we need the - 1 trail?
       dl = self.dash_lane
       can_sends.append(lane_path.create_lkas_hud_2(self.packer, self.CAN.lkas, (self.frame // 20 - 1) % 4,
