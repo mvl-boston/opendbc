@@ -17,6 +17,16 @@ from opendbc.car.common.pid import PIDController
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 
+# Stock Nidec camera launch signature (measured on ACURA_MDX_3G route 153): at a standstill
+# resume the camera jumps straight to PCM_SPEED=9.99 kph + PCM_GAS~104 and the PCM starts
+# applying pedal within ~0.2s. Anything weaker (gas ramped from 0, tiny speed lead) adds
+# ~0.4s of PCM response lag — enough to lose the launch race against the camera's shadow-ACC
+# watchdog, which latches ACC_PROBLEM ~0.8s after ITS launch if the car has not moved and the
+# engine is running (engine-off/idle-stop launches are tolerated much longer; see route 1db
+# fault vs 1d7 twins).
+NIDEC_LAUNCH_PCM_SPEED = 9.99 * CV.KPH_TO_MS  # m/s
+NIDEC_LAUNCH_PCM_GAS = 104
+
 
 def compute_gb_honda_bosch(accel, speed):
   # TODO returns 0s, is unused
@@ -188,6 +198,7 @@ class CarController(CarControllerBase):
     self.sat_accel = 0.9 if (Params().get("HondaSatAccelParams") is None) else Params().get("HondaSatAccelParams")
     self.deficit_frames = 0
     self.new_accel = 0.0
+    self.launching = False
 
     self.latFactors = {
       "05": 1.0 if (Params().get("HondaLatAccelFactor05Params") is None) else Params().get("HondaLatAccelFactor05Params"),
@@ -227,6 +238,12 @@ class CarController(CarControllerBase):
       if (actuators.longControlState in (LongCtrlState.pid, LongCtrlState.stopping)) and \
          (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
          and (not CS.out.stockAeb) and (not CS.out.gasPressed):
+        if CS.out.vEgo < 1e-2 and actuators.accel > 1e-5:
+          # standstill resume: integral wound during the braking approach is stale — it can
+          # only delay the launch and hold the brake into it (1db fault: i=-0.94 cost 0.35s
+          # plus a brake spike overlapping the camera launch). Drop the negative part now
+          # instead of unwinding it through k_i.
+          self.nidec_pid.i = max(self.nidec_pid.i, 0.0)
         self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
         self.accel = actuators.accel + self.nidec_pid_factor
         adjust_accel = self.accel + hill_brake
@@ -270,6 +287,14 @@ class CarController(CarControllerBase):
       self.accel = 0.0
       adjust_accel = self.accel
       brake = 0.0
+
+    # launch latch: set at an engaged standstill the moment the planner wants to go, cleared
+    # once rolling (or on any reason not to go). While latched the Nidec send path floors the
+    # commands to the stock launch signature so the PCM responds at stock speed.
+    if CC.longActive and (not CS.out.gasPressed) and CS.out.vEgo < 1e-2 and actuators.accel > 1e-5:
+      self.launching = True
+    elif (not CC.longActive) or CS.out.gasPressed or (actuators.accel <= 1e-5) or (CS.out.vEgo > 1.5):
+      self.launching = False
 
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
@@ -488,13 +513,21 @@ class CarController(CarControllerBase):
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
+      if self.CP.carFingerprint not in HONDA_BOSCH and self.launching and \
+          (self.apply_brake_last == 0) and (not CS.out.gasPressed):
+        # stock-signature launch: our brake is off and the planner wants to go, so command at
+        # least what the stock camera commands at a launch. Skipping the ramp-from-zero here is
+        # what wins the race against the camera's engine-on no-motion watchdog (~0.8s).
+        pcm_speed = max(pcm_speed, NIDEC_LAUNCH_PCM_SPEED)
+        self.new_accel = max(self.new_accel, NIDEC_LAUNCH_PCM_GAS)
+
     # Send dashboard UI commands.
     if self.frame % 10 == 0:
 
       if self.CP.openpilotLongitudinalControl:
         # On Nidec, this also controls longitudinal positive acceleration
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, self.new_accel,
-                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud))
+                                                 hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, self.launching))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       reduced_steering = CS.out.steeringPressed
