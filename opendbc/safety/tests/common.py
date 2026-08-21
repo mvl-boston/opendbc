@@ -221,6 +221,20 @@ class LongitudinalGasBrakeSafetyTest(SafetyTestBase, abc.ABC):
   def test_brake_safety_check(self):
     self._generic_limit_safety_check(self._send_brake_msg, self.MIN_BRAKE, self.MAX_BRAKE, 0, self.MAX_POSSIBLE_BRAKE, 1)
 
+  def test_brake_inactive_when_longitudinal_disallowed(self):
+    # Inactive brake must pass when longitudinal is blocked by disengagement or gas
+    cases = (
+      (False, False),
+      (True, True),
+    )
+    for controls_allowed, gas_pressed in cases:
+      with self.subTest(controls_allowed=controls_allowed, gas_pressed=gas_pressed):
+        self.safety.set_controls_allowed(controls_allowed)
+        self.safety.set_gas_pressed_prev(gas_pressed)
+        self.assertFalse(self.safety.get_longitudinal_allowed())
+        self.assertTrue(self._tx(self._send_brake_msg(0)))
+        self.assertFalse(self._tx(self._send_brake_msg(self.MIN_BRAKE + 1)))
+
   def test_gas_safety_check(self):
     self._generic_limit_safety_check(self._send_gas_msg, self.MIN_GAS, self.MAX_GAS, self.MIN_POSSIBLE_GAS, self.MAX_POSSIBLE_GAS, 1, self.INACTIVE_GAS)
 
@@ -787,6 +801,29 @@ class AngleSteeringSafetyTest(VehicleSpeedSafetyTest):
             should_tx = controls_allowed if steer_control_enabled else angle_cmd == angle_meas
             self.assertEqual(should_tx, self._tx(self._angle_cmd_msg(angle_cmd, steer_control_enabled)))
 
+  def test_angle_rate_limit_at_zero(self):
+    if self.ANGLE_RATE_BP is None:
+      raise unittest.SkipTest("Uses vehicle model limits")
+
+    # Use a low speed where windup and unwind limits differ after the safety speed fudge
+    speed = 5.
+    self.safety.set_controls_allowed(True)
+    self._reset_speed_measurement(speed)
+    self._reset_angle_measurement(0)
+
+    fudged_speed = max(speed - 1, 0)
+    delta_up = int(np.interp(fudged_speed, self.ANGLE_RATE_BP, self.ANGLE_RATE_UP) * self.DEG_TO_CAN) + 1
+    delta_down = int(np.interp(fudged_speed, self.ANGLE_RATE_BP, self.ANGLE_RATE_DOWN) * self.DEG_TO_CAN) + 1
+    if delta_up >= delta_down:
+      raise unittest.SkipTest("Need different up/down rate limits")
+
+    # At desired_angle_last == 0, the >= 0 check selects the lower rate limit
+    self.safety.set_desired_angle_last(0)
+    self.assertTrue(self._tx(self._angle_cmd_msg(-delta_down / self.DEG_TO_CAN, True)))
+
+    self.safety.set_desired_angle_last(0)
+    self.assertFalse(self._tx(self._angle_cmd_msg(-(delta_down + 1) / self.DEG_TO_CAN, True)))
+
   def test_angle_violation(self):
     # If violation occurs, angle cmd is blocked until reset to 0. Matches behavior of torque safety modes
     self.safety.set_controls_allowed(True)
@@ -838,7 +875,7 @@ class CurvatureSteeringSafetyTest(VehicleSpeedSafetyTest):
       raise unittest.SkipTest
 
   @abc.abstractmethod
-  def _curvature_cmd_msg(self, curvature: float, steer_req: bool):
+  def _curvature_cmd_msg(self, curvature: float, steer_req: bool, increment_timer: bool = True):
     pass
 
   @abc.abstractmethod
@@ -931,6 +968,33 @@ class CurvatureSteeringSafetyTest(VehicleSpeedSafetyTest):
       # after violation, prev is reset to 0, going past the jerk limit must fail
       self.safety.set_controls_allowed(True)
       self.assertFalse(self._tx(self._curvature_cmd_msg(2 * max_curvature_delta, True)))
+
+  def test_rt_limits(self):
+    if self.LATERAL_FREQUENCY == -1:
+      raise unittest.SkipTest("No real time limits")
+
+    # send rate is limited over a rolling 250ms window split into two half-interval buckets
+    self.safety.set_controls_allowed(True)
+    self._reset_curvature_measurement(0)
+    max_rt_msgs = int(self.LATERAL_FREQUENCY * RT_INTERVAL / 1e6 * 1.2 + 1)
+    half = RT_INTERVAL // 2
+
+    self.safety.set_timer(0)
+    for i in range(max_rt_msgs * 2):
+      self.assertEqual(i <= max_rt_msgs, self._tx(self._curvature_cmd_msg(0, True, increment_timer=False)))
+
+    self.safety.set_timer(half)
+    self.assertFalse(self._tx(self._curvature_cmd_msg(0, True, increment_timer=False)))
+
+    self.safety.set_timer(half + 2 * RT_INTERVAL // 5)
+    self.assertFalse(self._tx(self._curvature_cmd_msg(0, True, increment_timer=False)))
+    self.assertFalse(self._tx(self._curvature_cmd_msg(0, True, increment_timer=False)))
+
+    self.safety.set_timer(half + RT_INTERVAL)
+    self.assertFalse(self._tx(self._curvature_cmd_msg(0, True, increment_timer=False)))
+    self.safety.set_timer(half + 2 * RT_INTERVAL)
+    for _ in range(max_rt_msgs):
+      self.assertTrue(self._tx(self._curvature_cmd_msg(0, True, increment_timer=False)))
 
 
 class SafetyTest(SafetyTestBase):

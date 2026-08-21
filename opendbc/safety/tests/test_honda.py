@@ -375,6 +375,14 @@ class TestHondaNidecSafetyBase(HondaBase):
             send = brake == 0
           self.assertEqual(send, self._tx(self._send_brake_msg(brake)))
 
+    # Inactive brake must pass when gas blocks longitudinal actuation
+    self.safety.set_honda_fwd_brake(False)
+    self.safety.set_controls_allowed(True)
+    self.safety.set_gas_pressed_prev(True)
+    self.assertFalse(self.safety.get_longitudinal_allowed())
+    self.assertTrue(self._tx(self._send_brake_msg(0)))
+    self.assertFalse(self._tx(self._send_brake_msg(1)))
+
 
 class TestHondaNidecPcmSafety(HondaPcmEnableBase, TestHondaNidecSafetyBase):
   """
