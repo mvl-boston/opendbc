@@ -610,6 +610,11 @@ def main():
       ("opendbc/safety/lateral.h", 188, "boundary"),
       ("opendbc/safety/lateral.h", 218, "boundary"),
       ("opendbc/safety/lateral.h", 219, "boundary"),
+      # Fork: pre-FSD14 tesla.h address checks; upstream fixed via 01871c73b
+      ("opendbc/safety/modes/tesla.h", 26, "boundary"),
+      ("opendbc/safety/modes/tesla.h", 42, "boundary"),
+      ("opendbc/safety/modes/tesla.h", 48, "boundary"),
+      ("opendbc/safety/modes/tesla.h", 48, "comparison"),
     }
     survivors = [r for r in survivors if (str(r.site.origin_file.relative_to(ROOT)), r.site.origin_line, r.site.mutator) not in known_survivors]
 
