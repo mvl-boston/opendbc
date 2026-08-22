@@ -32,6 +32,8 @@ testing = [
   "pytest-subtests",
   "hypothesis==6.47.*",
   "parameterized>=0.8,<0.9",
+  "zstandard",
+  "unittest-parallel",
 
   # static analysis
   "ruff",
