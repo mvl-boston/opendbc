@@ -21,6 +21,8 @@ dependencies = [
 [project.optional-dependencies]
 testing = [
   "cffi",
+  "tree-sitter",
+  "tree-sitter-c",
   "gcovr",
   # FIXME: pytest 9.0.0 doesn't support unittest.SkipTest
   "pytest==8.4.2",
