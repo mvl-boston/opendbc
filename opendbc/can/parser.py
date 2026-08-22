@@ -129,7 +129,7 @@ class CANParser:
   def __init__(self, dbc_name: str, messages: list[tuple[str | int, int]], bus: int):
     self.dbc_name: str = dbc_name
     self.bus: int = bus
-    self.dbc: DBC = DBC(dbc_name)
+    self.dbc = DBC(dbc_name)
 
     self.vl: dict[int | str, dict[str, float]] = VLDict(self)
     self.vl_all: dict[int | str, dict[str, list[float]]] = {}
@@ -201,13 +201,18 @@ class CANParser:
     valid = True
     counters_valid = True
     bus_timeout = self.bus_timeout
+    is_honda = 'honda' in self.dbc_name or 'acura' in self.dbc_name
     for state in self.message_states.values():
       if state.counter_fail >= MAX_BAD_COUNTER:
         counters_valid = False
         state.rate_limited_log(self._last_update_nanos, f"counter invalid, {state.counter_fail=} {MAX_BAD_COUNTER=}")
+        if is_honda:
+          carlog.error({"counter invalid - message": state, "bus": self.bus})
       if not state.valid(self._last_update_nanos, bus_timeout):
         valid = False
         state.rate_limited_log(self._last_update_nanos, "not valid (timeout or missing)")
+        if is_honda:
+          carlog.error({"can invalid - message": state, "bus": self.bus})
 
     # TODO: probably only want to increment this once per update() call
     self.can_invalid_cnt = 0 if valid else min(self.can_invalid_cnt + 1, CAN_INVALID_CNT)

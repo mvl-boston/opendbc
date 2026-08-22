@@ -16,6 +16,7 @@ from opendbc.car.values import Platform
 from opendbc.car.volkswagen.values import CAR as VOLKSWAGEN
 from opendbc.car.body.values import CAR as COMMA
 from opendbc.car.psa.values import CAR as PSA
+from opendbc.car.mg.values import CAR as MG
 
 # FIXME: add routes for these cars
 non_tested_cars = [
@@ -27,7 +28,12 @@ non_tested_cars = [
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
   VOLKSWAGEN.PORSCHE_MACAN_MK1,
-  HONDA.ACURA_TLX_2G,
+  # Honda/Acura test routes below expired, replace when CI bucket sync is fixed
+  HONDA.ACURA_INTEGRA, # need new route - expired
+  HONDA.ACURA_TLX_2G, # need new route - expired
+  HONDA.HONDA_CRV_SA, # need new route - expired
+  HONDA.ACURA_TLX_2G_MMR, # need to fix Integra bug causing error
+  HONDA.HONDA_PILOT_4G_MMR, # awaiting driver for testroute
 
   # These had their DSUs unplugged, need new routes
   # TOYOTA.LEXUS_ES  # hybrid
@@ -35,7 +41,6 @@ non_tested_cars = [
   TOYOTA.TOYOTA_RAV4H,
 
   # port extensions
-  HYUNDAI.KIA_CEED_PHEV_2022_NON_SCC,
   HYUNDAI.HYUNDAI_KONA_EV_NON_SCC,
   HYUNDAI.HYUNDAI_BAYON_1ST_GEN_NON_SCC,
   HYUNDAI.HYUNDAI_ELANTRA_2022_NON_SCC,
@@ -45,6 +50,8 @@ non_tested_cars = [
   HYUNDAI.KIA_SELTOS_2023_NON_SCC,
   HYUNDAI.GENESIS_G70_2021_NON_SCC,
   HONDA.HONDA_CLARITY,
+  HONDA.ACURA_MDX_3G,
+  HONDA.ACURA_TLX_1G,
   GM.CHEVROLET_BOLT_NON_ACC,
   GM.CHEVROLET_BOLT_NON_ACC_1ST_GEN,
   GM.CHEVROLET_BOLT_NON_ACC_2ND_GEN,
@@ -144,6 +151,7 @@ routes = [
   CarTestRoute("f44aa96ace22f34a/2021-12-22--06-22-31", HONDA.HONDA_CIVIC_2022),
   CarTestRoute("1f032f5173c8ad99/00000006--573b3fcaf5", HONDA.HONDA_CIVIC_2022),  # Civic Type R with manual transmission
   CarTestRoute("b1c832ad56b6bc9d/00000010--debfcf5867", HONDA.HONDA_CIVIC_2022),  # 2025 Civic Hatch Hybrid with new eCVT transmission
+  CarTestRoute("49d0fc1df3e7320b/00000002--d2df953add", HONDA.HONDA_PRELUDE_6G),  # EU-market e:HEV
   CarTestRoute("f9c43864cf057d05/2024-01-15--23-01-20", HONDA.HONDA_PILOT_4G),  # TODO: Replace with a newer route
   CarTestRoute("f39cf149898833ff/0000002b--54f3fae045", HONDA.HONDA_ACCORD_11G),
   CarTestRoute("56b2cf1dacdcd033/00000017--d24ffdb376", HONDA.HONDA_CITY_7G),  # Brazilian model
@@ -151,8 +159,16 @@ routes = [
   CarTestRoute("a703d058f4e05aeb/00000008--f169423024", HONDA.HONDA_PASSPORT_4G),
   CarTestRoute("414af83891dbf72c/00000006--51fa6d99cd", HONDA.HONDA_NBOX_2G),
   CarTestRoute("ad9840558640c31d/0000001a--d6cd4871c2", HONDA.ACURA_MDX_4G_MMR),  # 2025 MDX
-  CarTestRoute("ad9840558640c31d/000001f2--026c4f6275", HONDA.ACURA_TLX_2G_MMR),
+  # CarTestRoute("ad9840558640c31d/000001f2--026c4f6275", HONDA.ACURA_TLX_2G_MMR), # need to fix Integra bug causing error
   CarTestRoute("619b464263ab23f2/00000025--ece505fdfc", HONDA.ACURA_MDX_4G),
+  # CarTestRoute("6b22f2fcd61fa86a/00000000--b3adfc8746", HONDA.ACURA_TLX_2G), # need new route - expired
+  # CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA), # need new route - expired
+  CarTestRoute("ad9840558640c31d/00000026--538590661c", HONDA.ACURA_ADX),
+  # CarTestRoute("4991f6e1afbe5adb/00000005--713a39aaee", HONDA.HONDA_CRV_SA), # South Africa model  # need new route - expired
+  CarTestRoute("f0a3de7786dcc72c/0000001a--4336abf007", HONDA.HONDA_FIT_4G),
+  # port extensions
+  CarTestRoute("ad9840558640c31d/0000011e--b1ab30a633", HONDA.ACURA_MDX_3G_MMR),
+  CarTestRoute("21ea2d289932890b/00000134--3862dfe91d", HONDA.HONDA_ACCORD_9G),
 
   CarTestRoute("87d7f06ade479c2e/2023-09-11--23-30-11", HYUNDAI.HYUNDAI_AZERA_6TH_GEN),
   CarTestRoute("66189dd8ec7b50e6/2023-09-20--07-02-12", HYUNDAI.HYUNDAI_AZERA_HEV_6TH_GEN),
@@ -293,11 +309,12 @@ routes = [
   CarTestRoute("cd9cff4b0b26c435/2021-05-13--15-12-39", TOYOTA.TOYOTA_CHR),
   CarTestRoute("57858ede0369a261/2021-05-18--20-34-20", TOYOTA.TOYOTA_CHR),  # hybrid
   CarTestRoute("ea8fbe72b96a185c/2023-02-08--15-11-46", TOYOTA.TOYOTA_CHR_TSS2),
-  CarTestRoute("ea8fbe72b96a185c|2023-02-22--09-20-34", TOYOTA.TOYOTA_CHR_TSS2),  # openpilot longitudinal, with smartDSU
   CarTestRoute("6719965b0e1d1737/2023-02-09--22-44-05", TOYOTA.TOYOTA_CHR_TSS2),  # hybrid
   CarTestRoute("6719965b0e1d1737/2023-08-29--06-40-05", TOYOTA.TOYOTA_CHR_TSS2),  # hybrid, openpilot longitudinal, radar disabled
   CarTestRoute("14623aae37e549f3/2021-10-24--01-20-49", TOYOTA.TOYOTA_PRIUS_V),
 
+  CarTestRoute("aebd8f1d4ea16066/00000009--b31e222338", VOLKSWAGEN.VOLKSWAGEN_ID4_MK1),
+  CarTestRoute("f73c01590368ee5b/00000aea--dc31ef6d5f", VOLKSWAGEN.VOLKSWAGEN_ID4_MK2),
   CarTestRoute("202c40641158a6e5/2021-09-21--09-43-24", VOLKSWAGEN.VOLKSWAGEN_ARTEON_MK1),
   CarTestRoute("2c68dda277d887ac/2021-05-11--15-22-20", VOLKSWAGEN.VOLKSWAGEN_ATLAS_MK1),
   CarTestRoute("ffcd23abbbd02219/2024-02-28--14-59-38", VOLKSWAGEN.VOLKSWAGEN_CADDY_MK3),
@@ -321,6 +338,7 @@ routes = [
   CarTestRoute("5432d2499e17e646/00000001--a99353214f", VOLKSWAGEN.AUDI_Q5_MK1),
   CarTestRoute("8f205bdd11bcbb65/2021-03-26--01-00-17", VOLKSWAGEN.SEAT_ATECA_MK1),
   CarTestRoute("fc6b6c9a3471c846/2021-05-27--13-39-56", VOLKSWAGEN.SEAT_ATECA_MK1),  # Leon
+  CarTestRoute("d4dd69160a48f11f/00000003--9cfe00cb74", VOLKSWAGEN.CUPRA_BORN_MK1),
   CarTestRoute("0bbe367c98fa1538/2023-03-04--17-46-11", VOLKSWAGEN.SKODA_FABIA_MK4),
   CarTestRoute("12d6ae3057c04b0d/2021-09-15--00-04-07", VOLKSWAGEN.SKODA_KAMIQ_MK1),
   CarTestRoute("12d6ae3057c04b0d/2021-09-04--21-21-21", VOLKSWAGEN.SKODA_KAROQ_MK1),
@@ -370,7 +388,12 @@ routes = [
   CarTestRoute("2c912ca5de3b1ee9/0000025d--6eb6bcbca4", TESLA.TESLA_MODEL_Y, segment=4),
   CarTestRoute("bdda168c0c35fad7/00000001--5c5a36ec06", TESLA.TESLA_MODEL_X), # openpilot longitudinal
 
+  CarTestRoute("5d61e2f6e1f247f3/00000054--d3dfb01b34", MG.MG_5_EV),
+
   # Segments that test specific issues
   # Controls mismatch due to standstill threshold
   CarTestRoute("bec2dcfde6a64235/2022-04-08--14-21-32", HONDA.HONDA_CRV_HYBRID, segment=22),
+
+  # port extensions
+  CarTestRoute("dc7bf18c8af12e37/00000006--ea06255cd0", HYUNDAI.KIA_CEED_PHEV_2022_NON_SCC),
 ]
