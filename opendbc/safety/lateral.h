@@ -1,4 +1,3 @@
-#include "opendbc/safety/sunnypilot/mads.h"
 #include "opendbc/safety/declarations.h"
 
 // ISO 11270
@@ -62,7 +61,7 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const TorqueStee
   bool violation = false;
   uint32_t ts = microsecond_timer_get();
 
-  if (controls_allowed || controls_allowed_lateral) {
+  if (controls_allowed) {
     // Some safety models support variable torque limit based on vehicle speed
     int max_torque = limits.max_torque;
     if (limits.dynamic_max_torque) {
@@ -97,8 +96,7 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const TorqueStee
   }
 
   bool torque_requested = desired_torque != 0;
-  // no torque if controls is not allowed
-  if (!(controls_allowed || controls_allowed_lateral) && torque_requested) {
+  if (!controls_allowed && torque_requested) {
     violation = true;
   }
 
@@ -140,7 +138,7 @@ bool steer_torque_cmd_checks(int desired_torque, int steer_req, const TorqueStee
   }
 
   // reset to 0 if either controls is not allowed or there's a violation
-  if (violation || !(controls_allowed || controls_allowed_lateral)) {
+  if (violation || !controls_allowed) {
     valid_steer_req_count = 0;
     invalid_steer_req_count = 0;
     desired_torque_last = 0;
@@ -206,7 +204,7 @@ static bool steer_angle_cmd_inactive_check(int desired_angle, int max_angle) {
 bool steer_angle_cmd_checks(int desired_angle, bool steer_control_enabled, const AngleSteeringLimits limits) {
   bool violation = false;
 
-  if ((controls_allowed || controls_allowed_lateral) && steer_control_enabled) {
+  if (controls_allowed && steer_control_enabled) {
     // convert floating point angle rate limits to integers in the scale of the desired angle on CAN,
     // add 1 to not false trigger the violation. also fudge the speed by 1 m/s so rate limits are
     // always slightly above openpilot's in case we read an updated speed in between angle commands
@@ -231,12 +229,12 @@ bool steer_angle_cmd_checks(int desired_angle, bool steer_control_enabled, const
   }
 
   // No angle control allowed when controls are not allowed
-  if (!(controls_allowed || controls_allowed_lateral)) {
+  if (!controls_allowed) {
     violation |= steer_control_enabled;
   }
 
   // reset to current angle if either controls is not allowed or there's a violation
-  if (violation || !(controls_allowed || controls_allowed_lateral)) {
+  if (violation || !controls_allowed) {
     desired_angle_last = SAFETY_CLAMP(angle_meas.values[0], -limits.max_angle, limits.max_angle);
   }
 
@@ -255,7 +253,7 @@ bool steer_curvature_cmd_checks(int desired_curvature, int steer_power, bool ste
 
   speed_mismatch_check((float)vehicle_speed_2.values[0] / VEHICLE_SPEED_FACTOR);
 
-  if ((controls_allowed || controls_allowed_lateral) && steer_control_enabled) {
+  if (controls_allowed && steer_control_enabled) {
     // *** absolute curvature cap ***
     violation |= safety_max_limit_check(desired_curvature, limits.max_curvature, -limits.max_curvature);
 
@@ -324,16 +322,15 @@ bool steer_curvature_cmd_checks(int desired_curvature, int steer_power, bool ste
   if (limits.max_steer_power != 0) {
     violation |= safety_max_limit_check(steer_power, limits.max_steer_power, 0);
     violation |= (steer_power != 0) && !steer_control_enabled;
-    violation |= !(controls_allowed || controls_allowed_lateral) && (steer_power != 0) && (steer_power >= curvature_state.steer_power_last);
+    violation |= !controls_allowed && (steer_power != 0) && (steer_power >= curvature_state.steer_power_last);
     curvature_state.steer_power_last = steer_power;
   } else {
     // No curvature control allowed when controls are not allowed
-    violation |= !(controls_allowed || controls_allowed_lateral) && steer_control_enabled;
+    violation |= !controls_allowed && steer_control_enabled;
   }
 
-  // reset to zero or measured curvature depending on EPS expectation
-  if (violation || !(controls_allowed || controls_allowed_lateral)) {
-    curvature_state.desired_last = limits.inactive_curvature_is_zero ? 0 : curvature_state.meas.values[0];
+  if (violation) {
+    curvature_state.desired_last = 0;
   }
 
   return violation;
@@ -365,7 +362,7 @@ bool steer_angle_cmd_checks_vm(int desired_angle, bool steer_control_enabled, co
 
   bool violation = false;
 
-  if ((controls_allowed || controls_allowed_lateral) && steer_control_enabled) {
+  if (controls_allowed && steer_control_enabled) {
     // *** ISO lateral jerk limit ***
     // calculate maximum angle rate per second
     const float max_curvature_rate_sec = MAX_LATERAL_JERK / (fudged_speed * fudged_speed);
@@ -399,12 +396,12 @@ bool steer_angle_cmd_checks_vm(int desired_angle, bool steer_control_enabled, co
   }
 
   // No angle control allowed when controls are not allowed
-  if (!(controls_allowed || controls_allowed_lateral)) {
+  if (!controls_allowed) {
     violation |= steer_control_enabled;
   }
 
   // reset to current angle if either controls is not allowed or there's a violation
-  if (violation || !(controls_allowed || controls_allowed_lateral)) {
+  if (violation || !controls_allowed) {
     desired_angle_last = SAFETY_CLAMP(angle_meas.values[0], -limits.max_angle, limits.max_angle);
   }
 

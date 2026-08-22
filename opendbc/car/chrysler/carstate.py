@@ -4,17 +4,12 @@ from opendbc.car.chrysler.values import CUSW_CARS, DBC, STEER_THRESHOLD, RAM_CAR
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
 
-from opendbc.sunnypilot.car.chrysler.carstate_ext import CarStateExt
-from opendbc.sunnypilot.car.chrysler.mads import MadsCarState
-
 ButtonType = structs.CarState.ButtonEvent.Type
 
 
-class CarState(CarStateBase, MadsCarState, CarStateExt):
-  def __init__(self, CP, CP_SP):
-    CarStateBase.__init__(self, CP, CP_SP)
-    MadsCarState.__init__(self, CP, CP_SP)
-    CarStateExt.__init__(self, CP, CP_SP)
+class CarState(CarStateBase):
+  def __init__(self, CP):
+    super().__init__(CP)
     self.CP = CP
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
 
@@ -29,7 +24,7 @@ class CarState(CarStateBase, MadsCarState, CarStateExt):
 
     self.distance_button = 0
 
-  def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
+  def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
 
@@ -37,7 +32,6 @@ class CarState(CarStateBase, MadsCarState, CarStateExt):
       return self.update_cusw(cp, cp_cam)
 
     ret = structs.CarState()
-    ret_sp = structs.CarStateSP()
 
     prev_distance_button = self.distance_button
     self.distance_button = cp.vl["CRUISE_BUTTONS"]["ACC_Distance_Dec"]
@@ -103,20 +97,12 @@ class CarState(CarStateBase, MadsCarState, CarStateExt):
     self.lkas_car_model = cp_cam.vl["DAS_6"]["CAR_MODEL"]
     self.button_counter = cp.vl["CRUISE_BUTTONS"]["COUNTER"]
 
-    MadsCarState.update_mads(self, ret, can_parsers)
-    CarStateExt.update(self, ret, ret_sp, can_parsers)
+    ret.buttonEvents = create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise})
 
-    ret.buttonEvents = [
-      *create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise}),
-      *create_button_events(self.lkas_button, self.prev_lkas_button, {1: ButtonType.lkas}),
-      *self.button_events,
-    ]
-
-    return ret, ret_sp
+    return ret
 
   def update_cusw(self, cp, cp_cam):
     ret = structs.CarState()
-    ret_sp = structs.CarStateSP()
 
     ret.doorOpen = any([cp.vl["DOORS"]["DOOR_OPEN_FL"],
                         cp.vl["DOORS"]["DOOR_OPEN_FR"],
@@ -160,10 +146,10 @@ class CarState(CarStateBase, MadsCarState, CarStateExt):
 
     self.lkas_car_model = cp_cam.vl["DAS_6"]["CAR_MODEL"]
 
-    return ret, ret_sp
+    return ret
 
   @staticmethod
-  def get_can_parsers(CP, CP_SP):
+  def get_can_parsers(CP):
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 0),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 2),

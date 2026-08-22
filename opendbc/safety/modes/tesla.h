@@ -2,20 +2,6 @@
 
 #include "opendbc/safety/declarations.h"
 
-#define TESLA_COMMON_RX_CHECKS \
-  {.msg = {{0x2b9, 2, 8, 25U, .max_counter = 7U, .ignore_quality_flag = true}, { 0 }, { 0 }}},    /* DAS_control */                                  \
-  {.msg = {{0x488, 2, 4, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},   /* DAS_steeringControl */                          \
-  {.msg = {{0x257, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},   /* DI_speed (speed in kph) */                      \
-  {.msg = {{0x155, 0, 8, 50U, .max_counter = 15U}, { 0 }, { 0 }}},                                /* ESP_B (2nd speed in kph) */                     \
-  {.msg = {{0x370, 0, 8, 100U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* EPAS3S_sysStatus (steering angle) */            \
-  {.msg = {{0x118, 0, 8, 100U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* DI_systemStatus (gas pedal) */                  \
-  {.msg = {{0x145, 0, 8, 50U, .max_counter = 15U}, { 0 }, { 0 }}},                                /* ESP_status (brakes) */                          \
-  {.msg = {{0x286, 0, 8, 10U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},   /* DI_state (acc state) */                         \
-  {.msg = {{0x311, 0, 7, 10U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},   /* UI_warning (blinkers, buckle switch & doors) */ \
-
-#define TESLA_VEHICLE_BUS_ADDR_CHECK \
-  {.msg = {{0x3DF, 1, 8, 2U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true, .ignore_frequency_check = true}, { 0 }, { 0 }}},    /* UI_status2 */ \
-
 static bool tesla_longitudinal = false;
 static bool tesla_fsd_14 = false;
 static bool tesla_stock_aeb = false;
@@ -28,14 +14,6 @@ static bool tesla_stock_lkas_prev = false;
 // Only Summon is currently supported due to Autopark not setting Autopark state properly
 static bool tesla_autopark = false;
 static bool tesla_autopark_prev = false;
-
-// Detected VEHICLE bus
-extern bool tesla_has_vehicle_bus;
-bool tesla_has_vehicle_bus = false;
-
-// Configured MADS screen button finger count (0 = disabled, 3-5 = expected touch-point count)
-extern uint8_t tesla_mads_screen_button_fingers;
-uint8_t tesla_mads_screen_button_fingers = 0U;
 
 static uint8_t tesla_get_counter(const CANPacket_t *msg) {
 
@@ -203,14 +181,6 @@ static void tesla_rx_hook(const CANPacket_t *msg) {
     }
   }
 
-  if (msg->bus == 1U) {
-    if (msg->addr == 0x3DFU) {
-      if (tesla_mads_screen_button_fingers != 0U) {
-        mads_button_press = (msg->data[3] == tesla_mads_screen_button_fingers) ? MADS_BUTTON_PRESSED : MADS_BUTTON_NOT_PRESSED;
-      }
-    }
-  }
-
   if (msg->bus == 2U) {
     // DAS_control
     if (msg->addr == 0x2b9U) {
@@ -224,7 +194,7 @@ static void tesla_rx_hook(const CANPacket_t *msg) {
       bool tesla_stock_lkas_now = steering_control_type == tesla_get_steer_ctrl_type(2);  // "LANE_KEEP_ASSIST"
 
       // Only consider rising edges while controls are not allowed
-      if (tesla_stock_lkas_now && !tesla_stock_lkas_prev && !(controls_allowed || controls_allowed_lateral)) {
+      if (tesla_stock_lkas_now && !tesla_stock_lkas_prev && !controls_allowed) {
         tesla_stock_lkas = true;
       }
       if (!tesla_stock_lkas_now) {
@@ -271,17 +241,14 @@ static bool tesla_tx_hook(const CANPacket_t *msg) {
     int desired_angle = raw_angle_can - 16384;
     int steer_control_type = msg->data[2] >> 6;
     const int angle_ctrl_type = tesla_get_steer_ctrl_type(1);
-    const int lkas_ctrl_type = tesla_get_steer_ctrl_type(2);
-    bool steer_control_enabled = (steer_control_type == angle_ctrl_type) ||  // ANGLE_CONTROL
-                                 (steer_control_type == lkas_ctrl_type);     // LANE_KEEP_ASSIST
+    bool steer_control_enabled = steer_control_type == angle_ctrl_type;  // ANGLE_CONTROL
 
     if (steer_angle_cmd_checks_vm(desired_angle, steer_control_enabled, TESLA_STEERING_LIMITS, TESLA_STEERING_PARAMS)) {
       violation = true;
     }
 
-    bool valid_steer_control_type = (steer_control_type == 0) ||                // NONE
-                                    (steer_control_type == angle_ctrl_type) ||  // ANGLE_CONTROL
-                                    (steer_control_type == lkas_ctrl_type);     // LANE_KEEP_ASSIST
+    bool valid_steer_control_type = (steer_control_type == 0) ||  // NONE
+                                    (steer_control_type == angle_ctrl_type);    // ANGLE_CONTROL
     if (!valid_steer_control_type) {
       violation = true;
     }
@@ -385,23 +352,6 @@ static safety_config tesla_init(uint16_t param) {
   tesla_longitudinal = GET_FLAG(param, TESLA_FLAG_LONGITUDINAL_CONTROL);
 #endif
 
-  const uint16_t TESLA_PARAM_SP_VEHICLE_BUS = 1;
-  const uint16_t TESLA_PARAM_SP_MADS_SCREEN_BUTTON_3_FINGER = 2;
-  const uint16_t TESLA_PARAM_SP_MADS_SCREEN_BUTTON_4_FINGER = 4;
-  const uint16_t TESLA_PARAM_SP_MADS_SCREEN_BUTTON_5_FINGER = 8;
-
-  tesla_has_vehicle_bus = GET_FLAG(current_safety_param_sp, TESLA_PARAM_SP_VEHICLE_BUS);
-
-  if (GET_FLAG(current_safety_param_sp, TESLA_PARAM_SP_MADS_SCREEN_BUTTON_3_FINGER)) {
-    tesla_mads_screen_button_fingers = 3U;
-  } else if (GET_FLAG(current_safety_param_sp, TESLA_PARAM_SP_MADS_SCREEN_BUTTON_4_FINGER)) {
-    tesla_mads_screen_button_fingers = 4U;
-  } else if (GET_FLAG(current_safety_param_sp, TESLA_PARAM_SP_MADS_SCREEN_BUTTON_5_FINGER)) {
-    tesla_mads_screen_button_fingers = 5U;
-  } else {
-    tesla_mads_screen_button_fingers = 0U;
-  }
-
   tesla_stock_aeb = false;
   tesla_stock_lkas = false;
   tesla_stock_lkas_prev = false;
@@ -411,25 +361,22 @@ static safety_config tesla_init(uint16_t param) {
   tesla_autopark_prev = false;
 
   static RxCheck tesla_model3_y_rx_checks[] = {
-    TESLA_COMMON_RX_CHECKS
-  };
-
-  static RxCheck tesla_model3_y_vehicle_bus_rx_checks[] = {
-    TESLA_COMMON_RX_CHECKS
-    TESLA_VEHICLE_BUS_ADDR_CHECK
+    {.msg = {{0x2b9, 2, 8, 25U, .max_counter = 7U, .ignore_quality_flag = true}, { 0 }, { 0 }}},    // DAS_control
+    {.msg = {{0x488, 2, 4, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},   // DAS_steeringControl
+    {.msg = {{0x257, 0, 8, 50U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},   // DI_speed (speed in kph)
+    {.msg = {{0x155, 0, 8, 50U, .max_counter = 15U}, { 0 }, { 0 }}},                                // ESP_B (2nd speed in kph)
+    {.msg = {{0x370, 0, 8, 100U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // EPAS3S_sysStatus (steering angle)
+    {.msg = {{0x118, 0, 8, 100U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // DI_systemStatus (gas pedal)
+    {.msg = {{0x145, 0, 8, 50U, .max_counter = 15U}, { 0 }, { 0 }}},                                // ESP_status (brakes)
+    {.msg = {{0x286, 0, 8, 10U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},   // DI_state (acc state)
+    {.msg = {{0x311, 0, 7, 10U, .max_counter = 15U, .ignore_quality_flag = true}, { 0 }, { 0 }}},   // UI_warning (blinkers, buckle switch & doors)
   };
 
   safety_config ret;
   if (tesla_longitudinal) {
-    SET_TX_MSGS(TESLA_M3_Y_LONG_TX_MSGS, ret);
+    ret = BUILD_SAFETY_CFG(tesla_model3_y_rx_checks, TESLA_M3_Y_LONG_TX_MSGS);
   } else {
-    SET_TX_MSGS(TESLA_M3_Y_TX_MSGS, ret);
-  }
-
-  if (tesla_has_vehicle_bus) {
-    SET_RX_CHECKS(tesla_model3_y_vehicle_bus_rx_checks, ret);
-  } else {
-    SET_RX_CHECKS(tesla_model3_y_rx_checks, ret);
+    ret = BUILD_SAFETY_CFG(tesla_model3_y_rx_checks, TESLA_M3_Y_TX_MSGS);
   }
   return ret;
 }
