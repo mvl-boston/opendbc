@@ -19,6 +19,13 @@ class ToyotaSecurityCarDocs(ExtraCarDocs):
 
 
 @dataclass
+class GMSecurityCarDocs(ExtraCarDocs):
+  def init_make(self, CP: structs.CarParams):
+    self.support_type = SupportType.INCOMPATIBLE
+    self.support_link = "#can-bus-security"
+
+
+@dataclass
 class FlexRayCarDocs(ExtraCarDocs):
   def init_make(self, CP: structs.CarParams):
     self.support_type = SupportType.INCOMPATIBLE
@@ -30,13 +37,10 @@ class CAR(Platforms):
 
   EXTRA_HONDA = ExtraPlatformConfig(
     [
-      CommunityCarDocs("Acura Integra 2024", "All"),
-      CommunityCarDocs("Honda Accord 2023-24", "All"),
-      CommunityCarDocs("Honda Clarity 2018-21", "All"),
-      CommunityCarDocs("Honda CR-V 2024", "All"),
-      CommunityCarDocs("Honda CR-V Hybrid 2024", "All"),
-      CommunityCarDocs("Honda Odyssey 2021-25", "All"),
-      CommunityCarDocs("Honda Pilot 2023-24", "All"),
+      CommunityCarDocs("Acura RDX 2025"),
+      CommunityCarDocs("Acura RLX 2017", "Advance Package or Technology Package"),
+      GMSecurityCarDocs("Acura ZDX 2024", "All"),
+      GMSecurityCarDocs("Honda Prologue 2024-25", "All"),
     ],
   )
 
