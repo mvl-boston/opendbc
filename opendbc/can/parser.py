@@ -1,9 +1,23 @@
+import contextlib
+import contextvars
 import math
 import numbers
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 
 from opendbc.car.carlog import carlog
+
+_suppress_can_valid_log = contextvars.ContextVar('suppress_can_valid_log', default=False)
+
+
+@contextlib.contextmanager
+def suppress_can_valid_log():
+  """Silence Honda CAN validation logs during synthetic fuzz tests."""
+  token = _suppress_can_valid_log.set(True)
+  try:
+    yield
+  finally:
+    _suppress_can_valid_log.reset(token)
 from opendbc.can.dbc import DBC, Signal
 
 
@@ -46,6 +60,8 @@ class MessageState:
   last_warning_log_nanos: int = 0
 
   def rate_limited_log(self, last_update_nanos: int, msg: str) -> None:
+    if _suppress_can_valid_log.get():
+      return
     if (last_update_nanos - self.last_warning_log_nanos) >= 1_000_000_000:
       carlog.warning(f"CANParser: {hex(self.address)} {self.name} {msg}")
       self.last_warning_log_nanos = last_update_nanos
@@ -206,12 +222,12 @@ class CANParser:
       if state.counter_fail >= MAX_BAD_COUNTER:
         counters_valid = False
         state.rate_limited_log(self._last_update_nanos, f"counter invalid, {state.counter_fail=} {MAX_BAD_COUNTER=}")
-        if is_honda:
+        if is_honda and not _suppress_can_valid_log.get():
           carlog.error({"counter invalid - message": state, "bus": self.bus})
       if not state.valid(self._last_update_nanos, bus_timeout):
         valid = False
         state.rate_limited_log(self._last_update_nanos, "not valid (timeout or missing)")
-        if is_honda:
+        if is_honda and not _suppress_can_valid_log.get():
           carlog.error({"can invalid - message": state, "bus": self.bus})
 
     # TODO: probably only want to increment this once per update() call

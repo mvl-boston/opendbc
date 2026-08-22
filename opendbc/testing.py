@@ -6,6 +6,8 @@ import sys
 from collections.abc import Callable, Sequence
 from typing import Any, TypeVar
 
+from opendbc.can.parser import suppress_can_valid_log
+
 
 T = TypeVar("T")
 
@@ -115,7 +117,8 @@ def fuzzy_test(max_examples: int) -> Callable[[Callable[..., None]], Callable[..
         if not 0 <= example_index < max_examples:
           raise ValueError(f"FUZZ_EXAMPLE={example_index} is outside [0, {max_examples})")
         try:
-          func(*args, **kwargs, fuzzy=Fuzzy(f"{test_seed}:{example_index}", example_index))
+          with suppress_can_valid_log():
+            func(*args, **kwargs, fuzzy=Fuzzy(f"{test_seed}:{example_index}", example_index))
         except Exception as exc:
           exc.add_note(f"reproduce with FUZZ_SEED={FUZZ_SEED} FUZZ_EXAMPLE={example_index}")
           raise
