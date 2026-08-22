@@ -213,7 +213,7 @@ class TestCarModelBase(unittest.TestCase):
     CC = structs.CarControl().as_reader()
     CC_SP = structs.CarControlSP()
     for i, msg in enumerate(self.can_msgs):
-      CS = self.CI.update(normalize_can_buses(msg, self.raw_can_keys))
+      CS, _ = self.CI.update(normalize_can_buses(msg, self.raw_can_keys))
       self.CI.apply(CC, CC_SP, msg[0])
       if i > 250:
         can_invalid_cnt += not CS.canValid
@@ -348,7 +348,7 @@ class TestCarModelBase(unittest.TestCase):
       self.safety.safety_rx_hook(packet)
 
       can = [(time.monotonic_ns(), [CanData(address=address, dat=dat, src=bus)])]
-      CS = self.CI.update(can)
+      CS, _ = self.CI.update(can)
       if n < 5:
         continue
 
@@ -396,7 +396,8 @@ class TestCarModelBase(unittest.TestCase):
     vehicle_speed_seen = self.CP.steerControlType == SteerControlType.angle and not self.CP.notCar
 
     for idx, can in enumerate(self.can_msgs):
-      CS = self.CI.update(can).as_reader()
+      CS, _ = self.CI.update(can)
+      CS = CS.as_reader()
       for msg in (msg for msg in can[1] if msg.src < 64):
         packet = libsafety_py.make_CANPacket(msg.address, msg.src % 4, msg.dat)
         ret = self.safety.safety_rx_hook(packet)
