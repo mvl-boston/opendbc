@@ -171,6 +171,7 @@ class TestCarModelBase(unittest.TestCase):
     cls.raw_can_keys = {(msg.address, msg.src) for _, messages in cls.can_msgs for msg in messages if msg.src < 128}
     cls.CarInterface = interfaces[cls.platform]
     cls.CP = cls.CarInterface.get_params(cls.platform, cls.fingerprint, car_fw, alpha_long, False, docs=False)
+    cls.CP_SP = cls.CarInterface.get_params_sp(cls.CP, cls.platform, cls.fingerprint, car_fw, alpha_long, docs=False)
     assert cls.CP
     assert cls.CP.carFingerprint == cls.platform
 
@@ -179,7 +180,7 @@ class TestCarModelBase(unittest.TestCase):
     del cls.can_msgs
 
   def setUp(self):
-    self.CI = self.CarInterface(self.CP.copy())
+    self.CI = self.CarInterface(self.CP.copy(), self.CP_SP)
     assert self.CI
 
     self.safety = libsafety_py.libsafety
@@ -210,15 +211,16 @@ class TestCarModelBase(unittest.TestCase):
   def test_car_interface(self):
     can_invalid_cnt = 0
     CC = structs.CarControl().as_reader()
+    CC_SP = structs.CarControlSP()
     for i, msg in enumerate(self.can_msgs):
       CS = self.CI.update(normalize_can_buses(msg, self.raw_can_keys))
-      self.CI.apply(CC, msg[0])
+      self.CI.apply(CC, CC_SP, msg[0])
       if i > 250:
         can_invalid_cnt += not CS.canValid
     self.assertEqual(can_invalid_cnt, 0)
 
   def test_radar_interface(self):
-    RI = self.CarInterface.RadarInterface(self.CP)
+    RI = self.CarInterface.RadarInterface(self.CP, self.CP_SP)
     assert RI
 
     error_cnt = 0
@@ -299,10 +301,11 @@ class TestCarModelBase(unittest.TestCase):
     def test_car_controller(car_control):
       now_nanos = 0
       msgs_sent = 0
-      CI = self.CarInterface(controller_params)
+      CC_SP = structs.CarControlSP()
+      CI = self.CarInterface(controller_params, self.CP_SP)
       for _ in range(round(10.0 / DT_CTRL)):
         CI.update([])
-        _, sendcan = CI.apply(car_control, now_nanos)
+        _, sendcan = CI.apply(car_control, CC_SP, now_nanos)
         now_nanos += DT_CTRL * 1e9
         msgs_sent += len(sendcan)
         for addr, dat, bus in sendcan:
