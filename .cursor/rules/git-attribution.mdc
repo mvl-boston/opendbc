@@ -1,0 +1,10 @@
+---
+description: Git commit co-author attribution preferences
+alwaysApply: true
+---
+
+Do not add any Co-authored-by trailers to git commits yourself.
+
+Cursor will add cursoragent@cursor.com automatically via its server hook.
+
+Do not copy Co-authored-by lines from git history.
