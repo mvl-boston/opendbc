@@ -95,10 +95,15 @@ jobs:
     - uses: actions/checkout@v4
       with:
         path: opendbc_repo
-    - name: Build openpilot params
+    - name: Sync opendbc dependencies
+      run: |
+        cd opendbc_repo
+        export UV_PROJECT_ENVIRONMENT="$GITHUB_WORKSPACE/.venv"
+        uv sync --all-extras --inexact || (sleep 300 && uv sync --all-extras --inexact)
+    - name: Build host openpilot
       run: |
         source .venv/bin/activate
-        scons -j$(nproc) common/
+        scons -j$(python -c 'import os; print(os.cpu_count() or 1)') openpilot/common/ openpilot/cereal/ openpilot/selfdrive/pandad/ openpilot/sunnypilot/ msgq_repo/ opendbc_repo
     - name: Cache test routes
       id: routes-cache
       uses: actions/cache@v4
