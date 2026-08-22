@@ -184,13 +184,16 @@ class CANParser:
   def update_valid(self, nanos: int) -> None:
     valid = True
     counters_valid = True
+    is_honda = 'honda' in self.dbc_name or 'acura' in self.dbc_name
     for state in self.message_states.values():
       if state.counter_fail >= MAX_BAD_COUNTER:
         counters_valid = False
-        carlog.error({"counter invalid - message": state, "bus": self.bus})
+        if is_honda:
+          carlog.error({"counter invalid - message": state, "bus": self.bus})
       if not state.valid(nanos, self.bus_timeout):
         valid = False
-        carlog.error({"can invalid - message": state, "bus": self.bus})
+        if is_honda:
+          carlog.error({"can invalid - message": state, "bus": self.bus})
 
     self.can_invalid_cnt = 0 if valid else min(self.can_invalid_cnt + 1, CAN_INVALID_CNT)
     self.can_valid = self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
