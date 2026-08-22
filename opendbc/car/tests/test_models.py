@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import copy
 import hashlib
 import json
 import os
@@ -173,6 +174,7 @@ class TestCarModelBase(unittest.TestCase):
     cls.CP = cls.CarInterface.get_params(cls.platform, cls.fingerprint, car_fw, alpha_long, False, docs=False)
     cls.CP_SP = cls.CarInterface.get_params_sp(cls.CP, cls.platform, cls.fingerprint, car_fw, alpha_long, docs=False)
     assert cls.CP
+    assert cls.CP_SP
     assert cls.CP.carFingerprint == cls.platform
 
   @classmethod
@@ -180,10 +182,11 @@ class TestCarModelBase(unittest.TestCase):
     del cls.can_msgs
 
   def setUp(self):
-    self.CI = self.CarInterface(self.CP.copy(), self.CP_SP)
+    self.CI = self.CarInterface(self.CP.copy(), copy.deepcopy(self.CP_SP))
     assert self.CI
 
     self.safety = libsafety_py.libsafety
+    self.safety.set_current_safety_param_sp(self.CP_SP.safetyParam)
     cfg = self.CP.safetyConfigs[-1]
     set_status = self.safety.set_safety_hooks(cfg.safetyModel.raw, cfg.safetyParam)
     self.assertEqual(0, set_status, f"failed to set safetyModel {cfg}")
@@ -302,7 +305,7 @@ class TestCarModelBase(unittest.TestCase):
       now_nanos = 0
       msgs_sent = 0
       CC_SP = structs.CarControlSP()
-      CI = self.CarInterface(controller_params, self.CP_SP)
+      CI = self.CarInterface(controller_params, copy.deepcopy(self.CP_SP))
       for _ in range(round(10.0 / DT_CTRL)):
         CI.update([])
         _, sendcan = CI.apply(car_control, CC_SP, now_nanos)
