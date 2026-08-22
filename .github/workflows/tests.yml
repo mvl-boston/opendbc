@@ -103,7 +103,7 @@ jobs:
     - name: Build host openpilot
       run: |
         source .venv/bin/activate
-        scons -j$(python -c 'import os; print(os.cpu_count() or 1)') openpilot/common/ openpilot/cereal/ openpilot/selfdrive/pandad/ openpilot/sunnypilot/ msgq_repo/ opendbc_repo
+        scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/ cereal/ selfdrive/pandad/ sunnypilot/ msgq_repo/ opendbc_repo
     - name: Cache test routes
       id: routes-cache
       uses: actions/cache@v4
