@@ -105,16 +105,35 @@ jobs:
       CI: 1
     steps:
     - uses: actions/checkout@v4
-    - run: ./setup.sh
+      with:
+        repository: 'mvl-boston/openpilot'
+        ref: ${{ env.PARENT_MVL_BRANCH }}
+        submodules: true
+    - run: ./tools/op.sh setup
+    - run: rm -rf opendbc_repo/
+    - uses: actions/checkout@v4
+      with:
+        path: opendbc_repo
+    - name: Build openpilot params
+      run: |
+        source .venv/bin/activate
+        scons -j$(nproc) common/
     - name: Cache test routes
       id: routes-cache
       uses: actions/cache@v4
       with:
         path: /tmp/comma_download_cache
-        key: car_models-${{ hashFiles('opendbc/car/tests/test_models.py', 'opendbc/car/tests/routes.py') }}-${{ matrix.job }}
+        key: car_models-${{ hashFiles('opendbc_repo/opendbc/car/tests/test_models.py', 'opendbc_repo/opendbc/car/tests/routes.py') }}-${{ matrix.job }}
     - name: Test car models
       timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 999 }}
-      run: source .venv/bin/activate && MAX_EXAMPLES=1 opendbc/car/tests/test_models.py
+      working-directory: opendbc_repo
+      run: |
+        source ../.venv/bin/activate
+        export UV_PROJECT_ENVIRONMENT="$GITHUB_WORKSPACE/.venv"
+        uv sync --all-extras --inexact
+        scons -j$(nproc)
+        MAX_EXAMPLES=1 python opendbc/car/tests/test_models.py
       env:
         NUM_JOBS: 4
         JOB_ID: ${{ matrix.job }}
+        PYTHONPATH: ${{ github.workspace }}/opendbc_repo:${{ github.workspace }}
