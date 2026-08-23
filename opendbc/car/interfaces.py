@@ -17,6 +17,7 @@ from opendbc.car.common.simple_kalman import KF1D, get_kalman_gain
 from opendbc.car.values import PLATFORMS
 from opendbc.can import CANParser
 from opendbc.car.carlog import carlog
+from opendbc.fuzzy_context import is_fuzzy_test
 
 from opendbc.sunnypilot.car.interfaces import CarInterfaceBaseSP
 
@@ -109,6 +110,7 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
 
     self.frame = 0
     self.v_ego_cluster_seen = False
+    self._prev_can_valid = False
 
     self.CS: CarStateBase = self.CarState(CP, CP_SP)
     self.can_parsers: dict[StrEnum, CANParser] = self.CS.get_can_parsers(CP, CP_SP)
@@ -277,6 +279,19 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
 
     ret.canValid = all(cp.can_valid for cp in self.can_parsers.values())
     ret.canTimeout = any(cp.bus_timeout for cp in self.can_parsers.values())
+
+    if self.CP.brand == "honda" and not is_fuzzy_test() and self._prev_can_valid and not ret.canValid:
+      invalid_parsers = []
+      for cp in self.can_parsers.values():
+        if cp is not None and not cp.can_valid:
+          invalid_parsers.append({
+            "bus": cp.bus,
+            "dbc": cp.dbc_name,
+            "messages": cp.get_invalid_messages(),
+          })
+      carlog.error({"canValid dropped": invalid_parsers})
+
+    self._prev_can_valid = ret.canValid
 
     if ret.vEgoCluster == 0.0 and not self.v_ego_cluster_seen:
       ret.vEgoCluster = ret.vEgo

@@ -5,11 +5,11 @@ from dataclasses import dataclass, field
 
 from opendbc.car.carlog import carlog
 from opendbc.can.dbc import DBC, Signal
+from opendbc.fuzzy_context import is_fuzzy_test
 
 
 MAX_BAD_COUNTER = 5
 CAN_INVALID_CNT = 5
-CAN_INVALID_WARMUP_MAX = 251
 
 def get_raw_value(dat: bytes | bytearray, sig: Signal) -> int:
   ret = 0
@@ -50,7 +50,7 @@ class MessageState:
       carlog.warning(f"CANParser: {hex(self.address)} {self.name} {msg}")
       self.last_warning_log_nanos = last_update_nanos
 
-  def parse(self, nanos: int, dat: bytes) -> bool:
+  def parse(self, nanos: int, dat: bytes, *, log_checksum_warnings: bool = False) -> bool:
     tmp_vals: list[float] = [0.0] * len(self.signals)
     checksum_failed = False
     counter_failed = False
@@ -67,7 +67,8 @@ class MessageState:
         expected_checksum = sig.calc_checksum(self.address, sig, bytearray(dat))
         if tmp != expected_checksum:
           checksum_failed = True
-          self.rate_limited_log(nanos, f"checksum failed: received {hex(tmp)}, calculated {hex(expected_checksum)}")
+          if log_checksum_warnings:
+            self.rate_limited_log(nanos, f"checksum failed: received {hex(tmp)}, calculated {hex(expected_checksum)}")
 
       if not self.ignore_counter and sig.type == 1:  # COUNTER
         if not self.update_counter(tmp, sig.size):
@@ -130,6 +131,7 @@ class CANParser:
     self.dbc_name: str = dbc_name
     self.bus: int = bus
     self.dbc = DBC(dbc_name)
+    self._log_checksum_warnings = 'honda' in dbc_name or 'acura' in dbc_name
 
     self.vl: dict[int | str, dict[str, float]] = VLDict(self)
     self.vl_all: dict[int | str, dict[str, list[float]]] = {}
@@ -150,10 +152,8 @@ class CANParser:
       self._add_message(name_or_addr, freq)
 
     self.can_invalid_cnt: int = CAN_INVALID_CNT
-    self.total_can_invalid_cnt = 0
     self.last_nonempty_nanos: int = 0
     self._last_update_nanos: int = 0
-    self._prev_can_valid: bool = False
 
   def _add_message(self, name_or_addr: str | int, freq: int | None = None) -> None:
     if isinstance(name_or_addr, numbers.Number):
@@ -198,37 +198,30 @@ class CANParser:
         bus_timeout_threshold = min(bus_timeout_threshold, st.timeout_threshold)
     return ((self._last_update_nanos - self.last_nonempty_nanos) > bus_timeout_threshold) and not ignore_alive
 
+  def get_invalid_messages(self) -> list[dict[str, str | int]]:
+    bus_timeout = self.bus_timeout
+    invalid: list[dict[str, str | int]] = []
+    for state in self.message_states.values():
+      if state.counter_fail >= MAX_BAD_COUNTER:
+        invalid.append({"name": state.name, "address": state.address, "reason": "counter"})
+      elif not state.valid(self._last_update_nanos, bus_timeout):
+        invalid.append({"name": state.name, "address": state.address, "reason": "timeout"})
+    return invalid
+
   @property
   def can_valid(self) -> bool:
     valid = True
     counters_valid = True
     bus_timeout = self.bus_timeout
-    is_honda = 'honda' in self.dbc_name or 'acura' in self.dbc_name
     for state in self.message_states.values():
       if state.counter_fail >= MAX_BAD_COUNTER:
         counters_valid = False
-        # state.rate_limited_log(self._last_update_nanos, f"counter invalid, {state.counter_fail=} {MAX_BAD_COUNTER=}")
-        carlog.error({"counter invalid - message": state, "bus": self.bus})
-
       if not state.valid(self._last_update_nanos, bus_timeout):
         valid = False
-        # state.rate_limited_log(self._last_update_nanos, "not valid (timeout or missing)")
 
     # TODO: probably only want to increment this once per update() call
     self.can_invalid_cnt = 0 if valid else min(self.can_invalid_cnt + 1, CAN_INVALID_CNT)
-    result = self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
-    if not result:
-      self.total_can_invalid_cnt += 1
-    log_invalid = is_honda and ((self._prev_can_valid and not result) or (self.total_can_invalid_cnt >= CAN_INVALID_WARMUP_MAX))
-
-    if log_invalid:
-      self.total_can_invalid_cnt = CAN_INVALID_WARMUP_MAX
-      for state in self.message_states.values():
-        if not state.valid(self._last_update_nanos, bus_timeout):
-          carlog.error({"can invalid - message": state, "bus": self.bus})
-
-    self._prev_can_valid = result
-    return result
+    return self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
 
   def update(self, strings, sendcan: bool = False):
     if strings and not isinstance(strings[0], list | tuple):
@@ -250,7 +243,7 @@ class CANParser:
         state = self.message_states.get(address)
         if state is None or len(dat) > 64:
           continue
-        if state.parse(t, dat):
+        if state.parse(t, dat, log_checksum_warnings=self._log_checksum_warnings and not is_fuzzy_test()):
           updated_addrs.add(address)
 
           vl_addr = self.vl[address]
