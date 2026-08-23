@@ -219,7 +219,7 @@ class CANParser:
     result = self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
     if not result:
       self.total_can_invalid_cnt += 1
-    log_invalid = (is_honda and self._prev_can_valid and not result) or (self.total_can_invalid_cnt == CAN_INVALID_WARMUP_MAX)
+    log_invalid = (is_honda and self._prev_can_valid and not result) or (self.total_can_invalid_cnt >= CAN_INVALID_WARMUP_MAX)
 
     if log_invalid:
       self.total_can_invalid_cnt = CAN_INVALID_WARMUP_MAX
