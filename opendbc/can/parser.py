@@ -152,6 +152,7 @@ class CANParser:
     self.can_invalid_cnt: int = CAN_INVALID_CNT
     self.last_nonempty_nanos: int = 0
     self._last_update_nanos: int = 0
+    self._prev_can_valid: bool = False
 
   def _add_message(self, name_or_addr: str | int, freq: int | None = None) -> None:
     if isinstance(name_or_addr, numbers.Number):
@@ -206,17 +207,24 @@ class CANParser:
       if state.counter_fail >= MAX_BAD_COUNTER:
         counters_valid = False
         state.rate_limited_log(self._last_update_nanos, f"counter invalid, {state.counter_fail=} {MAX_BAD_COUNTER=}")
-        if is_honda:
-          carlog.error({"counter invalid - message": state, "bus": self.bus})
       if not state.valid(self._last_update_nanos, bus_timeout):
         valid = False
         state.rate_limited_log(self._last_update_nanos, "not valid (timeout or missing)")
-        if is_honda:
-          carlog.error({"can invalid - message": state, "bus": self.bus})
 
     # TODO: probably only want to increment this once per update() call
     self.can_invalid_cnt = 0 if valid else min(self.can_invalid_cnt + 1, CAN_INVALID_CNT)
-    return self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
+    result = self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
+    log_invalid = is_honda and self._prev_can_valid and not result
+
+    if log_invalid:
+      for state in self.message_states.values():
+        if state.counter_fail >= MAX_BAD_COUNTER:
+          carlog.error({"counter invalid - message": state, "bus": self.bus})
+        if not state.valid(self._last_update_nanos, bus_timeout):
+          carlog.error({"can invalid - message": state, "bus": self.bus})
+
+    self._prev_can_valid = result
+    return result
 
   def update(self, strings, sendcan: bool = False):
     if strings and not isinstance(strings[0], list | tuple):
