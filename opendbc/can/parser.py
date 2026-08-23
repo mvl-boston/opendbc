@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from opendbc.car.carlog import carlog
 from opendbc.can.dbc import DBC, Signal
+from opendbc.fuzzy_context import is_fuzzy_test
 
 
 MAX_BAD_COUNTER = 5
@@ -49,7 +50,7 @@ class MessageState:
       carlog.warning(f"CANParser: {hex(self.address)} {self.name} {msg}")
       self.last_warning_log_nanos = last_update_nanos
 
-  def parse(self, nanos: int, dat: bytes) -> bool:
+  def parse(self, nanos: int, dat: bytes, *, log_checksum_warnings: bool = False) -> bool:
     tmp_vals: list[float] = [0.0] * len(self.signals)
     checksum_failed = False
     counter_failed = False
@@ -66,7 +67,8 @@ class MessageState:
         expected_checksum = sig.calc_checksum(self.address, sig, bytearray(dat))
         if tmp != expected_checksum:
           checksum_failed = True
-          self.rate_limited_log(nanos, f"checksum failed: received {hex(tmp)}, calculated {hex(expected_checksum)}")
+          if log_checksum_warnings:
+            self.rate_limited_log(nanos, f"checksum failed: received {hex(tmp)}, calculated {hex(expected_checksum)}")
 
       if not self.ignore_counter and sig.type == 1:  # COUNTER
         if not self.update_counter(tmp, sig.size):
@@ -129,6 +131,7 @@ class CANParser:
     self.dbc_name: str = dbc_name
     self.bus: int = bus
     self.dbc = DBC(dbc_name)
+    self._log_checksum_warnings = 'honda' in dbc_name or 'acura' in dbc_name
 
     self.vl: dict[int | str, dict[str, float]] = VLDict(self)
     self.vl_all: dict[int | str, dict[str, list[float]]] = {}
@@ -240,7 +243,7 @@ class CANParser:
         state = self.message_states.get(address)
         if state is None or len(dat) > 64:
           continue
-        if state.parse(t, dat):
+        if state.parse(t, dat, log_checksum_warnings=self._log_checksum_warnings and not is_fuzzy_test()):
           updated_addrs.add(address)
 
           vl_addr = self.vl[address]
