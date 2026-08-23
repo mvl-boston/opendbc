@@ -149,7 +149,7 @@ class CANParser:
 
       self._add_message(name_or_addr, freq)
 
-    self.can_invalid_cnt: int = CAN_INVALID_CNT
+    self.can_invalid_cnt: int = 0
     self.last_nonempty_nanos: int = 0
     self._last_update_nanos: int = 0
 
@@ -208,7 +208,7 @@ class CANParser:
         state.rate_limited_log(self._last_update_nanos, f"counter invalid, {state.counter_fail=} {MAX_BAD_COUNTER=}")
       if not state.valid(self._last_update_nanos, bus_timeout):
         valid = False
-        if self.can_invalid_cnt >= CAN_INVALID_CNT:
+        if self.can_invalid_cnt == CAN_INVALID_CNT:
           state.rate_limited_log(self._last_update_nanos, "not valid (timeout or missing)")
           last_invalid_message = None
         else:
