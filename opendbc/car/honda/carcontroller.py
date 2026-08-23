@@ -296,7 +296,7 @@ class CarController(CarControllerBase):
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
-    speed_val = int(CS.out.vEgo * CV.MS_TO_MPH / 5.0) * 5 + 100
+    speed_val = np.clip(round(CS.out.vEgo * CV.MS_TO_MPH / 5.0) * 5, 5, 60)
     currentLatSpeed = f"{speed_val:02d}"
     if currentLatSpeed in self.latFactors:
       if not CS.out.steeringPressed and abs(limited_torque) > 0.9 and self.latFactors[currentLatSpeed] > abs(CS.out.steeringAngleDeg):
