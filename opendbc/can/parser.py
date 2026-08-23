@@ -9,7 +9,7 @@ from opendbc.can.dbc import DBC, Signal
 
 MAX_BAD_COUNTER = 5
 CAN_INVALID_CNT = 5
-
+CAN_INVALID_WARMUP_MAX = 251
 
 def get_raw_value(dat: bytes | bytearray, sig: Signal) -> int:
   ret = 0
@@ -150,6 +150,7 @@ class CANParser:
       self._add_message(name_or_addr, freq)
 
     self.can_invalid_cnt: int = CAN_INVALID_CNT
+    self.total_can_invalid_cnt = 0
     self.last_nonempty_nanos: int = 0
     self._last_update_nanos: int = 0
     self._prev_can_valid: bool = False
@@ -206,21 +207,23 @@ class CANParser:
     for state in self.message_states.values():
       if state.counter_fail >= MAX_BAD_COUNTER:
         counters_valid = False
-        state.rate_limited_log(self._last_update_nanos, f"counter invalid, {state.counter_fail=} {MAX_BAD_COUNTER=}")
+        # state.rate_limited_log(self._last_update_nanos, f"counter invalid, {state.counter_fail=} {MAX_BAD_COUNTER=}")
+        carlog.error({"counter invalid - message": state, "bus": self.bus})
+
       if not state.valid(self._last_update_nanos, bus_timeout):
         valid = False
-        if is_honda:
-          state.rate_limited_log(self._last_update_nanos, "not valid (timeout or missing)")
+        # state.rate_limited_log(self._last_update_nanos, "not valid (timeout or missing)")
 
     # TODO: probably only want to increment this once per update() call
     self.can_invalid_cnt = 0 if valid else min(self.can_invalid_cnt + 1, CAN_INVALID_CNT)
     result = self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
-    log_invalid = is_honda and self._prev_can_valid and not result
+    if not result:
+      self.total_can_invalid_cnt += 1
+    log_invalid = (is_honda and self._prev_can_valid and not result) or (self.total_can_invalid_cnt == CAN_INVALID_WARMUP_MAX)
 
     if log_invalid:
+      self.total_can_invalid_cnt = CAN_INVALID_WARMUP_MAX
       for state in self.message_states.values():
-        if state.counter_fail >= MAX_BAD_COUNTER:
-          carlog.error({"counter invalid - message": state, "bus": self.bus})
         if not state.valid(self._last_update_nanos, bus_timeout):
           carlog.error({"can invalid - message": state, "bus": self.bus})
 
