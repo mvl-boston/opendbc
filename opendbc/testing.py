@@ -6,9 +6,6 @@ import sys
 from collections.abc import Callable, Sequence
 from typing import Any, TypeVar
 
-from opendbc.fuzzy_context import fuzzy_test_scope
-
-
 T = TypeVar("T")
 
 _EDGE_EXAMPLES = 16
@@ -117,8 +114,7 @@ def fuzzy_test(max_examples: int) -> Callable[[Callable[..., None]], Callable[..
         if not 0 <= example_index < max_examples:
           raise ValueError(f"FUZZ_EXAMPLE={example_index} is outside [0, {max_examples})")
         try:
-          with fuzzy_test_scope():
-            func(*args, **kwargs, fuzzy=Fuzzy(f"{test_seed}:{example_index}", example_index))
+          func(*args, **kwargs, fuzzy=Fuzzy(f"{test_seed}:{example_index}", example_index))
         except Exception as exc:
           exc.add_note(f"reproduce with FUZZ_SEED={FUZZ_SEED} FUZZ_EXAMPLE={example_index}")
           raise
