@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from opendbc.car.carlog import carlog
 from opendbc.can.dbc import DBC, Signal
+from opendbc.fuzzy_context import is_fuzzy_test
 
 
 MAX_BAD_COUNTER = 5
@@ -207,23 +208,27 @@ class CANParser:
     for state in self.message_states.values():
       if state.counter_fail >= MAX_BAD_COUNTER:
         counters_valid = False
-        # state.rate_limited_log(self._last_update_nanos, f"counter invalid, {state.counter_fail=} {MAX_BAD_COUNTER=}")
-        carlog.error({"counter invalid - message": state, "bus": self.bus})
-
+        state.rate_limited_log(self._last_update_nanos, f"counter invalid, {state.counter_fail=} {MAX_BAD_COUNTER=}")
       if not state.valid(self._last_update_nanos, bus_timeout):
         valid = False
-        # state.rate_limited_log(self._last_update_nanos, "not valid (timeout or missing)")
+        state.rate_limited_log(self._last_update_nanos, "not valid (timeout or missing)")
 
     # TODO: probably only want to increment this once per update() call
     self.can_invalid_cnt = 0 if valid else min(self.can_invalid_cnt + 1, CAN_INVALID_CNT)
     result = self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
     if not result:
       self.total_can_invalid_cnt += 1
-    log_invalid = is_honda and ((self._prev_can_valid and not result) or (self.total_can_invalid_cnt >= CAN_INVALID_WARMUP_MAX))
+    log_invalid = (
+      is_honda
+      and not is_fuzzy_test()
+      and ((self._prev_can_valid and not result) or (self.total_can_invalid_cnt >= CAN_INVALID_WARMUP_MAX))
+    )
 
     if log_invalid:
       self.total_can_invalid_cnt = CAN_INVALID_WARMUP_MAX
       for state in self.message_states.values():
+        if state.counter_fail >= MAX_BAD_COUNTER:
+          carlog.error({"counter invalid - message": state, "bus": self.bus})
         if not state.valid(self._last_update_nanos, bus_timeout):
           carlog.error({"can invalid - message": state, "bus": self.bus})
 
