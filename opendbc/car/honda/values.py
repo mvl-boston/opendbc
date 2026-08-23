@@ -159,6 +159,12 @@ def radar_dbc_dict(pt_dict):
   return {Bus.pt: pt_dict, Bus.radar: 'acura_ilx_2016_nidec'}
 
 
+def bosch_a_radar_dbc_dict(pt_dict, extra=None):
+  # Bus.radar = the hand-written 16-slot Bosch-A object bank DBC (see radar_interface.py for the
+  # decode). RX-parse only; no CAN authority is taken, so factory AEB/CMBS stays fully live.
+  return {Bus.pt: pt_dict, Bus.radar: 'honda_bosch_a_radar', **(extra or {})}
+
+
 # Certain Hondas have an extra steering sensor at the bottom of the steering rack,
 # which improves controls quality as it removes the steering column torsion from feedback.
 # Tire stiffness factor fictitiously lower if it includes the steering column torsion effect.
@@ -172,7 +178,7 @@ class CAR(Platforms):
       HondaCarDocs("Honda N-Box 2018", "All", min_steer_speed=5.),
     ],
     CarSpecs(mass=890., wheelbase=2.520, steerRatio=18.64),
-    {Bus.pt: 'acura_rdx_2020_can_generated'},
+    bosch_a_radar_dbc_dict('acura_rdx_2020_can_generated'),
   )
   HONDA_ACCORD = HondaBoschPlatformConfig(
     [
@@ -182,7 +188,7 @@ class CAR(Platforms):
     ],
     # steerRatio: 11.82 is spec end-to-end
     CarSpecs(mass=3279 * CV.LB_TO_KG, wheelbase=2.83, steerRatio=16.33, centerToFrontRatio=0.39, tireStiffnessFactor=0.8467),
-    {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated'},
+    bosch_a_radar_dbc_dict('honda_civic_hatchback_ex_2017_can_generated'),
   )
   HONDA_ACCORD_11G = HondaBoschCANFDPlatformConfig(
     [
@@ -199,12 +205,12 @@ class CAR(Platforms):
       HondaCarDocs("Honda Civic Hatchback 2019-21", "All", min_steer_speed=12. * CV.MPH_TO_MS),
     ],
     CarSpecs(mass=1326, wheelbase=2.7, steerRatio=15.38, centerToFrontRatio=0.4),  # steerRatio: 10.93 is end-to-end spec
-    {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated'},
+    bosch_a_radar_dbc_dict('honda_civic_hatchback_ex_2017_can_generated'),
   )
   HONDA_CIVIC_BOSCH_DIESEL = HondaBoschPlatformConfig(
     [],  # don't show in docs
     HONDA_CIVIC_BOSCH.specs,
-    {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated'},
+    bosch_a_radar_dbc_dict('honda_civic_hatchback_ex_2017_can_generated'),
   )
   HONDA_CIVIC_2022 = HondaBoschPlatformConfig(
     [
@@ -223,7 +229,7 @@ class CAR(Platforms):
     [HondaCarDocs("Honda CR-V 2017-22", min_steer_speed=15. * CV.MPH_TO_MS)],
     # steerRatio: 12.3 is spec end-to-end
     CarSpecs(mass=3410 * CV.LB_TO_KG, wheelbase=2.66, steerRatio=16.0, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),
-    {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated', Bus.body: 'honda_crv_ex_2017_body_generated'},
+    bosch_a_radar_dbc_dict('honda_civic_hatchback_ex_2017_can_generated', {Bus.body: 'honda_crv_ex_2017_body_generated'}),
     flags=HondaFlags.BOSCH_ALT_BRAKE | HondaFlags.LKAS_MINSPEED_CUTOFF
   )
   HONDA_CRV_6G = HondaBoschCANFDPlatformConfig(
@@ -237,7 +243,7 @@ class CAR(Platforms):
     [HondaCarDocs("Honda CR-V Hybrid 2017-22", min_steer_speed=12. * CV.MPH_TO_MS)],
     # mass: mean of 4 models in kg, steerRatio: 12.3 is spec end-to-end
     CarSpecs(mass=1667, wheelbase=2.66, steerRatio=16, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),
-    {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated'},
+    bosch_a_radar_dbc_dict('honda_civic_hatchback_ex_2017_can_generated'),
   )
   HONDA_HRV_3G = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda HR-V 2023-27", "All")],
@@ -254,7 +260,7 @@ class CAR(Platforms):
   ACURA_RDX_3G = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura RDX 2019-21", "All", min_steer_speed=3. * CV.MPH_TO_MS)],
     CarSpecs(mass=4068 * CV.LB_TO_KG, wheelbase=2.75, steerRatio=11.95, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),  # as spec
-    {Bus.pt: 'acura_rdx_2020_can_generated'},
+    bosch_a_radar_dbc_dict('acura_rdx_2020_can_generated'),
   )
   ACURA_RDX_3G_MMR = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura RDX 2022-26", "All", min_steer_speed=70. * CV.KPH_TO_MS)],
@@ -265,17 +271,17 @@ class CAR(Platforms):
   HONDA_INSIGHT = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda Insight 2019-22", "All", min_steer_speed=3. * CV.MPH_TO_MS)],
     CarSpecs(mass=2987 * CV.LB_TO_KG, wheelbase=2.7, steerRatio=15.0, centerToFrontRatio=0.39, tireStiffnessFactor=0.82),  # as spec
-    {Bus.pt: 'honda_insight_ex_2019_can_generated'},
+    bosch_a_radar_dbc_dict('honda_insight_ex_2019_can_generated'),
   )
   HONDA_E = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda e 2020", "All", min_steer_speed=3. * CV.MPH_TO_MS)],
     CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=16.71, tireStiffnessFactor=0.82),
-    {Bus.pt: 'acura_rdx_2020_can_generated'},
+    bosch_a_radar_dbc_dict('acura_rdx_2020_can_generated'),
   )
   HONDA_E_ADVANCE = HondaBoschPlatformConfig(
     [],  # don't show in docs, base trim already in docs
     CarSpecs(mass=1527, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=16.71, tireStiffnessFactor=0.82),
-    {Bus.pt: 'honda_e_advance_2020_can_generated'}, # 8 bit LKAS_HUD in Advance trim
+    bosch_a_radar_dbc_dict('honda_e_advance_2020_can_generated'), # 8 bit LKAS_HUD in Advance trim
   )
   HONDA_PILOT_4G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Pilot 2023-25", "All")],
@@ -489,6 +495,10 @@ HONDA_BOSCH = frozenset(c for c in CAR if c.config.flags & HondaFlags.BOSCH)
 HONDA_BOSCH_ALT_RADAR = frozenset(c for c in CAR if c.config.flags & HondaFlags.BOSCH_ALT_RADAR)
 HONDA_BOSCH_RADARLESS = frozenset(c for c in CAR if c.config.flags & HondaFlags.BOSCH_RADARLESS)
 HONDA_BOSCH_CANFD = frozenset(c for c in CAR if c.config.flags & HondaFlags.BOSCH_CANFD)
+# Platforms on the plain bosch_a harness (CarHarness.bosch_a): not CANFD, not radarless, not the
+# alt-radar variant. This is the hardware/wiring generation the hand-written Bosch-A 16-slot object
+# bank DBC (honda_bosch_a_radar, see radar_interface.py) was reverse-engineered against.
+HONDA_BOSCH_A = HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD - HONDA_BOSCH_ALT_RADAR
 
 
 STEER_THRESHOLD = {
