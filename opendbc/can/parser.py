@@ -149,7 +149,7 @@ class CANParser:
 
       self._add_message(name_or_addr, freq)
 
-    self.can_invalid_cnt: int = CAN_INVALID_CNT
+    self.can_invalid_cnt: int = 0
     self.last_nonempty_nanos: int = 0
     self._last_update_nanos: int = 0
 
@@ -201,16 +201,23 @@ class CANParser:
     valid = True
     counters_valid = True
     bus_timeout = self.bus_timeout
+    last_invalid_message = None
     for state in self.message_states.values():
       if state.counter_fail >= MAX_BAD_COUNTER:
         counters_valid = False
         state.rate_limited_log(self._last_update_nanos, f"counter invalid, {state.counter_fail=} {MAX_BAD_COUNTER=}")
       if not state.valid(self._last_update_nanos, bus_timeout):
         valid = False
-        state.rate_limited_log(self._last_update_nanos, "not valid (timeout or missing)")
+        if self.can_invalid_cnt == CAN_INVALID_CNT:
+          state.rate_limited_log(self._last_update_nanos, "not valid (timeout or missing)")
+          last_invalid_message = None
+        else:
+          last_invalid_message = self._last_update_nanos
 
     # TODO: probably only want to increment this once per update() call
     self.can_invalid_cnt = 0 if valid else min(self.can_invalid_cnt + 1, CAN_INVALID_CNT)
+    if (self.can_invalid_cnt == CAN_INVALID_CNT) and (last_invalid_message is not None):
+      state.rate_limited_log(last_invalid_message, "not valid (timeout or missing)")
     return self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
 
   def update(self, strings, sendcan: bool = False):
