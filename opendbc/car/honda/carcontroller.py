@@ -222,7 +222,6 @@ class CarController(CarControllerBase):
     prior_windfactor = self.windfactor
     prior_gasfactor = self.gasfactor
     prior_gas_alpha = self.gas_alpha
-    prior_average_factor = self.average_factor
     if CC.longActive:
       if (actuators.longControlState in (LongCtrlState.pid, LongCtrlState.stopping)) and \
          (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
