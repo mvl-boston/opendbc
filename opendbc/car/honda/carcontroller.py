@@ -359,8 +359,8 @@ class CarController(CarControllerBase):
                                 (self.new_accel < pcm_accel and self.accel < CS.out.aEgo)
         new_accel_factor = abs(averagefactor_error * (self.new_accel - pcm_accel))
         if more_new_accel_needed:
-          if (((self.sat_accel > self.accel > CS.out.aEgo) and (self.new_accel < self.params.NIDEC_GAS_MAX)) or
-              ((self.params.NIDEC_ACCEL_MIN < self.accel < CS.out.aEgo) and (self.new_accel > 0)) and
+          if ((((self.sat_accel > self.accel > CS.out.aEgo) and (self.new_accel < self.params.NIDEC_GAS_MAX)) or
+               ((self.params.NIDEC_ACCEL_MIN < self.accel < CS.out.aEgo) and (self.new_accel > 0))) and
               not (max_speedcontrol)):
             self.average_factor = min(1.0, self.average_factor * (1 + 0.0001 * new_accel_factor))
         else:
