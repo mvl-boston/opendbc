@@ -360,8 +360,9 @@ class CarController(CarControllerBase):
         new_accel_factor = abs(averagefactor_error * (self.new_accel - pcm_accel))
         if more_new_accel_needed:
           if (((self.sat_accel > self.accel > CS.out.aEgo) and (self.new_accel < self.params.NIDEC_GAS_MAX)) or
-              ((self.params.NIDEC_ACCEL_MIN < self.accel < CS.out.aEgo) and (self.new_accel > 0))):
-            self.average_factor = min(0.00001, self.average_factor * (1 + 0.0001 * new_accel_factor))
+              ((self.params.NIDEC_ACCEL_MIN < self.accel < CS.out.aEgo) and (self.new_accel > 0)) and
+              not (max_speedcontrol)):
+            self.average_factor = min(1.0, self.average_factor * (1 + 0.0001 * new_accel_factor))
         else:
           self.average_factor = max(0.00001, self.average_factor / (1 + 0.0001 * new_accel_factor))
 
@@ -386,7 +387,6 @@ class CarController(CarControllerBase):
           self.windfactor = min(prior_windfactor, self.windfactor)
           self.gasfactor = min(prior_gasfactor, self.gasfactor)
           self.gas_alpha = min(prior_gas_alpha, self.gas_alpha)
-          self.average_factor = prior_average_factor # no feedforward adjustment in either direction in this range
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
