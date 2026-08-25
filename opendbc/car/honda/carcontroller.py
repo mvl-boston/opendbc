@@ -335,7 +335,7 @@ class CarController(CarControllerBase):
     prior_speedalpha = self.speedalpha
 
     # feedforward for Nidec decaying-average gas pedal
-    max_increase = 10 # used to be: 2  # equivalent to 20 units per 10hz frame
+    max_increase = 2  # equivalent to 20 units per 10hz frame
     prior_accel = int(self.new_accel)
     self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - self.average_factor)) / self.average_factor)
     self.new_accel = int(np.clip(self.new_accel, 0, min(prior_accel + max_increase, self.params.NIDEC_GAS_MAX)))
