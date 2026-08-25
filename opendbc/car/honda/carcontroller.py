@@ -354,7 +354,7 @@ class CarController(CarControllerBase):
         dv_sent = self.speedfactor * self.accel + self.speedalpha
         dv_sat = max(0.1, self.speedfactor * self.sat_accel + self.speedalpha)
 
-        averagefactor_error = (self.accel - CS.out.aEgo
+        averagefactor_error = (self.accel - CS.out.aEgo)
         more_new_accel_needed = (self.new_accel > pcm_accel and self.accel > CS.out.aEgo) or \
                                 (self.new_accel < pcm_accel and self.accel < CS.out.aEgo)
         new_accel_factor = abs(averagefactor_error * (self.new_accel - pcm_accel))
