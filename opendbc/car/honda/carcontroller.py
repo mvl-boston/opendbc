@@ -361,12 +361,15 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         ts = self.frame * DT_CTRL
 
         if self.CP.flags & HondaFlags.BOSCH:
-          if (accel < min_gas) and (1e-3 < CS.out.vEgo < 3.0):
+          if (accel < min_gas) and (CS.out.vEgo < 3.0) and not (-1e-3 < CS.out.vEgo < 1e-3):
             brake_addon = self.brake_pid.update(error = accel - CS.out.aEgo, speed = CS.out.vEgo)
             targetaccel = min(accel,accel + brake_addon)
           else:
-            self.brake_pid.reset()
-            targetaccel = accel
+            if (self.brake_pid.i < 0.0) and (accel < min_gas):
+              self.brake_pid.i = min(0.0, self.brake_pid.i + 0.02) # release 1m/s2 @ 50hz
+            else:
+              self.brake_pid.reset()
+            targetaccel = min(accel,accel + self.brake_pid.i)
 
           self.accel = float(np.clip(targetaccel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
           gas_pedal_force = accel + wind_brake_ms2 * self.windfactor + hill_brake # not using self.accel since pid resets w gas pedal
