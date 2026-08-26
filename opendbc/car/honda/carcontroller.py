@@ -17,7 +17,6 @@ from opendbc.car.common.pid import PIDController
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 
-
 def compute_gb_honda_bosch(accel, speed):
   # TODO returns 0s, is unused
   return 0.0, 0.0
@@ -171,7 +170,9 @@ class CarController(CarControllerBase):
     self.brake_pid.i = self.brake_pid_factor_non_lowspeed
 
     self.prior_gas_average = 0.0
-    self.average_factor = 0.95 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
+    self.average_factor = 0.5 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
+    self.average_factor_sens = 0.0  # d(prior_gas_average)/d(average_factor), recursive model sensitivity
+    self.car_gas_per_pcm_gas = 0.3 if (Params().get("HondaCarGasScaleParams") is None) else Params().get("HondaCarGasScaleParams")
     self.creep_factor = 1.0 if (Params().get("HondaCreepFactorParams") is None) else Params().get("HondaCreepFactorParams")
     self.gas_alpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
     self.gas_alpha_nomaxspeed = self.gas_alpha
@@ -336,9 +337,15 @@ class CarController(CarControllerBase):
     # feedforward for Nidec decaying-average gas pedal
     max_increase = 2  # equivalent to 20 units per 10hz frame
     prior_accel = int(self.new_accel)
-    self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - self.average_factor)) / self.average_factor)
+    # When GAS_PEDAL_2 is absent the direct-measurement learner cannot run; use a fixed factor so
+    # feedforward stays stable on platforms that do not report applied pedal position.
+    effective_average_factor = self.average_factor if CS.car_gas_available else 0.5
+    self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - effective_average_factor)) / effective_average_factor)
     self.new_accel = int(np.clip(self.new_accel, 0, min(prior_accel + max_increase, self.params.NIDEC_GAS_MAX)))
-    self.prior_gas_average = self.prior_gas_average * (1 - self.average_factor) + (self.new_accel * self.average_factor)
+    # recursive sensitivity of the model prediction to average_factor, advanced with the model itself;
+    # used by the average_factor learner below (must be computed before prior_gas_average is updated)
+    self.average_factor_sens = (self.new_accel - self.prior_gas_average) + (1 - effective_average_factor) * self.average_factor_sens
+    self.prior_gas_average = self.prior_gas_average * (1 - effective_average_factor) + (self.new_accel * effective_average_factor)
 
     if self.CP.carFingerprint in HONDA_BOSCH:
       self.new_accel = pcm_accel
@@ -353,17 +360,31 @@ class CarController(CarControllerBase):
         dv_sent = self.speedfactor * self.accel + self.speedalpha
         dv_sat = max(0.1, self.speedfactor * self.sat_accel + self.speedalpha)
 
-        averagefactor_error = (self.accel - CS.out.aEgo)
-        more_new_accel_needed = (self.new_accel > pcm_accel and self.accel > CS.out.aEgo) or \
-                                (self.new_accel < pcm_accel and self.accel < CS.out.aEgo)
-        new_accel_factor = abs(averagefactor_error * (self.new_accel - pcm_accel))
-        if more_new_accel_needed:
-          if ((((self.sat_accel > self.accel > CS.out.aEgo) and (self.new_accel < self.params.NIDEC_GAS_MAX)) or
-               ((self.params.NIDEC_ACCEL_MIN < self.accel < CS.out.aEgo) and (self.new_accel > 0))) and
-              not (max_speedcontrol)):
-            self.average_factor = min(1.0, self.average_factor * (1 + 0.0001 * new_accel_factor))
-        else:
-          self.average_factor = max(0.00001, self.average_factor / (1 + 0.0001 * new_accel_factor))
+        # average_factor learner: direct measurement (system ID), not tracking-error integration.
+        # average_factor models the PCM's one-pole smoothing of our PCM_GAS commands, and
+        # prior_gas_average is that model's prediction of the PCM's response. The actual response
+        # is observable as the applied pedal (CAR_GAS ~= car_gas_per_pcm_gas * PCM_GAS), so move average_factor
+        # along the model-fit gradient: prediction error times the recursive sensitivity computed
+        # alongside the model above. The update sign flips around the PCM's true smoothing
+        # constant, making the learner self-bounding: tracking error can't poison it, and at a
+        # steady command rail the sensitivity decays away, so clipped/saturated frames teach it
+        # nothing instead of teaching it the wrong direction. The per-tick step cap bounds noise
+        # spikes; the range clip only protects the 1/average_factor feedforward division — the
+        # equilibrium is interior (route 250 replay settles ~0.06-0.10, consistent with the PCM's
+        # ~100ms pedal-apply lag), so it never binds.
+        if CC.longActive and (CS.out.vEgo > 1e-5) and CS.car_gas_available:
+          # car_gas_per_pcm_gas learner: direct ratio CAR_GAS / prior_gas_average (PCM units).
+          # Slow additive EMA; per-car constant scale between pedal byte and smoothed command.
+          if self.prior_gas_average > 20.0 and CS.car_gas > 5.0:
+            scale_sample = CS.car_gas / self.prior_gas_average
+            self.car_gas_per_pcm_gas += 0.00001 * (scale_sample - self.car_gas_per_pcm_gas)
+
+          self.car_gas_per_pcm_gas = max(0.00001, self.car_gas_per_pcm_gas)
+          gas_measured = CS.car_gas / self.car_gas_per_pcm_gas
+          averagefactor_error = (gas_measured - self.prior_gas_average) / self.params.NIDEC_GAS_MAX
+          averagefactor_step = 0.005 * averagefactor_error * self.average_factor_sens / self.params.NIDEC_GAS_MAX
+          self.average_factor = float(np.clip(self.average_factor + np.clip(averagefactor_step, -0.001, 0.001),
+                                              0.001, 1.0))
 
         # ceiling learner (sat_accel): owns the saturated regime, learns by direct measurement.
         # Asymmetric on purpose: a ceiling is a max-type quantity, so learn UP quickly whenever the
@@ -378,8 +399,10 @@ class CarController(CarControllerBase):
           if self.deficit_frames > 150:
             self.sat_accel = float(np.clip(self.sat_accel + 0.0002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
 
-        self.speedfactor = max(0.001, self.speedfactor * (1 + 0.001 * speedfactor_error * self.accel))
-        self.speedalpha = min(dv_sat, self.speedalpha + 0.001 * speedfactor_error)
+        if CC.longActive and (CS.out.vEgo > 1e-5):
+          self.speedfactor = max(0.001, self.speedfactor * (1 + 0.001 * speedfactor_error * self.accel))
+          self.speedalpha = min(dv_sat, self.speedalpha + 0.001 * speedfactor_error)
+
         if max_speedcontrol or (dv_sent > dv_sat): # only allow learning reductions
           self.speedfactor = min(prior_speedfactor, self.speedfactor)
           self.speedalpha = min(prior_speedalpha, self.speedalpha)
@@ -535,6 +558,7 @@ class CarController(CarControllerBase):
         "HondaSpeedAlphaParams": self.speedalpha,
         "HondaSpeedFactorParams": self.speedfactor,
         "HondaSatAccelParams": self.sat_accel,
+        "HondaCarGasScaleParams": self.car_gas_per_pcm_gas,
       })
 
     if self.frame % 12000 == 30:
