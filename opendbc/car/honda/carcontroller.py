@@ -17,6 +17,11 @@ from opendbc.car.common.pid import PIDController
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 
+# The Nidec PCM applies our ACC_HUD PCM_GAS command to the pedal as CAR_GAS ~= 0.32 * PCM_GAS
+# within ~100ms when the command is smooth (measured on ACURA_MDX_3G). Converts the measured
+# applied pedal back into PCM_GAS command units for the average_factor model fit.
+CAR_GAS_PER_PCM_GAS = 0.32
+
 
 def compute_gb_honda_bosch(accel, speed):
   # TODO returns 0s, is unused
@@ -171,7 +176,12 @@ class CarController(CarControllerBase):
     self.brake_pid.i = self.brake_pid_factor_non_lowspeed
 
     self.prior_gas_average = 0.0
-    self.average_factor = 0.95 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
+    self.average_factor = 0.5 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
+    if not (0.01 <= self.average_factor <= 1.0):
+      # recover persisted state poisoned by the removed error-driven learner (route 250: pinned at 1e-5,
+      # which turns the decaying-average inversion into a 0/198 comparator)
+      self.average_factor = 0.5
+    self.average_factor_sens = 0.0  # d(prior_gas_average)/d(average_factor), recursive model sensitivity
     self.creep_factor = 1.0 if (Params().get("HondaCreepFactorParams") is None) else Params().get("HondaCreepFactorParams")
     self.gas_alpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
     self.gas_alpha_nomaxspeed = self.gas_alpha
@@ -338,6 +348,9 @@ class CarController(CarControllerBase):
     prior_accel = int(self.new_accel)
     self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - self.average_factor)) / self.average_factor)
     self.new_accel = int(np.clip(self.new_accel, 0, min(prior_accel + max_increase, self.params.NIDEC_GAS_MAX)))
+    # recursive sensitivity of the model prediction to average_factor, advanced with the model itself;
+    # used by the average_factor learner below (must be computed before prior_gas_average is updated)
+    self.average_factor_sens = (self.new_accel - self.prior_gas_average) + (1 - self.average_factor) * self.average_factor_sens
     self.prior_gas_average = self.prior_gas_average * (1 - self.average_factor) + (self.new_accel * self.average_factor)
 
     if self.CP.carFingerprint in HONDA_BOSCH:
@@ -353,17 +366,24 @@ class CarController(CarControllerBase):
         dv_sent = self.speedfactor * self.accel + self.speedalpha
         dv_sat = max(0.1, self.speedfactor * self.sat_accel + self.speedalpha)
 
-        averagefactor_error = (self.accel - CS.out.aEgo)
-        more_new_accel_needed = (self.new_accel > pcm_accel and self.accel > CS.out.aEgo) or \
-                                (self.new_accel < pcm_accel and self.accel < CS.out.aEgo)
-        new_accel_factor = abs(averagefactor_error * (self.new_accel - pcm_accel))
-        if more_new_accel_needed:
-          if ((((self.sat_accel > self.accel > CS.out.aEgo) and (self.new_accel < self.params.NIDEC_GAS_MAX)) or
-               ((self.params.NIDEC_ACCEL_MIN < self.accel < CS.out.aEgo) and (self.new_accel > 0))) and
-              not (max_speedcontrol)):
-            self.average_factor = min(1.0, self.average_factor * (1 + 0.0001 * new_accel_factor))
-        else:
-          self.average_factor = max(0.00001, self.average_factor / (1 + 0.0001 * new_accel_factor))
+        # average_factor learner: direct measurement (system ID), not tracking-error integration.
+        # average_factor models the PCM's one-pole smoothing of our PCM_GAS commands, and
+        # prior_gas_average is that model's prediction of the PCM's response. The actual response
+        # is observable as the applied pedal (CAR_GAS ~= 0.32 * PCM_GAS), so move average_factor
+        # along the model-fit gradient: prediction error times the recursive sensitivity computed
+        # alongside the model above. The update sign flips around the PCM's true smoothing
+        # constant, making the learner self-bounding: tracking error can't poison it, and at a
+        # steady command rail the sensitivity decays away, so clipped/saturated frames teach it
+        # nothing instead of teaching it the wrong direction. The per-tick step cap bounds noise
+        # spikes; the range clip only protects the 1/average_factor feedforward division — the
+        # equilibrium is interior (route 250 replay settles ~0.06-0.10, consistent with the PCM's
+        # ~100ms pedal-apply lag), so it never binds.
+        if CC.longActive and (CS.out.vEgo > 1e-5):
+          gas_measured = CS.car_gas / CAR_GAS_PER_PCM_GAS
+          averagefactor_error = (gas_measured - self.prior_gas_average) / self.params.NIDEC_GAS_MAX
+          averagefactor_step = 0.005 * averagefactor_error * self.average_factor_sens / self.params.NIDEC_GAS_MAX
+          self.average_factor = float(np.clip(self.average_factor + np.clip(averagefactor_step, -0.001, 0.001),
+                                              0.01, 1.0))
 
         # ceiling learner (sat_accel): owns the saturated regime, learns by direct measurement.
         # Asymmetric on purpose: a ceiling is a max-type quantity, so learn UP quickly whenever the
