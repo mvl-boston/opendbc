@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from collections import defaultdict
 
@@ -58,8 +59,10 @@ class CarState(CarStateBase):
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
 
     # applied gas pedal reported by the PCM (GAS_PEDAL_2.CAR_GAS, includes ACC-applied gas),
-    # used by the Nidec carcontroller to measure the PCM's response to our PCM_GAS commands
+    # used by the Nidec carcontroller to measure the PCM's response to our PCM_GAS commands.
+    # Not all Nidec cars send GAS_PEDAL_2 (e.g. HRV, CRV EU, some Pilots).
     self.car_gas = 0.0
+    self.car_gas_available = False
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -255,7 +258,10 @@ class CarState(CarStateBase):
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
-      self.car_gas = cp.vl["GAS_PEDAL_2"]["CAR_GAS"]
+      gas_state = cp.message_states.get(304)  # GAS_PEDAL_2
+      self.car_gas_available = gas_state is not None and len(gas_state.timestamps) > 0
+      if self.car_gas_available:
+        self.car_gas = cp.vl["GAS_PEDAL_2"]["CAR_GAS"]
     if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
 
@@ -273,8 +279,11 @@ class CarState(CarStateBase):
     return ret
 
   def get_can_parsers(self, CP):
+    # GAS_PEDAL_2 is optional on some Nidec platforms; register before lazy vl access so it
+    # does not count against canValid on cars that never send it.
+    pt_messages = [("GAS_PEDAL_2", math.nan)]
     parsers = {
-      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).pt),
+      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).pt),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).camera),
     }
     if CP.enableBsm:

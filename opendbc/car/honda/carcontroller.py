@@ -346,12 +346,15 @@ class CarController(CarControllerBase):
     # feedforward for Nidec decaying-average gas pedal
     max_increase = 2  # equivalent to 20 units per 10hz frame
     prior_accel = int(self.new_accel)
-    self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - self.average_factor)) / self.average_factor)
+    # When GAS_PEDAL_2 is absent the direct-measurement learner cannot run; use a fixed factor so
+    # feedforward stays stable on platforms that do not report applied pedal position.
+    effective_average_factor = self.average_factor if CS.car_gas_available else 0.5
+    self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - effective_average_factor)) / effective_average_factor)
     self.new_accel = int(np.clip(self.new_accel, 0, min(prior_accel + max_increase, self.params.NIDEC_GAS_MAX)))
     # recursive sensitivity of the model prediction to average_factor, advanced with the model itself;
     # used by the average_factor learner below (must be computed before prior_gas_average is updated)
-    self.average_factor_sens = (self.new_accel - self.prior_gas_average) + (1 - self.average_factor) * self.average_factor_sens
-    self.prior_gas_average = self.prior_gas_average * (1 - self.average_factor) + (self.new_accel * self.average_factor)
+    self.average_factor_sens = (self.new_accel - self.prior_gas_average) + (1 - effective_average_factor) * self.average_factor_sens
+    self.prior_gas_average = self.prior_gas_average * (1 - effective_average_factor) + (self.new_accel * effective_average_factor)
 
     if self.CP.carFingerprint in HONDA_BOSCH:
       self.new_accel = pcm_accel
@@ -378,7 +381,7 @@ class CarController(CarControllerBase):
         # spikes; the range clip only protects the 1/average_factor feedforward division — the
         # equilibrium is interior (route 250 replay settles ~0.06-0.10, consistent with the PCM's
         # ~100ms pedal-apply lag), so it never binds.
-        if CC.longActive and (CS.out.vEgo > 1e-5):
+        if CC.longActive and (CS.out.vEgo > 1e-5) and CS.car_gas_available:
           gas_measured = CS.car_gas / CAR_GAS_PER_PCM_GAS
           averagefactor_error = (gas_measured - self.prior_gas_average) / self.params.NIDEC_GAS_MAX
           averagefactor_step = 0.005 * averagefactor_error * self.average_factor_sens / self.params.NIDEC_GAS_MAX
