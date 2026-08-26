@@ -57,6 +57,10 @@ class CarState(CarStateBase):
     self.initial_accFault_cleared = False
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
 
+    # applied gas pedal reported by the PCM (GAS_PEDAL_2.CAR_GAS, includes ACC-applied gas),
+    # used by the Nidec carcontroller to measure the PCM's response to our PCM_GAS commands
+    self.car_gas = 0.0
+
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
@@ -251,6 +255,7 @@ class CarState(CarStateBase):
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
+      self.car_gas = cp.vl["GAS_PEDAL_2"]["CAR_GAS"]
     if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
 
