@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from collections import defaultdict
 
@@ -56,6 +57,11 @@ class CarState(CarStateBase):
 
     self.initial_accFault_cleared = False
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
+
+    # Applied gas pedal in PCM units (includes ACC-applied gas, not just driver PEDAL_GAS).
+    # Source message varies by platform: GAS_PEDAL_2 (0x130) or GAS_PEDAL (0x13C).
+    self.car_gas = 0.0
+    self.car_gas_available = False
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -251,6 +257,16 @@ class CarState(CarStateBase):
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
+      gas_pedal_2_seen = cp.message_states.get(304) is not None and len(cp.message_states[304].timestamps) > 0
+      gas_pedal_seen = cp.message_states.get(316) is not None and len(cp.message_states[316].timestamps) > 0
+      if gas_pedal_2_seen:
+        self.car_gas_available = True
+        self.car_gas = cp.vl["GAS_PEDAL_2"]["CAR_GAS"]
+      elif gas_pedal_seen:
+        self.car_gas_available = True
+        self.car_gas = cp.vl["GAS_PEDAL"]["CAR_GAS"]
+      else:
+        self.car_gas_available = False
     if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
 
@@ -268,8 +284,11 @@ class CarState(CarStateBase):
     return ret
 
   def get_can_parsers(self, CP):
+    # Optional on Nidec: some platforms send GAS_PEDAL (0x13C) instead of GAS_PEDAL_2 (0x130).
+    # Register before lazy vl access so missing messages do not count against canValid.
+    pt_messages = [("GAS_PEDAL_2", math.nan), ("GAS_PEDAL", math.nan)]
     parsers = {
-      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).pt),
+      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).pt),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).camera),
     }
     if CP.enableBsm:
