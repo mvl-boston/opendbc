@@ -14,6 +14,19 @@ from opendbc.car.interfaces import CarStateBase
 TransmissionType = structs.CarParams.TransmissionType
 ButtonType = structs.CarState.ButtonEvent.Type
 
+# Route-derived scale from CAR_GAS byte to ACC_HUD PCM_GAS units (commaCarSegments, PCM_GAS>=80).
+# GAS_PEDAL_2 (0x130): MDX route 250; survey ~0.25-0.34 on other 304-msg Nidec cars.
+GAS_PEDAL_2_CAR_GAS_SCALE = 0.32
+# GAS_PEDAL (0x13C): HRV/Pilot/CRV/Ridgeline send this instead of GAS_PEDAL_2.
+GAS_PEDAL_CAR_GAS_SCALE_BY_CAR = {
+  CAR.HONDA_HRV: 0.32,
+  CAR.HONDA_CRV: 0.27,
+  CAR.HONDA_CRV_EU: 0.27,
+  CAR.HONDA_PILOT: 0.21,
+  CAR.HONDA_RIDGELINE: 0.28,
+}
+DEFAULT_GAS_PEDAL_CAR_GAS_SCALE = 0.27
+
 BUTTONS_DICT = {CruiseButtons.RES_ACCEL: ButtonType.accelCruise, CruiseButtons.DECEL_SET: ButtonType.decelCruise,
                 CruiseButtons.MAIN: ButtonType.mainCruise, CruiseButtons.CANCEL: ButtonType.cancel}
 SETTINGS_BUTTONS_DICT = {CruiseSettings.DISTANCE: ButtonType.gapAdjustCruise, CruiseSettings.LKAS: ButtonType.lkas}
@@ -58,11 +71,11 @@ class CarState(CarStateBase):
     self.initial_accFault_cleared = False
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
 
-    # applied gas pedal reported by the PCM (GAS_PEDAL_2.CAR_GAS, includes ACC-applied gas),
-    # used by the Nidec carcontroller to measure the PCM's response to our PCM_GAS commands.
-    # Not all Nidec cars send GAS_PEDAL_2 (e.g. HRV, CRV EU, some Pilots).
+    # Applied gas pedal in PCM units (includes ACC-applied gas, not just driver PEDAL_GAS).
+    # Source message varies by platform: GAS_PEDAL_2 (0x130) or GAS_PEDAL (0x13C).
     self.car_gas = 0.0
     self.car_gas_available = False
+    self.car_gas_per_pcm_gas = GAS_PEDAL_2_CAR_GAS_SCALE
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -258,10 +271,19 @@ class CarState(CarStateBase):
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
-      gas_state = cp.message_states.get(304)  # GAS_PEDAL_2
-      self.car_gas_available = gas_state is not None and len(gas_state.timestamps) > 0
-      if self.car_gas_available:
+      gas_pedal_2_seen = cp.message_states.get(304) is not None and len(cp.message_states[304].timestamps) > 0
+      gas_pedal_seen = cp.message_states.get(316) is not None and len(cp.message_states[316].timestamps) > 0
+      if gas_pedal_2_seen:
+        self.car_gas_available = True
         self.car_gas = cp.vl["GAS_PEDAL_2"]["CAR_GAS"]
+        self.car_gas_per_pcm_gas = GAS_PEDAL_2_CAR_GAS_SCALE
+      elif gas_pedal_seen:
+        self.car_gas_available = True
+        self.car_gas = cp.vl["GAS_PEDAL"]["CAR_GAS"]
+        self.car_gas_per_pcm_gas = GAS_PEDAL_CAR_GAS_SCALE_BY_CAR.get(self.CP.carFingerprint,
+                                                                      DEFAULT_GAS_PEDAL_CAR_GAS_SCALE)
+      else:
+        self.car_gas_available = False
     if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
 
@@ -279,9 +301,9 @@ class CarState(CarStateBase):
     return ret
 
   def get_can_parsers(self, CP):
-    # GAS_PEDAL_2 is optional on some Nidec platforms; register before lazy vl access so it
-    # does not count against canValid on cars that never send it.
-    pt_messages = [("GAS_PEDAL_2", math.nan)]
+    # Optional on Nidec: some platforms send GAS_PEDAL (0x13C) instead of GAS_PEDAL_2 (0x130).
+    # Register before lazy vl access so missing messages do not count against canValid.
+    pt_messages = [("GAS_PEDAL_2", math.nan), ("GAS_PEDAL", math.nan)]
     parsers = {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).pt),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).camera),

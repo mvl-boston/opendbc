@@ -17,10 +17,9 @@ from opendbc.car.common.pid import PIDController
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 
-# The Nidec PCM applies our ACC_HUD PCM_GAS command to the pedal as CAR_GAS ~= 0.32 * PCM_GAS
-# within ~100ms when the command is smooth (measured on ACURA_MDX_3G). Converts the measured
-# applied pedal back into PCM_GAS command units for the average_factor model fit.
-CAR_GAS_PER_PCM_GAS = 0.32
+# Default scale for GAS_PEDAL_2.CAR_GAS -> PCM_GAS units (MDX route 250). GAS_PEDAL (0x13C)
+# platforms use per-car scales set on CarState.car_gas_per_pcm_gas from route analysis.
+DEFAULT_CAR_GAS_PER_PCM_GAS = 0.32
 
 
 def compute_gb_honda_bosch(accel, speed):
@@ -372,7 +371,7 @@ class CarController(CarControllerBase):
         # average_factor learner: direct measurement (system ID), not tracking-error integration.
         # average_factor models the PCM's one-pole smoothing of our PCM_GAS commands, and
         # prior_gas_average is that model's prediction of the PCM's response. The actual response
-        # is observable as the applied pedal (CAR_GAS ~= 0.32 * PCM_GAS), so move average_factor
+        # is observable as the applied pedal (CAR_GAS ~= car_gas_per_pcm_gas * PCM_GAS), so move average_factor
         # along the model-fit gradient: prediction error times the recursive sensitivity computed
         # alongside the model above. The update sign flips around the PCM's true smoothing
         # constant, making the learner self-bounding: tracking error can't poison it, and at a
@@ -382,7 +381,7 @@ class CarController(CarControllerBase):
         # equilibrium is interior (route 250 replay settles ~0.06-0.10, consistent with the PCM's
         # ~100ms pedal-apply lag), so it never binds.
         if CC.longActive and (CS.out.vEgo > 1e-5) and CS.car_gas_available:
-          gas_measured = CS.car_gas / CAR_GAS_PER_PCM_GAS
+          gas_measured = CS.car_gas / CS.car_gas_per_pcm_gas
           averagefactor_error = (gas_measured - self.prior_gas_average) / self.params.NIDEC_GAS_MAX
           averagefactor_step = 0.005 * averagefactor_error * self.average_factor_sens / self.params.NIDEC_GAS_MAX
           self.average_factor = float(np.clip(self.average_factor + np.clip(averagefactor_step, -0.001, 0.001),
