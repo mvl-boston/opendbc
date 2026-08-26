@@ -9,6 +9,33 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
+from opendbc.car.honda.hondaparams import (
+  HondaBrakePIDParams,
+  HondaCarGasScaleParams,
+  HondaCreepFactorParams,
+  HondaFeedForwardParams,
+  HondaGasAlphaParams,
+  HondaGasFactorParams,
+  HondaSatAccelParams,
+  HondaSpeedAlphaParams,
+  HondaSpeedFactorParams,
+  HondaWindFactorParams,
+  HondaLatAccelFactor05Params,
+  HondaLatAccelFactor10Params,
+  HondaLatAccelFactor15Params,
+  HondaLatAccelFactor20Params,
+  HondaLatAccelFactor25Params,
+  HondaLatAccelFactor30Params,
+  HondaLatAccelFactor35Params,
+  HondaLatAccelFactor40Params,
+  HondaLatAccelFactor45Params,
+  HondaLatAccelFactor50Params,
+  HondaLatAccelFactor55Params,
+  HondaLatAccelFactor60Params,
+  CAR_GAS_SCALE_MIN,
+  CAR_GAS_SCALE_MAX,
+  default_car_gas_scale,
+)
 from opendbc.car.honda.values import CAR, CruiseButtons, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_BOSCH_TJA_CONTROL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
@@ -16,11 +43,6 @@ from opendbc.car.common.pid import PIDController
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
-
-# Default scale for GAS_PEDAL_2.CAR_GAS -> PCM_GAS units (MDX route 250). GAS_PEDAL (0x13C)
-# platforms use per-car scales set on CarState.car_gas_per_pcm_gas from route analysis.
-DEFAULT_CAR_GAS_PER_PCM_GAS = 0.32
-
 
 def compute_gb_honda_bosch(accel, speed):
   # TODO returns 0s, is unused
@@ -149,9 +171,9 @@ class CarController(CarControllerBase):
     self.last_torque = 0.0
     self.bosch_last_gas = 0
 
-    self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
+    self.gasfactor = 1.0 if (Params().get(HondaGasFactorParams) is None) else Params().get(HondaGasFactorParams)
     self.gasfactor_before_maxgas = self.gasfactor
-    self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
+    self.windfactor = 1.0 if (Params().get(HondaWindFactorParams) is None) else Params().get(HondaWindFactorParams)
     self.windfactor_before_maxgas = self.windfactor_before_brake = self.windfactor
     self.pitch = 0.0
     self.nidec_pid_factor = 0.0
@@ -171,46 +193,51 @@ class CarController(CarControllerBase):
                                    neg_limit=0,
                                    rate=50)
     self.brake_pid.reset()
-    self.brake_pid_factor_non_lowspeed = 0.4 if (Params().get("HondaBrakePIDParams") is None) else Params().get("HondaBrakePIDParams")
+    self.brake_pid_factor_non_lowspeed = 0.4 if (Params().get(HondaBrakePIDParams) is None) else Params().get(HondaBrakePIDParams)
     self.brake_pid.i = self.brake_pid_factor_non_lowspeed
 
     self.prior_gas_average = 0.0
-    self.average_factor = 0.5 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
+    self.average_factor = 0.5 if (Params().get(HondaFeedForwardParams) is None) else Params().get(HondaFeedForwardParams)
     if not (0.01 <= self.average_factor <= 1.0):
       # recover persisted state poisoned by the removed error-driven learner (route 250: pinned at 1e-5,
       # which turns the decaying-average inversion into a 0/198 comparator)
       self.average_factor = 0.5
     self.average_factor_sens = 0.0  # d(prior_gas_average)/d(average_factor), recursive model sensitivity
-    self.creep_factor = 1.0 if (Params().get("HondaCreepFactorParams") is None) else Params().get("HondaCreepFactorParams")
-    self.gas_alpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
+    self.car_gas_per_pcm_gas = Params().get(HondaCarGasScaleParams)
+    if self.car_gas_per_pcm_gas is None:
+      self.car_gas_per_pcm_gas = default_car_gas_scale(CP.carFingerprint)
+    elif not (CAR_GAS_SCALE_MIN <= self.car_gas_per_pcm_gas <= CAR_GAS_SCALE_MAX):
+      self.car_gas_per_pcm_gas = default_car_gas_scale(CP.carFingerprint)
+    self.creep_factor = 1.0 if (Params().get(HondaCreepFactorParams) is None) else Params().get(HondaCreepFactorParams)
+    self.gas_alpha = 0.0 if (Params().get(HondaGasAlphaParams) is None) else Params().get(HondaGasAlphaParams)
     self.gas_alpha_nomaxspeed = self.gas_alpha
-    self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
+    self.gasfactor = 1.0 if (Params().get(HondaGasFactorParams) is None) else Params().get(HondaGasFactorParams)
     self.gasfactor_before_gasmax = self.gasfactor_nomaxspeed = self.gasfactor
-    self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
+    self.windfactor = 1.0 if (Params().get(HondaWindFactorParams) is None) else Params().get(HondaWindFactorParams)
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
-    self.speedfactor = 4.0 if (Params().get("HondaSpeedFactorParams") is None) else Params().get("HondaSpeedFactorParams")
-    self.speedalpha = 0.0 if (Params().get("HondaSpeedAlphaParams") is None) else Params().get("HondaSpeedAlphaParams")
+    self.speedfactor = 4.0 if (Params().get(HondaSpeedFactorParams) is None) else Params().get(HondaSpeedFactorParams)
+    self.speedalpha = 0.0 if (Params().get(HondaSpeedAlphaParams) is None) else Params().get(HondaSpeedAlphaParams)
     # learned ceiling of the pcm_speed servo channel (m/s2): the most accel the plant delivers
     # no matter how large the speed lead gets. The servo's responsive band ends at
     # dv_sat = speedfactor * sat_accel, where the responsive line (accel = dv/speedfactor)
     # meets this ceiling.
-    self.sat_accel = 0.9 if (Params().get("HondaSatAccelParams") is None) else Params().get("HondaSatAccelParams")
+    self.sat_accel = 0.9 if (Params().get(HondaSatAccelParams) is None) else Params().get(HondaSatAccelParams)
     self.deficit_frames = 0
     self.new_accel = 0.0
 
     self.latFactors = {
-      "05": 1.0 if (Params().get("HondaLatAccelFactor05Params") is None) else Params().get("HondaLatAccelFactor05Params"),
-      "10": 1.0 if (Params().get("HondaLatAccelFactor10Params") is None) else Params().get("HondaLatAccelFactor10Params"),
-      "15": 1.0 if (Params().get("HondaLatAccelFactor15Params") is None) else Params().get("HondaLatAccelFactor15Params"),
-      "20": 1.0 if (Params().get("HondaLatAccelFactor20Params") is None) else Params().get("HondaLatAccelFactor20Params"),
-      "25": 1.0 if (Params().get("HondaLatAccelFactor25Params") is None) else Params().get("HondaLatAccelFactor25Params"),
-      "30": 1.0 if (Params().get("HondaLatAccelFactor30Params") is None) else Params().get("HondaLatAccelFactor30Params"),
-      "35": 1.0 if (Params().get("HondaLatAccelFactor35Params") is None) else Params().get("HondaLatAccelFactor35Params"),
-      "40": 1.0 if (Params().get("HondaLatAccelFactor40Params") is None) else Params().get("HondaLatAccelFactor40Params"),
-      "45": 1.0 if (Params().get("HondaLatAccelFactor45Params") is None) else Params().get("HondaLatAccelFactor45Params"),
-      "50": 1.0 if (Params().get("HondaLatAccelFactor50Params") is None) else Params().get("HondaLatAccelFactor50Params"),
-      "55": 1.0 if (Params().get("HondaLatAccelFactor55Params") is None) else Params().get("HondaLatAccelFactor55Params"),
-      "60": 1.0 if (Params().get("HondaLatAccelFactor60Params") is None) else Params().get("HondaLatAccelFactor60Params")
+      "05": 1.0 if (Params().get(HondaLatAccelFactor05Params) is None) else Params().get(HondaLatAccelFactor05Params),
+      "10": 1.0 if (Params().get(HondaLatAccelFactor10Params) is None) else Params().get(HondaLatAccelFactor10Params),
+      "15": 1.0 if (Params().get(HondaLatAccelFactor15Params) is None) else Params().get(HondaLatAccelFactor15Params),
+      "20": 1.0 if (Params().get(HondaLatAccelFactor20Params) is None) else Params().get(HondaLatAccelFactor20Params),
+      "25": 1.0 if (Params().get(HondaLatAccelFactor25Params) is None) else Params().get(HondaLatAccelFactor25Params),
+      "30": 1.0 if (Params().get(HondaLatAccelFactor30Params) is None) else Params().get(HondaLatAccelFactor30Params),
+      "35": 1.0 if (Params().get(HondaLatAccelFactor35Params) is None) else Params().get(HondaLatAccelFactor35Params),
+      "40": 1.0 if (Params().get(HondaLatAccelFactor40Params) is None) else Params().get(HondaLatAccelFactor40Params),
+      "45": 1.0 if (Params().get(HondaLatAccelFactor45Params) is None) else Params().get(HondaLatAccelFactor45Params),
+      "50": 1.0 if (Params().get(HondaLatAccelFactor50Params) is None) else Params().get(HondaLatAccelFactor50Params),
+      "55": 1.0 if (Params().get(HondaLatAccelFactor55Params) is None) else Params().get(HondaLatAccelFactor55Params),
+      "60": 1.0 if (Params().get(HondaLatAccelFactor60Params) is None) else Params().get(HondaLatAccelFactor60Params)
     }
 
   def update(self, CC, CS, now_nanos):
@@ -381,7 +408,15 @@ class CarController(CarControllerBase):
         # equilibrium is interior (route 250 replay settles ~0.06-0.10, consistent with the PCM's
         # ~100ms pedal-apply lag), so it never binds.
         if CC.longActive and (CS.out.vEgo > 1e-5) and CS.car_gas_available:
-          gas_measured = CS.car_gas / CS.car_gas_per_pcm_gas
+          # car_gas_per_pcm_gas learner: direct ratio CAR_GAS / prior_gas_average (PCM units).
+          # Slow additive EMA; per-car constant scale between pedal byte and smoothed command.
+          if self.prior_gas_average > 20.0 and CS.car_gas > 5.0:
+            scale_sample = CS.car_gas / self.prior_gas_average
+            self.car_gas_per_pcm_gas = float(np.clip(
+              self.car_gas_per_pcm_gas + 0.00001 * (scale_sample - self.car_gas_per_pcm_gas),
+              CAR_GAS_SCALE_MIN, CAR_GAS_SCALE_MAX))
+
+          gas_measured = CS.car_gas / self.car_gas_per_pcm_gas
           averagefactor_error = (gas_measured - self.prior_gas_average) / self.params.NIDEC_GAS_MAX
           averagefactor_step = 0.005 * averagefactor_error * self.average_factor_sens / self.params.NIDEC_GAS_MAX
           self.average_factor = float(np.clip(self.average_factor + np.clip(averagefactor_step, -0.001, 0.001),
@@ -548,31 +583,32 @@ class CarController(CarControllerBase):
 
     if self.frame % 6000 == 0:
       self.param_writer.put_many({
-        "HondaFeedForwardParams": self.average_factor,
-        "HondaBrakePIDParams": self.brake_pid_factor_non_lowspeed,
-        "HondaCreepFactorParams": self.creep_factor,
-        "HondaGasAlphaParams": self.gas_alpha_nomaxspeed,
-        "HondaGasFactorParams": self.gasfactor_nomaxspeed,
-        "HondaWindFactorParams": self.windfactor,
-        "HondaSpeedAlphaParams": self.speedalpha,
-        "HondaSpeedFactorParams": self.speedfactor,
-        "HondaSatAccelParams": self.sat_accel,
+        HondaFeedForwardParams: self.average_factor,
+        HondaBrakePIDParams: self.brake_pid_factor_non_lowspeed,
+        HondaCreepFactorParams: self.creep_factor,
+        HondaGasAlphaParams: self.gas_alpha_nomaxspeed,
+        HondaGasFactorParams: self.gasfactor_nomaxspeed,
+        HondaWindFactorParams: self.windfactor,
+        HondaSpeedAlphaParams: self.speedalpha,
+        HondaSpeedFactorParams: self.speedfactor,
+        HondaSatAccelParams: self.sat_accel,
+        HondaCarGasScaleParams: self.car_gas_per_pcm_gas,
       })
 
     if self.frame % 12000 == 30:
       self.param_writer.put_many({
-        "HondaLatAccelFactor05Params": self.latFactors["05"],
-        "HondaLatAccelFactor10Params": self.latFactors["10"],
-        "HondaLatAccelFactor15Params": self.latFactors["15"],
-        "HondaLatAccelFactor20Params": self.latFactors["20"],
-        "HondaLatAccelFactor25Params": self.latFactors["25"],
-        "HondaLatAccelFactor30Params": self.latFactors["30"],
-        "HondaLatAccelFactor35Params": self.latFactors["35"],
-        "HondaLatAccelFactor40Params": self.latFactors["40"],
-        "HondaLatAccelFactor45Params": self.latFactors["45"],
-        "HondaLatAccelFactor50Params": self.latFactors["50"],
-        "HondaLatAccelFactor55Params": self.latFactors["55"],
-        "HondaLatAccelFactor60Params": self.latFactors["60"],
+        HondaLatAccelFactor05Params: self.latFactors["05"],
+        HondaLatAccelFactor10Params: self.latFactors["10"],
+        HondaLatAccelFactor15Params: self.latFactors["15"],
+        HondaLatAccelFactor20Params: self.latFactors["20"],
+        HondaLatAccelFactor25Params: self.latFactors["25"],
+        HondaLatAccelFactor30Params: self.latFactors["30"],
+        HondaLatAccelFactor35Params: self.latFactors["35"],
+        HondaLatAccelFactor40Params: self.latFactors["40"],
+        HondaLatAccelFactor45Params: self.latFactors["45"],
+        HondaLatAccelFactor50Params: self.latFactors["50"],
+        HondaLatAccelFactor55Params: self.latFactors["55"],
+        HondaLatAccelFactor60Params: self.latFactors["60"],
       })
 
     self.frame += 1
