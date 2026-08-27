@@ -62,6 +62,8 @@ class CarState(CarStateBase):
     # Source message varies by platform: GAS_PEDAL_2 (0x130) or GAS_PEDAL (0x13C).
     self.car_gas = 0.0
     self.car_gas_available = False
+    # engine speed, used to distinguish EV/idle-stop from engine-on regimes on hybrids
+    self.engine_rpm = 0.0
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -257,6 +259,7 @@ class CarState(CarStateBase):
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
+      self.engine_rpm = cp.vl["ENGINE_DATA"]["ENGINE_RPM"]
       gas_pedal_2_seen = cp.message_states.get(304) is not None and len(cp.message_states[304].timestamps) > 0
       gas_pedal_seen = cp.message_states.get(316) is not None and len(cp.message_states[316].timestamps) > 0
       if gas_pedal_2_seen:
