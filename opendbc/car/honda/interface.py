@@ -95,7 +95,7 @@ class CarInterface(CarInterfaceBase):
       elif candidate in HONDA_BOSCH_CANFD:
         ret.longitudinalActuatorDelay = 0.05 # set to near zero, canfd seems to have stock feedforward correction
       else:
-        ret.longitudinalActuatorDelay = 0.5 # s
+        ret.longitudinalActuatorDelay = 0.25 # s, per Bosch A log
     else:
       # default longitudinal tuning for all Nidec hondas
       ret.longitudinalTuning.kiBP = [0., 5., 35.]
