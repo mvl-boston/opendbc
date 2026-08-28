@@ -190,38 +190,20 @@ class CarController(CarControllerBase):
     # authority over the sent lead.
     self.speedfactor_low = 4.0 if (Params().get("HondaSpeedFactorLowParams") is None) else Params().get("HondaSpeedFactorLowParams")
     self.speedalpha_low = 0.0 if (Params().get("HondaSpeedAlphaLowParams") is None) else Params().get("HondaSpeedAlphaLowParams")
-    # one-time sanitize of poisoned persisted speed-channel params. Growth past the servo knee
-    # was unobservable (no marginal response), so the old learner rode the error integral to
-    # absurd values (routes 015/18/19/1a: speedfactor ~420-511, pcm_speed pinned at the 100 m/s
-    # clip = 360 kph on the wire). Values outside the plant-plausible range restart at defaults.
-    if not (0.5 <= self.speedfactor <= 12.0):
-      self.speedfactor = 4.0
-    if not (-3.0 <= self.speedalpha <= 3.0):
-      self.speedalpha = 0.0
-    if not (0.5 <= self.speedfactor_low <= 12.0):
-      self.speedfactor_low = 4.0
-    if not (-3.0 <= self.speedalpha_low <= 3.0):
-      self.speedalpha_low = 0.0
-    # learned ceiling of the pcm_speed servo channel (m/s2): the most accel the plant delivers
-    # no matter how large the speed lead gets. The servo's responsive band ends at
-    # dv_sat = speedfactor * sat_accel, where the responsive line (accel = dv/speedfactor)
-    # meets this ceiling.
     self.sat_accel = 0.9 if (Params().get("HondaSatAccelParams") is None) else Params().get("HondaSatAccelParams")
     self.deficit_frames = 0
     self.new_accel = 0.0
 
     # launch governor: owns the standstill -> moving window with stock-shaped commands (small dv
     # step + immediate gas seed + X01 power flag) instead of the general pipeline. A huge dv step
-    # into the PCM's low-pass produces dead time followed by a late surge (route 015: motion
-    # +1.28s vs stock 0.25s, then aEgo overshoot after the planner backs off). Both parameters
+    # into the PCM's low-pass produces dead time followed by a late surge. Both parameters
     # learn once per launch EVENT from direct measurements and are bracketed from both sides
     # (slow launch grows dv_launch, motion lurch shrinks it), so neither can run away; the range
     # clips are loose backstops that should not bind.
     self.dv_launch = 2.8 if (Params().get("HondaLaunchDvParams") is None) else Params().get("HondaLaunchDvParams")  # m/s; stock launches at 9.99 kph
     self.gas_launch = 110.0 if (Params().get("HondaLaunchGasParams") is None) else Params().get("HondaLaunchGasParams")  # PCM_GAS units; stock 104-114
     # breakaway lead, used only until first motion: the EV creep response scales with dv, and
-    # the stock-sized lead is not enough to break away reliably engine-off (route 1a t=3002:
-    # gas 108 + dv 2.0 for 2.6s produced zero motion; route 183: dv ~25 m/s moved in 0.25s).
+    # the stock-sized lead is not enough to break away reliably engine-off.
     # Hands over to dv_launch at first motion so nothing accumulates in the servo low-pass.
     self.dv_break = 6.0 if (Params().get("HondaLaunchDvBreakParams") is None) else Params().get("HondaLaunchDvBreakParams")  # m/s
     self.launch_active = False
@@ -717,10 +699,9 @@ class CarController(CarControllerBase):
     new_actuators.speed = float(self.nidec_pid_factor)
     new_actuators.accel = float(self.accel)
     new_actuators.gas = float(self.average_factor)
-    new_actuators.brake = float(self.windfactor)
+    new_actuators.brake = float(self.speedalpha_low)
     new_actuators.torque = self.last_torque
-    # new_actuators.torqueOutputCan = float(self.average_factor)
-    new_actuators.torqueOutputCan = float(self.speedfactor)
+    new_actuators.torqueOutputCan = float(self.speedfactor_low)
 
     if self.frame % 6000 == 0:
       self.param_writer.put_many({
