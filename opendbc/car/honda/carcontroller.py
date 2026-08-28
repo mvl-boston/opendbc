@@ -182,6 +182,26 @@ class CarController(CarControllerBase):
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
     self.speedfactor = 4.0 if (Params().get("HondaSpeedFactorParams") is None) else Params().get("HondaSpeedFactorParams")
     self.speedalpha = 0.0 if (Params().get("HondaSpeedAlphaParams") is None) else Params().get("HondaSpeedAlphaParams")
+    # low-speed band of the speed channel (below ~30 mph): the servo's dv gain is lower there
+    # (plant fit 0.33-0.39 (m/s2)/(m/s) at 20-35 kph vs 0.39-0.46 at 35-65) and the zero-accel
+    # offset is speed-dependent, so city driving needs its own equilibrium instead of sharing
+    # one scalar with highway cruise (routes 18/19/1a: undershoot +0.45 below 13.4 m/s vs +0.04
+    # above). Blended with the main band over 10-16 m/s; each band learns in proportion to its
+    # authority over the sent lead.
+    self.speedfactor_low = 4.0 if (Params().get("HondaSpeedFactorLowParams") is None) else Params().get("HondaSpeedFactorLowParams")
+    self.speedalpha_low = 0.0 if (Params().get("HondaSpeedAlphaLowParams") is None) else Params().get("HondaSpeedAlphaLowParams")
+    # one-time sanitize of poisoned persisted speed-channel params. Growth past the servo knee
+    # was unobservable (no marginal response), so the old learner rode the error integral to
+    # absurd values (routes 015/18/19/1a: speedfactor ~420-511, pcm_speed pinned at the 100 m/s
+    # clip = 360 kph on the wire). Values outside the plant-plausible range restart at defaults.
+    if not (0.5 <= self.speedfactor <= 12.0):
+      self.speedfactor = 4.0
+    if not (-3.0 <= self.speedalpha <= 3.0):
+      self.speedalpha = 0.0
+    if not (0.5 <= self.speedfactor_low <= 12.0):
+      self.speedfactor_low = 4.0
+    if not (-3.0 <= self.speedalpha_low <= 3.0):
+      self.speedalpha_low = 0.0
     # learned ceiling of the pcm_speed servo channel (m/s2): the most accel the plant delivers
     # no matter how large the speed lead gets. The servo's responsive band ends at
     # dv_sat = speedfactor * sat_accel, where the responsive line (accel = dv/speedfactor)
@@ -398,6 +418,10 @@ class CarController(CarControllerBase):
 
     # all of this is only relevant for HONDA NIDEC
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
+    # two-band speed channel blend: pure low band below 10 m/s, pure high band above 16 m/s
+    low_w = float(np.interp(CS.out.vEgo, [10.0, 16.0], [1.0, 0.0]))
+    sf_eff = low_w * self.speedfactor_low + (1.0 - low_w) * self.speedfactor
+    alpha_eff = low_w * self.speedalpha_low + (1.0 - low_w) * self.speedalpha
     # TODO this 1.44 is just to maintain previous behavior
     if not CC.longActive:
       pcm_speed = 0.0
@@ -408,13 +432,15 @@ class CarController(CarControllerBase):
         # poisoned-prone and a step input the servo low-passes into dead time + late surge
         speed_lead = self.dv_launch
       else:
-        speed_lead = float(self.speedfactor * self.accel + self.speedalpha)
+        speed_lead = float(sf_eff * self.accel + alpha_eff)
       pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
       gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
       pcm_accel = int(np.clip((self.gas_alpha + gas_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
     max_speedcontrol = (pcm_speed > 99.999)
     prior_speedfactor = self.speedfactor
     prior_speedalpha = self.speedalpha
+    prior_speedfactor_low = self.speedfactor_low
+    prior_speedalpha_low = self.speedalpha_low
 
     # feedforward for Nidec decaying-average gas pedal
     max_increase = 2  # equivalent to 20 units per 10hz frame
@@ -446,8 +472,8 @@ class CarController(CarControllerBase):
         self.gasfactor *= (1 + 0.0001 * gasfactor_error * gas_accel)
       if (not CS.out.gasPressed) and (self.apply_brake_last == 0): # adjust speedfactor and average_factor
         speedfactor_error = (self.accel - CS.out.aEgo)
-        dv_sent = self.speedfactor * self.accel + self.speedalpha
-        dv_sat = max(0.1, self.speedfactor * self.sat_accel + self.speedalpha)
+        dv_sent = sf_eff * self.accel + alpha_eff
+        dv_sat = max(0.1, sf_eff * self.sat_accel + alpha_eff)
 
         # average_factor learner: direct measurement (system ID), not tracking-error integration.
         # average_factor models the PCM's one-pole smoothing of our PCM_GAS commands, and
@@ -499,12 +525,26 @@ class CarController(CarControllerBase):
             self.sat_accel = float(np.clip(self.sat_accel + 0.0002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
 
         if CC.longActive and (CS.out.vEgo > 1e-5) and (not self.launch_active):
-          self.speedfactor = max(0.001, self.speedfactor * (1 + 0.001 * speedfactor_error * self.accel))
-          self.speedalpha = min(dv_sat, self.speedalpha + 0.001 * speedfactor_error)
+          if (speedfactor_error > 0) and (dv_sent > dv_sat):
+            # beyond the knee surplus dv provably does nothing, so undershoot there is not
+            # growth fuel (that loop is what rode speedfactor to ~511): bleed toward the knee
+            # instead (min-norm: prefer the smallest lead with the same output), rate-limited
+            # to 0.5%/tick. The ratchet below only prevents growth; this is the convergence
+            # force that actually deflates a poisoned state.
+            sf_growth = -min(0.0005 * (dv_sent - dv_sat), 0.005)
+          else:
+            sf_growth = 0.001 * speedfactor_error * self.accel
+          # each band learns in proportion to its authority over the sent lead
+          self.speedfactor_low = float(np.clip(self.speedfactor_low * (1 + low_w * sf_growth), 0.5, 12.0))
+          self.speedfactor = float(np.clip(self.speedfactor * (1 + (1.0 - low_w) * sf_growth), 0.5, 12.0))
+          self.speedalpha_low = float(np.clip(min(dv_sat, self.speedalpha_low + low_w * 0.001 * speedfactor_error), -3.0, 3.0))
+          self.speedalpha = float(np.clip(min(dv_sat, self.speedalpha + (1.0 - low_w) * 0.001 * speedfactor_error), -3.0, 3.0))
 
         if max_speedcontrol or (dv_sent > dv_sat): # only allow learning reductions
           self.speedfactor = min(prior_speedfactor, self.speedfactor)
+          self.speedfactor_low = min(prior_speedfactor_low, self.speedfactor_low)
           self.speedalpha = min(prior_speedalpha, self.speedalpha)
+          self.speedalpha_low = min(prior_speedalpha_low, self.speedalpha_low)
           self.windfactor = min(prior_windfactor, self.windfactor)
           self.gasfactor = min(prior_gasfactor, self.gasfactor)
           self.gas_alpha = min(prior_gas_alpha, self.gas_alpha)
@@ -656,6 +696,8 @@ class CarController(CarControllerBase):
         "HondaWindFactorParams": self.windfactor,
         "HondaSpeedAlphaParams": self.speedalpha,
         "HondaSpeedFactorParams": self.speedfactor,
+        "HondaSpeedAlphaLowParams": self.speedalpha_low,
+        "HondaSpeedFactorLowParams": self.speedfactor_low,
         "HondaSatAccelParams": self.sat_accel,
         "HondaCarGasScaleParams": self.car_gas_per_pcm_gas,
         "HondaLaunchDvParams": self.dv_launch,
