@@ -219,11 +219,17 @@ class CarController(CarControllerBase):
     # clips are loose backstops that should not bind.
     self.dv_launch = 2.8 if (Params().get("HondaLaunchDvParams") is None) else Params().get("HondaLaunchDvParams")  # m/s; stock launches at 9.99 kph
     self.gas_launch = 110.0 if (Params().get("HondaLaunchGasParams") is None) else Params().get("HondaLaunchGasParams")  # PCM_GAS units; stock 104-114
+    # breakaway lead, used only until first motion: the EV creep response scales with dv, and
+    # the stock-sized lead is not enough to break away reliably engine-off (route 1a t=3002:
+    # gas 108 + dv 2.0 for 2.6s produced zero motion; route 183: dv ~25 m/s moved in 0.25s).
+    # Hands over to dv_launch at first motion so nothing accumulates in the servo low-pass.
+    self.dv_break = 6.0 if (Params().get("HondaLaunchDvBreakParams") is None) else Params().get("HondaLaunchDvBreakParams")  # m/s
     self.launch_active = False
     self.launch_ticks = 0
     self.launch_release_tick = -1
     self.launch_move_tick = -1
-    self.launch_lurch = 0.0
+    self.launch_lurch_sum = 0.0
+    self.launch_lurch_n = 0
     self.launch_err_sum = 0.0
     self.launch_err_n = 0
     self.launch_ceiling_ticks = 0
@@ -368,7 +374,8 @@ class CarController(CarControllerBase):
           self.launch_ticks = 0
           self.launch_release_tick = -1
           self.launch_move_tick = -1
-          self.launch_lurch = 0.0
+          self.launch_lurch_sum = 0.0
+          self.launch_lurch_n = 0
           self.launch_err_sum = 0.0
           self.launch_err_n = 0
           self.launch_ceiling_ticks = 0
@@ -378,9 +385,14 @@ class CarController(CarControllerBase):
           self.launch_release_tick = self.launch_ticks
         if (self.launch_move_tick < 0) and (CS.out.vEgo > 0.1):
           self.launch_move_tick = self.launch_ticks
-        if (self.launch_move_tick >= 0) and (self.launch_ticks - self.launch_move_tick <= 30):
-          # lurch: accel spike right at first motion beyond what the planner asked for
-          self.launch_lurch = max(self.launch_lurch, CS.out.aEgo - actuators.accel)
+        if (self.launch_move_tick >= 0) and (10 <= self.launch_ticks - self.launch_move_tick <= 50):
+          # lurch: SUSTAINED accel beyond the plan just after breakaway (0.1-0.5s window). The
+          # instantaneous aEgo at first motion spikes to ~3 m/s2 for a frame or two from wheel
+          # speed breakaway quantization (routes 18/19/1a: every launch registered a "lurch"
+          # that way, shrinking dv_launch 2.8 -> 2.0 while every launch was actually slow), so
+          # only a windowed mean is a real lurch measurement.
+          self.launch_lurch_sum += CS.out.aEgo - actuators.accel
+          self.launch_lurch_n += 1
         if self.launch_move_tick >= 0:
           self.launch_err_sum += actuators.accel - CS.out.aEgo
           self.launch_err_n += 1
@@ -393,27 +405,36 @@ class CarController(CarControllerBase):
         launch_done = (CS.out.vEgo > 1.5) or (self.launch_ticks >= 300)
         if launch_aborted or launch_done:
           if launch_done and not launch_aborted:
-            # dv_launch owns dead time vs lurch, one sign-correct update per launch: motion later
-            # than 0.6s after brake release (or never, with the brake released >1s) means more dv;
-            # an accel spike at first motion beyond the plan means less dv. Bracketed both sides.
+            # dv_break owns breakaway dead time vs lurch, one sign-correct update per launch:
+            # motion later than 0.6s after brake release (or never, with the brake released >1s)
+            # means more breakaway lead; sustained overshoot just after breakaway means less.
+            # Bracketed from both sides.
             never_moved = (self.launch_move_tick < 0) and (self.launch_release_tick >= 0) and \
                           (self.launch_ticks - self.launch_release_tick > 100)
             launch_slow = never_moved or ((self.launch_move_tick >= 0) and (self.launch_release_tick >= 0) and
                                           (self.launch_move_tick - self.launch_release_tick > 60))
             if launch_slow:
-              self.dv_launch *= 1.05
-            if self.launch_lurch > 0.5:
-              self.dv_launch *= (1 - 0.05 * min(self.launch_lurch, 2.0))
-            self.dv_launch = float(np.clip(self.dv_launch, 1.0, 8.0))
-            # gas_launch owns window authority: grow only on undershoot WITH the pedal riding the
-            # commanded ceiling (evidence that more would help), shrink slowly on window overshoot.
+              self.dv_break *= 1.05
+            launch_lurch = (self.launch_lurch_sum / self.launch_lurch_n) if self.launch_lurch_n > 0 else 0.0
+            if launch_lurch > 0.5:
+              self.dv_break *= (1 - 0.05 * min(launch_lurch, 2.0))
+            self.dv_break = float(np.clip(self.dv_break, 2.0, 12.0))
+            # post-motion window tracking splits by channel ownership: undershoot with the pedal
+            # riding the commanded ceiling engine-on means more gas would have helped; undershoot
+            # WITHOUT ceiling evidence (EV launches, where the pedal is decoupled from PCM_GAS)
+            # belongs to the speed lead. Overshoot shrinks both slowly.
             if self.launch_err_n > 50:
               launch_err = self.launch_err_sum / self.launch_err_n
-              if (launch_err > 0.15) and (self.launch_ceiling_ticks > 0.5 * self.launch_err_n):
-                self.gas_launch *= 1.03
+              if launch_err > 0.15:
+                if self.launch_ceiling_ticks > 0.5 * self.launch_err_n:
+                  self.gas_launch *= 1.03
+                else:
+                  self.dv_launch *= 1.03
               elif launch_err < -0.15:
                 self.gas_launch *= 0.99
+                self.dv_launch *= 0.99
               self.gas_launch = float(np.clip(self.gas_launch, 40.0, self.params.NIDEC_GAS_MAX))
+              self.dv_launch = float(np.clip(self.dv_launch, 1.0, 8.0))
           self.launch_active = False
 
     # all of this is only relevant for HONDA NIDEC
@@ -429,8 +450,10 @@ class CarController(CarControllerBase):
     else:
       if self.launch_active:
         # stock-shaped launch lead (stock uses 9.99 kph): the general sf*accel+alpha lead is both
-        # poisoned-prone and a step input the servo low-passes into dead time + late surge
-        speed_lead = self.dv_launch
+        # poisoned-prone and a step input the servo low-passes into dead time + late surge.
+        # Until first motion the larger breakaway lead is used: EV creep response scales with dv,
+        # and the post-motion lead alone was not enough to break away engine-off.
+        speed_lead = self.dv_launch if CS.out.vEgo > 0.1 else self.dv_break
       else:
         speed_lead = float(sf_eff * self.accel + alpha_eff)
       pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
@@ -456,7 +479,14 @@ class CarController(CarControllerBase):
       # launch just climbing, and PCM_GAS=0 gates off all power on this platform). While the brake
       # is still applied the concurrent gas+brake protection below keeps the wire at 0; on window
       # exit the rise clip continues from the seed via prior_accel, so there is no discontinuity.
-      self.new_accel = int(min(self.gas_launch, self.params.NIDEC_GAS_MAX))
+      launch_seed = self.gas_launch
+      if (CS.engine_rpm < 500) and (CS.out.vEgo <= 0.1):
+        # EV breakaway: midrange gas has no pedal coupling engine-off (route 1a t=3002: gas 108
+        # held 2.6s, zero motion until the driver's pedal cranked the engine). The stock camera's
+        # own EV plateau is saturation (198/200 observed while accelerating in EV), so command
+        # the full authority band until first motion, then hand back to the learned seed.
+        launch_seed = self.params.NIDEC_GAS_MAX
+      self.new_accel = int(min(launch_seed, self.params.NIDEC_GAS_MAX))
     # recursive sensitivity of the model prediction to average_factor, advanced with the model itself;
     # used by the average_factor learner below (must be computed before prior_gas_average is updated)
     self.average_factor_sens = (self.new_accel - self.prior_gas_average) + (1 - effective_average_factor) * self.average_factor_sens
@@ -624,6 +654,12 @@ class CarController(CarControllerBase):
             self.brake_pid.i = min(self.brake_pid_factor_non_lowspeed, self.brake_pid.i)
           brakefactor = 1 + self.brake_pid_factor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
+          if self.launch_active and (actuators.accel > 0.05) and (not CS.out.stockAeb):
+            # launch window with a positive plan: PID/creep residue must not tap the brake --
+            # any apply_brake > 0 zeroes the ACC_HUD wire (concurrent gas+brake protection),
+            # which stalled launches for 0.3-0.4s right at breakaway (routes 18/19). The -32/frame
+            # release ramp below still shapes the initial hold release.
+            apply_brake = 0
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
           # limit brake release to 32 units per frame to match factory
@@ -702,6 +738,7 @@ class CarController(CarControllerBase):
         "HondaCarGasScaleParams": self.car_gas_per_pcm_gas,
         "HondaLaunchDvParams": self.dv_launch,
         "HondaLaunchGasParams": self.gas_launch,
+        "HondaLaunchDvBreakParams": self.dv_break,
       })
 
     if self.frame % 12000 == 30:
