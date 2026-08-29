@@ -324,7 +324,7 @@ class CarController(CarControllerBase):
 
     speed_val = np.clip(round(CS.out.vEgo * CV.MS_TO_MPH / 5.0) * 5, 5, 60)
     currentLatSpeed = f"{speed_val:02d}"
-    if currentLatSpeed in self.latFactors and not CS.out.steeringPressed and CS.out.steer_control_active:
+    if currentLatSpeed in self.latFactors and not CS.out.steeringPressed and CS.steer_control_active:
       if abs(limited_torque) > 0.9 and self.latFactors[currentLatSpeed] > abs(CS.out.steeringAngleDeg):
         self.latFactors[currentLatSpeed] /= 1.001
       if abs(limited_torque) < 0.9 and self.latFactors[currentLatSpeed] < abs(CS.out.steeringAngleDeg):
@@ -681,7 +681,7 @@ class CarController(CarControllerBase):
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       reduced_steering = CS.out.steeringPressed
-      steer_maxed = (abs(apply_torque) >= self.params.STEER_MAX) or not (CS.out.steer_control_active)
+      steer_maxed = (abs(apply_torque) >= self.params.STEER_MAX) or not (CS.steer_control_active)
       can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
                                                 steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed))
 
