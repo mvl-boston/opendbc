@@ -361,6 +361,11 @@ class CarController(CarControllerBase):
           self.launch_err_sum = 0.0
           self.launch_err_n = 0
           self.launch_ceiling_ticks = 0
+          # brake_pid winds up during the stop approach; without a reset the stored factor
+          # can multiply the first post-launch brake request into a full-pedal spike
+          # (route 28 seg, t=2180: 0->171 in one frame after resume).
+          self.brake_pid.reset()
+          self.brake_pid_factor = 0.0
       else:
         self.launch_ticks += 1
         if (self.launch_release_tick < 0) and (self.apply_brake_last == 0):
@@ -628,7 +633,8 @@ class CarController(CarControllerBase):
                                                         self.stopping_counter, self.CP.carFingerprint, gas_pedal_force))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
-          if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 0) and (not CS.out.stockAeb):
+          if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 0) and \
+             (not CS.out.stockAeb) and (not self.launch_active):
             self.brake_pid_factor = self.brake_pid.update(error = -(self.accel - CS.out.aEgo) * apply_brake, speed = CS.out.vEgo)
           if (CS.out.vEgo >= 2): # save pid above 2m/s
             self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
@@ -644,8 +650,9 @@ class CarController(CarControllerBase):
             apply_brake = 0
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
-          # limit brake release to 32 units per frame to match factory
-          apply_brake = max(self.apply_brake_last - 32, apply_brake)
+          # limit brake slew to 32 units per frame to match factory (release was limited;
+          # increases were not, which allowed brake_pid to step 0->171 in one tick).
+          apply_brake = int(np.clip(apply_brake, self.apply_brake_last - 32, self.apply_brake_last + 32))
 
           pcm_override = CC.longActive or CS.out.stockAeb
           if apply_brake > 0: # prevent fault from concurrent gas + brake
