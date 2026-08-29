@@ -286,8 +286,11 @@ class CarInterface(CarInterfaceBase):
     if (candidate in HONDA_BOSCH) and (0x1BE in fingerprint[CAN.pt]):
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
 
-    if 0x190 in fingerprint[CAN.pt] and candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G):
-      ret.flags |= HondaFlags.LEGACY_MDX_STEER.value
+    # MDX 3G / TLX 1G EPS steer status is either 7-byte STEER_STATUS at 0x18F or 5-byte at 0x190.
+    # Some routes have unrelated 0x190 traffic; prefer non-legacy when 0x18F is present.
+    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G):
+      if 0x190 in fingerprint[CAN.pt] and 0x18f not in fingerprint[CAN.pt]:
+        ret.flags |= HondaFlags.LEGACY_MDX_STEER.value
 
     if ret.flags & HondaFlags.BOSCH_ALT_BRAKE:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value
