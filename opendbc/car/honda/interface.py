@@ -286,7 +286,8 @@ class CarInterface(CarInterfaceBase):
     if (candidate in HONDA_BOSCH) and (0x1BE in fingerprint[CAN.pt]):
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
 
-    if 0x190 in fingerprint[CAN.pt] and candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G):
+    # need to exclude 0x18F since that overlaps with 0x190 and makes both messages appear true
+    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G) and 0x190 in fingerprint[CAN.pt] and 0x18f not in fingerprint[CAN.pt]:
       ret.flags |= HondaFlags.LEGACY_MDX_STEER.value
 
     if ret.flags & HondaFlags.BOSCH_ALT_BRAKE:
