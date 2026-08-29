@@ -253,7 +253,8 @@ class CarController(CarControllerBase):
       if (actuators.longControlState in (LongCtrlState.pid, LongCtrlState.stopping)) and \
          (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
          and (not CS.out.stockAeb) and (not CS.out.gasPressed):
-        self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
+        if not ((actuators.accel >= 1e-5) and CS.out.vEgo < 1.0): # don't wind PID at launch lurch
+           self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
         self.accel = actuators.accel + self.nidec_pid_factor
         adjust_accel = self.accel + hill_brake
 
@@ -629,10 +630,11 @@ class CarController(CarControllerBase):
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb):
-            self.brake_pid_factor = self.brake_pid.update(error = -(self.accel - CS.out.aEgo) * apply_brake, speed = CS.out.vEgo)
+              if not ((self.accel >= 1e-5) and CS.out.vEgo < 1.0): # don't wind PID at launch lurch
+                self.brake_pid_factor = self.brake_pid.update(error = -(self.accel - CS.out.aEgo) * apply_brake, speed = CS.out.vEgo)
           if (CS.out.vEgo >= 2): # save pid above 2m/s
             self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
-          if (CS.out.vEgo < 1e-5) and (CS.out.aEgo < 1e-5): # gradually restore 2m/s pid after stopped
+          if (CS.out.vEgo < 1e-5) and (self.accel < 1e-5): # gradually restore 2m/s pid after stopped
             self.brake_pid.i = float(np.clip(self.brake_pid_factor_non_lowspeed, self.brake_pid.i - 0.01, self.brake_pid.i + 0.01))
           brakefactor = 1 + self.brake_pid_factor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
