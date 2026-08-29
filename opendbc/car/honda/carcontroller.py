@@ -628,15 +628,16 @@ class CarController(CarControllerBase):
                                                         self.stopping_counter, self.CP.carFingerprint, gas_pedal_force))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
-          if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 0) and (not CS.out.stockAeb):
+          if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb):
             self.brake_pid_factor = self.brake_pid.update(error = -(self.accel - CS.out.aEgo) * apply_brake, speed = CS.out.vEgo)
           if (CS.out.vEgo >= 2): # save pid above 2m/s
             self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
-          if (CS.out.vEgo < 1e-3) and (CS.out.aEgo < 0): # restore 2m/s pid after stopped if lowspeed was stronger
-            self.brake_pid.i = min(self.brake_pid_factor_non_lowspeed, self.brake_pid.i)
+          if (CS.out.vEgo < 1e-5) and (CS.out.aEgo < 1e-5): # restore 2m/s pid after stopped
+            self.brake_pid.i = min(self.brake_pid_factor_non_lowspeed, self.brake_pid.i + 0.01)
           brakefactor = 1 + self.brake_pid_factor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
-          if self.launch_active and (actuators.accel > 0.05) and (not CS.out.stockAeb):
+          # disabling below with "False", don't want to disable brake, need to find a better solution.
+          if self.launch_active and (actuators.accel > 0.05) and (not CS.out.stockAeb) and False:
             # launch window with a positive plan: PID/creep residue must not tap the brake --
             # any apply_brake > 0 zeroes the ACC_HUD wire (concurrent gas+brake protection),
             # which stalled launches for 0.3-0.4s right at breakaway (routes 18/19). The -32/frame
