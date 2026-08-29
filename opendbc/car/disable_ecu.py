@@ -6,13 +6,21 @@ EXT_DIAG_RESPONSE = b'\x50\x03'
 
 COM_CONT_RESPONSE = b''
 
+# UDS 0x14 ClearDiagnosticInformation for all DTC groups (0xFFFFFF), positive response 0x54
+CLEAR_DTC_REQUEST = b'\x14\xff\xff\xff'
+CLEAR_DTC_RESPONSE = b'\x54'
 
-def disable_ecu(can_recv, can_send, bus=0, addr=0x7d0, sub_addr=None, com_cont_req=b'\x28\x83\x01', timeout=0.1, retry=10):
+
+def disable_ecu(can_recv, can_send, bus=0, addr=0x7d0, sub_addr=None, com_cont_req=b'\x28\x83\x01', timeout=0.1, retry=10, clear_dtc=False):
   """Silence an ECU by disabling sending and receiving messages using UDS 0x28.
   The ECU will stay silent as long as openpilot keeps sending Tester Present.
 
   This is used to disable the radar in some cars. Openpilot will emulate the radar.
-  WARNING: THIS DISABLES AEB!"""
+  WARNING: THIS DISABLES AEB!
+
+  When clear_dtc is set, stored DTCs are cleared (UDS 0x14) after entering the extended
+  diagnostic session and before disabling communication. This prevents stale fault codes
+  accumulated while the ECU was disabled from being reported on a later drive."""
   carlog.warning(f"ecu disable {hex(addr), sub_addr} ...")
 
   for i in range(retry):
@@ -20,6 +28,12 @@ def disable_ecu(can_recv, can_send, bus=0, addr=0x7d0, sub_addr=None, com_cont_r
       query = IsoTpParallelQuery(can_send, can_recv, bus, [(addr, sub_addr)], [EXT_DIAG_REQUEST], [EXT_DIAG_RESPONSE])
 
       for _, _ in query.get_data(timeout).items():
+        # clear stored DTCs while the ECU can still process requests (before disabling comms)
+        if clear_dtc:
+          carlog.warning("clear diagnostic information ...")
+          query = IsoTpParallelQuery(can_send, can_recv, bus, [(addr, sub_addr)], [CLEAR_DTC_REQUEST], [CLEAR_DTC_RESPONSE])
+          query.get_data(timeout)
+
         carlog.warning("communication control disable tx/rx ...")
 
         query = IsoTpParallelQuery(can_send, can_recv, bus, [(addr, sub_addr)], [com_cont_req], [COM_CONT_RESPONSE])
