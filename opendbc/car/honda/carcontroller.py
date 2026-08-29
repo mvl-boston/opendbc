@@ -638,13 +638,6 @@ class CarController(CarControllerBase):
             self.brake_pid.i = float(np.clip(self.brake_pid_factor_non_lowspeed, self.brake_pid.i - 0.01, self.brake_pid.i + 0.01))
           brakefactor = 1 + self.brake_pid_factor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
-          # disabling below with "False", don't want to disable brake, need to find a better solution.
-          if self.launch_active and (actuators.accel > 0.05) and (not CS.out.stockAeb) and False:
-            # launch window with a positive plan: PID/creep residue must not tap the brake --
-            # any apply_brake > 0 zeroes the ACC_HUD wire (concurrent gas+brake protection),
-            # which stalled launches for 0.3-0.4s right at breakaway (routes 18/19). The -32/frame
-            # release ramp below still shapes the initial hold release.
-            apply_brake = 0
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
           # limit brake release to 32 units per frame to match factory
