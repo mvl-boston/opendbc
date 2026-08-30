@@ -527,12 +527,12 @@ class CarController(CarControllerBase):
           self.sat_excess_frames += 1
         else:
           self.sat_excess_frames = 0
-        if (CS.out.aEgo < self.sat_accel < self.accel) and (not CS.out.gasPressed) and (CC.longActive):
-          self.sat_defecit_frames += 1
+        if (CS.out.aEgo < self.sat_accel <= self.accel) and (not CS.out.gasPressed) and (CC.longActive):
+          self.sat_deficit_frames += 1
         else:
-          self.sat_defecit_frames = 0
-        if (self.sat_excess_frames > 100) or (self.sat_defecit_frames > 100):
-          self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
+          self.sat_deficit_frames = 0
+        if (self.sat_excess_frames > 100) or (self.sat_deficit_frames > 100):
+          self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX - 0.1))
 
         if CC.longActive and (CS.out.vEgo > 1e-5) and (not self.launch_active):
           if (speedfactor_error > 0) and (dv_sent > dv_sat):
