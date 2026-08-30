@@ -207,6 +207,13 @@ class CarController(CarControllerBase):
     # Hands over to dv_launch at first motion so nothing accumulates in the servo low-pass.
     self.dv_break = 6.0 if (Params().get("HondaLaunchDvBreakParams") is None) else Params().get("HondaLaunchDvBreakParams")  # m/s
     self.launch_active = False
+    # gas-channel recovery window: opened at driver-gas override release and at launch window
+    # exit. In both cases the wire gas is coming out of a known dead state and has to re-wind
+    # the PCM's internal pedal tracker; the +2/tick rise clip alone spends ~1s just climbing
+    # 0->198 (routes 33/34: post-release tracking err +0.9..+1.7 for 2-2.5s, engine even
+    # dropped to idle-stop mid-window from the commanded zero-torque second).
+    self.gas_recovery_ticks = 0
+    self.gas_pressed_prev = False
     self.launch_ticks = 0
     self.launch_release_tick = -1
     self.launch_move_tick = -1
@@ -423,6 +430,18 @@ class CarController(CarControllerBase):
               self.gas_launch = float(np.clip(self.gas_launch, 40.0, self.params.NIDEC_GAS_MAX))
               self.dv_launch = float(np.clip(self.dv_launch, 1.0, 8.0))
           self.launch_active = False
+          if launch_done and not launch_aborted:
+            # hand the general pipeline a recovery window: the seed is usually below the
+            # feedforward target at exit, and the +2/tick clip alone spends ~0.5s closing
+            # that gap (route 33 launch t=549: gas 91 -> 183 over 0.5s, err +0.76 for 3s)
+            self.gas_recovery_ticks = 200
+
+      # driver-gas override release: the wire gas restarts from the mirror/zero while the plan
+      # ramps positive immediately; open the recovery window on the falling edge.
+      self.gas_recovery_ticks = max(self.gas_recovery_ticks - 1, 0)
+      if CC.longActive and self.gas_pressed_prev and (not CS.out.gasPressed):
+        self.gas_recovery_ticks = 200
+      self.gas_pressed_prev = CS.out.gasPressed
 
     # all of this is only relevant for HONDA NIDEC
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
@@ -453,7 +472,13 @@ class CarController(CarControllerBase):
     prior_speedalpha_low = self.speedalpha_low
 
     # feedforward for Nidec decaying-average gas pedal
-    max_increase = 2  # equivalent to 20 units per 10hz frame
+    # inside a recovery window the rise clip opens to the stock launch envelope (+70/frame vs
+    # stock's observed +74/frame): the +20/frame cruise clip is sized for smoothness around an
+    # operating point, but coming out of an override/launch there is no operating point yet —
+    # holding it there spends a full second climbing 0->198 while PCM_GAS=0 gates off all power
+    # (routes 33/34: aEgo fell to -0.3 against cmd +1.25 during that second, and the PCM's
+    # pedal tracker + idle-stop restart stacked another ~1.5s on top).
+    max_increase = 7 if self.gas_recovery_ticks > 0 else 2  # per 100Hz tick, x10 per sent frame
     prior_accel = int(self.new_accel)
     # When GAS_PEDAL_2 is absent the direct-measurement learner cannot run; use a fixed factor so
     # feedforward stays stable on platforms that do not report applied pedal position.
@@ -474,6 +499,16 @@ class CarController(CarControllerBase):
         # the full authority band until first motion, then hand back to the learned seed.
         launch_seed = self.params.NIDEC_GAS_MAX
       self.new_accel = int(min(launch_seed, self.params.NIDEC_GAS_MAX))
+    elif CC.longActive and CS.out.gasPressed and CS.car_gas_available:
+      # driver-gas override: mirror the applied pedal onto the wire instead of zeroing it.
+      # Stock keeps commanding through overrides (PCM_SPEED = set speed, PCM_GAS nonzero);
+      # zeroing instead told the PCM "no torque" for the whole override, so its internal pedal
+      # tracker unwound to zero and the release started from scratch (routes 33/34: pedal
+      # stayed 0 until ~2s after release; at t=288.5 the commanded zero-torque second even
+      # dropped the engine into idle-stop while moving, adding restart lag). The mirror also
+      # keeps prior_gas_average — the model of the PCM's smoothed command — tracking the true
+      # operating point through the override, and seeds the release rise clip from it.
+      self.new_accel = int(np.clip(CS.car_gas / max(self.car_gas_per_pcm_gas, 1e-3), 0.0, self.params.NIDEC_GAS_MAX))
     # recursive sensitivity of the model prediction to average_factor, advanced with the model itself;
     # used by the average_factor learner below (must be computed before prior_gas_average is updated)
     self.average_factor_sens = (self.new_accel - self.prior_gas_average) + (1 - effective_average_factor) * self.average_factor_sens
@@ -483,7 +518,7 @@ class CarController(CarControllerBase):
       self.new_accel = pcm_accel
     else:
       if (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
-           (self.apply_brake_last == 0) and (not self.launch_active):
+           (self.apply_brake_last == 0) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
         gasfactor_error = (self.accel - CS.out.aEgo)
         self.gas_alpha = np.clip(self.gas_alpha + 0.0001 * gasfactor_error / 4.8, -3.0, 3.0)
         self.gasfactor *= (1 + 0.0001 * gasfactor_error * gas_accel)
@@ -529,14 +564,23 @@ class CarController(CarControllerBase):
           self.sat_excess_frames += 1
         else:
           self.sat_excess_frames = 0
-        if (CS.out.aEgo < self.sat_accel <= self.accel) and (not CS.out.gasPressed) and (CC.longActive):
+        # deficit samples are only ceiling evidence when the gas channel is in a settled state:
+        # inside launch/recovery windows the pedal is provably lagging the wire (routes 33/34:
+        # aEgo < 0 against cmd +1.25 while the wire ramped and the pedal applied ~2s late), so
+        # counting those ticks drags sat_accel down for a gas-transient it does not own
+        # (sat_accel fell 1.01 -> 0.86 between routes 33 and 34 while cruise tracking was clean)
+        if (CS.out.aEgo < self.sat_accel <= self.accel) and (not CS.out.gasPressed) and (CC.longActive) and \
+             (not self.launch_active) and (self.gas_recovery_ticks == 0):
           self.sat_deficit_frames += 1
         else:
           self.sat_deficit_frames = 0
         if (self.sat_excess_frames > 100) or (self.sat_deficit_frames > 100):
           self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX - 0.1))
 
-        if CC.longActive and (CS.out.vEgo > 1e-5) and (not self.launch_active):
+        # recovery windows are excluded like launch windows: the undershoot there is gas-channel
+        # dead time, not speed-servo response, and it was double-billed — growing/bleeding
+        # sf and alpha (sf_low fell 1.27 -> 0.60 across routes 33/34, mostly in these windows)
+        if CC.longActive and (CS.out.vEgo > 1e-5) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
           if (speedfactor_error > 0) and (dv_sent > dv_sat):
             # beyond the knee surplus dv provably does nothing, so undershoot there is not
             # growth fuel (that loop is what rode speedfactor to ~511): bleed toward the knee
@@ -646,13 +690,16 @@ class CarController(CarControllerBase):
           if apply_brake > 0: # prevent fault from concurrent gas + brake
             pcm_speed = 0.0
             self.new_accel = 0
-          elif CS.out.gasPressed: # prevent fault from user gas with a pcm_gas of 198
-            self.new_accel = 198
 
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
                                                          pcm_override, pcm_cancel_cmd, alert_fcw,
                                                          self.CP, CS.stock_brake))
-          if (apply_brake > 0) or CS.out.gasPressed: # set zero for feedforward
+          # during a driver-gas override the wire now carries the pedal mirror set above, so
+          # the PCM tracker (and the feedforward state) stay wound to the true operating
+          # point; platforms without GAS_PEDAL_2 keep the old zeroing since there is nothing
+          # to mirror. (A previous branch here set 198 during gasPressed and was immediately
+          # overwritten by the zeroing below — dead code, removed.)
+          if (apply_brake > 0) or (CS.out.gasPressed and not CS.car_gas_available):
             self.new_accel = 0
 
           if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
