@@ -191,7 +191,17 @@ class CarController(CarControllerBase):
     self.speedfactor_low = 4.0 if (Params().get("HondaSpeedFactorLowParams") is None) else Params().get("HondaSpeedFactorLowParams")
     self.speedalpha_low = 0.0 if (Params().get("HondaSpeedAlphaLowParams") is None) else Params().get("HondaSpeedAlphaLowParams")
     self.sat_accel = 0.9 if (Params().get("HondaSatAccelParams") is None) else Params().get("HondaSatAccelParams")
+    # persisted values outside the learnable range can only come from older builds whose
+    # learners ran away (route 2d booted with speedfactor 11.92/11.99 and speedalpha_low 2.9994
+    # pinned at the old clamps, sat_accel at the old 1.6 ceiling). Clip to the current backstop
+    # range so learning resumes from the nearest legal point; in-range values are untouched.
+    self.speedfactor = float(np.clip(self.speedfactor, 0.5, 12.0))
+    self.speedfactor_low = float(np.clip(self.speedfactor_low, 0.5, 12.0))
+    self.speedalpha = float(np.clip(self.speedalpha, -1.5, 1.5))
+    self.speedalpha_low = float(np.clip(self.speedalpha_low, -1.5, 1.5))
+    self.sat_accel = float(np.clip(self.sat_accel, 0.1, self.params.NIDEC_ACCEL_MAX))
     self.deficit_frames = 0
+    self.sat_above_frames = 0
     self.new_accel = 0.0
 
     # launch governor: owns the standstill -> moving window with stock-shaped commands (small dv
@@ -488,7 +498,17 @@ class CarController(CarControllerBase):
       if (not CS.out.gasPressed) and (self.apply_brake_last == 0): # adjust speedfactor and average_factor
         speedfactor_error = (self.accel - CS.out.aEgo)
         dv_sent = sf_eff * self.accel + alpha_eff
-        dv_sat = max(0.1, sf_eff * self.sat_accel + alpha_eff)
+        # derived knee of the servo's responsive band: where the responsive line
+        # (accel = dv/speedfactor) meets the learned ceiling. The [1, 10] clip is what keeps
+        # the knee observable while the parameters defining it are poisoned: route 2d ran with
+        # dv_sat = sf*sat_accel + alpha unclipped, which sat at 21-26 m/s (sf ~12, sat_accel
+        # pinned at 1.6, alpha +3) against a ~2.5 m/s real knee, so the bleed below fired on
+        # 0 of 35k growth-eligible ticks and sf/alpha rode their clamps all route. 10 m/s of
+        # lead is provably beyond servo response on this plant (marginal gain 0.009 in the
+        # 30-90 m/s band, route 1d7), so classifying dv beyond it as saturated is always safe.
+        # No alpha term: with alpha inside dv_sat, alpha's own bound was self-referential
+        # (min(dv_sat, .) contains +alpha, never binds) and the knee inflated as alpha grew.
+        dv_sat = float(np.clip(sf_eff * self.sat_accel, 1.0, 10.0))
 
         # average_factor learner: direct measurement (system ID), not tracking-error integration.
         # average_factor models the PCM's one-pole smoothing of our PCM_GAS commands, and
@@ -531,13 +551,35 @@ class CarController(CarControllerBase):
         # speed-channel learners are excluded from launch windows: there the wire carries the
         # governor's dv_launch/gas_launch, not sf*accel+alpha, so dv_sent/dv_sat do not describe
         # what was commanded, and creep lurches at brake release are not servo response samples.
-        if (CS.out.aEgo > self.sat_accel) and (not self.launch_active):
-          self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
-        if ((self.new_accel == self.params.NIDEC_GAS_MAX) or (self.accel > self.sat_accel + 0.1)) and (dv_sent >= dv_sat) and \
+        # up-branch: a sample is a ceiling measurement only when the ceiling was the binding
+        # constraint (commanding past the knee, engaged, moving) AND the response is sustained
+        # ~0.3s. Without the dv gate, every instantaneous aEgo spike above the estimate
+        # (wheel-speed breakaway quantization, potholes, post-launch lurches) fed the fast
+        # 0.002 EMA: route 2d had 669 such ticks > 1.6 m/s2 and sat_accel rode its clip,
+        # inflating dv_sat and disabling the bleed. Real ceiling episodes last seconds, spike
+        # noise lasts 1-2 frames, so a 30-frame sustain costs almost no signal.
+        if CC.longActive and (CS.out.aEgo > self.sat_accel) and (dv_sent > dv_sat) and \
+             (CS.out.vEgo > 1.0) and (not self.launch_active):
+          self.sat_above_frames += 1
+          if self.sat_above_frames > 30:
+            self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
+        else:
+          self.sat_above_frames = 0
+        # down-branch: persistent deficit with the channel provably maxed (gas pinned) means
+        # the observed aEgo IS the ceiling. No dv_sent >= dv_sat condition here: that gate was
+        # self-referential in the too-high direction — with sat_accel stuck at its clip the
+        # knee sits above anything ever commanded, so the estimate could never be falsified
+        # (route 2d: sat_accel rode 1.6 the whole route). Gas pinned during a hard pull is the
+        # provably-maxed evidence, and the 10:1 up/down asymmetry bounds the cost of the rare
+        # below-knee deficit sample. The counter resets whenever the gate is not satisfied so
+        # disjoint episodes cannot accumulate into one false 1.5s deficit.
+        if CC.longActive and ((self.new_accel == self.params.NIDEC_GAS_MAX) or (self.accel > self.sat_accel + 0.1)) and \
              (not self.launch_active):
           self.deficit_frames = self.deficit_frames + 1 if (speedfactor_error > 0.1 and CS.out.vEgo > 1.0) else 0
           if self.deficit_frames > 150:
             self.sat_accel = float(np.clip(self.sat_accel + 0.0002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
+        else:
+          self.deficit_frames = 0
 
         if CC.longActive and (CS.out.vEgo > 1e-5) and (not self.launch_active):
           if (speedfactor_error > 0) and (dv_sent > dv_sat):
@@ -546,20 +588,46 @@ class CarController(CarControllerBase):
             # instead (min-norm: prefer the smallest lead with the same output), rate-limited
             # to 0.5%/tick. The ratchet below only prevents growth; this is the convergence
             # force that actually deflates a poisoned state.
-            sf_growth = -min(0.0005 * (dv_sent - dv_sat), 0.005)
+            # Only when the commanded accel is within the plant's ceiling, though: when the
+            # plan demands more than sat_accel, dv_sent/dv_sat = accel/sat_accel > 1 holds no
+            # matter how small speedfactor is (both scale with sf), so the surplus is the
+            # planner's ceiling deficit, not evidence against sf — bleeding there ground
+            # sf_low to its floor in closed-loop replay while the pull was ceiling-limited.
+            # Those ticks are sat_accel's information (deficit branch above) and teach sf
+            # nothing.
+            sf_growth = -min(0.0005 * (dv_sent - dv_sat), 0.005) if (self.accel <= self.sat_accel) else 0.0
           else:
             sf_growth = 0.001 * speedfactor_error * self.accel
-          # each band learns in proportion to its authority over the sent lead
-          self.speedfactor_low = float(np.clip(self.speedfactor_low * (1 + low_w * sf_growth), 0.01, 99.0))
-          self.speedfactor = float(np.clip(self.speedfactor * (1 + (1.0 - low_w) * sf_growth), 0.01, 99.0))
-          self.speedalpha_low = min(dv_sat, self.speedalpha_low + low_w * 0.001 * speedfactor_error)
-          self.speedalpha = min(dv_sat, self.speedalpha + (1.0 - low_w) * 0.001 * speedfactor_error)
+          # each band learns in proportion to its authority over the sent lead. [0.5, 12] are
+          # loose backstops around the plant-plausible range (fit gain 0.33-0.46 => sf_eq
+          # ~2.2-3.0); with the corrected knee the bleed converges inside them instead of
+          # riding them.
+          self.speedfactor_low = float(np.clip(self.speedfactor_low * (1 + low_w * sf_growth), 0.5, 12.0))
+          self.speedfactor = float(np.clip(self.speedfactor * (1 + (1.0 - low_w) * sf_growth), 0.5, 12.0))
+          # speedalpha is the servo's zero-accel offset, so its error is only identified when
+          # the commanded accel is ~zero; there the update flips sign around the true offset
+          # (offset too high -> aEgo > 0 at cmd ~0 -> err < 0 -> shrink) and needs no coupled
+          # bound. Integrating 0.001*err on EVERY tick instead made alpha a second integrator
+          # on the ~0.9s plant lag: each ramp onset contributed pure undershoot fuel, and with
+          # the self-referential min(dv_sat, .) bound never binding it rode the +3 clamp
+          # (route 2d). Near-steady ticks are plentiful (18.7k on route 2d = 6.3% of ticks;
+          # traversing the full +-1.5 range takes ~25s of them), and +-1.5 covers the measured
+          # per-speed servo offsets (-0.18..+0.46 m/s) with margin.
+          if (abs(self.accel) < 0.1) and (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not max_speedcontrol):
+            self.speedalpha_low = float(np.clip(self.speedalpha_low + low_w * 0.001 * speedfactor_error, -1.5, 1.5))
+            self.speedalpha = float(np.clip(self.speedalpha + (1.0 - low_w) * 0.001 * speedfactor_error, -1.5, 1.5))
 
-        if max_speedcontrol or (dv_sent > dv_sat): # only allow learning reductions
+        if max_speedcontrol or (dv_sent > dv_sat): # speed channel past its knee: only allow reductions
           self.speedfactor = min(prior_speedfactor, self.speedfactor)
           self.speedfactor_low = min(prior_speedfactor_low, self.speedfactor_low)
           self.speedalpha = min(prior_speedalpha, self.speedalpha)
           self.speedalpha_low = min(prior_speedalpha_low, self.speedalpha_low)
+        # gas-side learners keep their previous effective gate: the corrected (much smaller)
+        # dv_sat is exceeded on about half of city accel transients, and a speed-channel
+        # condition should not ratchet gas-channel learners (regime ownership). The old
+        # inflated dv_sat made this branch max_speedcontrol-only in practice anyway (dv_sent
+        # never exceeded it on route 2d), so this preserves existing gas-side behavior.
+        if max_speedcontrol:
           self.windfactor = min(prior_windfactor, self.windfactor)
           self.gasfactor = min(prior_gasfactor, self.gasfactor)
           self.gas_alpha = min(prior_gas_alpha, self.gas_alpha)
