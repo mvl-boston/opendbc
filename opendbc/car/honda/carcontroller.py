@@ -550,10 +550,10 @@ class CarController(CarControllerBase):
           else:
             sf_growth = 0.001 * speedfactor_error * self.accel
           # each band learns in proportion to its authority over the sent lead
-          self.speedfactor_low = float(np.clip(self.speedfactor_low * (1 + low_w * sf_growth), 0.5, 12.0))
-          self.speedfactor = float(np.clip(self.speedfactor * (1 + (1.0 - low_w) * sf_growth), 0.5, 12.0))
-          self.speedalpha_low = float(np.clip(min(dv_sat, self.speedalpha_low + low_w * 0.001 * speedfactor_error), -3.0, 3.0))
-          self.speedalpha = float(np.clip(min(dv_sat, self.speedalpha + (1.0 - low_w) * 0.001 * speedfactor_error), -3.0, 3.0))
+          self.speedfactor_low = float(np.clip(self.speedfactor_low * (1 + low_w * sf_growth), 0.01, 99.0))
+          self.speedfactor = float(np.clip(self.speedfactor * (1 + (1.0 - low_w) * sf_growth), 0.01, 99.0))
+          self.speedalpha_low = min(dv_sat, self.speedalpha_low + low_w * 0.001 * speedfactor_error)
+          self.speedalpha = min(dv_sat, self.speedalpha + (1.0 - low_w) * 0.001 * speedfactor_error)
 
         if max_speedcontrol or (dv_sent > dv_sat): # only allow learning reductions
           self.speedfactor = min(prior_speedfactor, self.speedfactor)
