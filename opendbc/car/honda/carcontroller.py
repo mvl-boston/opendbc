@@ -253,8 +253,10 @@ class CarController(CarControllerBase):
       if (actuators.longControlState in (LongCtrlState.pid, LongCtrlState.stopping)) and \
          (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
          and (not CS.out.stockAeb) and (not CS.out.gasPressed):
-        if not ((actuators.accel >= 1e-5) and CS.out.vEgo < 1.0): # don't wind PID at launch lurch
-           self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
+        old_i = self.nidec_pid.i
+        self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
+        if actuators.accel >= 1e-5 and CS.out.vEgo < 1.0: # don't drop PID at launch lurch
+           self.nidec_pid_factor = self.nidec_pid.i = max(old_i, self.nidec_pid.i)
         self.accel = actuators.accel + self.nidec_pid_factor
         adjust_accel = self.accel + hill_brake
 
