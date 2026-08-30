@@ -191,7 +191,7 @@ class CarController(CarControllerBase):
     self.speedfactor_low = 4.0 if (Params().get("HondaSpeedFactorLowParams") is None) else Params().get("HondaSpeedFactorLowParams")
     self.speedalpha_low = 0.0 if (Params().get("HondaSpeedAlphaLowParams") is None) else Params().get("HondaSpeedAlphaLowParams")
     self.sat_accel = 0.9 if (Params().get("HondaSatAccelParams") is None) else Params().get("HondaSatAccelParams")
-    self.deficit_frames = 0
+    self.sat_deficit_frames = self.sat_excess_frames = 0
     self.new_accel = 0.0
 
     # launch governor: owns the standstill -> moving window with stock-shaped commands (small dv
@@ -522,22 +522,17 @@ class CarController(CarControllerBase):
           self.average_factor = float(np.clip(self.average_factor + np.clip(averagefactor_step, -0.001, 0.001),
                                               0.001, 1.0))
 
-        # ceiling learner (sat_accel): owns the saturated regime, learns by direct measurement.
-        # Asymmetric on purpose: a ceiling is a max-type quantity, so learn UP quickly whenever the
-        # plant demonstrably beats the estimate, and drift DOWN only under persistent deficit
-        # (undershooting for well past the ~1s plant lag with everything maxed means whatever aEgo
-        # we observe IS the ceiling). Raw aEgo, no hill term: the ceiling is a servo logic cap that
-        # is grade-compensated downstream (hill belongs on the gas channel only).
-        # speed-channel learners are excluded from launch windows: there the wire carries the
-        # governor's dv_launch/gas_launch, not sf*accel+alpha, so dv_sent/dv_sat do not describe
-        # what was commanded, and creep lurches at brake release are not servo response samples.
-        if (CS.out.aEgo > self.sat_accel) and (not self.launch_active):
+        # ceiling learner: identifies max accel capability, learn situation exist for a second before adjusting
+        if (CS.out.aEgo > self.sat_accel) and (not CS.out.gasPressed) and (CC.longActive):
+          self.sat_excess_frames += 1
+        else:
+          self.sat_excess_frames = 0
+        if (CS.out.aEgo < self.sat_accel < self.accel) and (not CS.out.gasPressed) and (CC.longActive):
+          self.sat_defecit_frames += 1
+        else:
+          self.sat_defecit_frames = 0
+        if (self.sat_excess_frames > 100) or self.sate_defecit_frames > 100):
           self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
-        if ((self.new_accel == self.params.NIDEC_GAS_MAX) or (self.accel > self.sat_accel + 0.1)) and (dv_sent >= dv_sat) and \
-             (not self.launch_active):
-          self.deficit_frames = self.deficit_frames + 1 if (speedfactor_error > 0.1 and CS.out.vEgo > 1.0) else 0
-          if self.deficit_frames > 150:
-            self.sat_accel = float(np.clip(self.sat_accel + 0.0002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX))
 
         if CC.longActive and (CS.out.vEgo > 1e-5) and (not self.launch_active):
           if (speedfactor_error > 0) and (dv_sent > dv_sat):
