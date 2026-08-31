@@ -462,12 +462,11 @@ class CarController(CarControllerBase):
         # operating point through the override, and seeds the release rise clip from it.
         # moved to "not CC.longActive" block because powertrain sets ACC_STATUS = 0 when gasPressed
         # set pcm_speed to current speed + 9 to mirror stock
-        pcm_accel = int(np.clip(CS.car_gas / max(self.car_gas_per_pcm_gas, 1e-3), 0.0, self.params.NIDEC_GAS_MAX))
         pcm_speed = CS.out.vEgo + 9 * CV.KPH_TO_MS
-        pcm_accel = int(0.0)
+        pcm_accel = int(np.clip(CS.car_gas / max(self.car_gas_per_pcm_gas, 1e-3), 0.0, self.params.NIDEC_GAS_MAX))
       else:
         pcm_speed = 0.0
-        pcm_accel = int(0.0)      
+        pcm_accel = int(0.0)
     else:
       if self.launch_active:
         # stock-shaped launch lead (stock uses 9.99 kph): the general sf*accel+alpha lead is both
