@@ -549,12 +549,17 @@ class CarController(CarControllerBase):
         # are excluded too: the pedal applies seconds late there, which is not the smoothing
         # constant this model represents.
         if CC.longActive and (CS.out.vEgo > 1e-5) and CS.car_gas_available and \
-             (CS.engine_rpm > 500) and (not self.launch_active):
-          # car_gas_per_pcm_gas learner: direct ratio CAR_GAS / prior_gas_average (PCM units).
-          # Slow additive EMA; per-car constant scale between pedal byte and smoothed command.
-          if self.prior_gas_average > 20.0 and CS.car_gas > 5.0:
-            scale_sample = CS.car_gas / self.prior_gas_average
-            self.car_gas_per_pcm_gas += 0.00001 * (scale_sample - self.car_gas_per_pcm_gas)
+             (CS.engine_rpm > 500) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
+          # car_gas_per_pcm_gas learner: direct ratio CAR_GAS / sent PCM_GAS (wire units).
+          # Must use the wire command, NOT prior_gas_average: average_factor already nudges
+          # prior_gas_average toward CAR_GAS/scale, so CAR_GAS/prior == scale at that joint
+          # equilibrium and the scale learner never moves off its boot default (route 3b:
+          # HondaCarGasScaleParams stuck at 0.3 for a full drive). Steady-wire gate skips
+          # transients where the pedal lags the command.
+          wire_gas = float(self.new_accel)
+          if (wire_gas > 20.0) and (CS.car_gas > 5.0) and (abs(wire_gas - prior_accel) <= 2.0):
+            scale_sample = CS.car_gas / wire_gas
+            self.car_gas_per_pcm_gas += 0.0005 * (scale_sample - self.car_gas_per_pcm_gas)
 
           self.car_gas_per_pcm_gas = max(0.00001, self.car_gas_per_pcm_gas)
           gas_measured = CS.car_gas / self.car_gas_per_pcm_gas
