@@ -557,7 +557,7 @@ class CarController(CarControllerBase):
           # HondaCarGasScaleParams stuck at 0.3 for a full drive). Steady-wire gate skips
           # transients where the pedal lags the command.
           wire_gas = float(self.new_accel)
-          if (wire_gas > 20.0) and (CS.car_gas > 5.0) and (abs(wire_gas - prior_accel) <= 2.0):
+          if (wire_gas > 20.0) and (CS.car_gas > 5.0) and (abs(wire_gas - prior_accel) <= 1.0):
             scale_sample = CS.car_gas / wire_gas
             self.car_gas_per_pcm_gas += 0.0005 * (scale_sample - self.car_gas_per_pcm_gas)
 
