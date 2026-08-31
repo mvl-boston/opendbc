@@ -191,6 +191,21 @@ class CarController(CarControllerBase):
     self.speedfactor_low = 4.0 if (Params().get("HondaSpeedFactorLowParams") is None) else Params().get("HondaSpeedFactorLowParams")
     self.speedalpha_low = 0.0 if (Params().get("HondaSpeedAlphaLowParams") is None) else Params().get("HondaSpeedAlphaLowParams")
     self.sat_accel = 0.9 if (Params().get("HondaSatAccelParams") is None) else Params().get("HondaSatAccelParams")
+    # boot-time range sanitize: a learned bound is only healthy if both directions are reachable
+    # from every state the params can persist in. sat_accel above the planner's routine demand
+    # (p99 ~1.3, plant knee ~0.9) is unfalsifiable-by-error, and via the bleed identity
+    # (dv_sent > dv_sat <=> accel > sat_accel) a high sat_accel disables the speedfactor bleed
+    # entirely: route 3b booted sat_accel=1.49, cmd reached it on 0.15% of frames, sf_low grew
+    # 63.7 -> 81 unchecked and pinned 360 kph on the wire at every launch window exit. The
+    # speedfactor [1, 12] band is the loose backstop from the self-bounding learner replay
+    # (equilibrium ~DV_SAT/accel_typ ~3-8); alpha outside +-3 m/s is likewise poison, not tuning.
+    if not (1.0 <= self.speedfactor <= 12.0):
+      self.speedfactor = 4.0
+    if not (1.0 <= self.speedfactor_low <= 12.0):
+      self.speedfactor_low = 4.0
+    self.speedalpha = float(np.clip(self.speedalpha, -3.0, 3.0))
+    self.speedalpha_low = float(np.clip(self.speedalpha_low, -3.0, 3.0))
+    self.sat_accel = float(np.clip(self.sat_accel, 0.1, 1.0))
     self.sat_deficit_frames = self.sat_excess_frames = 0
     self.new_accel = 0.0
 
@@ -396,7 +411,16 @@ class CarController(CarControllerBase):
           if (CS.engine_rpm > 500) and (CS.car_gas >= 0.8 * self.car_gas_per_pcm_gas * self.gas_launch):
             self.launch_ceiling_ticks += 1
         launch_aborted = (not CC.longActive) or CS.out.gasPressed or CS.out.brakePressed or (actuators.accel < -0.05)
-        launch_done = (CS.out.vEgo > 1.5) or (self.launch_ticks >= 300)
+        # the timeout bounds the NO-MOTION wait only; once the car is moving the window runs to
+        # the handover speed (with its own 2s cap). A single total-window timeout expired 0.4s
+        # after first motion on route 3b (idle-stop + 4% grade ate 2.5s of the 3s in pedal-ramp
+        # dead time) and handed over mid-breakaway at v=1.2 to the general pipeline, whose
+        # poisoned lead (360 kph pinned) turned the accumulated pedal into a +2.2 m/s2 surge
+        # against a +1.5 plan and a driver takeover.
+        if self.launch_move_tick < 0:
+          launch_done = (CS.out.vEgo > 1.5) or (self.launch_ticks >= 300)
+        else:
+          launch_done = (CS.out.vEgo > 1.5) or (self.launch_ticks - self.launch_move_tick >= 200)
         if launch_aborted or launch_done:
           if launch_done and not launch_aborted:
             # dv_break owns breakaway dead time vs lurch, one sign-correct update per launch:
@@ -475,7 +499,13 @@ class CarController(CarControllerBase):
         # and the post-motion lead alone was not enough to break away engine-off.
         speed_lead = self.dv_launch if CS.out.vEgo > 0.1 else self.dv_break
       else:
-        speed_lead = float(sf_eff * self.accel + alpha_eff)
+        # send-point cap on the positive lead: the servo has zero marginal authority past
+        # dv ~2.5 (aEgo/dv slope 0.009 in [30,90)), so surplus lead only accumulates in the
+        # PCM's low-pass and comes back out as a surge. 12 m/s matches dv_break's ceiling and
+        # retires the 360-kph-on-wire latent fault (route 3b: pipeline sent 100 m/s pinned at
+        # every launch window exit while sf_low was poisoned). Learner geometry (dv_sent) stays
+        # uncapped so the bleed still sees the true commanded lead.
+        speed_lead = min(float(sf_eff * self.accel + alpha_eff), 12.0)
       pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
       gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
       pcm_accel = int(np.clip((self.gas_alpha + gas_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
@@ -563,23 +593,35 @@ class CarController(CarControllerBase):
           self.average_factor = float(np.clip(self.average_factor + np.clip(averagefactor_step, -0.001, 0.001),
                                               0.001, 1.0))
 
-        # ceiling learner: identifies max accel capability, learn situation exist for a second before adjusting
-        if (CS.out.aEgo > self.sat_accel) and (not CS.out.gasPressed) and (CC.longActive):
+        # ceiling learner: identifies max accel capability, learn situation exist for a second before adjusting.
+        # Excess samples are gated like deficit samples (launch/recovery windows) plus a breakaway
+        # speed floor: post-launch surges are accumulated-pedal transients, not speed-servo ceiling
+        # deliveries, and they were pumping the ceiling up (route 3b: sat_accel's ONLY moves all
+        # route were 1.490 -> 1.542 during the t=295 launch surge and -> 1.554 during the t=421
+        # low-speed overshoot — each pump further disabling the bleed that would have deflated
+        # the sf poison causing the surges: a closed ratchet loop).
+        if (CS.out.aEgo > self.sat_accel) and (not CS.out.gasPressed) and (CC.longActive) and \
+             (CS.out.vEgo > 2.0) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
           self.sat_excess_frames += 1
         else:
           self.sat_excess_frames = 0
-        # deficit samples are only ceiling evidence when the gas channel is in a settled state:
-        # inside launch/recovery windows the pedal is provably lagging the wire (routes 33/34:
-        # aEgo < 0 against cmd +1.25 while the wire ramped and the pedal applied ~2s late), so
-        # counting those ticks drags sat_accel down for a gas-transient it does not own
-        # (sat_accel fell 1.01 -> 0.86 between routes 33 and 34 while cruise tracking was clean)
-        if (CS.out.aEgo < self.sat_accel <= self.accel) and (not CS.out.gasPressed) and (CC.longActive) and \
+        # deficit: the down-path must be reachable WITHOUT cmd exceeding sat_accel, or any
+        # persisted-high state is unfalsifiable (route 3b: sat=1.49 vs cmd>=1.49 on 0.15% of
+        # frames -> frozen high forever). Evidence the channel is provably maxed: wire gas
+        # pinned + sustained undershoot well past the plant's ~1s response lag, outside
+        # launch/recovery windows (routes 33/34: window ticks are gas-transient dead time, they
+        # dragged sat 1.01 -> 0.86 while cruise was clean). Down rate is 10:1 slower than up so
+        # lag dips can't eat the ceiling (symmetric 0.002 collapsed sat 0.9 -> 0.36 in bench).
+        if (self.new_accel >= self.params.NIDEC_GAS_MAX) and (speedfactor_error > 0.1) and \
+             (CS.out.vEgo > 1.0) and (not CS.out.gasPressed) and (CC.longActive) and \
              (not self.launch_active) and (self.gas_recovery_ticks == 0):
           self.sat_deficit_frames += 1
         else:
           self.sat_deficit_frames = 0
-        if (self.sat_excess_frames > 100) or (self.sat_deficit_frames > 100):
+        if self.sat_excess_frames > 100:
           self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX - 0.1))
+        elif self.sat_deficit_frames > 150:
+          self.sat_accel = float(np.clip(self.sat_accel + 0.0002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX - 0.1))
 
         # recovery windows are excluded like launch windows: the undershoot there is gas-channel
         # dead time, not speed-servo response, and it was double-billed — growing/bleeding
