@@ -451,7 +451,7 @@ class CarController(CarControllerBase):
     alpha_eff = low_w * self.speedalpha_low + (1.0 - low_w) * self.speedalpha
     # TODO this 1.44 is just to maintain previous behavior
     if not CC.longActive:
-      if CC.enabled and CS.out.gasPressed and CS.car_gas_available:
+      if CC.enabled and CS.out.gasPressed and CS.car_gas_available and self.CP.carFingerprint not in HONDA_BOSCH:
         # driver-gas override: mirror the applied pedal onto the wire instead of zeroing it.
         # Stock keeps commanding through overrides (PCM_SPEED = set speed, PCM_GAS nonzero);
         # zeroing instead told the PCM "no torque" for the whole override, so its internal pedal
@@ -462,7 +462,7 @@ class CarController(CarControllerBase):
         # operating point through the override, and seeds the release rise clip from it.
         # moved to "not CC.longActive" block because powertrain sets ACC_STATUS = 0 when gasPressed
         # set pcm_speed to current speed + 9 to mirror stock
-        pcm_speed = CS.out.vEgo + 9 * CV.KPH_TO_MS
+        pcm_speed = float(np.clip(CS.out.vEgo, 0.0, 100.0))
         pcm_accel = int(np.clip(CS.car_gas / max(self.car_gas_per_pcm_gas, 1e-3), 0.0, self.params.NIDEC_GAS_MAX))
       else:
         pcm_speed = 0.0
