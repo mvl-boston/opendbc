@@ -407,7 +407,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
               self.gasfactor_before_gasmax = self.gasfactor
               self.windfactor_before_gasmax = self.windfactor
           self.gas = float(np.interp((gas_pedal_force) * self.gasfactor,
-                                     [0, self.params.BOSCH_GAS_LOOKUP_BP(1)], self.params.BOSCH_GAS_LOOKUP_V))
+                                     [0, self.params.BOSCH_GAS_LOOKUP_BP[1]], self.params.BOSCH_GAS_LOOKUP_V))
 
           # limit gas ramp to 60 units per frame, matches stock.  Higher sometimes causes powertrain to ignore gas command.
           max_gas = max(60, self.bosch_last_gas + 60)
