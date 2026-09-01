@@ -162,7 +162,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.gasalpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
     self.gasfactor_before_gasmax = self.gasfactor
-    self.gasalpha = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
     self.pitch = 0.0
@@ -379,13 +378,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           # live-learn gas pedal adjustments when openpilot is controlling gas
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
             gas_error = accel - CS.out.aEgo
+            if self.CP.carFingerprint in (CAR.HONDA_INSIGHT, CAR.HONDA_CIVIC_BOSCH): # gas pedal reacts too slowly
+              learn_speed = 150
+            elif self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Prevent overreacting to turbo lag
+              learn_speed = 300
+            else:
+              learn_speed = 50
             if gas_error != 0.0 and gas_pedal_force > 0:
-              if self.CP.carFingerprint in (CAR.HONDA_INSIGHT, CAR.HONDA_CIVIC_BOSCH): # gas pedal reacts too slowly
-                learn_speed = 150
-              elif self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Prevent overreacting to turbo lag
-                learn_speed = 300
-              else:
-                learn_speed = 50
               self.gasfactor = np.clip(self.gasfactor + gas_error / learn_speed * gas_pedal_force, 0.01, 3.0)
             if (abs(gas_pedal_force) < 0.25) and (CS.out.vEgo > 1.0):
               self.gasalpha = float(np.clip(self.gasalpha + gas_error / learn_speed / 10.0, -0.5, 0.5))
