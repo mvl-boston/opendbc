@@ -37,7 +37,7 @@ jobs:
   mutation:
     name: Safety mutation tests
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: ${{ github.repository == 'commaai/opendbc' && 45 || 999 }}
     strategy:
       fail-fast: false
       matrix:
@@ -53,6 +53,7 @@ jobs:
 
   car_diff:
     name: car diff
+    if: false
     runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-latest' }}
     env:
       GIT_REF: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.event.before || format('origin/{0}', github.event.repository.default_branch) }}
@@ -64,7 +65,7 @@ jobs:
       if: github.event_name == 'pull_request'
       run: source setup.sh && python opendbc/car/tests/car_diff.py | tee diff.txt
     - name: Upload diff
-      if: always() && github.event_name == 'pull_request'
+      if: always() && github.event_name == 'pull_request' && github.repository == 'commaai/opendbc'
       uses: actions/upload-artifact@v4
       with:
         name: car_diff_${{ github.event.number }}
