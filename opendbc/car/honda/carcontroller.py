@@ -151,6 +151,7 @@ class CarController(CarControllerBase):
 
     self.lkas_button_send_remaining = 0
     self.last_lkas_button_frame = 0
+    self.lkas_hud2_button_bursts = 0
     self.radar_disable_counter = 0
 
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
@@ -534,8 +535,19 @@ class CarController(CarControllerBase):
     # accepted by the camera).
     if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD) and CC.enabled and self.frame % 4 == 0 and \
         not pcm_cancel_cmd and not CC.cruiseControl.resume:
-      if self.lkas_button_send_remaining == 0 and CS.lkas_hud["LKAS_READY"] and self.frame >= self.last_lkas_button_frame + 500:
-        self.lkas_button_send_remaining = 3
+      if self.lkas_button_send_remaining == 0 and self.frame >= self.last_lkas_button_frame + 500:
+        if CS.lkas_hud["LKAS_READY"]:
+          self.lkas_button_send_remaining = 3
+        elif CS.lkas_hud2_lane_display and self.lkas_hud2_button_bursts < 3:
+          # Newer CAN FD radar firmware (CR-V 6G A220) keeps the lane display armed across ignition
+          # cycles and shows it only radar-side (LKAS_HUD_2 on the pt bus) -- the camera never asserts
+          # LKAS_READY, yet the armed display runs the touch-steering-wheel timer that ends in a
+          # full FCM/LKAS/RDM fault ~3-4 min in (CR-V 6G routes cf8efca14d378c49/00000000/1/2).
+          # The button is a toggle and this firmware's response to it is unverified, so cap the
+          # bursts triggered by this path: if the display doesn't disarm, endless on/off cycling
+          # would be worse than the nag. LKAS_READY-triggered bursts above stay uncapped.
+          self.lkas_hud2_button_bursts += 1
+          self.lkas_button_send_remaining = 3
 
       if self.lkas_button_send_remaining > 0:
         self.last_lkas_button_frame = self.frame
