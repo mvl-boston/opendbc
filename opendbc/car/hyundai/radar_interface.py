@@ -22,9 +22,9 @@ def get_radar_can_parser(CP):
 
 
 class RadarInterface(RadarInterfaceBase, RadarInterfaceExt):
-  def __init__(self, CP, CP_SP):
+  def __init__(self, CP, CP_SP=None):
     RadarInterfaceBase.__init__(self, CP, CP_SP)
-    RadarInterfaceExt.__init__(self, CP, CP_SP)
+    RadarInterfaceExt.__init__(self, CP, self.CP_SP)
     self.updated_messages = set()
     self.trigger_msg = RADAR_START_ADDR + RADAR_MSG_COUNT - 1
     self.track_id = 0
