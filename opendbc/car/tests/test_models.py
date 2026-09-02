@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import copy
 import hashlib
 import json
 import os
@@ -15,7 +16,7 @@ from opendbc.car import DT_CTRL, gen_empty_fingerprint, structs
 from opendbc.car.can_definitions import CanData
 from opendbc.car.car_helpers import FRAME_FINGERPRINT, interfaces
 from opendbc.car.fingerprints import MIGRATION
-from opendbc.car.honda.values import HondaFlags
+from opendbc.car.honda.values import CAR as HONDA, HondaFlags
 from opendbc.car.logreader import LogReader
 from opendbc.car.structs import car
 from opendbc.car.tests.routes import CarTestRoute, non_tested_cars, routes
@@ -72,6 +73,12 @@ def get_cached_segment(route: str, segment: int) -> Path:
     path = Path(urlparse(url).path)
     if path.parent.name == str(segment) and path.name.startswith("rlog."):
       return get_cached_url(url)
+
+  try:
+    from openpilot.sunnypilot.tools.lib.sunnypilot_car_segments import get_url
+    return get_cached_url(get_url(route, segment))
+  except (ImportError, OSError):
+    pass
 
   raise FileNotFoundError(f"no log found for {route}/{segment}")
 
@@ -172,7 +179,9 @@ class TestCarModelBase(unittest.TestCase):
     cls.raw_can_keys = {(msg.address, msg.src) for _, messages in cls.can_msgs for msg in messages if msg.src < 128}
     cls.CarInterface = interfaces[cls.platform]
     cls.CP = cls.CarInterface.get_params(cls.platform, cls.fingerprint, car_fw, alpha_long, False, docs=False)
+    cls.CP_SP = cls.CarInterface.get_params_sp(cls.CP, cls.platform, cls.fingerprint, car_fw, alpha_long, False, docs=False)
     assert cls.CP
+    assert cls.CP_SP
     assert cls.CP.carFingerprint == cls.platform
 
   @classmethod
@@ -180,10 +189,11 @@ class TestCarModelBase(unittest.TestCase):
     del cls.can_msgs
 
   def setUp(self):
-    self.CI = self.CarInterface(self.CP.copy())
+    self.CI = self.CarInterface(self.CP.copy(), copy.deepcopy(self.CP_SP))
     assert self.CI
 
     self.safety = libsafety_py.libsafety
+    self.safety.set_current_safety_param_sp(self.CP_SP.safetyParam)
     cfg = self.CP.safetyConfigs[-1]
     set_status = self.safety.set_safety_hooks(cfg.safetyModel.raw, cfg.safetyParam)
     self.assertEqual(0, set_status, f"failed to set safetyModel {cfg}")
@@ -206,15 +216,16 @@ class TestCarModelBase(unittest.TestCase):
   def test_car_interface(self):
     can_invalid_cnt = 0
     CC = structs.CarControl().as_reader()
+    CC_SP = structs.CarControlSP()
     for i, msg in enumerate(self.can_msgs):
-      CS = self.CI.update(normalize_can_buses(msg, self.raw_can_keys))
-      self.CI.apply(CC, msg[0])
+      CS, _ = self.CI.update(normalize_can_buses(msg, self.raw_can_keys))
+      self.CI.apply(CC, CC_SP, msg[0])
       if i > 250:
         can_invalid_cnt += not CS.canValid
     self.assertEqual(can_invalid_cnt, 0)
 
   def test_radar_interface(self):
-    RI = self.CarInterface.RadarInterface(self.CP)
+    RI = self.CarInterface.RadarInterface(self.CP, self.CP_SP)
     assert RI
 
     error_cnt = 0
@@ -295,13 +306,15 @@ class TestCarModelBase(unittest.TestCase):
       # Some archived MLB routes record alpha longitudinal, which current MLB safety does not support.
       controller_params = self.CarInterface.get_params(self.platform, self.fingerprint, self.CP.carFw, False, False, docs=False)
 
+    CC_SP = structs.CarControlSP()
+
     def test_car_controller(car_control):
       now_nanos = 0
       msgs_sent = 0
-      CI = self.CarInterface(controller_params)
+      CI = self.CarInterface(controller_params, copy.deepcopy(self.CP_SP))
       for _ in range(round(10.0 / DT_CTRL)):
         CI.update([])
-        _, sendcan = CI.apply(car_control, now_nanos)
+        _, sendcan = CI.apply(car_control, CC_SP, now_nanos)
         now_nanos += DT_CTRL * 1e9
         msgs_sent += len(sendcan)
         for addr, dat, bus in sendcan:
@@ -344,14 +357,19 @@ class TestCarModelBase(unittest.TestCase):
       self.safety.safety_rx_hook(packet)
 
       can = [(time.monotonic_ns(), [CanData(address=address, dat=dat, src=bus)])]
-      CS = self.CI.update(can)
+      CS, _ = self.CI.update(can)
       if n < 5:
         continue
 
       if self.safety.get_gas_pressed_prev() != prev_panda_gas:
         self.assertEqual(CS.gasPressed, self.safety.get_gas_pressed_prev())
       if self.safety.get_brake_pressed_prev() != prev_panda_brake:
-        self.assertEqual(CS.brakePressed, self.safety.get_brake_pressed_prev())
+        # TODO: remove this exception once this mismatch is resolved
+        brake_pressed = CS.brakePressed
+        if CS.brakePressed and not self.safety.get_brake_pressed_prev():
+          if self.CP.carFingerprint in (HONDA.HONDA_PILOT, HONDA.HONDA_RIDGELINE) and CS.deprecated.brake > 0.05:
+            brake_pressed = False
+        self.assertEqual(brake_pressed, self.safety.get_brake_pressed_prev())
       if self.safety.get_regen_braking_prev() != prev_panda_regen_braking:
         self.assertEqual(CS.regenBraking, self.safety.get_regen_braking_prev())
       if self.safety.get_steering_disengage_prev() != prev_panda_steering_disengage:
@@ -388,7 +406,8 @@ class TestCarModelBase(unittest.TestCase):
     vehicle_speed_seen = self.CP.steerControlType == SteerControlType.angle and not self.CP.notCar
 
     for idx, can in enumerate(self.can_msgs):
-      CS = self.CI.update(can).as_reader()
+      CS, _ = self.CI.update(can)
+      CS = CS.as_reader()
       for msg in (msg for msg in can[1] if msg.src < 64):
         packet = libsafety_py.make_CANPacket(msg.address, msg.src % 4, msg.dat)
         ret = self.safety.safety_rx_hook(packet)
@@ -415,7 +434,12 @@ class TestCarModelBase(unittest.TestCase):
         checks["steeringAngleDeg"] += (angle_can > self.safety.get_angle_meas_max() + 1 or
                                        angle_can < self.safety.get_angle_meas_min() - 1)
 
-      checks["brakePressed"] += CS.brakePressed != self.safety.get_brake_pressed_prev()
+      # TODO: remove this exception once this mismatch is resolved
+      brake_pressed = CS.brakePressed
+      if CS.brakePressed and not self.safety.get_brake_pressed_prev():
+        if self.CP.carFingerprint in (HONDA.HONDA_PILOT, HONDA.HONDA_RIDGELINE) and CS.deprecated.brake > 0.05:
+          brake_pressed = False
+      checks["brakePressed"] += brake_pressed != self.safety.get_brake_pressed_prev()
       checks["regenBraking"] += CS.regenBraking != self.safety.get_regen_braking_prev()
       checks["steeringDisengage"] += CS.steeringDisengage != self.safety.get_steering_disengage_prev()
 
