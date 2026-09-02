@@ -182,7 +182,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
     gas_pedal_force = 0.0
-    # min_gas = self.params.BOSCH_GAS_LOOKUP_BP[0]
     actuators = CC.actuators
     hud_control = CC.hudControl
     hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
