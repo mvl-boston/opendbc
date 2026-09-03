@@ -171,6 +171,7 @@ class CarController(CarControllerBase):
 
     self.prior_gas_average = 0.0
     self.average_factor = 0.5 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
+    self.average_factor = max(0.02, self.average_factor)  # same floor as the learner, so frame 1 is not a 1000x comparator
     self.average_factor_sens = 0.0  # d(prior_gas_average)/d(average_factor), recursive model sensitivity
     self.car_gas_per_pcm_gas = 0.3 if (Params().get("HondaCarGasScaleParams") is None) else Params().get("HondaCarGasScaleParams")
     self.creep_factor = 1.0 if (Params().get("HondaCreepFactorParams") is None) else Params().get("HondaCreepFactorParams")
@@ -565,8 +566,18 @@ class CarController(CarControllerBase):
           gas_measured = CS.car_gas / self.car_gas_per_pcm_gas
           averagefactor_error = (gas_measured - self.prior_gas_average) / self.params.NIDEC_GAS_MAX
           averagefactor_step = 0.005 * averagefactor_error * self.average_factor_sens / self.params.NIDEC_GAS_MAX
-          self.average_factor = float(np.clip(self.average_factor + np.clip(averagefactor_step, -0.001, 0.001),
-                                              0.001, 1.0))
+          # This learner had been frozen since the rpm gate was added (CS.engine_rpm read 0 on the
+          # MDX, see carstate), so the per-tick cap was never exercised on this car. Replaying it
+          # on route 48 wire/pedal with the gate open: at +-0.001/tick it swings 0.001 <-> 0.10 on
+          # a minute timescale from any start (a full-range move every second on a pedal signal
+          # with ~0.01 wire correlation) and sits on the floor 157s of a 22min engaged drive. At
+          # 0.001 the 1/average_factor lead is 1000x and prior_gas_average has a 10s memory, i.e.
+          # the rail-to-rail bang-bang of failure mode #10. A 10x slower cap needs >=10s of
+          # consistent evidence for a full-range move, and the 0.02 floor (50x lead, 0.5s
+          # memory) keeps the feedforward in the sawtooth-tracking regime it has been driving in
+          # at 0.035; replay band with both: 0.020-0.057 over the route.
+          self.average_factor = float(np.clip(self.average_factor + np.clip(averagefactor_step, -0.0001, 0.0001),
+                                              0.02, 1.0))
 
         # ceiling learner: identifies max accel capability, learn situation exist for a second before adjusting
         if (CS.out.aEgo > self.sat_accel) and (not CS.out.gasPressed) and (CC.longActive):
