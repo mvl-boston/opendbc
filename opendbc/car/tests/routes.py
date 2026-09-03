@@ -35,6 +35,7 @@ non_tested_cars = [
   # custom hardware / not upstreamable
   HONDA.HONDA_CLARITY,
   HONDA.ACURA_TLX_1G,
+  HONDA.ACURA_RLX_HYBRID,  # requires pre-flashed steer-bus bridge panda
 
   # These had their DSUs unplugged, need new routes
   # TOYOTA.LEXUS_ES  # hybrid
