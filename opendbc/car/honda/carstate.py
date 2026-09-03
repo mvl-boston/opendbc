@@ -262,7 +262,12 @@ class CarState(CarStateBase):
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
-      self.engine_rpm = cp.vl["ENGINE_DATA"]["ENGINE_RPM"]
+      # ENGINE_DATA and POWERTRAIN_DATA both carry an ENGINE_RPM field at the same bits, but the
+      # MDX 3G hybrid only populates the POWERTRAIN_DATA copy (route 48: 0x158 rpm was 0 for all
+      # 226k frames while 0x17C read 0-2668). Reading only ENGINE_DATA left engine_rpm pinned at
+      # 0, which permanently closed every rpm>500 learner gate (average_factor froze at its boot
+      # value for the whole drive) and made every breakaway look engine-off.
+      self.engine_rpm = max(cp.vl["ENGINE_DATA"]["ENGINE_RPM"], cp.vl["POWERTRAIN_DATA"]["ENGINE_RPM"])
       gas_pedal_2_seen = cp.message_states.get(304) is not None and len(cp.message_states[304].timestamps) > 0
       gas_pedal_seen = cp.message_states.get(316) is not None and len(cp.message_states[316].timestamps) > 0
       if gas_pedal_2_seen:
