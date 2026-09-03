@@ -9,6 +9,7 @@
 // all the safety modes
 #include "opendbc/safety/modes/defaults.h"
 #include "opendbc/safety/modes/honda.h"
+#include "opendbc/safety/modes/honda_rlx_forwarder.h"
 #include "opendbc/safety/modes/toyota.h"
 #include "opendbc/safety/modes/tesla.h"
 #include "opendbc/safety/modes/gm.h"
@@ -395,6 +396,7 @@ int set_safety_hooks(uint16_t mode, uint16_t param) {
     {SAFETY_ELM327, &elm327_hooks},
     {SAFETY_GM, &gm_hooks},
     {SAFETY_HONDA_BOSCH, &honda_bosch_hooks},
+    {SAFETY_HONDA_RLX_FORWARDER, &honda_rlx_forwarder_hooks},
     {SAFETY_HYUNDAI, &hyundai_hooks},
     {SAFETY_CHRYSLER, &chrysler_hooks},
     {SAFETY_SUBARU, &subaru_hooks},
