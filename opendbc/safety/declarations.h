@@ -34,6 +34,7 @@
 #define SAFETY_RIVIAN 33U
 #define SAFETY_VOLKSWAGEN_MEB 34U
 #define SAFETY_RLX_RED_PANDA 36U
+#define SAFETY_HONDA_RLX_FORWARDER 35U
 
 #define GET_BIT(msg, b) ((bool)!!(((msg)->data[((b) / 8U)] >> ((b) % 8U)) & 0x1U))
 #define GET_FLAG(value, mask) (((__typeof__(mask))(value) & (mask)) == (mask)) // cppcheck-suppress misra-c2012-1.2; allow __typeof__
@@ -329,6 +330,7 @@ extern const safety_hooks gm_hooks;
 extern const safety_hooks honda_nidec_hooks;
 extern const safety_hooks honda_rlx_redpanda_hooks;
 extern const safety_hooks honda_bosch_hooks;
+extern const safety_hooks honda_rlx_forwarder_hooks;
 extern const safety_hooks hyundai_canfd_hooks;
 extern const safety_hooks hyundai_hooks;
 extern const safety_hooks hyundai_legacy_hooks;

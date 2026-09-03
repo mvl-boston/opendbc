@@ -637,6 +637,7 @@ struct CarParams {
     rivian @33;
     volkswagenMeb @34;
     rlxRedPanda @36;
+    hondaRlxForwarder @35;  # standalone steer-bus bridge panda, never selected by openpilot
   }
 
   enum SteerControlType {
