@@ -412,6 +412,14 @@ class CAR(Platforms):
     radar_dbc_dict('acura_mdx_3g_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
+  ACURA_RLX_HYBRID = HondaNidecPlatformConfig(
+    # 2017 RLX Sport Hybrid. Don't add to cardocs: the EPS is on a separate steer bus that needs a
+    # second panda running the hondaRlxForwarder safety mode to bridge it to the powertrain bus
+    [],
+    CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.43, steerRatio=18.3),
+    radar_dbc_dict('acura_rlx_2017_can_generated'),
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
+  )
   HONDA_PILOT = HondaNidecPlatformConfig(
     [
       HondaCarDocs("Honda Pilot 2016-22", min_steer_speed=12. * CV.MPH_TO_MS),
@@ -522,12 +530,12 @@ FW_QUERY_CONFIG = FwQueryConfig(
   # This is or'd with (ALL_ECUS - ESSENTIAL_ECUS) from fw_versions.py
   non_essential_ecus={
     Ecu.eps: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_E, CAR.HONDA_E_ADVANCE, CAR.ACURA_MDX_4G,
-              CAR.HONDA_CRV_SA, CAR.ACURA_MDX_3G, CAR.HONDA_ACCORD_9G,
+              CAR.HONDA_CRV_SA, CAR.ACURA_MDX_3G, CAR.HONDA_ACCORD_9G, CAR.ACURA_RLX_HYBRID,
               *HONDA_BOSCH_ALT_RADAR,
               *HONDA_BOSCH_RADARLESS, *HONDA_BOSCH_CANFD],
     Ecu.vsa: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID, CAR.HONDA_E,
               CAR.HONDA_E_ADVANCE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G, CAR.ACURA_MDX_4G,
-              CAR.HONDA_ACCORD_9G,
+              CAR.HONDA_ACCORD_9G, CAR.ACURA_RLX_HYBRID,
               *HONDA_BOSCH_ALT_RADAR, *HONDA_BOSCH_RADARLESS,
               *HONDA_BOSCH_CANFD],
   },

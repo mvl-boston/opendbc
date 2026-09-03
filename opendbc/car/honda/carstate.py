@@ -147,7 +147,11 @@ class CarState(CarStateBase):
 
     # Log non-critical stock ACC/LKAS faults if Nidec (camera) or longitudinal CANFD alt-brake
     if self.CP.carFingerprint not in HONDA_BOSCH:
-      ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
+      ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"])
+      if self.CP.carFingerprint != CAR.ACURA_RLX_HYBRID:
+        # The RLX LKAS camera sits on the steer bus and its LKAS_HUD is not bridged to the powertrain bus,
+        # so it never shows up on the camera bus of this panda
+        ret.carFaultedNonCritical = ret.carFaultedNonCritical or bool(cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
 
     elif self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])

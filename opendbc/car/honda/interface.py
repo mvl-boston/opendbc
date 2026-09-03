@@ -98,6 +98,9 @@ class CarInterface(CarInterfaceBase):
     if candidate == CAR.HONDA_CITY_7G:
       ret.vEgoStopping = 2.0
       ret.stoppingDecelRate = 0.3
+    elif candidate == CAR.ACURA_RLX_HYBRID:
+      ret.vEgoStopping = 0.5
+      ret.stoppingDecelRate = 0.3
     else:
       ret.vEgoStopping = 0.5 # make up for driving model creep at stop lights/signs
       ret.stoppingDecelRate = 0.1
@@ -252,6 +255,13 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kf = 0.000035
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
+    elif candidate == CAR.ACURA_RLX_HYBRID:
+      # STEERING_CONTROL is bridged to the EPS on the steer bus by the hondaRlxForwarder panda.
+      # The RLX EPS torque request has the opposite sign from the other Hondas.
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2047], [0, -2047]]
+      ret.lateralTuning.pid.kf = 0.000035
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
+
     elif candidate == CAR.HONDA_CLARITY: # source Sunnypilot
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
@@ -311,7 +321,7 @@ class CarInterface(CarInterfaceBase):
     elif (ret.transmissionType == TransmissionType.manual) and (not ret.openpilotLongitudinalControl):
       ret.autoResumeSng = False
     else:
-      ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G,
+      ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G, CAR.ACURA_RLX_HYBRID,
                                                        CAR.ACURA_TLX_1G, CAR.HONDA_CLARITY})
     if ret.autoResumeSng:
       ret.minEnableSpeed = -1.
