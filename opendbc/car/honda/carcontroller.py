@@ -208,13 +208,21 @@ class CarController(CarControllerBase):
     # Hands over to dv_launch at first motion so nothing accumulates in the servo low-pass.
     self.dv_break = 6.0 if (Params().get("HondaLaunchDvBreakParams") is None) else Params().get("HondaLaunchDvBreakParams")  # m/s
     self.launch_active = False
-    # gas-channel recovery window: opened at driver-gas override release and at launch window
-    # exit. In both cases the wire gas is coming out of a known dead state and has to re-wind
-    # the PCM's internal pedal tracker; the +2/tick rise clip alone spends ~1s just climbing
-    # 0->198 (routes 33/34: post-release tracking err +0.9..+1.7 for 2-2.5s, engine even
-    # dropped to idle-stop mid-window from the commanded zero-torque second).
+    # gas-channel recovery window: opened at driver-gas override release, at launch window
+    # exit, at openpilot brake release and at engage while rolling. In every case the wire gas
+    # is coming out of a known dead state (the concurrent gas+brake guard zeroes it for the
+    # whole brake period) and has to re-wind the PCM's internal pedal tracker; the +2/tick rise
+    # clip alone spends ~1s just climbing 0->198 (routes 33/34: post-override err +0.9..+1.7 for
+    # 2-2.5s; route 48: 28 brake->gas transitions, wire reached 100 at +0.62s median, pedal
+    # onset +1.44s, aEgo>0.2 only at +2.3s, err +0.56 over the 3s; pedal onset tracked
+    # wire>=100 (corr 0.71) plus the same ~0.6s PCM lag seen for cruise rises, so the climb
+    # is the only part of that chain on our side — whether the PCM also has a fixed re-apply
+    # dead time after its brake period is unresolved: the one fast-wire event still saw the
+    # pedal at +1.44s, so the wire shaping here is bounded-benefit, while the learner gating
+    # the window provides is the certain part).
     self.gas_recovery_ticks = 0
     self.gas_pressed_prev = False
+    self.long_active_prev = False
     self.launch_ticks = 0
     self.launch_release_tick = -1
     self.launch_move_tick = -1
@@ -443,6 +451,13 @@ class CarController(CarControllerBase):
       if CC.enabled and self.gas_pressed_prev and (not CS.out.gasPressed):
         self.gas_recovery_ticks = 200
       self.gas_pressed_prev = CS.out.gasPressed
+      # engage while rolling: the wire was 0 (not longActive) and the plan is typically already
+      # positive, so this is the same restart-from-dead-state as an override release (route 48:
+      # 8 rolling engages without a prior gas press, err +0.35..+0.79 over 3s, wire>=100 at
+      # 0.5-2.8s). Standstill engages are owned by the launch governor.
+      if CC.longActive and (not self.long_active_prev) and (CS.out.vEgo > 0.1) and (not self.launch_active):
+        self.gas_recovery_ticks = 200
+      self.long_active_prev = CC.longActive
 
     # all of this is only relevant for HONDA NIDEC
     max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
@@ -489,12 +504,17 @@ class CarController(CarControllerBase):
     # feedforward for Nidec decaying-average gas pedal
     # inside a recovery window the rise clip opens to the stock launch envelope (+70/frame vs
     # stock's observed +74/frame): the +20/frame cruise clip is sized for smoothness around an
-    # operating point, but coming out of an override/launch there is no operating point yet —
+    # operating point, but coming out of an override/launch/brake there is no operating point yet —
     # holding it there spends a full second climbing 0->198 while PCM_GAS=0 gates off all power
     # (routes 33/34: aEgo fell to -0.3 against cmd +1.25 during that second, and the PCM's
     # pedal tracker + idle-stop restart stacked another ~1.5s on top).
-    max_increase = 7 if self.gas_recovery_ticks > 0 else 2  # per 100Hz tick, x10 per sent frame
+    # The wide clip only applies while the wire is still below the feedforward target: the
+    # window's job is to close the gap from the dead state to the operating point. Beyond the
+    # target the 1/average_factor lead (~30x at the learned ~0.035) already overshoots, and
+    # letting that run at +70/frame just triples the sawtooth amplitude the PCM has to smooth
+    # (bench: 0->140 in 0.2s against a target of 50) for no gain in reaching the target.
     prior_accel = int(self.new_accel)
+    max_increase = 7 if (self.gas_recovery_ticks > 0 and prior_accel < pcm_accel) else 2  # per 100Hz tick, x10 per sent frame
     # When GAS_PEDAL_2 is absent the direct-measurement learner cannot run; use a fixed factor so
     # feedforward stays stable on platforms that do not report applied pedal position.
     effective_average_factor = self.average_factor if CS.car_gas_available else 0.5
@@ -721,6 +741,18 @@ class CarController(CarControllerBase):
           # overwritten by the zeroing below — dead code, removed.)
           if (apply_brake > 0) or (CS.out.gasPressed and not CS.car_gas_available):
             self.new_accel = 0
+
+          # openpilot brake release: the guard above held the wire at 0 for the whole brake
+          # period, so the gas channel restarts from a dead state exactly like an override
+          # release, and 86% of releases have the plan positive within 1s (route 48: 1.9
+          # releases/min engaged). Without the window the +2/tick clip alone puts ~0.6s of the
+          # ~2s post-brake deficit on the wire before the PCM's own lag even starts, and the
+          # dead window was billed to the speed/gas learners as servo undershoot (45% of the
+          # speedfactor_low growth fuel came from the 13% of ticks in these windows; the
+          # average_factor learner saw 3.5x its usual downward per-tick pressure there).
+          # Launch windows own their own release and open the window at exit.
+          if (self.apply_brake_last > 0) and (apply_brake == 0) and CC.longActive and (not self.launch_active):
+            self.gas_recovery_ticks = 200
 
           if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
             self.gasfactor_nomaxspeed = self.gasfactor
