@@ -1,0 +1,18 @@
+From c5b714a3a2712627a6fc2b6fead90ae37e713cc8 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Thu, 3 Sep 2026 23:28:17 +0000
+Subject: [PATCH 3/5] safety tests: make test_honda_rlx_forwarder.py executable
+ like the other test modules
+
+Co-authored-by: mliza <mliza@umass.edu>
+---
+ opendbc/safety/tests/test_honda_rlx_forwarder.py | 0
+ 1 file changed, 0 insertions(+), 0 deletions(-)
+ mode change 100644 => 100755 opendbc/safety/tests/test_honda_rlx_forwarder.py
+
+diff --git a/opendbc/safety/tests/test_honda_rlx_forwarder.py b/opendbc/safety/tests/test_honda_rlx_forwarder.py
+old mode 100644
+new mode 100755
+-- 
+2.43.0
+

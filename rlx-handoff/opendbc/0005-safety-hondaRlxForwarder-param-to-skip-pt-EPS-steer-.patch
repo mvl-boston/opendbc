@@ -1,0 +1,144 @@
+From dc70509aecc8755719e3bc57b9720498142f7c58 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Fri, 4 Sep 2026 00:28:59 +0000
+Subject: [PATCH 5/5] safety: hondaRlxForwarder param to skip pt->EPS steer
+ command forwarding
+
+Dual-panda rlogs from a5cd616a92467aed|0000013b--370250c82a show the car's
+gateway relaying openpilot's BRAKE_COMMAND/ACC_HUD from the powertrain bus
+onto the steer bus byte for byte. If it does the same for 0x194/0x33D, the
+bridge forwarding them as well would make the EPS see every frame twice.
+Param bit 0 disables that leg without touching the rest of the routing.
+
+The same logs confirm STEER_STATUS and CAR_SPEED exist only on the steer
+bus, so routing them to the powertrain bus is collision free.
+
+Co-authored-by: mliza <mliza@umass.edu>
+---
+ opendbc/safety/modes/honda_rlx_forwarder.h    | 15 ++++++++--
+ .../safety/tests/test_honda_rlx_forwarder.py  | 30 ++++++++++++++-----
+ 2 files changed, 36 insertions(+), 9 deletions(-)
+
+diff --git a/opendbc/safety/modes/honda_rlx_forwarder.h b/opendbc/safety/modes/honda_rlx_forwarder.h
+index 1a2b3deb2..558d924cc 100644
+--- a/opendbc/safety/modes/honda_rlx_forwarder.h
++++ b/opendbc/safety/modes/honda_rlx_forwarder.h
+@@ -28,6 +28,12 @@
+ // powertrain bus: openpilot transmits 0x33D there itself and the comma panda treats a received 0x33D
+ // on its bus 0 as a relay malfunction.
+ //
++// Logs from the dual-panda setup (a5cd616a92467aed|0000013b--370250c82a) show STEER_STATUS/CAR_SPEED
++// only on the steer bus and never on the powertrain bus, and that the car's gateway relays openpilot's
++// BRAKE_COMMAND/ACC_HUD from the powertrain bus onto the steer bus. If it turns out to relay 0x194/0x33D
++// as well, set param bit 0 (HONDA_RLX_FORWARDER_PARAM_GATEWAY_RELAYS_STEER_CMDS) so this panda stops
++// forwarding them itself and the EPS doesn't see every frame twice.
++//
+ // Nothing may be transmitted over USB, so this panda cannot actuate anything by itself. It is meant
+ // to be the boot default safety mode in the panda firmware (board/main.c) for the bridge panda;
+ // openpilot never selects it.
+@@ -36,8 +42,13 @@
+ #define HONDA_RLX_FWD_BUS_PT 1
+ #define HONDA_RLX_FWD_BUS_CAMERA 2
+ 
++static bool honda_rlx_forwarder_fwd_steer_cmds = true;
++
+ static safety_config honda_rlx_forwarder_init(uint16_t param) {
+-  SAFETY_UNUSED(param);
++  const uint16_t HONDA_RLX_FORWARDER_PARAM_GATEWAY_RELAYS_STEER_CMDS = 1U;
++
++  honda_rlx_forwarder_fwd_steer_cmds = !GET_FLAG(param, HONDA_RLX_FORWARDER_PARAM_GATEWAY_RELAYS_STEER_CMDS);
++
+   // no RX checks and no TX allowlist: this panda only bridges buses
+   return (safety_config){NULL, 0, NULL, 0, false}; // NOLINT(readability/braces)
+ }
+@@ -55,7 +66,7 @@ static int honda_rlx_forwarder_fwd_bus_hook(int bus_num, int addr) {
+   } else if (bus_num == HONDA_RLX_FWD_BUS_EPS) {
+     destination_bus = is_eps_status ? HONDA_RLX_FWD_BUS_PT : HONDA_RLX_FWD_BUS_CAMERA;
+   } else if (bus_num == HONDA_RLX_FWD_BUS_PT) {
+-    destination_bus = is_steer_cmd ? HONDA_RLX_FWD_BUS_EPS : -1;
++    destination_bus = (is_steer_cmd && honda_rlx_forwarder_fwd_steer_cmds) ? HONDA_RLX_FWD_BUS_EPS : -1;
+   } else {
+     // nothing is forwarded from any other bus
+   }
+diff --git a/opendbc/safety/tests/test_honda_rlx_forwarder.py b/opendbc/safety/tests/test_honda_rlx_forwarder.py
+index 61dc20867..5764d35e1 100755
+--- a/opendbc/safety/tests/test_honda_rlx_forwarder.py
++++ b/opendbc/safety/tests/test_honda_rlx_forwarder.py
+@@ -19,13 +19,17 @@ STEER_CMD_ADDRS = {STEERING_CONTROL, LKAS_HUD}
+ EPS_STATUS_ADDRS = {STEER_STATUS, CAR_SPEED}
+ 
+ 
+-def expected_fwd_bus(bus: int, addr: int) -> int:
++# param bit 0: the car's gateway already relays openpilot's steering command/HUD onto the steer bus
++PARAM_GATEWAY_RELAYS_STEER_CMDS = 1
++
++
++def expected_fwd_bus(bus: int, addr: int, fwd_steer_cmds: bool = True) -> int:
+   if bus == BUS_CAMERA:
+     return -1 if addr in STEER_CMD_ADDRS else BUS_EPS
+   if bus == BUS_EPS:
+     return BUS_PT if addr in EPS_STATUS_ADDRS else BUS_CAMERA
+   if bus == BUS_PT:
+-    return BUS_EPS if addr in STEER_CMD_ADDRS else -1
++    return BUS_EPS if (addr in STEER_CMD_ADDRS and fwd_steer_cmds) else -1
+   return -1
+ 
+ 
+@@ -36,17 +40,19 @@ class TestHondaRlxForwarder(TestDefaultRxHookBase):
+     may be sent over USB.
+   """
+   TX_MSGS = []
++  PARAM = 0
++  FWD_STEER_CMDS = True
+ 
+   def setUp(self):
+     self.safety = libsafety_py.libsafety
+-    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaRlxForwarder, 0)
++    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaRlxForwarder, self.PARAM)
+     self.safety.init_tests()
+ 
+   def test_fwd_hook(self):
+     # routing is per address, so the generic bus lookup test doesn't apply
+     for bus in range(4):
+       for addr in self.SCANNED_ADDRS:
+-        self.assertEqual(expected_fwd_bus(bus, addr), self.safety.safety_fwd_hook(bus, addr), f"{addr=:#x} from {bus=}")
++        self.assertEqual(expected_fwd_bus(bus, addr, self.FWD_STEER_CMDS), self.safety.safety_fwd_hook(bus, addr), f"{addr=:#x} from {bus=}")
+ 
+   def test_camera_intercept(self):
+     # the stock camera's steering command and HUD never reach the EPS, everything else passes through
+@@ -64,9 +70,10 @@ class TestHondaRlxForwarder(TestDefaultRxHookBase):
+       self.assertEqual(BUS_CAMERA, self.safety.safety_fwd_hook(BUS_EPS, addr), f"{addr=:#x}")
+ 
+   def test_powertrain_to_eps(self):
+-    # openpilot's steering command and LKAS HUD are relayed from the powertrain bus to the EPS
++    # openpilot's steering command and LKAS HUD are relayed from the powertrain bus to the EPS,
++    # unless the car's gateway is known to do that already
+     for addr in STEER_CMD_ADDRS:
+-      self.assertEqual(BUS_EPS, self.safety.safety_fwd_hook(BUS_PT, addr), f"{addr=:#x}")
++      self.assertEqual(BUS_EPS if self.FWD_STEER_CMDS else -1, self.safety.safety_fwd_hook(BUS_PT, addr), f"{addr=:#x}")
+     # nothing else from the powertrain bus leaks onto the steer bus
+     for addr in (0x158, 0x17C, 0x1FA, 0x30C, *EPS_STATUS_ADDRS):
+       self.assertEqual(-1, self.safety.safety_fwd_hook(BUS_PT, addr), f"{addr=:#x}")
+@@ -85,9 +92,18 @@ class TestHondaRlxForwarder(TestDefaultRxHookBase):
+         self.assertTrue(self._rx(common.make_msg(bus, addr, 8)))
+     self.assertFalse(self.safety.get_relay_malfunction())
+     self.assertEqual(BUS_PT, self.safety.safety_fwd_hook(BUS_EPS, STEER_STATUS))
+-    self.assertEqual(BUS_EPS, self.safety.safety_fwd_hook(BUS_PT, STEERING_CONTROL))
++    self.assertEqual(BUS_EPS if self.FWD_STEER_CMDS else -1, self.safety.safety_fwd_hook(BUS_PT, STEERING_CONTROL))
+     self.assertEqual(-1, self.safety.safety_fwd_hook(BUS_CAMERA, STEERING_CONTROL))
+ 
+ 
++class TestHondaRlxForwarderGatewayRelay(TestHondaRlxForwarder):
++  """
++    Same bridge, but the gateway already relays openpilot's 0x194/0x33D onto the steer bus,
++    so the bridge must not forward them itself
++  """
++  PARAM = PARAM_GATEWAY_RELAYS_STEER_CMDS
++  FWD_STEER_CMDS = False
++
++
+ if __name__ == "__main__":
+   unittest.main()
+-- 
+2.43.0
+

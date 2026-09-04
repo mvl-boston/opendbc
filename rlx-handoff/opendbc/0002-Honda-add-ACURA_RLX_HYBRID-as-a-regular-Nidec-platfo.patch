@@ -1,0 +1,207 @@
+From 9bc16a7659eeae2a0ac938a10dab4234308cef20 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Thu, 3 Sep 2026 23:22:32 +0000
+Subject: [PATCH 2/5] Honda: add ACURA_RLX_HYBRID as a regular Nidec platform
+
+With the steer bus bridged onto the powertrain bus by the
+hondaRlxForwarder panda, the RLX no longer needs any multi-bus handling:
+STEER_STATUS and CAR_SPEED are read from the pt bus and STEERING_CONTROL
+and LKAS_HUD are sent on the pt bus like any other Nidec car. The only
+remaining exception is that the stock LKAS camera's LKAS_HUD is not
+visible on the camera bus, so carFaultedNonCritical only uses ACC_PROBLEM.
+
+Platform specs, fingerprints, lateral tuning and torque data are carried
+over from the rlx-step21 branch.
+
+Co-authored-by: mliza <mliza@umass.edu>
+---
+ opendbc/car/honda/carstate.py                 |  6 +++-
+ opendbc/car/honda/fingerprints.py             | 20 +++++++++++++
+ opendbc/car/honda/interface.py                | 12 +++++++-
+ opendbc/car/honda/values.py                   | 12 ++++++--
+ opendbc/car/tests/routes.py                   |  1 +
+ opendbc/car/torque_data/override.toml         |  1 +
+ .../generator/honda/acura_rlx_2017_can.dbc    | 28 +++++++++++++++++++
+ 7 files changed, 76 insertions(+), 4 deletions(-)
+ create mode 100644 opendbc/dbc/generator/honda/acura_rlx_2017_can.dbc
+
+diff --git a/opendbc/car/honda/carstate.py b/opendbc/car/honda/carstate.py
+index a9284ad07..dcf6805b6 100644
+--- a/opendbc/car/honda/carstate.py
++++ b/opendbc/car/honda/carstate.py
+@@ -147,7 +147,11 @@ class CarState(CarStateBase):
+ 
+     # Log non-critical stock ACC/LKAS faults if Nidec (camera) or longitudinal CANFD alt-brake
+     if self.CP.carFingerprint not in HONDA_BOSCH:
+-      ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
++      ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"])
++      if self.CP.carFingerprint != CAR.ACURA_RLX_HYBRID:
++        # The RLX LKAS camera sits on the steer bus and its LKAS_HUD is not bridged to the powertrain bus,
++        # so it never shows up on the camera bus of this panda
++        ret.carFaultedNonCritical = ret.carFaultedNonCritical or bool(cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
+ 
+     elif self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
+diff --git a/opendbc/car/honda/fingerprints.py b/opendbc/car/honda/fingerprints.py
+index 07442f944..53e8c33b3 100644
+--- a/opendbc/car/honda/fingerprints.py
++++ b/opendbc/car/honda/fingerprints.py
+@@ -626,6 +626,26 @@ FW_VERSIONS = {
+       b'8S302-TYA-A020\x00\x00',
+     ],
+   },
++  CAR.ACURA_RLX_HYBRID: {
++    (Ecu.fwdRadar, 0x18dab0f1, None): [
++      b'36161-TY3-A030\x00\x00',
++    ],
++    (Ecu.shiftByWire, 0x18da0bf1, None): [
++      b'54008-TY3-J010\x00\x00',
++    ],
++    (Ecu.srs, 0x18da53f1, None): [
++      b'77959-TY3-L130\x00\x00',
++    ],
++    (Ecu.gateway, 0x18daeff1, None): [
++      b'38897-TY3-A020\x00\x00',
++    ],
++    (Ecu.hud, 0x18da61f1, None): [
++      b'78209-TY3-A110\x00\x00',
++    ],
++    (Ecu.eps, 0x18da30f1, None): [
++      b'39990-TY3-J030\x00\x00',
++    ],
++  },
+   CAR.HONDA_ODYSSEY: {
+     (Ecu.gateway, 0x18daeff1, None): [
+       b'38897-THR-A010\x00\x00',
+diff --git a/opendbc/car/honda/interface.py b/opendbc/car/honda/interface.py
+index bc0161a91..92527b94d 100755
+--- a/opendbc/car/honda/interface.py
++++ b/opendbc/car/honda/interface.py
+@@ -98,6 +98,9 @@ class CarInterface(CarInterfaceBase):
+     if candidate == CAR.HONDA_CITY_7G:
+       ret.vEgoStopping = 2.0
+       ret.stoppingDecelRate = 0.3
++    elif candidate == CAR.ACURA_RLX_HYBRID:
++      ret.vEgoStopping = 0.5
++      ret.stoppingDecelRate = 0.3
+     else:
+       ret.vEgoStopping = 0.5 # make up for driving model creep at stop lights/signs
+       ret.stoppingDecelRate = 0.1
+@@ -252,6 +255,13 @@ class CarInterface(CarInterfaceBase):
+       ret.lateralTuning.pid.kf = 0.000035
+       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
+ 
++    elif candidate == CAR.ACURA_RLX_HYBRID:
++      # STEERING_CONTROL is bridged to the EPS on the steer bus by the hondaRlxForwarder panda.
++      # The RLX EPS torque request has the opposite sign from the other Hondas.
++      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2047], [0, -2047]]
++      ret.lateralTuning.pid.kf = 0.000035
++      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
++
+     elif candidate == CAR.HONDA_CLARITY: # source Sunnypilot
+       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
+       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
+@@ -311,7 +321,7 @@ class CarInterface(CarInterfaceBase):
+     elif (ret.transmissionType == TransmissionType.manual) and (not ret.openpilotLongitudinalControl):
+       ret.autoResumeSng = False
+     else:
+-      ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G,
++      ret.autoResumeSng = candidate in (HONDA_BOSCH | {CAR.HONDA_CIVIC, CAR.ACURA_MDX_3G, CAR.ACURA_RLX_HYBRID,
+                                                        CAR.ACURA_TLX_1G, CAR.HONDA_CLARITY})
+     if ret.autoResumeSng:
+       ret.minEnableSpeed = -1.
+diff --git a/opendbc/car/honda/values.py b/opendbc/car/honda/values.py
+index 0d4078582..e905e5035 100644
+--- a/opendbc/car/honda/values.py
++++ b/opendbc/car/honda/values.py
+@@ -412,6 +412,14 @@ class CAR(Platforms):
+     radar_dbc_dict('acura_mdx_3g_can_generated'),
+     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
+   )
++  ACURA_RLX_HYBRID = HondaNidecPlatformConfig(
++    # 2017 RLX Sport Hybrid. Don't add to cardocs: the EPS is on a separate steer bus that needs a
++    # second panda running the hondaRlxForwarder safety mode to bridge it to the powertrain bus
++    [],
++    CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.43, steerRatio=18.3),
++    radar_dbc_dict('acura_rlx_2017_can_generated'),
++    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
++  )
+   HONDA_PILOT = HondaNidecPlatformConfig(
+     [
+       HondaCarDocs("Honda Pilot 2016-22", min_steer_speed=12. * CV.MPH_TO_MS),
+@@ -522,12 +530,12 @@ FW_QUERY_CONFIG = FwQueryConfig(
+   # This is or'd with (ALL_ECUS - ESSENTIAL_ECUS) from fw_versions.py
+   non_essential_ecus={
+     Ecu.eps: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_E, CAR.HONDA_E_ADVANCE, CAR.ACURA_MDX_4G,
+-              CAR.HONDA_CRV_SA, CAR.ACURA_MDX_3G, CAR.HONDA_ACCORD_9G,
++              CAR.HONDA_CRV_SA, CAR.ACURA_MDX_3G, CAR.HONDA_ACCORD_9G, CAR.ACURA_RLX_HYBRID,
+               *HONDA_BOSCH_ALT_RADAR,
+               *HONDA_BOSCH_RADARLESS, *HONDA_BOSCH_CANFD],
+     Ecu.vsa: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID, CAR.HONDA_E,
+               CAR.HONDA_E_ADVANCE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G, CAR.ACURA_MDX_4G,
+-              CAR.HONDA_ACCORD_9G,
++              CAR.HONDA_ACCORD_9G, CAR.ACURA_RLX_HYBRID,
+               *HONDA_BOSCH_ALT_RADAR, *HONDA_BOSCH_RADARLESS,
+               *HONDA_BOSCH_CANFD],
+   },
+diff --git a/opendbc/car/tests/routes.py b/opendbc/car/tests/routes.py
+index 843b008df..7bc46c3ed 100644
+--- a/opendbc/car/tests/routes.py
++++ b/opendbc/car/tests/routes.py
+@@ -35,6 +35,7 @@ non_tested_cars = [
+   # custom hardware / not upstreamable
+   HONDA.HONDA_CLARITY,
+   HONDA.ACURA_TLX_1G,
++  HONDA.ACURA_RLX_HYBRID,  # steer bus bridged by a second panda (hondaRlxForwarder)
+ 
+   # These had their DSUs unplugged, need new routes
+   # TOYOTA.LEXUS_ES  # hybrid
+diff --git a/opendbc/car/torque_data/override.toml b/opendbc/car/torque_data/override.toml
+index 51906c142..fedd0cc87 100644
+--- a/opendbc/car/torque_data/override.toml
++++ b/opendbc/car/torque_data/override.toml
+@@ -105,6 +105,7 @@ legend = ["LAT_ACCEL_FACTOR", "MAX_LAT_ACCEL_MEASURED", "FRICTION"]
+ "ACURA_INTEGRA" = [2.0, 2.0, 0.25]
+ "ACURA_MDX_3G" = [3.8, 1.8, 0.11]
+ "HONDA_ACCORD_9G" = [2.1, 2.1, 0.19]
++"ACURA_RLX_HYBRID" = [1.4, 1.4, 0.3]
+ "ACURA_ADX" = [2.9, 2.9, 0.30]
+ "HONDA_FIT_4G" = [1.3, 1.3, 0.22]
+ "HONDA_PILOT_4G_MMR" = [1.25, 1.25, 0.21]
+diff --git a/opendbc/dbc/generator/honda/acura_rlx_2017_can.dbc b/opendbc/dbc/generator/honda/acura_rlx_2017_can.dbc
+new file mode 100644
+index 000000000..284372bd5
+--- /dev/null
++++ b/opendbc/dbc/generator/honda/acura_rlx_2017_can.dbc
+@@ -0,0 +1,28 @@
++CM_ "IMPORT _honda_common.dbc";
++CM_ "IMPORT _nidec_common.dbc";
++CM_ "IMPORT _lkas_hud_5byte.dbc";
++CM_ "IMPORT _nidec_scm_group_a.dbc";
++CM_ "IMPORT _steering_sensors_b.dbc";
++CM_ "IMPORT _gearbox_common.dbc";
++
++CM_ "The RLX EPS uses the 4 byte STEERING_CONTROL of _steering_control_b.dbc with the 7 byte STEER_STATUS of _steering_control_a.dbc";
++CM_ "Both live on a separate steer bus and are bridged to the powertrain bus by a panda running the hondaRlxForwarder safety mode";
++
++BO_ 404 STEERING_CONTROL: 4 EON
++ SG_ STEER_TORQUE : 7|12@0- (1,0) [-768|768] "" EPS
++ SG_ SET_ME_X00 : 11|4@0+ (1,0) [0|15] "" EPS
++ SG_ STEER_TORQUE_REQUEST : 23|1@0+ (1,0) [0|1] "" EPS
++ SG_ SET_ME_X00_2 : 22|7@0+ (1,0) [0|127] "" EPS
++ SG_ COUNTER : 29|2@0+ (1,0) [0|15] "" EPS
++ SG_ CHECKSUM : 27|4@0+ (1,0) [0|3] "" EPS
++
++BO_ 399 STEER_STATUS: 7 EPS
++ SG_ STEER_TORQUE_SENSOR : 7|16@0- (-1,0) [-31000|31000] "tbd" EON
++ SG_ STEER_ANGLE_RATE : 23|16@0- (-0.1,0) [-31000|31000] "deg/s" EON
++ SG_ STEER_STATUS : 39|4@0+ (1,0) [0|15] "" EON
++ SG_ STEER_CONTROL_ACTIVE : 35|1@0+ (1,0) [0|1] "" EON
++ SG_ STEER_CONFIG_INDEX : 43|4@0+ (1,0) [0|15] "" EON
++ SG_ COUNTER : 53|2@0+ (1,0) [0|3] "" EON
++ SG_ CHECKSUM : 51|4@0+ (1,0) [0|3] "" EON
++
++VAL_ 399 STEER_STATUS 7 "permanent_fault" 6 "tmp_fault" 5 "fault_1" 4 "no_torque_alert_2" 3 "low_speed_lockout" 2 "no_torque_alert_1" 1 "driver_steering" 0 "normal" ;
+-- 
+2.43.0
+

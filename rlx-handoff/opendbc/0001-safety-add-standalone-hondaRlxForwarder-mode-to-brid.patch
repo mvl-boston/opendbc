@@ -1,0 +1,252 @@
+From b6d9e8613d15fc46b1dea6f7fec984362b7c52f5 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Thu, 3 Sep 2026 23:22:32 +0000
+Subject: [PATCH 1/5] safety: add standalone hondaRlxForwarder mode to bridge
+ the RLX steer bus
+
+The 2017 Acura RLX Sport Hybrid has its EPS and LKAS camera on a CAN bus
+separate from the powertrain bus. This used to be driven through a second
+panda that openpilot addressed as buses 4-6, but openpilot no longer
+supports multiple pandas.
+
+The new mode turns that second panda into an unattended bridge that only
+forwards STEER_STATUS/CAR_SPEED from the steer bus to the powertrain bus
+and STEERING_CONTROL/LKAS_HUD the other way, blocks everything else and
+allows no USB TX. It is meant to be set as the boot default in the panda
+firmware for that panda; openpilot never selects it.
+
+Co-authored-by: mliza <mliza@umass.edu>
+---
+ opendbc/car/car.capnp                         |  1 +
+ opendbc/safety/declarations.h                 |  2 +
+ opendbc/safety/modes/honda_rlx_forwarder.h    | 63 +++++++++++++
+ opendbc/safety/safety.h                       |  2 +
+ .../safety/tests/test_honda_rlx_forwarder.py  | 94 +++++++++++++++++++
+ 5 files changed, 162 insertions(+)
+ create mode 100644 opendbc/safety/modes/honda_rlx_forwarder.h
+ create mode 100644 opendbc/safety/tests/test_honda_rlx_forwarder.py
+
+diff --git a/opendbc/car/car.capnp b/opendbc/car/car.capnp
+index d2b8d758a..7c1eb272c 100644
+--- a/opendbc/car/car.capnp
++++ b/opendbc/car/car.capnp
+@@ -635,6 +635,7 @@ struct CarParams {
+     fcaGiorgio @32;
+     rivian @33;
+     volkswagenMeb @34;
++    hondaRlxForwarder @35;  # standalone steer-bus bridge panda, never selected by openpilot
+   }
+ 
+   enum SteerControlType {
+diff --git a/opendbc/safety/declarations.h b/opendbc/safety/declarations.h
+index 1a6854944..69cfe0919 100644
+--- a/opendbc/safety/declarations.h
++++ b/opendbc/safety/declarations.h
+@@ -34,6 +34,7 @@
+ #define SAFETY_PSA 31U
+ #define SAFETY_RIVIAN 33U
+ #define SAFETY_VOLKSWAGEN_MEB 34U
++#define SAFETY_HONDA_RLX_FORWARDER 35U
+ 
+ #define GET_BIT(msg, b) ((bool)!!(((msg)->data[((b) / 8U)] >> ((b) % 8U)) & 0x1U))
+ #define GET_FLAG(value, mask) (((value) & (mask)) == (mask))
+@@ -329,6 +330,7 @@ extern const safety_hooks ford_hooks;
+ extern const safety_hooks gm_hooks;
+ extern const safety_hooks honda_nidec_hooks;
+ extern const safety_hooks honda_bosch_hooks;
++extern const safety_hooks honda_rlx_forwarder_hooks;
+ extern const safety_hooks hyundai_canfd_hooks;
+ extern const safety_hooks hyundai_hooks;
+ extern const safety_hooks hyundai_legacy_hooks;
+diff --git a/opendbc/safety/modes/honda_rlx_forwarder.h b/opendbc/safety/modes/honda_rlx_forwarder.h
+new file mode 100644
+index 000000000..3257b67fc
+--- /dev/null
++++ b/opendbc/safety/modes/honda_rlx_forwarder.h
+@@ -0,0 +1,63 @@
++#pragma once
++
++#include "opendbc/safety/declarations.h"
++#include "opendbc/safety/modes/defaults.h"
++
++// Standalone steer-bus bridge for the 2017 Acura RLX Sport Hybrid.
++//
++// On this car the EPS (and the stock LKAS camera) live on a CAN bus that is separate from the
++// powertrain bus the comma device is connected to. This used to be handled with a second panda
++// that openpilot addressed as buses 4-6, but openpilot no longer supports multiple pandas.
++//
++// This mode instead turns that second panda into an unattended forwarder so the regular Honda
++// Nidec port can talk to the EPS through the powertrain bus:
++//
++//   bus 0: powertrain bus (the same bus the comma harness bus 0 is on)
++//   bus 2: steer bus, EPS side
++//
++//   steer bus -> powertrain bus: STEER_STATUS (0x18F), CAR_SPEED (0x309)
++//   powertrain bus -> steer bus: STEERING_CONTROL (0x194), LKAS_HUD (0x33D)
++//
++// Everything else is blocked in both directions and nothing may be transmitted over USB, so this
++// panda cannot actuate anything by itself. It is meant to be the boot default safety mode in the
++// panda firmware (board/main.c) for the bridge panda; openpilot never selects it.
++//
++// Set param bit 0 (HONDA_RLX_FORWARDER_PARAM_SWAP_BUSES) if the wiring is the other way around,
++// i.e. steer bus on bus 0 and powertrain bus on bus 2.
++
++static int honda_rlx_forwarder_pt_bus = 0;
++static int honda_rlx_forwarder_steer_bus = 2;
++
++static safety_config honda_rlx_forwarder_init(uint16_t param) {
++  const uint16_t HONDA_RLX_FORWARDER_PARAM_SWAP_BUSES = 1U;
++
++  const bool swap_buses = GET_FLAG(param, HONDA_RLX_FORWARDER_PARAM_SWAP_BUSES);
++  honda_rlx_forwarder_pt_bus = swap_buses ? 2 : 0;
++  honda_rlx_forwarder_steer_bus = swap_buses ? 0 : 2;
++
++  // no RX checks and no TX allowlist: this panda only bridges the two buses
++  return (safety_config){NULL, 0, NULL, 0, false}; // NOLINT(readability/braces)
++}
++
++static bool honda_rlx_forwarder_fwd_hook(int bus_num, int addr) {
++  bool allowed = false;
++
++  if (bus_num == honda_rlx_forwarder_steer_bus) {
++    // EPS feedback the Honda port reads from the powertrain bus
++    allowed = (addr == 0x18F) || (addr == 0x309);
++  } else if (bus_num == honda_rlx_forwarder_pt_bus) {
++    // openpilot steering command and LKAS HUD, sent on the powertrain bus
++    allowed = (addr == 0x194) || (addr == 0x33D);
++  } else {
++    // nothing is forwarded from any other bus
++  }
++
++  return !allowed;
++}
++
++const safety_hooks honda_rlx_forwarder_hooks = {
++  .init = honda_rlx_forwarder_init,
++  .rx = default_rx_hook,
++  .tx = nooutput_tx_hook,
++  .fwd = honda_rlx_forwarder_fwd_hook,
++};
+diff --git a/opendbc/safety/safety.h b/opendbc/safety/safety.h
+index 4290ec077..6b49ed473 100644
+--- a/opendbc/safety/safety.h
++++ b/opendbc/safety/safety.h
+@@ -9,6 +9,7 @@
+ // all the safety modes
+ #include "opendbc/safety/modes/defaults.h"
+ #include "opendbc/safety/modes/honda.h"
++#include "opendbc/safety/modes/honda_rlx_forwarder.h"
+ #include "opendbc/safety/modes/toyota.h"
+ #include "opendbc/safety/modes/tesla.h"
+ #include "opendbc/safety/modes/gm.h"
+@@ -395,6 +396,7 @@ int set_safety_hooks(uint16_t mode, uint16_t param) {
+     {SAFETY_ELM327, &elm327_hooks},
+     {SAFETY_GM, &gm_hooks},
+     {SAFETY_HONDA_BOSCH, &honda_bosch_hooks},
++    {SAFETY_HONDA_RLX_FORWARDER, &honda_rlx_forwarder_hooks},
+     {SAFETY_HYUNDAI, &hyundai_hooks},
+     {SAFETY_CHRYSLER, &chrysler_hooks},
+     {SAFETY_SUBARU, &subaru_hooks},
+diff --git a/opendbc/safety/tests/test_honda_rlx_forwarder.py b/opendbc/safety/tests/test_honda_rlx_forwarder.py
+new file mode 100644
+index 000000000..8eca5c0b7
+--- /dev/null
++++ b/opendbc/safety/tests/test_honda_rlx_forwarder.py
+@@ -0,0 +1,94 @@
++#!/usr/bin/env python3
++import unittest
++
++import opendbc.safety.tests.common as common
++from opendbc.car.structs import CarParams
++from opendbc.safety.tests.libsafety import libsafety_py
++from opendbc.safety.tests.test_defaults import TestDefaultRxHookBase
++
++STEER_STATUS = 0x18F
++CAR_SPEED = 0x309
++STEERING_CONTROL = 0x194
++LKAS_HUD = 0x33D
++
++# messages allowed from the steer bus to the powertrain bus and vice versa
++STEER_TO_PT_ADDRS = {STEER_STATUS, CAR_SPEED}
++PT_TO_STEER_ADDRS = {STEERING_CONTROL, LKAS_HUD}
++
++
++class TestHondaRlxForwarderBase(TestDefaultRxHookBase):
++  """
++    Standalone bridge panda between the RLX steer bus and the powertrain bus.
++    Only a handful of steering messages cross between the buses and nothing may be sent over USB.
++  """
++  TX_MSGS = []
++  FWD_BUS_LOOKUP = {0: 2, 2: 0}
++  PARAM = 0
++  PT_BUS = 0
++  STEER_BUS = 2
++
++  @classmethod
++  def setUpClass(cls):
++    if cls.__name__.endswith('Base'):
++      cls.safety = None
++      raise unittest.SkipTest
++
++    scanned = set(cls.SCANNED_ADDRS)
++    cls.FWD_BLACKLISTED_ADDRS = {
++      cls.PT_BUS: scanned - PT_TO_STEER_ADDRS,
++      cls.STEER_BUS: scanned - STEER_TO_PT_ADDRS,
++    }
++
++  def setUp(self):
++    self.safety = libsafety_py.libsafety
++    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaRlxForwarder, self.PARAM)
++    self.safety.init_tests()
++
++  def test_steer_bus_to_powertrain(self):
++    for addr in STEER_TO_PT_ADDRS:
++      self.assertEqual(self.PT_BUS, self.safety.safety_fwd_hook(self.STEER_BUS, addr), f"{addr=:#x}")
++      # never reflected back onto the steer bus
++      self.assertEqual(-1, self.safety.safety_fwd_hook(self.PT_BUS, addr), f"{addr=:#x}")
++
++  def test_powertrain_to_steer_bus(self):
++    for addr in PT_TO_STEER_ADDRS:
++      self.assertEqual(self.STEER_BUS, self.safety.safety_fwd_hook(self.PT_BUS, addr), f"{addr=:#x}")
++      # the stock camera's steering messages must not leak onto the powertrain bus
++      self.assertEqual(-1, self.safety.safety_fwd_hook(self.STEER_BUS, addr), f"{addr=:#x}")
++
++  def test_nothing_forwarded_from_bus_1(self):
++    for addr in STEER_TO_PT_ADDRS | PT_TO_STEER_ADDRS:
++      self.assertEqual(-1, self.safety.safety_fwd_hook(1, addr), f"{addr=:#x}")
++
++  def test_no_usb_tx(self):
++    # even with controls allowed, nothing may be transmitted from the bridge panda
++    self.safety.set_controls_allowed(True)
++    for bus in range(4):
++      for addr in STEER_TO_PT_ADDRS | PT_TO_STEER_ADDRS:
++        self.assertFalse(self._tx(common.make_msg(bus, addr, 8)), f"allowed TX {addr=:#x} {bus=}")
++
++  def test_forwarding_survives_rx(self):
++    # RX traffic on either bus must not disturb forwarding (no relay malfunction detection possible)
++    for bus in (self.PT_BUS, self.STEER_BUS):
++      for addr in STEER_TO_PT_ADDRS | PT_TO_STEER_ADDRS:
++        self.assertTrue(self._rx(common.make_msg(bus, addr, 8)))
++    self.assertFalse(self.safety.get_relay_malfunction())
++    self.assertEqual(self.PT_BUS, self.safety.safety_fwd_hook(self.STEER_BUS, STEER_STATUS))
++    self.assertEqual(self.STEER_BUS, self.safety.safety_fwd_hook(self.PT_BUS, STEERING_CONTROL))
++
++
++class TestHondaRlxForwarder(TestHondaRlxForwarderBase):
++  pass
++
++
++class TestHondaRlxForwarderSwapped(TestHondaRlxForwarderBase):
++  """
++    Same bridge with the steer bus on bus 0 and the powertrain bus on bus 2
++  """
++  PARAM = 1
++  PT_BUS = 2
++  STEER_BUS = 0
++
++
++if __name__ == "__main__":
++  unittest.main()
+-- 
+2.43.0
+
