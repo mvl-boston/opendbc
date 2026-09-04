@@ -259,9 +259,14 @@ static int get_fwd_bus(int bus_num) {
 int safety_fwd_hook(int bus_num, int addr) {
   bool blocked = relay_malfunction || current_safety_config.disable_forwarding;
 
+  // Forwards go between bus 0 and 2 (ie: through the relay), unless the safety mode routes them itself
+  int destination_bus = get_fwd_bus(bus_num);
+  if (current_hooks->fwd_bus != NULL) {
+    destination_bus = current_hooks->fwd_bus(bus_num, addr);
+  }
+
   // Block messages that are being checked for relay malfunctions. Safety modes can opt out of this
   // in the case of selective AEB forwarding
-  const int destination_bus = get_fwd_bus(bus_num);
   if (!blocked) {
     for (int i = 0; i < current_safety_config.tx_msgs_len; i++) {
       const CanMsg *m = &current_safety_config.tx_msgs[i];
