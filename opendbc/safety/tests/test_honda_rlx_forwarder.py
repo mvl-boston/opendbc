@@ -19,13 +19,17 @@ STEER_CMD_ADDRS = {STEERING_CONTROL, LKAS_HUD}
 EPS_STATUS_ADDRS = {STEER_STATUS, CAR_SPEED}
 
 
-def expected_fwd_bus(bus: int, addr: int) -> int:
+# param bit 0: the car's gateway already relays openpilot's steering command/HUD onto the steer bus
+PARAM_GATEWAY_RELAYS_STEER_CMDS = 1
+
+
+def expected_fwd_bus(bus: int, addr: int, fwd_steer_cmds: bool = True) -> int:
   if bus == BUS_CAMERA:
     return -1 if addr in STEER_CMD_ADDRS else BUS_EPS
   if bus == BUS_EPS:
     return BUS_PT if addr in EPS_STATUS_ADDRS else BUS_CAMERA
   if bus == BUS_PT:
-    return BUS_EPS if addr in STEER_CMD_ADDRS else -1
+    return BUS_EPS if (addr in STEER_CMD_ADDRS and fwd_steer_cmds) else -1
   return -1
 
 
@@ -36,17 +40,19 @@ class TestHondaRlxForwarder(TestDefaultRxHookBase):
     may be sent over USB.
   """
   TX_MSGS = []
+  PARAM = 0
+  FWD_STEER_CMDS = True
 
   def setUp(self):
     self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaRlxForwarder, 0)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaRlxForwarder, self.PARAM)
     self.safety.init_tests()
 
   def test_fwd_hook(self):
     # routing is per address, so the generic bus lookup test doesn't apply
     for bus in range(4):
       for addr in self.SCANNED_ADDRS:
-        self.assertEqual(expected_fwd_bus(bus, addr), self.safety.safety_fwd_hook(bus, addr), f"{addr=:#x} from {bus=}")
+        self.assertEqual(expected_fwd_bus(bus, addr, self.FWD_STEER_CMDS), self.safety.safety_fwd_hook(bus, addr), f"{addr=:#x} from {bus=}")
 
   def test_camera_intercept(self):
     # the stock camera's steering command and HUD never reach the EPS, everything else passes through
@@ -64,9 +70,10 @@ class TestHondaRlxForwarder(TestDefaultRxHookBase):
       self.assertEqual(BUS_CAMERA, self.safety.safety_fwd_hook(BUS_EPS, addr), f"{addr=:#x}")
 
   def test_powertrain_to_eps(self):
-    # openpilot's steering command and LKAS HUD are relayed from the powertrain bus to the EPS
+    # openpilot's steering command and LKAS HUD are relayed from the powertrain bus to the EPS,
+    # unless the car's gateway is known to do that already
     for addr in STEER_CMD_ADDRS:
-      self.assertEqual(BUS_EPS, self.safety.safety_fwd_hook(BUS_PT, addr), f"{addr=:#x}")
+      self.assertEqual(BUS_EPS if self.FWD_STEER_CMDS else -1, self.safety.safety_fwd_hook(BUS_PT, addr), f"{addr=:#x}")
     # nothing else from the powertrain bus leaks onto the steer bus
     for addr in (0x158, 0x17C, 0x1FA, 0x30C, *EPS_STATUS_ADDRS):
       self.assertEqual(-1, self.safety.safety_fwd_hook(BUS_PT, addr), f"{addr=:#x}")
@@ -85,8 +92,17 @@ class TestHondaRlxForwarder(TestDefaultRxHookBase):
         self.assertTrue(self._rx(common.make_msg(bus, addr, 8)))
     self.assertFalse(self.safety.get_relay_malfunction())
     self.assertEqual(BUS_PT, self.safety.safety_fwd_hook(BUS_EPS, STEER_STATUS))
-    self.assertEqual(BUS_EPS, self.safety.safety_fwd_hook(BUS_PT, STEERING_CONTROL))
+    self.assertEqual(BUS_EPS if self.FWD_STEER_CMDS else -1, self.safety.safety_fwd_hook(BUS_PT, STEERING_CONTROL))
     self.assertEqual(-1, self.safety.safety_fwd_hook(BUS_CAMERA, STEERING_CONTROL))
+
+
+class TestHondaRlxForwarderGatewayRelay(TestHondaRlxForwarder):
+  """
+    Same bridge, but the gateway already relays openpilot's 0x194/0x33D onto the steer bus,
+    so the bridge must not forward them itself
+  """
+  PARAM = PARAM_GATEWAY_RELAYS_STEER_CMDS
+  FWD_STEER_CMDS = False
 
 
 if __name__ == "__main__":
