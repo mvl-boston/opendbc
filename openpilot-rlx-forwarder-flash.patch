@@ -1,0 +1,60 @@
+From be8aa09adcfc34444fcd93aedd148f12bd19f175 Mon Sep 17 00:00:00 2001
+From: Cursor Agent <cursoragent@cursor.com>
+Date: Fri, 4 Sep 2026 00:49:12 +0000
+Subject: [PATCH] rlx-forwarder-flash: one-time flash branch for the RLX steer
+ bus bridge panda
+
+Boot a comma device on this branch with the red panda plugged into its
+USB-C port and pandad (multi-panda era) flashes every panda it finds with
+firmware built from:
+
+  panda:       mvl-boston/panda rlx-forwarder-flash
+               (red pandas boot into SAFETY_HONDA_RLX_FORWARDER, green LED on)
+  opendbc_repo: mvl-boston/opendbc rlx-forwarder-flash
+               (rlx-step21 + hondaRlxForwarder safety mode)
+
+Once the red panda's green LED is solid, unplug it, install it on the
+car's steer bus + powertrain tap, and switch the comma back to the
+regular branch. The internal panda is reflashed by the regular branch.
+---
+ .gitmodules  | 5 +++--
+ opendbc_repo | 2 +-
+ panda        | 2 +-
+ 3 files changed, 5 insertions(+), 4 deletions(-)
+
+diff --git a/.gitmodules b/.gitmodules
+index 0b3cab0..debd14d 100644
+--- a/.gitmodules
++++ b/.gitmodules
+@@ -1,6 +1,7 @@
+ [submodule "panda"]
+   path = panda
+-  url = ../../commaai/panda.git
++  url = https://github.com/mvl-boston/panda.git
++  branch = rlx-forwarder-flash
+ [submodule "msgq"]
+   path = msgq_repo
+   url = ../../commaai/msgq.git
+@@ -16,4 +17,4 @@
+ [submodule "opendbc_repo"]
+ 	path = opendbc_repo
+ 	url = https://github.com/mvl-boston/opendbc
+-	branch = rlx-step21
++	branch = rlx-forwarder-flash
+diff --git a/opendbc_repo b/opendbc_repo
+index c47c4d6..8a8c088 160000
+--- a/opendbc_repo
++++ b/opendbc_repo
+@@ -1 +1 @@
+-Subproject commit c47c4d6b4e4383caba96d28fc4c59c754348dba2
++Subproject commit 8a8c0886f6b14f639aff06c9d883ef32c856bc7e
+diff --git a/panda b/panda
+index 615009c..48cb7ef 160000
+--- a/panda
++++ b/panda
+@@ -1 +1 @@
+-Subproject commit 615009cf0f8fb8f3feadac160fbb0a07e4de171b
++Subproject commit 48cb7ef79f870e799ff6f348657f0eb9d0bfda47
+-- 
+2.43.0
+
