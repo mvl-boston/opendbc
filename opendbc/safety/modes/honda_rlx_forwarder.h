@@ -28,6 +28,12 @@
 // powertrain bus: openpilot transmits 0x33D there itself and the comma panda treats a received 0x33D
 // on its bus 0 as a relay malfunction.
 //
+// Logs from the dual-panda setup (a5cd616a92467aed|0000013b--370250c82a) show STEER_STATUS/CAR_SPEED
+// only on the steer bus and never on the powertrain bus, and that the car's gateway relays openpilot's
+// BRAKE_COMMAND/ACC_HUD from the powertrain bus onto the steer bus. If it turns out to relay 0x194/0x33D
+// as well, set param bit 0 (HONDA_RLX_FORWARDER_PARAM_GATEWAY_RELAYS_STEER_CMDS) so this panda stops
+// forwarding them itself and the EPS doesn't see every frame twice.
+//
 // Nothing may be transmitted over USB, so this panda cannot actuate anything by itself. It is meant
 // to be the boot default safety mode in the panda firmware (board/main.c) for the bridge panda;
 // openpilot never selects it.
@@ -36,8 +42,13 @@
 #define HONDA_RLX_FWD_BUS_PT 1
 #define HONDA_RLX_FWD_BUS_CAMERA 2
 
+static bool honda_rlx_forwarder_fwd_steer_cmds = true;
+
 static safety_config honda_rlx_forwarder_init(uint16_t param) {
-  SAFETY_UNUSED(param);
+  const uint16_t HONDA_RLX_FORWARDER_PARAM_GATEWAY_RELAYS_STEER_CMDS = 1U;
+
+  honda_rlx_forwarder_fwd_steer_cmds = !GET_FLAG(param, HONDA_RLX_FORWARDER_PARAM_GATEWAY_RELAYS_STEER_CMDS);
+
   // no RX checks and no TX allowlist: this panda only bridges buses
   return (safety_config){NULL, 0, NULL, 0, false}; // NOLINT(readability/braces)
 }
@@ -55,7 +66,7 @@ static int honda_rlx_forwarder_fwd_bus_hook(int bus_num, int addr) {
   } else if (bus_num == HONDA_RLX_FWD_BUS_EPS) {
     destination_bus = is_eps_status ? HONDA_RLX_FWD_BUS_PT : HONDA_RLX_FWD_BUS_CAMERA;
   } else if (bus_num == HONDA_RLX_FWD_BUS_PT) {
-    destination_bus = is_steer_cmd ? HONDA_RLX_FWD_BUS_EPS : -1;
+    destination_bus = (is_steer_cmd && honda_rlx_forwarder_fwd_steer_cmds) ? HONDA_RLX_FWD_BUS_EPS : -1;
   } else {
     // nothing is forwarded from any other bus
   }
