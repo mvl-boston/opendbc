@@ -98,9 +98,6 @@ class CarInterface(CarInterfaceBase):
     if candidate == CAR.HONDA_CITY_7G:
       ret.vEgoStopping = 2.0
       ret.stoppingDecelRate = 0.3
-    elif candidate == CAR.ACURA_RLX_HYBRID:
-      ret.vEgoStopping = 0.5
-      ret.stoppingDecelRate = 0.3
     else:
       ret.vEgoStopping = 0.5 # make up for driving model creep at stop lights/signs
       ret.stoppingDecelRate = 0.1
