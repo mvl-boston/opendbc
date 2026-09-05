@@ -13,28 +13,36 @@
 // LKAS camera like a regular Honda harness and additionally taps the powertrain bus, so the regular
 // Honda Nidec port can drive the EPS through the powertrain bus:
 //
-//   bus 0: steer bus, car side (EPS)
+//   bus 0: steer bus, car side (EPS, gateway)
 //   bus 1: powertrain bus (the same bus the comma harness bus 0 is on)
 //   bus 2: steer bus, camera side (stock LKAS camera)
 //
+// The relay of this panda is open, so the two halves of the steer bus only see each other through
+// the forwarding below. Every frame is forwarded to one primary destination (fwd_bus) and optionally
+// copied to a second bus (fwd_copy_bus), so nothing the stock ECUs exchange with each other is ever
+// withheld: openpilot only ever gets a copy.
+//
 // openpilot is "steering" while its STEERING_CONTROL (0x194) has been seen on the powertrain bus
 // within HONDA_RLX_FWD_OP_STEER_TIMEOUT_US. That is the bridge's equivalent of the comma harness
-// relay: while openpilot steers the camera is cut off from the EPS, otherwise the camera drives the
-// EPS and the EPS is never left without a steering command (dashcam mode, boot, openpilot crash).
+// relay: while openpilot steers the camera's steering command and HUD are replaced by openpilot's,
+// otherwise the camera drives the EPS and the EPS is never left without a steering command (dashcam
+// mode, boot, openpilot crash).
 //
-//   camera (2) -> EPS (0):     everything, except while openpilot is steering: then the camera's
-//                              STEERING_CONTROL (0x194) is dropped and its LKAS_HUD (0x33D) goes to
-//                              the powertrain bus (1) instead, so openpilot can read LKAS_PROBLEM
-//   EPS (0) -> camera (2):     everything except STEER_STATUS (0x18F) and CAR_SPEED (0x309),
-//                              which go to the powertrain bus (1) instead so openpilot can read them
-//   powertrain (1) -> EPS (0): openpilot's STEERING_CONTROL (0x194) and LKAS_HUD (0x33D), nothing else
+//   camera (2) -> EPS (0):     everything. While openpilot is steering its 0x194/0x33D replace the
+//                              camera's, which are dropped from the steer bus.
+//   camera (2) -> pt (1):      copy of LKAS_HUD (0x33D), always, so openpilot can read LKAS_PROBLEM
+//                              and check the message.
+//   EPS (0) -> camera (2):     everything, without exception (route 0000014b: withholding STEER_STATUS
+//                              and CAR_SPEED from the camera faulted LKAS, ACC and FCM)
+//   EPS (0) -> pt (1):         copy of STEER_STATUS (0x18F) and CAR_SPEED (0x309), always, so
+//                              openpilot can read the EPS; these don't exist on the powertrain bus
+//   pt (1) -> EPS (0):         openpilot's STEERING_CONTROL (0x194) and LKAS_HUD (0x33D), nothing else
 //
-// The firmware forwards each received frame to at most one bus and never rewrites its address, so
-// openpilot has to send the stock 0x194/0x33D addresses on the powertrain bus, and the camera no
-// longer sees STEER_STATUS/CAR_SPEED. While openpilot steers, the steer bus gets openpilot's LKAS_HUD
-// and the powertrain bus gets the camera's; the comma panda has to run the Honda Nidec safety mode
-// with the RLX_STEER_BRIDGE param so a received 0x33D on its bus 0 is an expected, checked message
-// rather than a relay malfunction.
+// The firmware never rewrites addresses, so openpilot has to send the stock 0x194/0x33D addresses on
+// the powertrain bus. The comma panda has to run the Honda Nidec safety mode with the RLX_STEER_BRIDGE
+// param so the copied 0x33D on its bus 0 is an expected, checked message rather than a relay
+// malfunction. A CAN controller does not receive its own transmissions, so the copies this panda
+// puts on the powertrain bus are not seen again by the pt (1) -> EPS (0) rule.
 //
 // Logs from the dual-panda setup (a5cd616a92467aed|0000013b--370250c82a) show STEER_STATUS/CAR_SPEED
 // only on the steer bus and never on the powertrain bus, and that the car's gateway relays openpilot's
@@ -44,7 +52,8 @@
 //
 // Nothing may be transmitted over USB, so this panda cannot actuate anything by itself. It is meant
 // to be the boot default safety mode in the panda firmware (board/main.c) for the bridge panda;
-// openpilot never selects it.
+// openpilot never selects it. The firmware must call safety_fwd_copy_hook() next to safety_fwd_hook()
+// in its CAN RX path for the copies to happen.
 
 #define HONDA_RLX_FWD_BUS_EPS 0
 #define HONDA_RLX_FWD_BUS_PT 1
@@ -83,18 +92,12 @@ static int honda_rlx_forwarder_fwd_bus_hook(int bus_num, int addr) {
 
   // steering command and LKAS HUD, sent by openpilot and by the stock camera
   const bool is_steer_cmd = (addr == 0x194) || (addr == 0x33D);
-  // EPS feedback the Honda port reads from the powertrain bus
-  const bool is_eps_status = (addr == 0x18F) || (addr == 0x309);
 
   if (bus_num == HONDA_RLX_FWD_BUS_CAMERA) {
-    if (is_steer_cmd && honda_rlx_forwarder_op_steering()) {
-      // openpilot has taken over: its 0x194 replaces the camera's, and it reads the camera's LKAS_HUD
-      destination_bus = (addr == 0x33D) ? HONDA_RLX_FWD_BUS_PT : -1;
-    } else {
-      destination_bus = HONDA_RLX_FWD_BUS_EPS;
-    }
+    // openpilot's steering command and HUD replace the camera's while it is steering
+    destination_bus = (is_steer_cmd && honda_rlx_forwarder_op_steering()) ? -1 : HONDA_RLX_FWD_BUS_EPS;
   } else if (bus_num == HONDA_RLX_FWD_BUS_EPS) {
-    destination_bus = is_eps_status ? HONDA_RLX_FWD_BUS_PT : HONDA_RLX_FWD_BUS_CAMERA;
+    destination_bus = HONDA_RLX_FWD_BUS_CAMERA;
   } else if (bus_num == HONDA_RLX_FWD_BUS_PT) {
     if (addr == 0x194) {
       // the fwd hook runs for every received frame, so this is where openpilot's steering command is seen
@@ -109,9 +112,27 @@ static int honda_rlx_forwarder_fwd_bus_hook(int bus_num, int addr) {
   return destination_bus;
 }
 
+static int honda_rlx_forwarder_fwd_copy_bus_hook(int bus_num, int addr) {
+  int destination_bus = -1;
+
+  // EPS feedback the Honda port reads from the powertrain bus
+  const bool is_eps_status = (addr == 0x18F) || (addr == 0x309);
+
+  if ((bus_num == HONDA_RLX_FWD_BUS_EPS) && is_eps_status) {
+    destination_bus = HONDA_RLX_FWD_BUS_PT;
+  } else if ((bus_num == HONDA_RLX_FWD_BUS_CAMERA) && (addr == 0x33D)) {
+    destination_bus = HONDA_RLX_FWD_BUS_PT;
+  } else {
+    // everything else only goes to its primary destination
+  }
+
+  return destination_bus;
+}
+
 const safety_hooks honda_rlx_forwarder_hooks = {
   .init = honda_rlx_forwarder_init,
   .rx = default_rx_hook,
   .tx = nooutput_tx_hook,
   .fwd_bus = honda_rlx_forwarder_fwd_bus_hook,
+  .fwd_copy_bus = honda_rlx_forwarder_fwd_copy_bus_hook,
 };
