@@ -622,7 +622,7 @@ class CarController(CarControllerBase):
       prior_speedalpha = self.speedalpha
       prior_speedfactor_low = self.speedfactor_low
       prior_speedalpha_low = self.speedalpha_low
-  
+
       # feedforward for Nidec decaying-average gas pedal
       # inside a recovery window the rise clip opens to the stock launch envelope (+70/frame vs
       # stock's observed +74/frame): the +20/frame cruise clip is sized for smoothness around an
@@ -660,7 +660,7 @@ class CarController(CarControllerBase):
       # used by the average_factor learner below (must be computed before prior_gas_average is updated)
       self.average_factor_sens = (self.new_accel - self.prior_gas_average) + (1 - effective_average_factor) * self.average_factor_sens
       self.prior_gas_average = self.prior_gas_average * (1 - effective_average_factor) + (self.new_accel * effective_average_factor)
-  
+
       if (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
            (self.apply_brake_last == 0) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
         gasfactor_error = (self.accel - CS.out.aEgo)
