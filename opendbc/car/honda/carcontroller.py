@@ -257,6 +257,23 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       "60": 1.0 if (Params().get("HondaLatAccelFactor60Params") is None) else Params().get("HondaLatAccelFactor60Params")
     }
 
+  def _nidec_brake_apply(self, apply_brake_scalar, actuators, CS, CC, ts):
+    """0111 Nidec brake assist: PID-scaled BRAKE_COMMAND with rate limiting."""
+    apply_brake = apply_brake_scalar
+    if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb):
+      if not ((self.accel >= 1e-5) and CS.out.vEgo < 1.0):
+        self.brake_pid_factor = self.nidec_brake_pid.update(error=-(self.accel - CS.out.aEgo) * apply_brake, speed=CS.out.vEgo)
+    if CS.out.vEgo >= 2:
+      self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
+    if (CS.out.vEgo < 1e-5) and (self.accel < 1e-5):
+      self.nidec_brake_pid.i = float(np.clip(self.brake_pid_factor_non_lowspeed,
+                                             self.nidec_brake_pid.i - 0.01, self.nidec_brake_pid.i + 0.01))
+    brakefactor = 1 + self.brake_pid_factor
+    apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
+    pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
+    apply_brake = max(self.apply_brake_last - 32, apply_brake)
+    return apply_brake, pump_on
+
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
     gas_pedal_force = 0.0
@@ -266,7 +283,11 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
     is_bosch = self.CP.flags & HondaFlags.BOSCH
-    is_wire_gas = not is_bosch and not self.CP_SP.enableGasInterceptor
+    is_nidec = not is_bosch
+    is_gas_interceptor = is_nidec and self.CP_SP.enableGasInterceptor
+    is_stock_nidec = is_nidec and not self.CP.openpilotLongitudinalControl
+    is_wire_gas = is_nidec and self.CP.openpilotLongitudinalControl and not is_gas_interceptor
+    use_0111_steering = is_nidec
 
     if len(CC.orientationNED) == 3:
       self.pitch = CC.orientationNED[1]
@@ -287,10 +308,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         adjust_accel = accel + hill_brake
         brake = 0.0
         gas, brake = compute_gas_brake(adjust_accel, CS.out.vEgo, self.CP)
-      elif self.CP_SP.enableGasInterceptor:
+      elif is_gas_interceptor or is_stock_nidec:
         accel = actuators.accel
+        if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)) and (accel > max(0, CS.out.aEgo) + 0.1):
+          accel = 10000.0  # help with lagged accel until pedal tuning is inserted
         gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP)
-      else:
+      elif is_wire_gas:
         if (actuators.longControlState in (LongCtrlState.pid, LongCtrlState.stopping)) and \
            (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
            and (not CS.out.stockAeb) and (not CS.out.gasPressed):
@@ -351,8 +374,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
-    if is_wire_gas and (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and \
-        (self.apply_brake_last > 0 or self.new_accel < 1e-5): # lower steer limits while braking
+    if use_0111_steering and (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and \
+        (self.apply_brake_last > 0 or (is_wire_gas and self.new_accel < 1e-5)):  # lower steer limits while braking
       brake_limit = float(233.0 / self.params.STEER_MAX)
       limited_torque = float(np.clip(limited_torque, -brake_limit, brake_limit))
     self.last_torque = limited_torque
@@ -372,7 +395,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
-    if is_wire_gas:
+    if use_0111_steering:
       speed_val = np.clip(round(CS.out.vEgo * CV.MS_TO_MPH / 5.0) * 5, 5, 60)
       currentLatSpeed = f"{speed_val:02d}"
       if currentLatSpeed in self.latFactors and not CS.out.steeringPressed and CS.steer_control_active:
@@ -682,10 +705,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           if not (self.CP.flags & HondaFlags.BOSCH_CANFD and CS.stock_acc_alive):
             can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
                                                           self.stopping_counter, self.CP, gas_pedal_force))
-        elif self.CP_SP.enableGasInterceptor:
-          apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
-          apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
-          pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
+        elif is_gas_interceptor:
+          apply_brake_scalar = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
+          apply_brake, pump_on = self._nidec_brake_apply(apply_brake_scalar, actuators, CS, CC, ts)
 
           pcm_override = True
           can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
@@ -695,7 +717,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
           gas_error = actuators.accel - CS.out.aEgo
-          if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and self.CP_SP.enableGasInterceptor:
+          if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid):
             if gas_error != 0.0 and gas > 0.0:
               self.gasfactor = np.clip(self.gasfactor + gas_error / 150 * (gas * 4.8), 0.1, 3.0)
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
@@ -707,20 +729,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
               self.windfactor_before_brake = self.windfactor
 
           can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake, self.packer, self.frame))
-        else:
-          apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
-          if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb):
-              if not ((self.accel >= 1e-5) and CS.out.vEgo < 1.0):
-                self.brake_pid_factor = self.nidec_brake_pid.update(error = -(self.accel - CS.out.aEgo) * apply_brake, speed = CS.out.vEgo)
-          if (CS.out.vEgo >= 2):
-            self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
-          if (CS.out.vEgo < 1e-5) and (self.accel < 1e-5):
-            self.nidec_brake_pid.i = float(np.clip(self.brake_pid_factor_non_lowspeed, self.nidec_brake_pid.i - 0.01, self.nidec_brake_pid.i + 0.01))
-          brakefactor = 1 + self.brake_pid_factor
-          apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
-          pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
-
-          apply_brake = max(self.apply_brake_last - 32, apply_brake)
+        elif is_wire_gas:
+          apply_brake_scalar = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
+          apply_brake, pump_on = self._nidec_brake_apply(apply_brake_scalar, actuators, CS, CC, ts)
 
           pcm_override = CC.longActive or CS.out.stockAeb
           if apply_brake > 0:
@@ -901,7 +912,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           "HondaWindFactorParams": self.windfactor,
         })
 
-    if self.frame % 12000 == 30 and is_wire_gas:
+    if self.frame % 12000 == 30 and use_0111_steering:
       self.param_writer.put_many({
         "HondaLatAccelFactor05Params": self.latFactors["05"],
         "HondaLatAccelFactor10Params": self.latFactors["10"],
