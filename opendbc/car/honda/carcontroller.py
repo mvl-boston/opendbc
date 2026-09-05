@@ -18,6 +18,7 @@ from opendbc.car.honda import hud_objects
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
 from opendbc.sunnypilot.car.honda.gas_interceptor import GasInterceptorCarController
 from opendbc.sunnypilot.car.honda.icbm import IntelligentCruiseButtonManagementInterface
+from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -285,8 +286,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     is_bosch = self.CP.flags & HondaFlags.BOSCH
     is_nidec = not is_bosch
     is_gas_interceptor = is_nidec and self.CP_SP.enableGasInterceptor
-    is_stock_nidec = is_nidec and not self.CP.openpilotLongitudinalControl
-    is_wire_gas = is_nidec and self.CP.openpilotLongitudinalControl and not is_gas_interceptor
+    is_stock_nidec = is_nidec and bool(self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL)
+    is_wire_gas = is_nidec and self.CP.openpilotLongitudinalControl and not is_gas_interceptor and not is_stock_nidec
     use_0111_steering = is_nidec
 
     if len(CC.orientationNED) == 3:
@@ -616,6 +617,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.speedalpha_low = min(prior_speedalpha_low, self.speedalpha_low)
           self.windfactor = min(prior_windfactor, self.windfactor)
 
+    elif is_gas_interceptor or is_stock_nidec or not CC.longActive:
+      # Gas interceptor (0x201 on bus) and stock-longitudinal mode do not drive PCM_GAS via ACC_HUD
+      pcm_speed = 0.0
+      pcm_accel = int(0.0)
     elif is_bosch:
       speed_control = 0
       max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
@@ -623,20 +628,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                       -wind_brake * (3 / 4),
                       0.0,
                       0.5]
-      if not CC.longActive:
-        pcm_speed = 0.0
-        pcm_accel = int(0.0)
-      else:
-        pcm_speed_V = [0.0,
-                       np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
-                       np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
-                       np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
-        pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
-        pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
-    else:
-      # gas interceptor: PCM HUD not used
-      pcm_speed = 0.0
-      pcm_accel = int(0.0)
+      pcm_speed_V = [0.0,
+                     np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
+                     np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
+                     np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
+      pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
+      pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and not (self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD)) and not (self.CP.flags & HondaFlags.NIDEC):
@@ -801,7 +798,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           can_sends.append(hondacan.create_legacy_brake_command(self.packer, self.CAN.pt))
         if not is_bosch:
           self.speed = pcm_speed
-          if is_wire_gas:
+          if not is_gas_interceptor:
             self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
     # Render OP's lane and lead car on the dash.
