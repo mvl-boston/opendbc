@@ -57,6 +57,8 @@ class HondaSafetyFlags(IntFlag):
   RADARLESS = 8
   BOSCH_CANFD = 16
   NIDEC_HYBRID = 32
+  # RLX: a bridge panda relays the stock camera's LKAS_HUD from the steer bus onto the powertrain bus
+  RLX_STEER_BRIDGE = 64
 
 
 class HondaFlags(IntFlag):
