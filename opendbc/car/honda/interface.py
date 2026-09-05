@@ -97,7 +97,8 @@ class CarInterface(CarInterfaceBase):
       else:
         ret.longitudinalActuatorDelay = 0.25 # s, per Bosch A log
     else:
-      # default longitudinal tuning for gas-interceptor Nidec; wire-gas Nidec uses nidec_pid in carcontroller
+      # Interceptor hardware (0x201 on PT bus) vs wire-gas PCM tuning; enableGasInterceptor is set
+      # from the same fingerprint check in _get_params_sp for any Nidec platform.
       if 0x201 not in fingerprint[CAN.pt]:
         # ret.longitudinalTuning.kiBP = [0., 5., 35.]
         # ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
