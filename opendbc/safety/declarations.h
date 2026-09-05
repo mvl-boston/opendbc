@@ -214,6 +214,7 @@ typedef void (*rx_hook)(const CANPacket_t *msg);
 typedef bool (*tx_hook)(const CANPacket_t *msg);  // returns true if the message is allowed
 typedef bool (*fwd_hook)(int bus_num, int addr);      // returns true if the message should be blocked from forwarding
 typedef int (*fwd_bus_hook)(int bus_num, int addr);   // returns the destination bus (-1 for none), replaces the default bus 0 <-> bus 2 forwarding
+typedef int (*fwd_copy_bus_hook)(int bus_num, int addr);   // returns a second bus (-1 for none) that also gets a copy of the received frame
 
 typedef struct {
   safety_hook_init init;
@@ -221,6 +222,7 @@ typedef struct {
   tx_hook tx;
   fwd_hook fwd;
   fwd_bus_hook fwd_bus;
+  fwd_copy_bus_hook fwd_copy_bus;
   get_checksum_t get_checksum;
   compute_checksum_t compute_checksum;
   get_counter_t get_counter;
@@ -320,6 +322,7 @@ extern uint16_t current_safety_param;
 extern safety_config current_safety_config;
 
 int safety_fwd_hook(int bus_num, int addr);
+int safety_fwd_copy_hook(int bus_num, int addr);
 int set_safety_hooks(uint16_t mode, uint16_t param);
 
 extern const safety_hooks body_hooks;

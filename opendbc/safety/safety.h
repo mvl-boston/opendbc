@@ -284,6 +284,17 @@ int safety_fwd_hook(int bus_num, int addr) {
   return blocked ? -1 : destination_bus;
 }
 
+// Second destination for a received frame. Only bridge modes use it, so there is no default and no
+// static blocking: their TX allowlist is empty and they don't run a relay malfunction check.
+int safety_fwd_copy_hook(int bus_num, int addr) {
+  int destination_bus = -1;
+  const bool blocked = relay_malfunction || current_safety_config.disable_forwarding;
+  if (!blocked && (current_hooks->fwd_copy_bus != NULL)) {
+    destination_bus = current_hooks->fwd_copy_bus(bus_num, addr);
+  }
+  return destination_bus;
+}
+
 // Given a CRC-8 poly, generate a static lookup table to use with a fast CRC-8
 // algorithm. Called at init time for safety modes using CRC-8.
 void gen_crc_lookup_table_8(uint8_t poly, uint8_t crc_lut[]) {

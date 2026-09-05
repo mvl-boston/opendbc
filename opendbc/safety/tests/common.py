@@ -841,6 +841,8 @@ class SafetyTest(SafetyTestBase):
         if bus in self.FWD_BLACKLISTED_ADDRS and addr in self.FWD_BLACKLISTED_ADDRS[bus]:
           fwd_bus = -1
         self.assertEqual(fwd_bus, self.safety.safety_fwd_hook(bus, addr), f"{addr=:#x} from {bus=} to {fwd_bus=}")
+        # only bridge modes forward a frame to a second bus
+        self.assertEqual(-1, self.safety.safety_fwd_copy_hook(bus, addr), f"{addr=:#x} from {bus=} copied")
 
   def test_spam_can_buses(self):
     for bus in range(4):
