@@ -394,7 +394,14 @@ static safety_config honda_nidec_init(uint16_t param) {
     {0x1A6, 0, 8, .check_relay = false},
   };
 
+  // RLX steer-bus bridge: the EPS and the stock LKAS camera are on a separate bus, and a bridge panda relays the
+  // camera's LKAS_HUD (0x33D) onto the powertrain bus so openpilot can read LKAS_PROBLEM. A received 0x33D on bus 0
+  // is therefore expected rather than a relay malfunction, and it is a checked message like the rest of the car.
+  static CanMsg HONDA_N_RLX_BRIDGE_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
+                                                {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = false}};
+
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
+  const uint16_t HONDA_PARAM_RLX_STEER_BRIDGE = 64;
 
   const uint16_t HONDA_PARAM_SP_NIDEC_HYBRID = 1;
   const uint16_t HONDA_PARAM_GAS_INTERCEPTOR = 2;
@@ -413,12 +420,22 @@ static safety_config honda_nidec_init(uint16_t param) {
   safety_config ret;
 
   bool enable_nidec_alt = GET_FLAG(param, HONDA_PARAM_NIDEC_ALT);
+  const bool rlx_steer_bridge = GET_FLAG(param, HONDA_PARAM_RLX_STEER_BRIDGE);
 
   honda_nidec_hybrid = GET_FLAG(current_safety_param_sp, HONDA_PARAM_SP_NIDEC_HYBRID);
   enable_gas_interceptor = GET_FLAG(current_safety_param_sp, HONDA_PARAM_GAS_INTERCEPTOR);
   honda_stock_longitudinal = GET_FLAG(current_safety_param_sp, HONDA_PARAM_STOCK_LONGITUDINAL);
 
-  if (enable_nidec_alt) {
+  if (rlx_steer_bridge) {
+    // RLX uses the alternate SCM messages, plus the bridged LKAS_HUD on the powertrain bus
+    static RxCheck honda_nidec_rlx_bridge_rx_checks[] = {
+      HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(0)
+      {.msg = {{0x1FA, 2, 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // BRAKE_COMMAND
+      {.msg = {{0x33D, 0, 5, 10U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // LKAS_HUD (stock camera, bridged)
+    };
+
+    SET_RX_CHECKS(honda_nidec_rlx_bridge_rx_checks, ret);
+  } else if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
     static RxCheck honda_nidec_alt_rx_checks[] = {
       HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(0)
@@ -436,8 +453,12 @@ static safety_config honda_nidec_init(uint16_t param) {
     SET_RX_CHECKS(honda_nidec_common_rx_checks, ret);
   }
 
-  if (honda_stock_longitudinal) {
+  if (enable_gas_interceptor) {
+    SET_TX_MSGS(HONDA_N_INTERCEPTOR_TX_MSGS, ret);
+  } else if (honda_stock_longitudinal) {
     SET_TX_MSGS(HONDA_N_STOCK_LONGITUDINAL_TX_MSGS, ret);
+  } else if (rlx_steer_bridge) {
+    SET_TX_MSGS(HONDA_N_RLX_BRIDGE_TX_MSGS, ret);
   } else {
     SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
   }
@@ -460,8 +481,6 @@ static safety_config honda_nidec_init(uint16_t param) {
 
       SET_RX_CHECKS(honda_nidec_common_interceptor_rx_checks, ret);
     }
-
-    SET_TX_MSGS(HONDA_N_INTERCEPTOR_TX_MSGS, ret);
   }
 
   return ret;
