@@ -37,6 +37,8 @@ class CarState(CarStateBase):
 
     self.brake_error_msg = "HYBRID_BRAKE_ERROR" if CP.flags & HondaFlags.HYBRID else "STANDSTILL"
     self.brakehold_msg = "BRAKE_HOLD_HYBRID_ALT" if CP.flags & HondaFlags.HYBRID_ALT_BRAKEHOLD else "VSA_STATUS"
+    self.steer_status_msg = "STEER_STATUS_LEGACY" if (self.CP.flags & HondaFlags.LEGACY_MDX_STEER) else "STEER_STATUS"
+    self.steer_control_active = False  # whether EPS is reacting to steering messages
 
     self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
 
@@ -57,6 +59,14 @@ class CarState(CarStateBase):
 
     self.initial_accFault_cleared = False
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
+
+    # Applied gas pedal in PCM units (includes ACC-applied gas, not just driver PEDAL_GAS).
+    # Source message varies by platform: GAS_PEDAL_2 (0x130) or GAS_PEDAL (0x13C).
+    self.car_gas = 0.0
+    self.car_gas_available = False
+    # engine speed, used to distinguish EV/idle-stop from engine-on regimes on hybrids
+    self.engine_rpm = 0.0
+
     self.radar_ref_counter = 0
     self.radar_5hz_tick_counter = 0
     self.radar_5hz_tick = False
@@ -134,7 +144,7 @@ class CarState(CarStateBase):
 
     ret.seatbeltUnlatched = bool(cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LAMP"] or not cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LATCHED"])
 
-    steer_status = self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
+    steer_status = self.steer_status_values[cp.vl[self.steer_status_msg]["STEER_STATUS"]]
     ret.steerFaultPermanent = steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TJA_LOW_SPEED_LOCKOUT",
                                                    "TMP_FAULT")
     if self.CP.carFingerprint in (HONDA_BOSCH_ALT_RADAR | HONDA_BOSCH_CANFD):
@@ -147,6 +157,8 @@ class CarState(CarStateBase):
       # NO_TORQUE_ALERT_2 can be caused by bump or steering nudge from driver
       # FIXME: the stock camera stops steering on NO_TORQUE_ALERT_1
       ret.steerFaultTemporary = steer_status not in ("NORMAL", "LOW_SPEED_LOCKOUT", "TJA_LOW_SPEED_LOCKOUT", "NO_TORQUE_ALERT_2")
+
+    self.steer_control_active = bool(cp.vl[self.steer_status_msg]["STEER_CONTROL_ACTIVE"])
 
     if (self.CP.carFingerprint == CAR.ACURA_MDX_4G) and (steer_status == "TJA_LOW_SPEED_LOCKOUT"):
       ret.steerFaultPermanent = False
@@ -212,7 +224,7 @@ class CarState(CarStateBase):
 
     ret.gasPressed = cp.vl["POWERTRAIN_DATA"]["PEDAL_GAS"] > 1e-5
 
-    ret.steeringTorque = cp.vl["STEER_STATUS"]["STEER_TORQUE_SENSOR"]
+    ret.steeringTorque = cp.vl[self.steer_status_msg]["STEER_TORQUE_SENSOR"]
     ret.steeringPressed = abs(ret.steeringTorque) > STEER_THRESHOLD.get(self.CP.carFingerprint, 1200)
 
     if self.CP.carFingerprint in HONDA_BOSCH:
@@ -284,6 +296,22 @@ class CarState(CarStateBase):
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
+      # ENGINE_DATA and POWERTRAIN_DATA both carry an ENGINE_RPM field at the same bits, but the
+      # MDX 3G hybrid only populates the POWERTRAIN_DATA copy (route 48: 0x158 rpm was 0 for all
+      # 226k frames while 0x17C read 0-2668). Reading only ENGINE_DATA left engine_rpm pinned at
+      # 0, which permanently closed every rpm>500 learner gate (average_factor froze at its boot
+      # value for the whole drive) and made every breakaway look engine-off.
+      self.engine_rpm = max(cp.vl["ENGINE_DATA"]["ENGINE_RPM"], cp.vl["POWERTRAIN_DATA"]["ENGINE_RPM"])
+      gas_pedal_2_seen = cp.message_states.get(304) is not None and len(cp.message_states[304].timestamps) > 0
+      gas_pedal_seen = cp.message_states.get(316) is not None and len(cp.message_states[316].timestamps) > 0
+      if gas_pedal_2_seen:
+        self.car_gas_available = True
+        self.car_gas = cp.vl["GAS_PEDAL_2"]["CAR_GAS"]
+      elif gas_pedal_seen:
+        self.car_gas_available = True
+        self.car_gas = cp.vl["GAS_PEDAL"]["CAR_GAS"]
+      else:
+        self.car_gas_available = False
     if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
     if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
