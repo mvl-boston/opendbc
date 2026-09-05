@@ -376,6 +376,76 @@ class TestHondaNidecPcmHybridSafety(TestHondaNidecPcmAltSafety):
     return self.packer.make_can_msg_safety("BRAKE_COMMAND", bus, values)
 
 
+class TestHondaNidecPcmRlxBridgeSafety(TestHondaNidecPcmHybridSafety):
+  """
+    Covers the Honda Nidec safety mode for the RLX steer-bus bridge: a bridge panda relays the stock
+    camera's LKAS_HUD onto the powertrain bus, so 0x33D on bus 0 is a checked RX message rather than
+    a relay malfunction
+  """
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x30C]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x194, 0x30C)}
+
+  cnt_lkas_hud = 0
+
+  def setUp(self):
+    self.packer = CANPackerSafety("acura_rlx_2017_can_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec,
+                                 HondaSafetyFlags.NIDEC_ALT | HondaSafetyFlags.NIDEC_HYBRID | HondaSafetyFlags.RLX_STEER_BRIDGE)
+    self.safety.init_tests()
+
+  def _lkas_hud_msg(self, lkas_problem=False, bus=0):
+    values = {"LKAS_PROBLEM": lkas_problem, "COUNTER": self.cnt_lkas_hud % 4}
+    self.__class__.cnt_lkas_hud += 1
+    return self.packer.make_can_msg_safety("LKAS_HUD", bus, values)
+
+  def test_steer_safety_check(self):
+    # the RLX's 4 byte STEERING_CONTROL only has a 12 bit torque field
+    self.safety.set_controls_allowed(0)
+    self.assertTrue(self._tx(self._send_steer_msg(0x0000)))
+    self.assertFalse(self._tx(self._send_steer_msg(0x0100)))
+
+  def test_fwd_hook(self):
+    # normal operation, not forwarding AEB. LKAS_HUD is no longer statically blocked
+    self.FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x30C, 0x1FA]}
+    self.safety.set_honda_fwd_brake(False)
+    HondaBase.test_fwd_hook(self)
+
+    # forwarding AEB brake signal
+    self.FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x30C]}
+    self.safety.set_honda_fwd_brake(True)
+    HondaBase.test_fwd_hook(self)
+
+  def test_lkas_hud_rx_check(self):
+    # the bridged stock camera LKAS_HUD is expected on the powertrain bus and never a relay malfunction
+    self.safety.set_controls_allowed(True)
+    for lkas_problem in (False, True):
+      self.assertTrue(self._rx(self._lkas_hud_msg(lkas_problem)))
+    self.assertFalse(self.safety.get_relay_malfunction())
+    self.assertTrue(self.safety.get_controls_allowed())
+
+    # a bad checksum is rejected and disengages
+    msg = self._lkas_hud_msg()
+    msg[0].data[4] ^= 0x1
+    self.assertFalse(self._rx(msg))
+    self.assertFalse(self.safety.get_controls_allowed())
+
+    # so are repeated counter skips
+    for i in range(MAX_WRONG_COUNTERS + 1):
+      self.__class__.cnt_lkas_hud += 1
+      if i < MAX_WRONG_COUNTERS:
+        self.safety.set_controls_allowed(True)
+        self._rx(self._lkas_hud_msg())
+      else:
+        self.assertFalse(self._rx(self._lkas_hud_msg()))
+        self.assertFalse(self.safety.get_controls_allowed())
+
+    # recover with good messages
+    for _ in range(2):
+      self._rx(self._lkas_hud_msg())
+    self.assertTrue(self._rx(self._lkas_hud_msg()))
+
+
 # ********************* Honda Bosch **********************
 
 
