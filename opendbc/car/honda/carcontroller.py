@@ -179,6 +179,18 @@ class CarController(CarControllerBase):
     self.gas_alpha_nomaxspeed = self.gas_alpha
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
     self.gasfactor_before_gasmax = self.gasfactor_nomaxspeed = self.gasfactor
+    # low-speed band of the gas channel (same 10-16 m/s blend as the speed channel). The gas
+    # target is normalized by NIDEC_MAX_ACCEL_V, whose shape (2.4 m/s2 at 4 m/s -> 0.6 at 20)
+    # is ~2x too steep for this car: with the wire pinned at 198 the plant delivers ~0.9-1.2
+    # m/s2 at 4.5-13 m/s and ~0.6 at 18-32 (route 51). One scalar gasfactor equilibrates on the
+    # highway frames (where the wire is already pinned 60-100% of the time) and leaves the
+    # low-speed target at about half of pinned: route 51 steady accel at 2-13 m/s ran a
+    # smoothed wire of 48-97 for cmd 0.3-1.5 (pinned <=16%) with err +0.18..+0.47, while
+    # 13-32 m/s was pinned 43-100% with err +0.05..+0.32 (authority-limited). Each band learns
+    # in proportion to its authority over the sent target. Seeded from the persisted scalar so
+    # the first drive starts at today's operating point instead of halving the low-speed target.
+    self.gasfactor_low = self.gasfactor if (Params().get("HondaGasFactorLowParams") is None) else Params().get("HondaGasFactorLowParams")
+    self.gasfactor_low_before_gasmax = self.gasfactor_low_nomaxspeed = self.gasfactor_low
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
     self.speedfactor = 4.0 if (Params().get("HondaSpeedFactorParams") is None) else Params().get("HondaSpeedFactorParams")
@@ -263,8 +275,6 @@ class CarController(CarControllerBase):
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
 
     prior_windfactor = self.windfactor
-    prior_gasfactor = self.gasfactor
-    prior_gas_alpha = self.gas_alpha
     if CC.longActive:
       if (actuators.longControlState in (LongCtrlState.pid, LongCtrlState.stopping)) and \
          (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
@@ -289,13 +299,16 @@ class CarController(CarControllerBase):
         if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
           # drop to max values when not near speed limit
           self.gasfactor = self.gasfactor_nomaxspeed
+          self.gasfactor_low = self.gasfactor_low_nomaxspeed
           self.gas_alpha = self.gas_alpha_nomaxspeed
         if (gas_pedal_force >= self.params.BOSCH_ACCEL_MAX):
           # don't increase gasfactor nor windfactor at accel max, allow decreases
           self.gasfactor = min(self.gasfactor, self.gasfactor_before_gasmax)
+          self.gasfactor_low = min(self.gasfactor_low, self.gasfactor_low_before_gasmax)
           self.windfactor = min(self.windfactor, self.windfactor_before_gasmax)
         else:
           self.gasfactor_before_gasmax = self.gasfactor
+          self.gasfactor_low_before_gasmax = self.gasfactor_low
           self.windfactor_before_gasmax = self.windfactor
 
       else:
@@ -494,7 +507,8 @@ class CarController(CarControllerBase):
         speed_lead = float(sf_eff * self.accel + alpha_eff)
       pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
       gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
-      pcm_accel = int(np.clip((self.gas_alpha + gas_accel * self.gasfactor / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+      gf_eff = low_w * self.gasfactor_low + (1.0 - low_w) * self.gasfactor
+      pcm_accel = int(np.clip((self.gas_alpha + gas_accel * gf_eff / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
     max_speedcontrol = (pcm_speed > 99.999)
     prior_speedfactor = self.speedfactor
     prior_speedalpha = self.speedalpha
@@ -546,7 +560,14 @@ class CarController(CarControllerBase):
            (self.apply_brake_last == 0) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
         gasfactor_error = (self.accel - CS.out.aEgo)
         self.gas_alpha = np.clip(self.gas_alpha + 0.0001 * gasfactor_error / 4.8, -3.0, 3.0)
-        self.gasfactor *= (1 + 0.0001 * gasfactor_error * gas_accel)
+        # the 0<wire<198 gate above is the gas channel's own observability condition (a pinned
+        # wire cannot show what more gasfactor would do); the clip is a runaway backstop only.
+        # 5.0 rather than the Bosch path's 3.0 because the Nidec target divides by
+        # NIDEC_MAX_ACCEL_V (2.0-2.4 at 4-10 m/s): pinning the wire at cmd 0.85 there needs
+        # gf ~3.5, which the low band is expected to learn.
+        gf_growth = 0.0001 * gasfactor_error * gas_accel
+        self.gasfactor_low = float(np.clip(self.gasfactor_low * (1 + low_w * gf_growth), 0.1, 5.0))
+        self.gasfactor = float(np.clip(self.gasfactor * (1 + (1.0 - low_w) * gf_growth), 0.1, 5.0))
       if (not CS.out.gasPressed) and (self.apply_brake_last == 0): # adjust speedfactor and average_factor
         speedfactor_error = (self.accel - CS.out.aEgo)
         dv_sent = sf_eff * self.accel + alpha_eff
@@ -637,13 +658,19 @@ class CarController(CarControllerBase):
           self.speedalpha = min(dv_sat, self.speedalpha + (1.0 - low_w) * 0.001 * speedfactor_error)
 
         if max_speedcontrol or (dv_sent > dv_sat): # only allow learning reductions
+          # speed-channel saturation is a speed-channel condition. gasfactor/gas_alpha used to
+          # be ratcheted here too, which made "pcm_speed at its clip" (68% of low-speed accel
+          # frames on route 51, with speedfactor_low pinned at its clamp) forbid the gas target
+          # from ever growing on exactly the frames that undershoot most: the ratchet was
+          # active on 10% of the gas-learner's gated ticks but those ran err +0.45 vs +0.045
+          # on the rest, and it discarded +0.14 of +0.18 total ln-growth over the drive. The
+          # gas learners keep their own observability gate (0 < wire < 198) above; windfactor
+          # has no saturation gate of its own, so it stays.
           self.speedfactor = min(prior_speedfactor, self.speedfactor)
           self.speedfactor_low = min(prior_speedfactor_low, self.speedfactor_low)
           self.speedalpha = min(prior_speedalpha, self.speedalpha)
           self.speedalpha_low = min(prior_speedalpha_low, self.speedalpha_low)
           self.windfactor = min(prior_windfactor, self.windfactor)
-          self.gasfactor = min(prior_gasfactor, self.gasfactor)
-          self.gas_alpha = min(prior_gas_alpha, self.gas_alpha)
 
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
@@ -756,10 +783,12 @@ class CarController(CarControllerBase):
 
           if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
             self.gasfactor_nomaxspeed = self.gasfactor
+            self.gasfactor_low_nomaxspeed = self.gasfactor_low
             self.gas_alpha_nomaxspeed = self.gas_alpha
           else:
             # store lower than low max speed or current
             self.gasfactor_nomaxspeed = min(self.gasfactor_nomaxspeed, self.gasfactor)
+            self.gasfactor_low_nomaxspeed = min(self.gasfactor_low_nomaxspeed, self.gasfactor_low)
             self.gas_alpha_nomaxspeed = min(self.gas_alpha_nomaxspeed, self.gas_alpha)
 
           self.apply_brake_last = apply_brake
@@ -804,6 +833,7 @@ class CarController(CarControllerBase):
         "HondaCreepFactorParams": self.creep_factor,
         "HondaGasAlphaParams": self.gas_alpha_nomaxspeed,
         "HondaGasFactorParams": self.gasfactor_nomaxspeed,
+        "HondaGasFactorLowParams": self.gasfactor_low_nomaxspeed,
         "HondaWindFactorParams": self.windfactor,
         "HondaSpeedAlphaParams": self.speedalpha,
         "HondaSpeedFactorParams": self.speedfactor,
