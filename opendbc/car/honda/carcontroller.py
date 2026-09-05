@@ -302,8 +302,6 @@ class CarController(CarControllerBase):
     if CC.longActive:
       if self.CP.carFingerprint in HONDA_BOSCH:
         accel = actuators.accel
-        if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)) and (accel > max(0, CS.out.aEgo) + 0.1):
-          accel = 10000.0  # help with lagged accel until pedal tuning is inserted
         adjust_accel = accel + hill_brake
         brake = 0.0
         gas, brake = compute_gas_brake(adjust_accel, CS.out.vEgo, self.CP.carFingerprint)
@@ -395,7 +393,7 @@ class CarController(CarControllerBase):
 
     speed_val = np.clip(round(CS.out.vEgo * CV.MS_TO_MPH / 5.0) * 5, 5, 60)
     currentLatSpeed = f"{speed_val:02d}"
-    if currentLatSpeed in self.latFactors and not CS.out.steeringPressed and CS.steer_control_active and self.CP.carFingerprint not in HONDA_BOSCH:
+    if currentLatSpeed in self.latFactors and not CS.out.steeringPressed and CS.steer_control_active:
       if abs(limited_torque) > 0.9 and self.latFactors[currentLatSpeed] > abs(CS.out.steeringAngleDeg):
         self.latFactors[currentLatSpeed] /= 1.001
       if abs(limited_torque) < 0.9 and self.latFactors[currentLatSpeed] < abs(CS.out.steeringAngleDeg):
@@ -787,22 +785,6 @@ class CarController(CarControllerBase):
       if not CC.longActive:
         pcm_speed = 0.0
         pcm_accel = int(0.0)
-      elif self.CP.carFingerprint in HONDA_NIDEC_ALT_PCM_ACCEL:
-        pcm_speed_V = [0.0,
-                       np.clip(CS.out.vEgo - 3.0, 0.0, 100.0),
-                       np.clip(CS.out.vEgo + 0.0, 0.0, 100.0),
-                       np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
-        pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
-        pcm_accel = int(1.0 * self.params.NIDEC_GAS_MAX)
-      elif (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)):
-        pcm_speed_V = [0.0,
-                       np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
-                       np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
-                       np.clip(CS.out.vEgo + 20.0, 0.0, 100.0)]
-        pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
-        pcm_accel = int(np.clip((accel / 1.44) / max_accel, 10.0 / self.params.NIDEC_GAS_MAX, 1.0) * self.params.NIDEC_GAS_MAX)
-        if speed_control == 1 and CC.longActive:
-          pcm_accel = 198
       else:
         pcm_speed_V = [0.0,
                        np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
