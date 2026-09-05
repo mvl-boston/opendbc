@@ -70,9 +70,6 @@ class CarInterface(CarInterfaceBase):
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID) and (0x223 in fingerprint[CAN.pt]):
       ret.flags |= HondaFlags.HYBRID_ALT_BRAKEHOLD.value
 
-    if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID):
-      ret.stoppingDecelRate = 0.3
-
     if all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
       ret.transmissionType = TransmissionType.manual
     elif 0x191 in fingerprint[CAN.pt] and candidate != CAR.ACURA_RDX:
