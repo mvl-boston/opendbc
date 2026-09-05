@@ -585,24 +585,23 @@ class CarController(CarControllerBase):
       sf_eff = low_w * self.speedfactor_low + (1.0 - low_w) * self.speedfactor
       alpha_eff = low_w * self.speedalpha_low + (1.0 - low_w) * self.speedalpha
       # TODO this 1.44 is just to maintain previous behavior
-      gas_override = CC.enabled and CS.out.gasPressed and CS.car_gas_available
-      mirror_gas = int(np.clip(CS.car_gas / max(self.car_gas_per_pcm_gas, 1e-3), 0.0, self.params.NIDEC_GAS_MAX)) if gas_override else 0
-      if gas_override:
-        # driver-gas override: mirror the applied pedal onto the wire instead of zeroing it.
-        # Stock keeps commanding through overrides (PCM_SPEED = set speed, PCM_GAS nonzero);
-        # zeroing instead told the PCM "no torque" for the whole override, so its internal pedal
-        # tracker unwound to zero and the release started from scratch (routes 33/34: pedal
-        # stayed 0 until ~2s after release; at t=288.5 the commanded zero-torque second even
-        # dropped the engine into idle-stop while moving, adding restart lag). The mirror also
-        # keeps prior_gas_average — the model of the PCM's smoothed command — tracking the true
-        # operating point through the override, and seeds the release rise clip from it.
-        # Applies whenever the driver is on the gas (longActive stays true on no-disengage forks).
-        override_speed = CS.out.cruiseState.speed if CS.out.cruiseState.speed > 0.5 else CS.out.vEgo
-        pcm_speed = float(np.clip(max(CS.out.vEgo, override_speed), 0.0, 100.0))
-        pcm_accel = mirror_gas
-      elif not CC.longActive:
-        pcm_speed = 0.0
-        pcm_accel = int(0.0)
+      if not CC.longActive:
+        if CC.enabled and CS.out.gasPressed and CS.car_gas_available:
+          # driver-gas override: mirror the applied pedal onto the wire instead of zeroing it.
+          # Stock keeps commanding through overrides (PCM_SPEED = set speed, PCM_GAS nonzero);
+          # zeroing instead told the PCM "no torque" for the whole override, so its internal pedal
+          # tracker unwound to zero and the release started from scratch (routes 33/34: pedal
+          # stayed 0 until ~2s after release; at t=288.5 the commanded zero-torque second even
+          # dropped the engine into idle-stop while moving, adding restart lag). The mirror also
+          # keeps prior_gas_average — the model of the PCM's smoothed command — tracking the true
+          # operating point through the override, and seeds the release rise clip from it.
+          # moved to "not CC.longActive" block because powertrain sets ACC_STATUS = 0 when gasPressed
+          # set pcm_speed to current speed + 9 to mirror stock
+          pcm_speed = float(np.clip(CS.out.vEgo, 0.0, 100.0))
+          pcm_accel = int(np.clip(CS.car_gas / max(self.car_gas_per_pcm_gas, 1e-3), 0.0, self.params.NIDEC_GAS_MAX))
+        else:
+          pcm_speed = 0.0
+          pcm_accel = int(0.0)
       else:
         if self.launch_active:
           # stock-shaped launch lead (stock uses 9.99 kph): the general sf*accel+alpha lead is both
@@ -655,8 +654,6 @@ class CarController(CarControllerBase):
           # the full authority band until first motion, then hand back to the learned seed.
           launch_seed = self.params.NIDEC_GAS_MAX
         self.new_accel = int(min(launch_seed, self.params.NIDEC_GAS_MAX))
-      elif gas_override:
-        self.new_accel = mirror_gas
       # recursive sensitivity of the model prediction to average_factor, advanced with the model itself;
       # used by the average_factor learner below (must be computed before prior_gas_average is updated)
       self.average_factor_sens = (self.new_accel - self.prior_gas_average) + (1 - effective_average_factor) * self.average_factor_sens
