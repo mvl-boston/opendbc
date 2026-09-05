@@ -166,7 +166,9 @@ class CarState(CarStateBase):
 
     # Log non-critical stock ACC/LKAS faults if Nidec (camera) or longitudinal CANFD alt-brake
     if self.CP.carFingerprint not in HONDA_BOSCH:
-      ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
+      # RLX: the stock LKAS camera is on the steer bus; the bridge panda relays its LKAS_HUD onto the powertrain bus
+      lkas_hud_cp = cp if self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID else cp_cam
+      ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or lkas_hud_cp.vl["LKAS_HUD"]["LKAS_PROBLEM"])
 
     elif self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
@@ -370,7 +372,12 @@ class CarState(CarStateBase):
     return ret
 
   def get_can_parsers(self, CP):
-    pt_messages = []
+    # Optional on Nidec: some platforms send GAS_PEDAL (0x13C) instead of GAS_PEDAL_2 (0x130).
+    # Register before lazy vl access so missing messages do not count against canValid.
+    pt_messages = [("GAS_PEDAL_2", math.nan), ("GAS_PEDAL", math.nan)]
+    if CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
+      # the bridged stock camera LKAS_HUD must stay alive on the powertrain bus
+      pt_messages.append(("LKAS_HUD", 10))
     cam_messages = []
     if CP.carFingerprint in HONDA_BOSCH_CANFD:
       # Radar-alive and relay-open detection for the deferred radar disable (see carcontroller).
