@@ -18,7 +18,7 @@ class CarControllerParams:
   # Our controller should still keep the 2 second average above
   # -3.5 m/s^2 as per planner limits
   NIDEC_ACCEL_MIN = -4.0  # m/s^2
-  NIDEC_ACCEL_MAX = 1.6  # m/s^2, lower than 2.0 m/s^2 for tuning reasons
+  NIDEC_ACCEL_MAX = 2.0  # m/s^2, dv_sat removes need for artificial limit
 
   NIDEC_ACCEL_LOOKUP_BP = [-1., 0., .6]
   NIDEC_ACCEL_LOOKUP_V = [-4.8, 0., 2.0]
@@ -56,6 +56,9 @@ class HondaSafetyFlags(IntFlag):
   NIDEC_ALT = 4
   RADARLESS = 8
   BOSCH_CANFD = 16
+  NIDEC_HYBRID = 32
+  # RLX: a bridge panda relays the stock camera's LKAS_HUD from the steer bus onto the powertrain bus
+  RLX_STEER_BRIDGE = 64
 
 
 class HondaFlags(IntFlag):
@@ -80,6 +83,8 @@ class HondaFlags(IntFlag):
   HYBRID = 2048
   BOSCH_TJA_CONTROL = 4096
   LKAS_MINSPEED_CUTOFF = 8192
+  HYBRID_ALT_BRAKEHOLD = 16384  # Some Nidec Hybrids use a different brakehold
+  LEGACY_MDX_STEER = 32768
 
 
 # Car button codes
@@ -460,7 +465,7 @@ class CAR(Platforms):
       HondaCarDocs("Acura MDX Hybrid 2017-19", "All"),
     ],
     CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
-    radar_dbc_dict('acura_mdx_2017_can_ext_generated'),
+    radar_dbc_dict('acura_mdx_3g_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_MDX_3G_MMR = HondaNidecPlatformConfig(
@@ -478,7 +483,15 @@ class CAR(Platforms):
       HondaCarDocs("Acura TLX 2018-20", "All"),
     ],
     CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=17.0, centerToFrontRatio=0.40, tireStiffnessFactor=0.18),
-    radar_dbc_dict('acura_mdx_2017_can_ext_generated'),
+    radar_dbc_dict('acura_mdx_3g_can_generated'),
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
+  )
+  ACURA_RLX_HYBRID = HondaNidecPlatformConfig(
+    # 2017 RLX Sport Hybrid. Don't add to cardocs: the EPS is on a separate steer bus; a
+    # pre-flashed red panda bridges steer messages onto the powertrain bus this code sees
+    [],
+    CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.43, steerRatio=18.3),
+    radar_dbc_dict('acura_rlx_2017_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
 
@@ -507,7 +520,7 @@ STEER_THRESHOLD = {
   CAR.HONDA_ODYSSEY_5G_MMR: 600,
   # port extensions
   CAR.HONDA_ACCORD_9G: 30,
-  CAR.ACURA_MDX_3G: 30,
+  CAR.ACURA_MDX_3G: 400,
   CAR.ACURA_MDX_3G_MMR: 30,
   CAR.ACURA_TLX_1G: 30,
 }
