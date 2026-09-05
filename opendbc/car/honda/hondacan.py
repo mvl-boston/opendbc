@@ -170,7 +170,9 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     acc_hud_values['ACC_ON'] = int(enabled)
     acc_hud_values['PCM_SPEED'] = pcm_speed * CV.MS_TO_KPH
     acc_hud_values['PCM_GAS'] = pcm_accel
-    acc_hud_values['SET_ME_X01'] = speed_control if (CP.flags & HondaFlags.HYBRID) else 1
+    # stock holds X01 through accelerate-to-target ramps ("1 gives power"), so keep it set for the
+    # whole launch window; outside launches keep the existing at-the-rails behavior
+    acc_hud_values['SET_ME_X01'] = 1 if (speed_control or pcm_accel == 0 or pcm_accel == 198) else 0
     acc_hud_values['FCM_OFF'] = acc_hud['FCM_OFF']
     acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
     acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
@@ -183,12 +185,19 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
                     lkas_state_change=None):
   commands = []
 
+  if CP.carFingerprint in HONDA_BOSCH:
+    solid_lanes = hud_control.lanesVisible and not steer_maxed
+    dashed_lanes = lat_active
+  else:
+    solid_lanes = lat_active and not steer_maxed
+    dashed_lanes = hud_control.lanesVisible
+
   lkas_hud_values = {
     'LKAS_READY': 1,
     'LKAS_STATE_CHANGE': 1,
     'STEERING_REQUIRED': alert_steer_required,
-    'SOLID_LANES': lat_active and not steer_maxed,
-    'DASHED_LANES': hud_control.lanesVisible and not lat_active,
+    'SOLID_LANES': solid_lanes,
+    'DASHED_LANES': dashed_lanes,
     'BEEP': 0,
   }
 
