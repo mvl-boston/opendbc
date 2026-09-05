@@ -43,6 +43,61 @@ def compute_gas_brake(accel, speed, fingerprint):
     return compute_gb_honda_bosch(accel, speed)
 
 
+# TODO not clear this does anything useful
+def actuator_hysteresis(brake, braking, brake_steady, v_ego, car_fingerprint):
+  # hyst params
+  brake_hyst_on = 0.02    # to activate brakes exceed this value
+  brake_hyst_off = 0.005  # to deactivate brakes below this value
+  brake_hyst_gap = 0.01   # don't change brake command for small oscillations within this value
+
+  # *** hysteresis logic to avoid brake blinking. go above 0.1 to trigger
+  if (brake < brake_hyst_on and not braking) or brake < brake_hyst_off:
+    brake = 0.
+  braking = brake > 0.
+
+  # for small brake oscillations within brake_hyst_gap, don't change the brake command
+  if brake == 0.:
+    brake_steady = 0.
+  elif brake > brake_steady + brake_hyst_gap:
+    brake_steady = brake - brake_hyst_gap
+  elif brake < brake_steady - brake_hyst_gap:
+    brake_steady = brake + brake_hyst_gap
+  brake = brake_steady
+
+  return brake, braking, brake_steady
+
+
+def brake_pump_hysteresis(apply_brake, apply_brake_last, last_pump_ts, ts):
+  pump_on = False
+
+  # reset pump timer if:
+  # - there is an increment in brake request
+  # - we are applying steady state brakes and we haven't been running the pump
+  #   for more than 20s (to prevent pressure bleeding)
+  if apply_brake > apply_brake_last or (ts - last_pump_ts > 20. and apply_brake > 0):
+    last_pump_ts = ts
+
+  # once the pump is on, run it for at least 0.2s
+  if ts - last_pump_ts < 0.2 and apply_brake > 0:
+    pump_on = True
+
+  return pump_on, last_pump_ts
+
+
+def process_hud_alert(hud_alert):
+  alert_fcw = False
+  alert_steer_required = False
+
+  # Make sure FCW is prioritized over steering required
+  # TODO: implement separate available LDW alert
+  if hud_alert == VisualAlert.fcw:
+    alert_fcw = True
+  elif hud_alert in (VisualAlert.steerRequired, VisualAlert.ldw):
+    alert_steer_required = True
+
+  return alert_fcw, alert_steer_required
+
+
 class HondaParamWriter:
   def __init__(self):
     self._params = Params()
@@ -136,6 +191,7 @@ class CarController(CarControllerBase):
                                    rate=50)
     self.nidec_brake_pid.reset()
     self.brake_pid_factor_non_lowspeed = 0.4 if (Params().get("HondaBrakePIDParams") is None) else Params().get("HondaBrakePIDParams")
+    self.nidec_brake_pid.i = self.brake_pid_factor_non_lowspeed
     self.brake_pid_factor = 0.0
 
     self.prior_gas_average = 0.0
@@ -250,6 +306,7 @@ class CarController(CarControllerBase):
           accel = 10000.0  # help with lagged accel until pedal tuning is inserted
         adjust_accel = accel + hill_brake
         brake = 0.0
+        gas, brake = compute_gas_brake(adjust_accel, CS.out.vEgo, self.CP.carFingerprint)
       else:
         if (actuators.longControlState in (LongCtrlState.pid, LongCtrlState.stopping)) and \
            (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
@@ -304,6 +361,7 @@ class CarController(CarControllerBase):
       adjust_accel = self.accel
       brake = 0.0
       accel = 0.0
+      gas, brake = 0.0, 0.0
     if CC.longActive and self.CP.carFingerprint not in HONDA_BOSCH:
       accel = self.accel
     if CS.out.gasPressed or not CC.longActive:
@@ -337,7 +395,7 @@ class CarController(CarControllerBase):
 
     speed_val = np.clip(round(CS.out.vEgo * CV.MS_TO_MPH / 5.0) * 5, 5, 60)
     currentLatSpeed = f"{speed_val:02d}"
-    if currentLatSpeed in self.latFactors and not CS.out.steeringPressed and CS.steer_control_active:
+    if currentLatSpeed in self.latFactors and not CS.out.steeringPressed and CS.steer_control_active and self.CP.carFingerprint not in HONDA_BOSCH:
       if abs(limited_torque) > 0.9 and self.latFactors[currentLatSpeed] > abs(CS.out.steeringAngleDeg):
         self.latFactors[currentLatSpeed] /= 1.001
       if abs(limited_torque) < 0.9 and self.latFactors[currentLatSpeed] < abs(CS.out.steeringAngleDeg):
@@ -521,90 +579,88 @@ class CarController(CarControllerBase):
         self.gas_recovery_ticks = 200
       self.long_active_prev = CC.longActive
 
-    # all of this is only relevant for HONDA NIDEC
-    max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
-    # two-band speed channel blend: pure low band below 10 m/s, pure high band above 16 m/s
-    low_w = float(np.interp(CS.out.vEgo, [10.0, 16.0], [1.0, 0.0]))
-    sf_eff = low_w * self.speedfactor_low + (1.0 - low_w) * self.speedfactor
-    alpha_eff = low_w * self.speedalpha_low + (1.0 - low_w) * self.speedalpha
-    # TODO this 1.44 is just to maintain previous behavior
-    if not CC.longActive:
-      if CC.enabled and CS.out.gasPressed and CS.car_gas_available and self.CP.carFingerprint not in HONDA_BOSCH:
-        # driver-gas override: mirror the applied pedal onto the wire instead of zeroing it.
-        # Stock keeps commanding through overrides (PCM_SPEED = set speed, PCM_GAS nonzero);
-        # zeroing instead told the PCM "no torque" for the whole override, so its internal pedal
-        # tracker unwound to zero and the release started from scratch (routes 33/34: pedal
-        # stayed 0 until ~2s after release; at t=288.5 the commanded zero-torque second even
-        # dropped the engine into idle-stop while moving, adding restart lag). The mirror also
-        # keeps prior_gas_average — the model of the PCM's smoothed command — tracking the true
-        # operating point through the override, and seeds the release rise clip from it.
-        # moved to "not CC.longActive" block because powertrain sets ACC_STATUS = 0 when gasPressed
-        # set pcm_speed to current speed + 9 to mirror stock
-        pcm_speed = float(np.clip(CS.out.vEgo, 0.0, 100.0))
-        pcm_accel = int(np.clip(CS.car_gas / max(self.car_gas_per_pcm_gas, 1e-3), 0.0, self.params.NIDEC_GAS_MAX))
+    if self.CP.carFingerprint not in HONDA_BOSCH:
+      # all of this is only relevant for HONDA NIDEC
+      max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
+      # two-band speed channel blend: pure low band below 10 m/s, pure high band above 16 m/s
+      low_w = float(np.interp(CS.out.vEgo, [10.0, 16.0], [1.0, 0.0]))
+      sf_eff = low_w * self.speedfactor_low + (1.0 - low_w) * self.speedfactor
+      alpha_eff = low_w * self.speedalpha_low + (1.0 - low_w) * self.speedalpha
+      # TODO this 1.44 is just to maintain previous behavior
+      if not CC.longActive:
+        if CC.enabled and CS.out.gasPressed and CS.car_gas_available:
+          # driver-gas override: mirror the applied pedal onto the wire instead of zeroing it.
+          # Stock keeps commanding through overrides (PCM_SPEED = set speed, PCM_GAS nonzero);
+          # zeroing instead told the PCM "no torque" for the whole override, so its internal pedal
+          # tracker unwound to zero and the release started from scratch (routes 33/34: pedal
+          # stayed 0 until ~2s after release; at t=288.5 the commanded zero-torque second even
+          # dropped the engine into idle-stop while moving, adding restart lag). The mirror also
+          # keeps prior_gas_average — the model of the PCM's smoothed command — tracking the true
+          # operating point through the override, and seeds the release rise clip from it.
+          # moved to "not CC.longActive" block because powertrain sets ACC_STATUS = 0 when gasPressed
+          # set pcm_speed to current speed + 9 to mirror stock
+          pcm_speed = float(np.clip(CS.out.vEgo, 0.0, 100.0))
+          pcm_accel = int(np.clip(CS.car_gas / max(self.car_gas_per_pcm_gas, 1e-3), 0.0, self.params.NIDEC_GAS_MAX))
+        else:
+          pcm_speed = 0.0
+          pcm_accel = int(0.0)
       else:
-        pcm_speed = 0.0
-        pcm_accel = int(0.0)
-    else:
+        if self.launch_active:
+          # stock-shaped launch lead (stock uses 9.99 kph): the general sf*accel+alpha lead is both
+          # poisoned-prone and a step input the servo low-passes into dead time + late surge.
+          # Until first motion the larger breakaway lead is used: EV creep response scales with dv,
+          # and the post-motion lead alone was not enough to break away engine-off.
+          speed_lead = self.dv_launch if CS.out.vEgo > 0.1 else self.dv_break
+        else:
+          speed_lead = float(sf_eff * self.accel + alpha_eff)
+        pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
+        gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
+        gf_eff = low_w * self.gasfactor_low + (1.0 - low_w) * self.gasfactor
+        pcm_accel = int(np.clip((self.gas_alpha + gas_accel * gf_eff / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+      max_speedcontrol = (pcm_speed > 99.999)
+      prior_speedfactor = self.speedfactor
+      prior_speedalpha = self.speedalpha
+      prior_speedfactor_low = self.speedfactor_low
+      prior_speedalpha_low = self.speedalpha_low
+  
+      # feedforward for Nidec decaying-average gas pedal
+      # inside a recovery window the rise clip opens to the stock launch envelope (+70/frame vs
+      # stock's observed +74/frame): the +20/frame cruise clip is sized for smoothness around an
+      # operating point, but coming out of an override/launch/brake there is no operating point yet —
+      # holding it there spends a full second climbing 0->198 while PCM_GAS=0 gates off all power
+      # (routes 33/34: aEgo fell to -0.3 against cmd +1.25 during that second, and the PCM's
+      # pedal tracker + idle-stop restart stacked another ~1.5s on top).
+      # The wide clip only applies while the wire is still below the feedforward target: the
+      # window's job is to close the gap from the dead state to the operating point. Beyond the
+      # target the 1/average_factor lead (~30x at the learned ~0.035) already overshoots, and
+      # letting that run at +70/frame just triples the sawtooth amplitude the PCM has to smooth
+      # (bench: 0->140 in 0.2s against a target of 50) for no gain in reaching the target.
+      prior_accel = int(self.new_accel)
+      max_increase = 7 if (self.gas_recovery_ticks > 0 and prior_accel < pcm_accel) else 2  # per 100Hz tick, x10 per sent frame
+      # When GAS_PEDAL_2 is absent the direct-measurement learner cannot run; use a fixed factor so
+      # feedforward stays stable on platforms that do not report applied pedal position.
+      effective_average_factor = self.average_factor if CS.car_gas_available else 0.5
+      self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - effective_average_factor)) / effective_average_factor)
+      self.new_accel = int(np.clip(self.new_accel, 0, min(prior_accel + max_increase, self.params.NIDEC_GAS_MAX)))
       if self.launch_active:
-        # stock-shaped launch lead (stock uses 9.99 kph): the general sf*accel+alpha lead is both
-        # poisoned-prone and a step input the servo low-passes into dead time + late surge.
-        # Until first motion the larger breakaway lead is used: EV creep response scales with dv,
-        # and the post-motion lead alone was not enough to break away engine-off.
-        speed_lead = self.dv_launch if CS.out.vEgo > 0.1 else self.dv_break
-      else:
-        speed_lead = float(sf_eff * self.accel + alpha_eff)
-      pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
-      gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
-      gf_eff = low_w * self.gasfactor_low + (1.0 - low_w) * self.gasfactor
-      pcm_accel = int(np.clip((self.gas_alpha + gas_accel * gf_eff / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
-    max_speedcontrol = (pcm_speed > 99.999)
-    prior_speedfactor = self.speedfactor
-    prior_speedalpha = self.speedalpha
-    prior_speedfactor_low = self.speedfactor_low
-    prior_speedalpha_low = self.speedalpha_low
-
-    # feedforward for Nidec decaying-average gas pedal
-    # inside a recovery window the rise clip opens to the stock launch envelope (+70/frame vs
-    # stock's observed +74/frame): the +20/frame cruise clip is sized for smoothness around an
-    # operating point, but coming out of an override/launch/brake there is no operating point yet —
-    # holding it there spends a full second climbing 0->198 while PCM_GAS=0 gates off all power
-    # (routes 33/34: aEgo fell to -0.3 against cmd +1.25 during that second, and the PCM's
-    # pedal tracker + idle-stop restart stacked another ~1.5s on top).
-    # The wide clip only applies while the wire is still below the feedforward target: the
-    # window's job is to close the gap from the dead state to the operating point. Beyond the
-    # target the 1/average_factor lead (~30x at the learned ~0.035) already overshoots, and
-    # letting that run at +70/frame just triples the sawtooth amplitude the PCM has to smooth
-    # (bench: 0->140 in 0.2s against a target of 50) for no gain in reaching the target.
-    prior_accel = int(self.new_accel)
-    max_increase = 7 if (self.gas_recovery_ticks > 0 and prior_accel < pcm_accel) else 2  # per 100Hz tick, x10 per sent frame
-    # When GAS_PEDAL_2 is absent the direct-measurement learner cannot run; use a fixed factor so
-    # feedforward stays stable on platforms that do not report applied pedal position.
-    effective_average_factor = self.average_factor if CS.car_gas_available else 0.5
-    self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - effective_average_factor)) / effective_average_factor)
-    self.new_accel = int(np.clip(self.new_accel, 0, min(prior_accel + max_increase, self.params.NIDEC_GAS_MAX)))
-    if self.launch_active:
-      # gas seed: send the learned launch gas immediately (stock jumps to 104-114 in one frame,
-      # within its observed +114/frame ramp envelope; ramping from 0 at +2/tick wastes ~0.5s of the
-      # launch just climbing, and PCM_GAS=0 gates off all power on this platform). While the brake
-      # is still applied the concurrent gas+brake protection below keeps the wire at 0; on window
-      # exit the rise clip continues from the seed via prior_accel, so there is no discontinuity.
-      launch_seed = self.gas_launch
-      if (CS.engine_rpm < 500) and (CS.out.vEgo <= 0.1):
-        # EV breakaway: midrange gas has no pedal coupling engine-off (route 1a t=3002: gas 108
-        # held 2.6s, zero motion until the driver's pedal cranked the engine). The stock camera's
-        # own EV plateau is saturation (198/200 observed while accelerating in EV), so command
-        # the full authority band until first motion, then hand back to the learned seed.
-        launch_seed = self.params.NIDEC_GAS_MAX
-      self.new_accel = int(min(launch_seed, self.params.NIDEC_GAS_MAX))
-    # recursive sensitivity of the model prediction to average_factor, advanced with the model itself;
-    # used by the average_factor learner below (must be computed before prior_gas_average is updated)
-    self.average_factor_sens = (self.new_accel - self.prior_gas_average) + (1 - effective_average_factor) * self.average_factor_sens
-    self.prior_gas_average = self.prior_gas_average * (1 - effective_average_factor) + (self.new_accel * effective_average_factor)
-
-    if self.CP.carFingerprint in HONDA_BOSCH:
-      self.new_accel = pcm_accel
-    else:
+        # gas seed: send the learned launch gas immediately (stock jumps to 104-114 in one frame,
+        # within its observed +114/frame ramp envelope; ramping from 0 at +2/tick wastes ~0.5s of the
+        # launch just climbing, and PCM_GAS=0 gates off all power on this platform). While the brake
+        # is still applied the concurrent gas+brake protection below keeps the wire at 0; on window
+        # exit the rise clip continues from the seed via prior_accel, so there is no discontinuity.
+        launch_seed = self.gas_launch
+        if (CS.engine_rpm < 500) and (CS.out.vEgo <= 0.1):
+          # EV breakaway: midrange gas has no pedal coupling engine-off (route 1a t=3002: gas 108
+          # held 2.6s, zero motion until the driver's pedal cranked the engine). The stock camera's
+          # own EV plateau is saturation (198/200 observed while accelerating in EV), so command
+          # the full authority band until first motion, then hand back to the learned seed.
+          launch_seed = self.params.NIDEC_GAS_MAX
+        self.new_accel = int(min(launch_seed, self.params.NIDEC_GAS_MAX))
+      # recursive sensitivity of the model prediction to average_factor, advanced with the model itself;
+      # used by the average_factor learner below (must be computed before prior_gas_average is updated)
+      self.average_factor_sens = (self.new_accel - self.prior_gas_average) + (1 - effective_average_factor) * self.average_factor_sens
+      self.prior_gas_average = self.prior_gas_average * (1 - effective_average_factor) + (self.new_accel * effective_average_factor)
+  
       if (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
            (self.apply_brake_last == 0) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
         gasfactor_error = (self.accel - CS.out.aEgo)
@@ -720,6 +776,40 @@ class CarController(CarControllerBase):
           self.speedalpha_low = min(prior_speedalpha_low, self.speedalpha_low)
           self.windfactor = min(prior_windfactor, self.windfactor)
 
+    else:
+      # Bosch (0111): pcm_speed/pcm_accel for ACC_HUD only; gas/brake commands use separate path below
+      speed_control = 0
+      max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
+      pcm_speed_BP = [-wind_brake,
+                      -wind_brake * (3 / 4),
+                      0.0,
+                      0.5]
+      if not CC.longActive:
+        pcm_speed = 0.0
+        pcm_accel = int(0.0)
+      elif self.CP.carFingerprint in HONDA_NIDEC_ALT_PCM_ACCEL:
+        pcm_speed_V = [0.0,
+                       np.clip(CS.out.vEgo - 3.0, 0.0, 100.0),
+                       np.clip(CS.out.vEgo + 0.0, 0.0, 100.0),
+                       np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
+        pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
+        pcm_accel = int(1.0 * self.params.NIDEC_GAS_MAX)
+      elif (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)):
+        pcm_speed_V = [0.0,
+                       np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
+                       np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
+                       np.clip(CS.out.vEgo + 20.0, 0.0, 100.0)]
+        pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
+        pcm_accel = int(np.clip((accel / 1.44) / max_accel, 10.0 / self.params.NIDEC_GAS_MAX, 1.0) * self.params.NIDEC_GAS_MAX)
+        if speed_control == 1 and CC.longActive:
+          pcm_accel = 198
+      else:
+        pcm_speed_V = [0.0,
+                       np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
+                       np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
+                       np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
+        pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
+        pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD:
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
@@ -855,27 +945,25 @@ class CarController(CarControllerBase):
     # the non-long safety config doesn't allowlist it.
     speed_control = 0 if self.CP.carFingerprint in HONDA_BOSCH else self.launch_active
     if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
-        pcm_accel = actuators.accel
-        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, self.new_accel,
+        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, actuators.accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                  self.CP.openpilotLongitudinalControl))
 
     if self.frame % 10 == 0:
-      if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)):
-        # standstill disengage
-        if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
-          pcm_speed = 25.0 / 3.6
-
       if self.CP.openpilotLongitudinalControl:
         if self.CP.carFingerprint not in HONDA_BOSCH_CANFD:
           # On Nidec, this also controls longitudinal positive acceleration
-          can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, self.new_accel,
+          acc_hud_pcm_accel = self.new_accel if self.CP.carFingerprint not in HONDA_BOSCH else pcm_accel
+          can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, acc_hud_pcm_accel,
                                                    hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                    self.CP.openpilotLongitudinalControl))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       reduced_steering = CS.out.steeringPressed
-      steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
+      if self.CP.carFingerprint in HONDA_BOSCH:
+        steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
+      else:
+        steer_maxed = (abs(apply_torque) >= self.params.STEER_MAX) or not (CS.steer_control_active)
 
       lkas_state_change = None
       if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
@@ -907,7 +995,7 @@ class CarController(CarControllerBase):
           can_sends.append(hondacan.create_legacy_brake_command(self.packer, self.CAN.pt))
         if self.CP.carFingerprint not in HONDA_BOSCH:
           self.speed = pcm_speed
-          self.gas = self.new_accel / self.params.NIDEC_GAS_MAX
+          self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
     # Render OP's lane and lead car on the dash. On CAN FD these are radar look-alikes that only exist
     # (and are only allowed by panda safety) when the radar is disabled, i.e. openpilot longitudinal;
@@ -991,9 +1079,11 @@ class CarController(CarControllerBase):
       new_actuators.accel = float(self.accel)
       new_actuators.gas = float(self.average_factor)
       new_actuators.brake = float(self.sat_accel)
-      new_actuators.torqueOutputCan = float(self.speedfactor_low)
     new_actuators.torque = self.last_torque
-    new_actuators.torqueOutputCan = apply_torque
+    if self.CP.carFingerprint in HONDA_BOSCH:
+      new_actuators.torqueOutputCan = apply_torque
+    else:
+      new_actuators.torqueOutputCan = float(self.speedfactor_low)
 
     if self.frame % 6000 == 0:
       if self.CP.carFingerprint in HONDA_BOSCH:

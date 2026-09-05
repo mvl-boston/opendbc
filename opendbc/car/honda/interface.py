@@ -98,8 +98,9 @@ class CarInterface(CarInterfaceBase):
         ret.longitudinalActuatorDelay = 0.25 # s, per Bosch A log
     else:
       # default longitudinal tuning for all Nidec hondas
-      ret.longitudinalTuning.kiBP = [0., 5., 35.]
-      ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
+      # ret.longitudinalTuning.kiBP = [0., 5., 35.]
+      # ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
+      pass  # moved to opendbc controller
 
     if candidate == CAR.HONDA_CITY_7G:
       ret.vEgoStopping = 2.0
