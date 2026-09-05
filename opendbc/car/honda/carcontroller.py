@@ -4,11 +4,12 @@ from queue import Empty, Queue
 
 import numpy as np
 from openpilot.common.params import Params
+from opendbc.car.common.conversions import Conversions as CV
 
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
-from opendbc.car.honda.values import CAR, CruiseButtons, HondaFlags, CarControllerParams, CruiseSettings
+from opendbc.car.honda.values import CAR, CruiseButtons, CruiseSettings, HondaFlags, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
@@ -27,21 +28,28 @@ def compute_gb_honda_bosch(accel, speed):
   return 0.0, 0.0
 
 
-def compute_gb_honda_nidec(accel, speed):
+def compute_gb_honda_nidec(accel, speed, creep_factor):
   creep_brake = 0.0
   creep_speed = 2.3
   creep_brake_value = 0.15
   if speed < creep_speed:
     creep_brake = (creep_speed - speed) / creep_speed * creep_brake_value
-  gb = float(accel) / 4.8 - creep_brake
-  return np.clip(gb, 0.0, 1.0), np.clip(-gb, 0.0, 1.0)
+  gb = float(accel) / 4.8 - creep_brake * creep_factor
+  creep_impact = -creep_brake
+  return np.clip(-gb, 0.0, 1.0), creep_impact
 
 
 def compute_gas_brake(accel, speed, CP):
   if CP.flags & HondaFlags.BOSCH:
     return compute_gb_honda_bosch(accel, speed)
   else:
-    return compute_gb_honda_nidec(accel, speed)
+    creep_brake = 0.0
+    creep_speed = 2.3
+    creep_brake_value = 0.15
+    if speed < creep_speed:
+      creep_brake = (creep_speed - speed) / creep_speed * creep_brake_value
+    gb = float(accel) / 4.8 - creep_brake
+    return np.clip(gb, 0.0, 1.0), np.clip(-gb, 0.0, 1.0)
 
 
 # TODO not clear this does anything useful
@@ -179,6 +187,76 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                    rate=50)
     self.brake_pid.reset()
 
+    self.nidec_pid_factor = 0.0
+    self.brake_pid_factor = 0.0
+
+    self.nidec_pid = PIDController(k_p=([0,], [0,]),
+                                   k_i=([0.01, 5., 35.], [1.2, 0.8, 0.5]),
+                                   k_f=1,
+                                   pos_limit=0., # self.params.NIDEC_ACCEL_MAX,
+                                   neg_limit=self.params.NIDEC_ACCEL_MIN)
+    self.nidec_pid.reset()
+
+    self.nidec_brake_pid = PIDController(k_p=0.0,
+                                   k_i=2.0,
+                                   pos_limit=4.0,
+                                   neg_limit=0,
+                                   rate=50)
+    self.nidec_brake_pid.reset()
+    self.brake_pid_factor_non_lowspeed = 0.4 if (Params().get("HondaBrakePIDParams") is None) else Params().get("HondaBrakePIDParams")
+    self.nidec_brake_pid.i = self.brake_pid_factor_non_lowspeed
+    self.brake_pid_factor = 0.0
+
+    self.prior_gas_average = 0.0
+    self.average_factor = 0.5 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
+    self.average_factor = max(0.02, self.average_factor)  # same floor as the learner, so frame 1 is not a 1000x comparator
+    self.average_factor_sens = 0.0  # d(prior_gas_average)/d(average_factor), recursive model sensitivity
+    self.car_gas_per_pcm_gas = 0.3 if (Params().get("HondaCarGasScaleParams") is None) else Params().get("HondaCarGasScaleParams")
+    self.creep_factor = 1.0 if (Params().get("HondaCreepFactorParams") is None) else Params().get("HondaCreepFactorParams")
+    self.gas_alpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
+    self.gas_alpha_nomaxspeed = self.gas_alpha
+    self.gasfactor_nomaxspeed = self.gasfactor
+    self.gasfactor_low = self.gasfactor if (Params().get("HondaGasFactorLowParams") is None) else Params().get("HondaGasFactorLowParams")
+    self.gasfactor_low_before_gasmax = self.gasfactor_low_nomaxspeed = self.gasfactor_low
+    self.speedfactor = 4.0 if (Params().get("HondaSpeedFactorParams") is None) else Params().get("HondaSpeedFactorParams")
+    self.speedalpha = 0.0 if (Params().get("HondaSpeedAlphaParams") is None) else Params().get("HondaSpeedAlphaParams")
+    self.speedfactor_low = 4.0 if (Params().get("HondaSpeedFactorLowParams") is None) else Params().get("HondaSpeedFactorLowParams")
+    self.speedalpha_low = 0.0 if (Params().get("HondaSpeedAlphaLowParams") is None) else Params().get("HondaSpeedAlphaLowParams")
+    self.sat_accel = 0.9 if (Params().get("HondaSatAccelParams") is None) else Params().get("HondaSatAccelParams")
+    self.sat_deficit_frames = self.sat_excess_frames = 0
+    self.new_accel = 0.0
+
+    self.dv_launch = 2.8 if (Params().get("HondaLaunchDvParams") is None) else Params().get("HondaLaunchDvParams")
+    self.gas_launch = 110.0 if (Params().get("HondaLaunchGasParams") is None) else Params().get("HondaLaunchGasParams")
+    self.dv_break = 6.0 if (Params().get("HondaLaunchDvBreakParams") is None) else Params().get("HondaLaunchDvBreakParams")
+    self.launch_active = False
+    self.gas_recovery_ticks = 0
+    self.gas_pressed_prev = False
+    self.long_active_prev = False
+    self.launch_ticks = 0
+    self.launch_release_tick = -1
+    self.launch_move_tick = -1
+    self.launch_lurch_sum = 0.0
+    self.launch_lurch_n = 0
+    self.launch_err_sum = 0.0
+    self.launch_err_n = 0
+    self.launch_ceiling_ticks = 0
+
+    self.latFactors = {
+      "05": 1.0 if (Params().get("HondaLatAccelFactor05Params") is None) else Params().get("HondaLatAccelFactor05Params"),
+      "10": 1.0 if (Params().get("HondaLatAccelFactor10Params") is None) else Params().get("HondaLatAccelFactor10Params"),
+      "15": 1.0 if (Params().get("HondaLatAccelFactor15Params") is None) else Params().get("HondaLatAccelFactor15Params"),
+      "20": 1.0 if (Params().get("HondaLatAccelFactor20Params") is None) else Params().get("HondaLatAccelFactor20Params"),
+      "25": 1.0 if (Params().get("HondaLatAccelFactor25Params") is None) else Params().get("HondaLatAccelFactor25Params"),
+      "30": 1.0 if (Params().get("HondaLatAccelFactor30Params") is None) else Params().get("HondaLatAccelFactor30Params"),
+      "35": 1.0 if (Params().get("HondaLatAccelFactor35Params") is None) else Params().get("HondaLatAccelFactor35Params"),
+      "40": 1.0 if (Params().get("HondaLatAccelFactor40Params") is None) else Params().get("HondaLatAccelFactor40Params"),
+      "45": 1.0 if (Params().get("HondaLatAccelFactor45Params") is None) else Params().get("HondaLatAccelFactor45Params"),
+      "50": 1.0 if (Params().get("HondaLatAccelFactor50Params") is None) else Params().get("HondaLatAccelFactor50Params"),
+      "55": 1.0 if (Params().get("HondaLatAccelFactor55Params") is None) else Params().get("HondaLatAccelFactor55Params"),
+      "60": 1.0 if (Params().get("HondaLatAccelFactor60Params") is None) else Params().get("HondaLatAccelFactor60Params")
+    }
+
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
     gas_pedal_force = 0.0
@@ -187,22 +265,96 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
+    is_bosch = self.CP.flags & HondaFlags.BOSCH
+    is_wire_gas = not is_bosch and not self.CP_SP.enableGasInterceptor
+
     if len(CC.orientationNED) == 3:
       self.pitch = CC.orientationNED[1]
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
 
+    # wind brake from air resistance decel at high speed
+    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
+    prior_windfactor = self.windfactor
+
+    accel = 0.0
+    gas = 0.0
+    brake = 0.0
+    adjust_accel = 0.0
+
     if CC.longActive:
-      accel = actuators.accel
-      if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)) and (accel > max(0, CS.out.aEgo) + 0.1):
-        accel = 10000.0 # help with lagged accel until pedal tuning is inserted
-      gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP)
+      if is_bosch:
+        accel = actuators.accel
+        adjust_accel = accel + hill_brake
+        brake = 0.0
+        gas, brake = compute_gas_brake(adjust_accel, CS.out.vEgo, self.CP)
+      elif self.CP_SP.enableGasInterceptor:
+        accel = actuators.accel
+        gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP)
+      else:
+        if (actuators.longControlState in (LongCtrlState.pid, LongCtrlState.stopping)) and \
+           (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
+           and (not CS.out.stockAeb) and (not CS.out.gasPressed):
+          old_i = self.nidec_pid.i
+          self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
+          if actuators.accel >= 1e-5 and CS.out.vEgo < 1.0: # don't drop PID at launch lurch
+             self.nidec_pid_factor = self.nidec_pid.i = max(old_i, self.nidec_pid.i)
+          self.accel = actuators.accel + self.nidec_pid_factor
+          adjust_accel = self.accel + hill_brake
+
+          gas_error = self.accel - CS.out.aEgo
+          wind_learn_speed = 1000
+          wind_adjust = 1 + wind_brake / wind_learn_speed
+          self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
+          gas_pedal_force = self.accel
+          if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
+            self.windfactor = max(self.windfactor, self.windfactor_before_brake)
+          else:
+            self.windfactor_before_brake = self.windfactor
+          if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
+            self.gasfactor = self.gasfactor_nomaxspeed
+            self.gasfactor_low = self.gasfactor_low_nomaxspeed
+            self.gas_alpha = self.gas_alpha_nomaxspeed
+          if (gas_pedal_force >= self.params.BOSCH_ACCEL_MAX):
+            self.gasfactor = min(self.gasfactor, self.gasfactor_before_gasmax)
+            self.gasfactor_low = min(self.gasfactor_low, self.gasfactor_low_before_gasmax)
+            self.windfactor = min(self.windfactor, self.windfactor_before_gasmax)
+          else:
+            self.gasfactor_before_gasmax = self.gasfactor
+            self.gasfactor_low_before_gasmax = self.gasfactor_low
+            self.windfactor_before_gasmax = self.windfactor
+
+        else:
+          self.accel = actuators.accel + self.nidec_pid_factor
+          adjust_accel = self.accel + hill_brake
+
+        if (CS.out.brakePressed or CS.out.gasPressed or CS.out.vEgo < 1e-5) and (self.nidec_pid.i <= 0.01):
+          self.nidec_pid.i += 0.01 # clear out nidec pid integral while acc not controlling car
+
+        brake, creep_impact = compute_gb_honda_nidec(adjust_accel, CS.out.vEgo, self.creep_factor)
+        gas_error = self.accel - CS.out.aEgo
+        if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed) \
+               and (1e-5 <= CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
+          self.creep_factor = 0.0
     else:
+      self.accel = 0.0
+      adjust_accel = self.accel
+      brake = 0.0
       accel = 0.0
       gas, brake = 0.0, 0.0
+
+    if CC.longActive and is_wire_gas:
+      accel = self.accel
+    if CS.out.gasPressed or not CC.longActive:
+      if is_wire_gas:
+        self.nidec_pid.reset()
 
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
+    if is_wire_gas and (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and \
+        (self.apply_brake_last > 0 or self.new_accel < 1e-5): # lower steer limits while braking
+      brake_limit = float(233.0 / self.params.STEER_MAX)
+      limited_torque = float(np.clip(limited_torque, -brake_limit, brake_limit))
     self.last_torque = limited_torque
 
     # *** apply brake hysteresis ***
@@ -220,46 +372,33 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
-    speed_control = 1 if ((accel <= 0.0) and (CS.out.vEgo == 0)) else 0
+    if is_wire_gas:
+      speed_val = np.clip(round(CS.out.vEgo * CV.MS_TO_MPH / 5.0) * 5, 5, 60)
+      currentLatSpeed = f"{speed_val:02d}"
+      if currentLatSpeed in self.latFactors and not CS.out.steeringPressed and CS.steer_control_active:
+        if abs(limited_torque) > 0.9 and self.latFactors[currentLatSpeed] > abs(CS.out.steeringAngleDeg):
+          self.latFactors[currentLatSpeed] /= 1.001
+        if abs(limited_torque) < 0.9 and self.latFactors[currentLatSpeed] < abs(CS.out.steeringAngleDeg):
+          self.latFactors[currentLatSpeed] *= 1.001
 
     # Send CAN commands
     can_sends = []
 
-    if self.CP.flags & HondaFlags.BOSCH and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
+    if is_bosch and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
       if self.CP.flags & HondaFlags.BOSCH_CANFD and CS.stock_acc_alive:
-        # CAN FD: the radar is still transmitting. It is silenced from here rather than from
-        # CarInterface.init(), and only once the comma relay is confirmed open: init() ran while the
-        # panda was still in the ELM327 safety mode, so the replacement ACC_CONTROL stream was blocked
-        # until the safety-mode switch landed, and whenever the switch took longer than ~110 ms after
-        # the radar went silent the brake module latched CRUISE_FAULT (accFaulted) for the whole drive.
-        # With the relay already open the stock radar keeps feeding the brake module (and, via panda
-        # forwarding, the camera) right up to the switchover, and the replacement stream starts within
-        # a few frames of radar silence (see CS.stock_acc_alive), well inside the fault threshold.
         if CS.canfd_relay_open:
           if self.radar_disable_counter % 50 == 0:
-            # UDS extended diagnostic session, required before CommunicationControl
             can_sends.append((0x18DAB0F1, b'\x02\x10\x03\x00\x00\x00\x00\x00', self.CAN.pt))
           elif self.radar_disable_counter % 50 == 5:
-            # UDS CommunicationControl disableRxAndTx (0x80 suppresses the response); the same request
-            # CarInterface.init() used to send, retried every 0.5 s until the radar goes silent
             can_sends.append((0x18DAB0F1, b'\x03\x28\x83\x03\x00\x00\x00\x00', self.CAN.pt))
           self.radar_disable_counter += 1
       elif self.frame % 10 == 0:
-        # tester present - w/ no response (keeps radar disabled)
         bus = 0 if self.CP.flags & HondaFlags.BOSCH_CANFD else 1
         can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
 
-    # simulate canfd radar to prevent faults
-    # These radar look-alikes are consumed by both the camera ECU (behind the relay, on the camera
-    # bus) and the powertrain (radar bus). openpilot's own transmissions are not forwarded across the
-    # open relay, so they must be sent explicitly on both buses. Each message is packed exactly once
-    # so the packer's counter/checksum only advance once per cycle, then the identical bytes are
-    # mirrored onto both buses (re-packing would double-increment the counter and desync the buses).
-    # While the stock radar is still transmitting (drive start, before the deferred disable above has
-    # silenced it), it authors all of these itself: sending look-alikes too would double them up.
     if (self.CP.flags & HondaFlags.BOSCH_CANFD) and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
       if CC.enabled and not self.last_acc_enabled:
-        self.radar_hud_pulse = 30  # ~3 s at 10 Hz, matching the stock 2-6 s engage burst
+        self.radar_hud_pulse = 30
       self.last_acc_enabled = CC.enabled
       radar_msgs = []
       if CS.hud_tick:
@@ -269,13 +408,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       if CS.supp_tick:
         radar_msgs.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
       if CS.radar_50hz_tick:
-        # Cycle the radar MUX through the same banks the stock radar uses: 1-10, 17-26, 33-42, 49-58.
-        # This counter also drives the LANE_PATH/HUD_OBJECTS mux below: it advances exactly one step
-        # per transmitted frame, so the sweep stays contiguous even when a tick is missed (deriving
-        # the mux from the frame counter skipped a mux on every missed tick, leaving holes in the
-        # sweep the stock radar never produces).
-        # These must be elif (not sequential if): a bare `if` that sets the bank start would fall
-        # through to the `else` increment, skipping the bank-start values (17, 33, 49).
         if self.radar_mux >= 58:
           self.radar_mux = 1
         elif self.radar_mux == 10:
@@ -286,18 +418,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.radar_mux = 49
         else:
           self.radar_mux += 1
-        # radar_msgs.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.pt, self.radar_mux))
       if CS.radar_5hz_tick:
-        # RADAR_LEAD's LANE_PATH_LENGTH must track the valid-point count of the LANE_PATH sweep we are
-        # authoring; the stock radar keeps the two in lockstep and the dash won't draw lanes otherwise.
-        # LEFT_LANE/RIGHT_LANE carry the per-side line-detected status (3/0) the same way the stock
-        # radar mirrors the camera's LANE_LINES bits; the dash draws no lane lines while both are 0.
         radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter,
                                                                    lane_path.canfd_lane_length(self.dash_lane),
                                                                    lane_path.LANE_LINE_ON if self.dash_lane.left_line else 0,
                                                                    lane_path.LANE_LINE_ON if self.dash_lane.right_line else 0))
 
-      # mirror each packed frame onto both the powertrain bus and the camera bus
       for addr, dat, _ in radar_msgs:
         can_sends.append((addr, dat, self.CAN.pt))
         can_sends.append((addr, dat, self.CAN.camera))
@@ -305,68 +431,209 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # Send steering command.
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
 
-    # wind brake from air resistance decel at high speed
-    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
     wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
 
-    # all of this is only relevant for HONDA NIDEC
-    speed_control = 0
-    max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
-    # TODO this 1.44 is just to maintain previous behavior
-    pcm_speed_BP = [-wind_brake,
-                    -wind_brake * (3 / 4),
-                    0.0,
-                    0.5]
-    # The Honda ODYSSEY seems to have different PCM_ACCEL
-    # msgs, is it other cars too?
-    if self.CP_SP.enableGasInterceptor or not CC.longActive:
+    # launch governor state machine (wire-gas Nidec)
+    if is_wire_gas:
+      if not self.launch_active:
+        if CC.longActive and (not CS.out.gasPressed) and (not CS.out.brakePressed) and \
+             (CS.out.vEgo < 0.1) and (actuators.accel > 0.05):
+          self.launch_active = True
+          self.launch_ticks = 0
+          self.launch_release_tick = -1
+          self.launch_move_tick = -1
+          self.launch_lurch_sum = 0.0
+          self.launch_lurch_n = 0
+          self.launch_err_sum = 0.0
+          self.launch_err_n = 0
+          self.launch_ceiling_ticks = 0
+      else:
+        self.launch_ticks += 1
+        if (self.launch_release_tick < 0) and (self.apply_brake_last == 0):
+          self.launch_release_tick = self.launch_ticks
+        if (self.launch_move_tick < 0) and (CS.out.vEgo > 0.1):
+          self.launch_move_tick = self.launch_ticks
+        if (self.launch_move_tick >= 0) and (10 <= self.launch_ticks - self.launch_move_tick <= 50):
+          self.launch_lurch_sum += CS.out.aEgo - actuators.accel
+          self.launch_lurch_n += 1
+        if self.launch_move_tick >= 0:
+          self.launch_err_sum += actuators.accel - CS.out.aEgo
+          self.launch_err_n += 1
+          if (CS.engine_rpm > 500) and (CS.car_gas >= 0.8 * self.car_gas_per_pcm_gas * self.gas_launch):
+            self.launch_ceiling_ticks += 1
+        launch_aborted = (not CC.longActive) or CS.out.gasPressed or CS.out.brakePressed or (actuators.accel < -0.05)
+        launch_done = (CS.out.vEgo > 1.5) or (self.launch_ticks >= 300)
+        if launch_aborted or launch_done:
+          if launch_done and not launch_aborted:
+            never_moved = (self.launch_move_tick < 0) and (self.launch_release_tick >= 0) and \
+                          (self.launch_ticks - self.launch_release_tick > 100)
+            launch_slow = never_moved or ((self.launch_move_tick >= 0) and (self.launch_release_tick >= 0) and
+                                          (self.launch_move_tick - self.launch_release_tick > 60))
+            if launch_slow:
+              self.dv_break *= 1.05
+            launch_lurch = (self.launch_lurch_sum / self.launch_lurch_n) if self.launch_lurch_n > 0 else 0.0
+            if launch_lurch > 0.5:
+              self.dv_break *= (1 - 0.05 * min(launch_lurch, 2.0))
+            self.dv_break = float(np.clip(self.dv_break, 2.0, 12.0))
+            if self.launch_err_n > 50:
+              launch_err = self.launch_err_sum / self.launch_err_n
+              if launch_err > 0.15:
+                if self.launch_ceiling_ticks > 0.5 * self.launch_err_n:
+                  self.gas_launch *= 1.03
+                else:
+                  self.dv_launch *= 1.03
+              elif launch_err < -0.15:
+                self.gas_launch *= 0.99
+                self.dv_launch *= 0.99
+              self.gas_launch = float(np.clip(self.gas_launch, 40.0, self.params.NIDEC_GAS_MAX))
+              self.dv_launch = float(np.clip(self.dv_launch, 1.0, 8.0))
+          self.launch_active = False
+          if launch_done and not launch_aborted:
+            self.gas_recovery_ticks = 200
+
+      self.gas_recovery_ticks = max(self.gas_recovery_ticks - 1, 0)
+      if CC.enabled and self.gas_pressed_prev and (not CS.out.gasPressed):
+        self.gas_recovery_ticks = 200
+      self.gas_pressed_prev = CS.out.gasPressed
+      if CC.longActive and (not self.long_active_prev) and (CS.out.vEgo > 0.1) and (not self.launch_active):
+        self.gas_recovery_ticks = 200
+      self.long_active_prev = CC.longActive
+
+    if is_wire_gas:
+      max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
+      low_w = float(np.interp(CS.out.vEgo, [10.0, 16.0], [1.0, 0.0]))
+      sf_eff = low_w * self.speedfactor_low + (1.0 - low_w) * self.speedfactor
+      alpha_eff = low_w * self.speedalpha_low + (1.0 - low_w) * self.speedalpha
+      if not CC.longActive:
+        if CC.enabled and CS.out.gasPressed and CS.car_gas_available:
+          pcm_speed = float(np.clip(CS.out.vEgo, 0.0, 100.0))
+          pcm_accel = int(np.clip(CS.car_gas / max(self.car_gas_per_pcm_gas, 1e-3), 0.0, self.params.NIDEC_GAS_MAX))
+        else:
+          pcm_speed = 0.0
+          pcm_accel = int(0.0)
+      else:
+        if self.launch_active:
+          speed_lead = self.dv_launch if CS.out.vEgo > 0.1 else self.dv_break
+        else:
+          speed_lead = float(sf_eff * self.accel + alpha_eff)
+        pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
+        gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
+        gf_eff = low_w * self.gasfactor_low + (1.0 - low_w) * self.gasfactor
+        pcm_accel = int(np.clip((self.gas_alpha + gas_accel * gf_eff / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+      max_speedcontrol = (pcm_speed > 99.999)
+      prior_speedfactor = self.speedfactor
+      prior_speedalpha = self.speedalpha
+      prior_speedfactor_low = self.speedfactor_low
+      prior_speedalpha_low = self.speedalpha_low
+
+      prior_accel = int(self.new_accel)
+      max_increase = 7 if (self.gas_recovery_ticks > 0 and prior_accel < pcm_accel) else 2
+      effective_average_factor = self.average_factor if CS.car_gas_available else 0.5
+      self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - effective_average_factor)) / effective_average_factor)
+      self.new_accel = int(np.clip(self.new_accel, 0, min(prior_accel + max_increase, self.params.NIDEC_GAS_MAX)))
+      if self.launch_active:
+        launch_seed = self.gas_launch
+        if (CS.engine_rpm < 500) and (CS.out.vEgo <= 0.1):
+          launch_seed = self.params.NIDEC_GAS_MAX
+        self.new_accel = int(min(launch_seed, self.params.NIDEC_GAS_MAX))
+      self.average_factor_sens = (self.new_accel - self.prior_gas_average) + (1 - effective_average_factor) * self.average_factor_sens
+      self.prior_gas_average = self.prior_gas_average * (1 - effective_average_factor) + (self.new_accel * effective_average_factor)
+
+      if (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
+           (self.apply_brake_last == 0) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
+        gasfactor_error = (self.accel - CS.out.aEgo)
+        self.gas_alpha = np.clip(self.gas_alpha + 0.0001 * gasfactor_error / 4.8, -3.0, 3.0)
+        gf_growth = 0.0001 * gasfactor_error * gas_accel
+        self.gasfactor_low = float(np.clip(self.gasfactor_low * (1 + low_w * gf_growth), 0.1, 5.0))
+        self.gasfactor = float(np.clip(self.gasfactor * (1 + (1.0 - low_w) * gf_growth), 0.1, 5.0))
+      if (not CS.out.gasPressed) and (self.apply_brake_last == 0):
+        speedfactor_error = (self.accel - CS.out.aEgo)
+        dv_sent = sf_eff * self.accel + alpha_eff
+        dv_sat = max(0.1, sf_eff * self.sat_accel + alpha_eff)
+
+        if CC.longActive and (CS.out.vEgo > 1e-5) and CS.car_gas_available and \
+             (CS.engine_rpm > 500) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
+          wire_gas = float(self.new_accel)
+          if (wire_gas > 20.0) and (CS.car_gas > 5.0) and (abs(wire_gas - prior_accel) <= 1.0):
+            scale_sample = CS.car_gas / wire_gas
+            self.car_gas_per_pcm_gas += 0.0005 * (scale_sample - self.car_gas_per_pcm_gas)
+
+          self.car_gas_per_pcm_gas = max(0.00001, self.car_gas_per_pcm_gas)
+          gas_measured = CS.car_gas / self.car_gas_per_pcm_gas
+          averagefactor_error = (gas_measured - self.prior_gas_average) / self.params.NIDEC_GAS_MAX
+          averagefactor_step = 0.005 * averagefactor_error * self.average_factor_sens / self.params.NIDEC_GAS_MAX
+          self.average_factor = float(np.clip(self.average_factor + np.clip(averagefactor_step, -0.0001, 0.0001),
+                                              0.02, 1.0))
+
+        if (CS.out.aEgo > self.sat_accel) and (not CS.out.gasPressed) and (CC.longActive):
+          self.sat_excess_frames += 1
+        else:
+          self.sat_excess_frames = 0
+        if (CS.out.aEgo < self.sat_accel <= self.accel) and (not CS.out.gasPressed) and (CC.longActive) and \
+             (not self.launch_active) and (self.gas_recovery_ticks == 0):
+          self.sat_deficit_frames += 1
+        else:
+          self.sat_deficit_frames = 0
+        if (self.sat_excess_frames > 100) or (self.sat_deficit_frames > 100):
+          self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX - 0.1))
+
+        if CC.longActive and (CS.out.vEgo > 1e-5) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
+          if (speedfactor_error > 0) and (dv_sent > dv_sat):
+            sf_growth = -min(0.0005 * (dv_sent - dv_sat), 0.005)
+          else:
+            sf_growth = 0.001 * speedfactor_error * self.accel
+          self.speedfactor_low = float(np.clip(self.speedfactor_low * (1 + low_w * sf_growth), 0.01, 99.0))
+          self.speedfactor = float(np.clip(self.speedfactor * (1 + (1.0 - low_w) * sf_growth), 0.01, 99.0))
+          self.speedalpha_low = min(dv_sat, self.speedalpha_low + low_w * 0.001 * speedfactor_error)
+          self.speedalpha = min(dv_sat, self.speedalpha + (1.0 - low_w) * 0.001 * speedfactor_error)
+        if max_speedcontrol or (dv_sent > dv_sat):
+          self.speedfactor = min(prior_speedfactor, self.speedfactor)
+          self.speedfactor_low = min(prior_speedfactor_low, self.speedfactor_low)
+          self.speedalpha = min(prior_speedalpha, self.speedalpha)
+          self.speedalpha_low = min(prior_speedalpha_low, self.speedalpha_low)
+          self.windfactor = min(prior_windfactor, self.windfactor)
+
+    elif is_bosch:
+      speed_control = 0
+      max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
+      pcm_speed_BP = [-wind_brake,
+                      -wind_brake * (3 / 4),
+                      0.0,
+                      0.5]
+      if not CC.longActive:
+        pcm_speed = 0.0
+        pcm_accel = int(0.0)
+      else:
+        pcm_speed_V = [0.0,
+                       np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
+                       np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
+                       np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
+        pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
+        pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+    else:
+      # gas interceptor: PCM HUD not used
       pcm_speed = 0.0
       pcm_accel = int(0.0)
-    elif self.CP.flags & HondaFlags.NIDEC_ALT_PCM_ACCEL:
-      pcm_speed_V = [0.0,
-                     np.clip(CS.out.vEgo - 3.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo + 0.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
-      pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
-      pcm_accel = int(1.0 * self.params.NIDEC_GAS_MAX)
-    elif (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)):
-      pcm_speed_V = [0.0,
-                     np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo + 20.0, 0.0, 100.0)]
-      pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
-      pcm_accel = int(np.clip((accel / 1.44) / max_accel, 10.0 / self.params.NIDEC_GAS_MAX, 1.0) * self.params.NIDEC_GAS_MAX)
-      if speed_control == 1 and CC.longActive:
-        pcm_accel = 198
-    else:
-      pcm_speed_V = [0.0,
-                     np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
-                     np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
-      pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
-      pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
 
     if not self.CP.openpilotLongitudinalControl:
-      if self.frame % 2 == 0 and not (self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD)) and not self.CP.flags & HondaFlags.NIDEC:
+      if self.frame % 2 == 0 and not (self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD)) and not (self.CP.flags & HondaFlags.NIDEC):
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
-      # If using stock ACC, spam cancel command to kill gas when OP disengages.
       if pcm_cancel_cmd:
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.CANCEL, 0, CS.scm_ambient_light, self.CP))
       elif CC.cruiseControl.resume:
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, 0, CS.scm_ambient_light, self.CP))
 
     else:
-      # Send gas and brake commands.
       if self.frame % 2 == 0:
         ts = self.frame * DT_CTRL
 
-        if self.CP.flags & HondaFlags.BOSCH:
+        if is_bosch:
           if (accel < 1e-3) and (CS.out.vEgo < 3.0) and not (-1e-3 < CS.out.vEgo < 1e-3):
             brake_addon = self.brake_pid.update(error = accel - CS.out.aEgo, speed = CS.out.vEgo)
             targetaccel = min(accel,accel + brake_addon)
           else:
             if self.brake_pid.i < 0.0:
-              self.brake_pid.i = min(0.0, self.brake_pid.i + 0.02) # release 1m/s2 @ 50hz
+              self.brake_pid.i = min(0.0, self.brake_pid.i + 0.02)
             else:
               self.brake_pid.reset()
             targetaccel = min(accel,accel + self.brake_pid.i)
@@ -374,12 +641,11 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.accel = float(np.clip(targetaccel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
           gas_pedal_force = targetaccel + wind_brake_ms2 * self.windfactor + hill_brake + self.gasalpha
 
-          # live-learn gas pedal adjustments when openpilot is controlling gas
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
             gas_error = accel - CS.out.aEgo
-            if self.CP.carFingerprint in (CAR.HONDA_INSIGHT, CAR.HONDA_CIVIC_BOSCH): # gas pedal reacts too slowly
+            if self.CP.carFingerprint in (CAR.HONDA_INSIGHT, CAR.HONDA_CIVIC_BOSCH):
               learn_speed = 150
-            elif self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Prevent overreacting to turbo lag
+            elif self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR):
               learn_speed = 300
             else:
               learn_speed = 50
@@ -388,17 +654,17 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             if (-0.5 < gas_pedal_force - self.gasalpha < 0.1) and (CS.out.vEgo > 1.0):
               self.gasalpha = float(np.clip(self.gasalpha + gas_error / learn_speed / 10.0, 0.0, 0.4))
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
-              if self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Faster reaction
+              if self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR):
                 wind_learn_speed = 100
               else:
                 wind_learn_speed = 1000
               wind_adjust = 1 + wind_brake_ms2 / wind_learn_speed
               self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
-            if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
+            if gas_pedal_force <= 0.0:
               self.windfactor = max(self.windfactor, self.windfactor_before_brake)
             else:
               self.windfactor_before_brake = self.windfactor
-            if gas_pedal_force >= self.params.BOSCH_ACCEL_MAX: # don't increase gasfactor nor windfactor at accel max, allow decreases
+            if gas_pedal_force >= self.params.BOSCH_ACCEL_MAX:
               self.gasfactor = min(self.gasfactor, self.gasfactor_before_gasmax)
               self.windfactor = min(self.windfactor, self.windfactor_before_gasmax)
             else:
@@ -407,19 +673,16 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.gas = float(np.interp((gas_pedal_force) * self.gasfactor,
                                      [0, self.params.BOSCH_GAS_LOOKUP_BP[1]], self.params.BOSCH_GAS_LOOKUP_V))
 
-          # limit gas ramp to 60 units per frame, matches stock.  Higher sometimes causes powertrain to ignore gas command.
           max_gas = max(60, self.bosch_last_gas + 60)
           self.gas = min(self.gas, max_gas)
           self.bosch_last_gas = self.gas
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
-          # CAN FD: never overlap the stock radar's own ACC_CONTROL stream; ours starts within a few
-          # frames of the radar going silent (see the deferred radar disable above)
           if not (self.CP.flags & HondaFlags.BOSCH_CANFD and CS.stock_acc_alive):
             can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
                                                           self.stopping_counter, self.CP, gas_pedal_force))
-        else:
+        elif self.CP_SP.enableGasInterceptor:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
@@ -438,54 +701,81 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
               wind_adjust = 1 + (wind_brake * 4.8) / 1000
               self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
-            if gas <= 0.0: # don't reduce windfactor while braking, allow increases
+            if gas <= 0.0:
               self.windfactor = max(self.windfactor, self.windfactor_before_brake)
             else:
               self.windfactor_before_brake = self.windfactor
 
           can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake, self.packer, self.frame))
+        else:
+          apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
+          if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb):
+              if not ((self.accel >= 1e-5) and CS.out.vEgo < 1.0):
+                self.brake_pid_factor = self.nidec_brake_pid.update(error = -(self.accel - CS.out.aEgo) * apply_brake, speed = CS.out.vEgo)
+          if (CS.out.vEgo >= 2):
+            self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
+          if (CS.out.vEgo < 1e-5) and (self.accel < 1e-5):
+            self.nidec_brake_pid.i = float(np.clip(self.brake_pid_factor_non_lowspeed, self.nidec_brake_pid.i - 0.01, self.nidec_brake_pid.i + 0.01))
+          brakefactor = 1 + self.brake_pid_factor
+          apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
+          pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
-    # Send dashboard UI commands. On CAN FD, ACC_HUD is a radar/ADAS look-alike that openpilot only
-    # owns when it has disabled the radar (op longitudinal); in stock ACC the real system sends it and
-    # the non-long safety config doesn't allowlist it.
+          apply_brake = max(self.apply_brake_last - 32, apply_brake)
+
+          pcm_override = CC.longActive or CS.out.stockAeb
+          if apply_brake > 0:
+            pcm_speed = 0.0
+            self.new_accel = 0
+
+          can_sends.append(hondacan.create_brake_command(self.packer, self.CAN, apply_brake, pump_on,
+                                                         pcm_override, pcm_cancel_cmd, alert_fcw,
+                                                         CS.stock_brake, self.CP_SP))
+          if (apply_brake > 0) or (CS.out.gasPressed and not CS.car_gas_available):
+            self.new_accel = 0
+
+          if (self.apply_brake_last > 0) and (apply_brake == 0) and CC.longActive and (not self.launch_active):
+            self.gas_recovery_ticks = 200
+
+          if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
+            self.gasfactor_nomaxspeed = self.gasfactor
+            self.gasfactor_low_nomaxspeed = self.gasfactor_low
+            self.gas_alpha_nomaxspeed = self.gas_alpha
+          else:
+            self.gasfactor_nomaxspeed = min(self.gasfactor_nomaxspeed, self.gasfactor)
+            self.gasfactor_low_nomaxspeed = min(self.gasfactor_low_nomaxspeed, self.gasfactor_low)
+            self.gas_alpha_nomaxspeed = min(self.gas_alpha_nomaxspeed, self.gas_alpha)
+
+          self.apply_brake_last = apply_brake
+          self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
+
+    speed_control = 0 if is_bosch else self.launch_active
+
     if (self.CP.flags & HondaFlags.BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
-        pcm_accel = actuators.accel
-        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
+        can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, actuators.accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                  self.CP.openpilotLongitudinalControl))
 
     if self.frame % 10 == 0:
-      if CC.longActive and (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)):
-        # standstill disengage
-        if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
-          pcm_speed = 25.0 / 3.6
-
       if self.CP.openpilotLongitudinalControl:
         if not (self.CP.flags & HondaFlags.BOSCH_CANFD):
-          # On Nidec, this also controls longitudinal positive acceleration
-          can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, pcm_accel,
+          acc_hud_pcm_accel = self.new_accel if is_wire_gas else pcm_accel
+          can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, acc_hud_pcm_accel,
                                                    hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                    self.CP.openpilotLongitudinalControl))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       reduced_steering = CS.out.steeringPressed
-      steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
+      if is_bosch:
+        steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
+      else:
+        steer_maxed = (abs(apply_torque) >= self.params.STEER_MAX) or not CS.steer_control_active
 
       lkas_state_change = None
       if self.CP.flags & HondaFlags.BOSCH_CANFD:
-        # The stock camera holds LKAS_STATE_CHANGE low and pulses it high for ~3s around HUD state
-        # changes; holding it high permanently (the default below) suppresses the dash lane lines.
-        # The key must contain exactly the signals that change the LKAS_HUD payload, nothing more:
-        # steer_maxed used to be in here (via SOLID_LANES) and its 10Hz flicker during city-speed
-        # steering re-triggered the pulse continuously, keeping LKAS_STATE_CHANGE high whenever a
-        # real lane path was being sent - which suppressed the dash lane lines entirely.
-        # latActive drives SOLID_LANES (under sunnypilot MADS the lateral control stays engaged
-        # when ACC disengages, and the dash LKAS indication follows it); dashed_lanes (MADS armed,
-        # from MadsCarController) drives DASHED_LANES so parked LKAS presses get cluster feedback.
         hud_key = (bool(CC.latActive), bool(self.dashed_lanes), bool(alert_steer_required), bool(CS.out.steerFaultPermanent))
         if hud_key != self.lkas_hud_key:
           self.lkas_hud_key = hud_key
-          self.lkas_state_change_frames = 30  # 3s at the 10Hz LKAS_HUD rate, matching stock pulse length
+          self.lkas_state_change_frames = 30
         lkas_state_change = self.lkas_state_change_frames > 0
         self.lkas_state_change_frames = max(0, self.lkas_state_change_frames - 1)
 
@@ -494,37 +784,25 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                 steer_maxed, CS, lkas_state_change=lkas_state_change))
 
       if self.CP.openpilotLongitudinalControl:
-        # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
-        if self.CP.flags & HondaFlags.BOSCH and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS) and not (self.CP.flags & HondaFlags.BOSCH_CANFD):
+        if is_bosch and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS) and not (self.CP.flags & HondaFlags.BOSCH_CANFD):
           can_sends.append(hondacan.create_radar_hud(self.packer, self.CAN.pt))
         if self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH:
           can_sends.append(hondacan.create_legacy_brake_command(self.packer, self.CAN.pt))
-        if not (self.CP.flags & HondaFlags.BOSCH):
+        if not is_bosch:
           self.speed = pcm_speed
-          if not self.CP_SP.enableGasInterceptor:
+          if is_wire_gas:
             self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
-    # Intelligent Cruise Button Management
-    can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CC_SP, CS, self.packer, self.frame,
-                                                                       self.last_button_frame, self.CAN))
-
-    # Render OP's lane and lead car on the dash. On CAN FD these are radar look-alikes that only exist
-    # (and are only allowed by panda safety) when the radar is disabled, i.e. openpilot longitudinal;
-    # in stock ACC the real radar still owns LANE_PATH/HUD_OBJECTS, so don't author them.
+    # Render OP's lane and lead car on the dash.
     if ((self.frame % 2 == 0 and self.CP.flags & HondaFlags.BOSCH_RADARLESS) or
         (CS.radar_50hz_tick and self.CP.flags & HondaFlags.BOSCH_CANFD and self.CP.openpilotLongitudinalControl
          and not CS.stock_acc_alive)):
       leads = hud_objects.leads_from_model(self.model, CS.out.vEgo)
       lead = leads[0]
-      lead_d = lead.dRel if lead.status else 0.0  # extend the lane out to the lead (0 = no lead)
+      lead_d = lead.dRel if lead.status else 0.0
       self.dash_lane = self.lane_path_fitter.update(self.model, CS.out.vEgo, lead_d)
-      # Important: same mux for lane_path and hud_objects. Lane display freezes if muxes don't match.
       if self.CP.flags & HondaFlags.BOSCH_CANFD:
-        # self.radar_mux advances one step per 50Hz tick (above), so the mux sweep stays contiguous
-        # across missed ticks, unlike a frame-derived mux.
         mux = self.radar_mux
-        # No LKAS_HUD_2 on CAN FD: the dash reads the lane length from the stock radar's in-band
-        # terminator, so reshape the path into the terminated-prefix form (see lane_path.py).
         lane_offsets = lane_path.canfd_lane_offsets(self.dash_lane)
       else:
         mux = lane_path.MUX_CYCLE[(self.frame // 2) % len(lane_path.MUX_CYCLE)]
@@ -532,36 +810,23 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       lane_msg = lane_path.create_lane_path(self.packer, self.CAN.lkas, lane_offsets, mux)
       can_sends.append(lane_msg)
 
-      # CAN FD cars have no camera HUD_OBJECTS to poll (the disabled radar owned it), so there are no
-      # secondary vehicle locations: author OP's lead in slot 0 with the other slots blank (tracks=None).
       tracks = CS.hud_object_tracker.snapshot() if CS.hud_object_tracker is not None else None
       if self.CP.openpilotLongitudinalControl:
-        # For OP long, replace lead car and forward rest of objects
         hud_msg = self.hud_object_author.create(self.packer, self.CAN.lkas, lead, tracks, mux, now_nanos * 1e-9,
                                                 extra_leads=leads[1:])
       else:
-        # For ACC, forward objects but with our mux
         hud_msg = hud_objects.forward_hud_object(self.packer, self.CAN.lkas, mux, tracks)
       can_sends.append(hud_msg)
 
-      # On CAN FD the camera (behind the relay) also consumes these radar look-alikes, and openpilot's
-      # own TX is not forwarded across the open relay. Mirror the identical packed bytes onto the camera
-      # bus (packed once above, so the counter/checksum don't double-increment and both buses match).
       if self.CP.flags & HondaFlags.BOSCH_CANFD:
         for addr, dat, _ in (lane_msg, hud_msg):
           can_sends.append((addr, dat, self.CAN.camera))
 
     if self.frame % 20 == 0 and self.CP.flags & HondaFlags.BOSCH_RADARLESS:
-      # COUNTER_2 trails the packer's COUNTER (frame//20 % 4) by one. TODO: do we need the - 1 trail?
       dl = self.dash_lane
       can_sends.append(lane_path.create_lkas_hud_2(self.packer, self.CAN.lkas, (self.frame // 20 - 1) % 4,
                                                    dl.reach, dl.lane_cross, dl.left_line, dl.right_line))
 
-    # Radarless + CAN FD: when stock LKAS is active, the touch-steering-wheel timer/nag eventually forces an ACC
-    # disengagement (on CAN FD it shows up as a brake tap from the VSA). Disable LKAS automatically and block the
-    # driver's LKAS button from reaching the camera by taking over SCM_BUTTONS on the camera bus while engaged
-    # (panda blocks the forwarded stock SCM_BUTTONS when engaged; the standard button spamming isn't reliably
-    # accepted by the camera).
     if self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD) and CC.enabled and self.frame % 4 == 0 and \
         not pcm_cancel_cmd and not CC.cruiseControl.resume:
       if self.lkas_button_send_remaining == 0 and CS.lkas_hud["LKAS_READY"] and self.frame >= self.last_lkas_button_frame + 500:
@@ -572,26 +837,84 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         self.lkas_button_send_remaining -= 1
         cruise_setting = CruiseSettings.LKAS
       elif CS.cruise_setting == CruiseSettings.LKAS:
-        cruise_setting = 0  # block driver's LKAS button press
+        cruise_setting = 0
       else:
         cruise_setting = CS.cruise_setting
 
       can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CS.cruise_buttons, cruise_setting,
                                                      CS.scm_ambient_light, self.CP, bus=self.CAN.camera))
 
+    can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CC_SP, CS, self.packer, self.frame,
+                                                                       self.last_button_frame, self.CAN))
+
     new_actuators = actuators.as_builder()
-    new_actuators.speed = float(self.gasalpha)
-    new_actuators.accel = self.accel
-    new_actuators.gas = float(self.gasfactor)
-    new_actuators.brake = float(self.windfactor)
+    if is_bosch:
+      new_actuators.speed = float(self.gasalpha)
+      new_actuators.accel = self.accel
+      new_actuators.gas = float(self.gasfactor)
+      new_actuators.brake = float(self.windfactor)
+      new_actuators.torqueOutputCan = apply_torque
+    elif is_wire_gas:
+      new_actuators.speed = float(self.nidec_pid_factor)
+      new_actuators.accel = float(self.accel)
+      new_actuators.gas = float(self.average_factor)
+      new_actuators.brake = float(self.sat_accel)
+      new_actuators.torqueOutputCan = float(self.speedfactor_low)
+    else:
+      new_actuators.speed = float(self.gasalpha)
+      new_actuators.accel = self.accel
+      new_actuators.gas = float(self.gasfactor)
+      new_actuators.brake = float(self.windfactor)
+      new_actuators.torqueOutputCan = apply_torque
     new_actuators.torque = self.last_torque
-    new_actuators.torqueOutputCan = apply_torque
 
     if self.frame % 6000 == 0:
+      if is_bosch:
+        self.param_writer.put_many({
+          "HondaGasAlphaParams": self.gasalpha,
+          "HondaGasFactorParams": self.gasfactor,
+          "HondaWindFactorParams": self.windfactor,
+        })
+      elif is_wire_gas:
+        self.param_writer.put_many({
+          "HondaFeedForwardParams": self.average_factor,
+          "HondaBrakePIDParams": self.brake_pid_factor_non_lowspeed,
+          "HondaCreepFactorParams": self.creep_factor,
+          "HondaGasAlphaParams": self.gas_alpha_nomaxspeed,
+          "HondaGasFactorParams": self.gasfactor_nomaxspeed,
+          "HondaGasFactorLowParams": self.gasfactor_low_nomaxspeed,
+          "HondaWindFactorParams": self.windfactor,
+          "HondaSpeedAlphaParams": self.speedalpha,
+          "HondaSpeedFactorParams": self.speedfactor,
+          "HondaSpeedAlphaLowParams": self.speedalpha_low,
+          "HondaSpeedFactorLowParams": self.speedfactor_low,
+          "HondaSatAccelParams": self.sat_accel,
+          "HondaCarGasScaleParams": self.car_gas_per_pcm_gas,
+          "HondaLaunchDvParams": self.dv_launch,
+          "HondaLaunchGasParams": self.gas_launch,
+          "HondaLaunchDvBreakParams": self.dv_break,
+        })
+      else:
+        self.param_writer.put_many({
+          "HondaGasAlphaParams": self.gasalpha,
+          "HondaGasFactorParams": self.gasfactor,
+          "HondaWindFactorParams": self.windfactor,
+        })
+
+    if self.frame % 12000 == 30 and is_wire_gas:
       self.param_writer.put_many({
-        "HondaGasAlphaParams": self.gasalpha,
-        "HondaGasFactorParams": self.gasfactor,
-        "HondaWindFactorParams": self.windfactor,
+        "HondaLatAccelFactor05Params": self.latFactors["05"],
+        "HondaLatAccelFactor10Params": self.latFactors["10"],
+        "HondaLatAccelFactor15Params": self.latFactors["15"],
+        "HondaLatAccelFactor20Params": self.latFactors["20"],
+        "HondaLatAccelFactor25Params": self.latFactors["25"],
+        "HondaLatAccelFactor30Params": self.latFactors["30"],
+        "HondaLatAccelFactor35Params": self.latFactors["35"],
+        "HondaLatAccelFactor40Params": self.latFactors["40"],
+        "HondaLatAccelFactor45Params": self.latFactors["45"],
+        "HondaLatAccelFactor50Params": self.latFactors["50"],
+        "HondaLatAccelFactor55Params": self.latFactors["55"],
+        "HondaLatAccelFactor60Params": self.latFactors["60"],
       })
 
     self.frame += 1
