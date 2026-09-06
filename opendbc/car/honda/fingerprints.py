@@ -686,6 +686,7 @@ FW_VERSIONS = {
     (Ecu.eps, 0x18da30f1, None): [
       b'39990-T6A-J210\x00\x00',
       b'39990-T6A-J420\x00\x00',
+      b'39990-T6D-H220\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-T6A-J130\x00\x00',
@@ -696,6 +697,7 @@ FW_VERSIONS = {
       b'36161-T6A-U230\x00\x00',
     ],
     (Ecu.gateway, 0x18daeff1, None): [
+      b'38897-T6A-J010\x00\x00',
       b'38897-T6A-J110\x00\x00',
     ],
     (Ecu.transmission, 0x18da1ef1, None): [
