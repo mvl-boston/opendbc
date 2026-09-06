@@ -311,7 +311,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         gas, brake = compute_gas_brake(adjust_accel, CS.out.vEgo, self.CP)
       elif is_gas_interceptor or is_stock_nidec:
         accel = actuators.accel
-        if (self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR)) and (accel > max(0, CS.out.aEgo) + 0.1):
+        if self.CP.carFingerprint == CAR.ACURA_MDX_3G and (accel > max(0, CS.out.aEgo) + 0.1):
           accel = 10000.0  # help with lagged accel until pedal tuning is inserted
         gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP)
       elif is_wire_gas:
@@ -410,19 +410,39 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     if is_bosch and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
       if self.CP.flags & HondaFlags.BOSCH_CANFD and CS.stock_acc_alive:
+        # CAN FD: the radar is still transmitting. It is silenced from here rather than from
+        # CarInterface.init(), and only once the comma relay is confirmed open: init() ran while the
+        # panda was still in the ELM327 safety mode, so the replacement ACC_CONTROL stream was blocked
+        # until the safety-mode switch landed, and whenever the switch took longer than ~110 ms after
+        # the radar went silent the brake module latched CRUISE_FAULT (accFaulted) for the whole drive.
+        # With the relay already open the stock radar keeps feeding the brake module (and, via panda
+        # forwarding, the camera) right up to the switchover, and the replacement stream starts within
+        # a few frames of radar silence (see CS.stock_acc_alive), well inside the fault threshold.
         if CS.canfd_relay_open:
           if self.radar_disable_counter % 50 == 0:
+            # UDS extended diagnostic session, required before CommunicationControl
             can_sends.append((0x18DAB0F1, b'\x02\x10\x03\x00\x00\x00\x00\x00', self.CAN.pt))
           elif self.radar_disable_counter % 50 == 5:
+            # UDS CommunicationControl disableRxAndTx (0x80 suppresses the response); the same request
+            # CarInterface.init() used to send, retried every 0.5 s until the radar goes silent
             can_sends.append((0x18DAB0F1, b'\x03\x28\x83\x03\x00\x00\x00\x00', self.CAN.pt))
           self.radar_disable_counter += 1
       elif self.frame % 10 == 0:
+        # tester present - w/ no response (keeps radar disabled)
         bus = 0 if self.CP.flags & HondaFlags.BOSCH_CANFD else 1
         can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
 
+    # simulate canfd radar to prevent faults
+    # These radar look-alikes are consumed by both the camera ECU (behind the relay, on the camera
+    # bus) and the powertrain (radar bus). openpilot's own transmissions are not forwarded across the
+    # open relay, so they must be sent explicitly on both buses. Each message is packed exactly once
+    # so the packer's counter/checksum only advance once per cycle, then the identical bytes are
+    # mirrored onto both buses (re-packing would double-increment the counter and desync the buses).
+    # While the stock radar is still transmitting (drive start, before the deferred disable above has
+    # silenced it), it authors all of these itself: sending look-alikes too would double them up.
     if (self.CP.flags & HondaFlags.BOSCH_CANFD) and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
       if CC.enabled and not self.last_acc_enabled:
-        self.radar_hud_pulse = 30
+        self.radar_hud_pulse = 30  # ~3 s at 10 Hz, matching the stock 2-6 s engage burst
       self.last_acc_enabled = CC.enabled
       radar_msgs = []
       if CS.hud_tick:
@@ -432,6 +452,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       if CS.supp_tick:
         radar_msgs.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
       if CS.radar_50hz_tick:
+        # Cycle the radar MUX through the same banks the stock radar uses: 1-10, 17-26, 33-42, 49-58.
+        # This counter also drives the LANE_PATH/HUD_OBJECTS mux below: it advances exactly one step
+        # per transmitted frame, so the sweep stays contiguous even when a tick is missed (deriving
+        # the mux from the frame counter skipped a mux on every missed tick, leaving holes in the
+        # sweep the stock radar never produces).
+        # These must be elif (not sequential if): a bare `if` that sets the bank start would fall
+        # through to the `else` increment, skipping the bank-start values (17, 33, 49).
         if self.radar_mux >= 58:
           self.radar_mux = 1
         elif self.radar_mux == 10:
@@ -442,12 +469,18 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.radar_mux = 49
         else:
           self.radar_mux += 1
+        # radar_msgs.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.pt, self.radar_mux))
       if CS.radar_5hz_tick:
+        # RADAR_LEAD's LANE_PATH_LENGTH must track the valid-point count of the LANE_PATH sweep we are
+        # authoring; the stock radar keeps the two in lockstep and the dash won't draw lanes otherwise.
+        # LEFT_LANE/RIGHT_LANE carry the per-side line-detected status (3/0) the same way the stock
+        # radar mirrors the camera's LANE_LINES bits; the dash draws no lane lines while both are 0.
         radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter,
                                                                    lane_path.canfd_lane_length(self.dash_lane),
                                                                    lane_path.LANE_LINE_ON if self.dash_lane.left_line else 0,
                                                                    lane_path.LANE_LINE_ON if self.dash_lane.right_line else 0))
 
+      # mirror each packed frame onto both the powertrain bus and the camera bus
       for addr, dat, _ in radar_msgs:
         can_sends.append((addr, dat, self.CAN.pt))
         can_sends.append((addr, dat, self.CAN.camera))
@@ -639,11 +672,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       if self.frame % 2 == 0 and not (self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD)) and not (self.CP.flags & HondaFlags.NIDEC):
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
       if pcm_cancel_cmd:
+        # If using stock ACC, spam cancel command to kill gas when OP disengages.
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.CANCEL, 0, CS.scm_ambient_light, self.CP))
       elif CC.cruiseControl.resume:
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, 0, CS.scm_ambient_light, self.CP))
 
     else:
+      # Send gas and brake commands.
       if self.frame % 2 == 0:
         ts = self.frame * DT_CTRL
 
@@ -653,7 +688,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             targetaccel = min(accel,accel + brake_addon)
           else:
             if self.brake_pid.i < 0.0:
-              self.brake_pid.i = min(0.0, self.brake_pid.i + 0.02)
+              self.brake_pid.i = min(0.0, self.brake_pid.i + 0.02) # release 1m/s2 @ 50hz
             else:
               self.brake_pid.reset()
             targetaccel = min(accel,accel + self.brake_pid.i)
@@ -661,11 +696,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.accel = float(np.clip(targetaccel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
           gas_pedal_force = targetaccel + wind_brake_ms2 * self.windfactor + hill_brake + self.gasalpha
 
+          # live-learn gas pedal adjustments when openpilot is controlling gas
           if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.gasPressed):
             gas_error = accel - CS.out.aEgo
-            if self.CP.carFingerprint in (CAR.HONDA_INSIGHT, CAR.HONDA_CIVIC_BOSCH):
+            if self.CP.carFingerprint in (CAR.HONDA_INSIGHT, CAR.HONDA_CIVIC_BOSCH): # gas pedal reacts too slowly
               learn_speed = 150
-            elif self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR):
+            elif self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Prevent overreacting to turbo lag
               learn_speed = 300
             else:
               learn_speed = 50
@@ -674,17 +710,17 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             if (-0.5 < gas_pedal_force - self.gasalpha < 0.1) and (CS.out.vEgo > 1.0):
               self.gasalpha = float(np.clip(self.gasalpha + gas_error / learn_speed / 10.0, 0.0, 0.4))
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
-              if self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR):
+              if self.CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR): # Faster reaction
                 wind_learn_speed = 100
               else:
                 wind_learn_speed = 1000
               wind_adjust = 1 + wind_brake_ms2 / wind_learn_speed
               self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
-            if gas_pedal_force <= 0.0:
+            if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
               self.windfactor = max(self.windfactor, self.windfactor_before_brake)
             else:
               self.windfactor_before_brake = self.windfactor
-            if gas_pedal_force >= self.params.BOSCH_ACCEL_MAX:
+            if gas_pedal_force >= self.params.BOSCH_ACCEL_MAX: # don't increase gasfactor nor windfactor at accel max, allow decreases
               self.gasfactor = min(self.gasfactor, self.gasfactor_before_gasmax)
               self.windfactor = min(self.windfactor, self.windfactor_before_gasmax)
             else:
@@ -693,12 +729,15 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.gas = float(np.interp((gas_pedal_force) * self.gasfactor,
                                      [0, self.params.BOSCH_GAS_LOOKUP_BP[1]], self.params.BOSCH_GAS_LOOKUP_V))
 
+          # limit gas ramp to 60 units per frame, matches stock.  Higher sometimes causes powertrain to ignore gas command.
           max_gas = max(60, self.bosch_last_gas + 60)
           self.gas = min(self.gas, max_gas)
           self.bosch_last_gas = self.gas
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
+          # CAN FD: never overlap the stock radar's own ACC_CONTROL stream; ours starts within a few
+          # frames of the radar going silent (see the deferred radar disable above)
           if not (self.CP.flags & HondaFlags.BOSCH_CANFD and CS.stock_acc_alive):
             can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
                                                           self.stopping_counter, self.CP, gas_pedal_force))
@@ -720,7 +759,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
               wind_adjust = 1 + (wind_brake * 4.8) / 1000
               self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
-            if gas <= 0.0:
+            if gas <= 0.0: # don't reduce windfactor while braking, allow increases
               self.windfactor = max(self.windfactor, self.windfactor_before_brake)
             else:
               self.windfactor_before_brake = self.windfactor
@@ -759,13 +798,22 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     speed_control = 0 if is_bosch else self.launch_active
 
     if (self.CP.flags & HondaFlags.BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
+        # Send dashboard UI commands. On CAN FD, ACC_HUD is a radar/ADAS look-alike that openpilot only
+        # owns when it has disabled the radar (op longitudinal); in stock ACC the real system sends it and
+        # the non-long safety config doesn't allowlist it.
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, actuators.accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                  self.CP.openpilotLongitudinalControl))
 
     if self.frame % 10 == 0:
+      if CC.longActive and self.CP.carFingerprint == CAR.ACURA_MDX_3G:
+        # standstill disengage
+        if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
+          pcm_speed = 25.0 / 3.6
+
       if self.CP.openpilotLongitudinalControl:
         if not (self.CP.flags & HondaFlags.BOSCH_CANFD):
+          # On Nidec, this also controls longitudinal positive acceleration
           acc_hud_pcm_accel = self.new_accel if is_wire_gas else pcm_accel
           can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, acc_hud_pcm_accel,
                                                    hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
@@ -780,10 +828,19 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
       lkas_state_change = None
       if self.CP.flags & HondaFlags.BOSCH_CANFD:
+        # The stock camera holds LKAS_STATE_CHANGE low and pulses it high for ~3s around HUD state
+        # changes; holding it high permanently (the default below) suppresses the dash lane lines.
+        # The key must contain exactly the signals that change the LKAS_HUD payload, nothing more:
+        # steer_maxed used to be in here (via SOLID_LANES) and its 10Hz flicker during city-speed
+        # steering re-triggered the pulse continuously, keeping LKAS_STATE_CHANGE high whenever a
+        # real lane path was being sent - which suppressed the dash lane lines entirely.
+        # latActive drives SOLID_LANES (under sunnypilot MADS the lateral control stays engaged
+        # when ACC disengages, and the dash LKAS indication follows it); dashed_lanes (MADS armed,
+        # from MadsCarController) drives DASHED_LANES so parked LKAS presses get cluster feedback.
         hud_key = (bool(CC.latActive), bool(self.dashed_lanes), bool(alert_steer_required), bool(CS.out.steerFaultPermanent))
         if hud_key != self.lkas_hud_key:
           self.lkas_hud_key = hud_key
-          self.lkas_state_change_frames = 30
+          self.lkas_state_change_frames = 30  # 3s at the 10Hz LKAS_HUD rate, matching stock pulse length
         lkas_state_change = self.lkas_state_change_frames > 0
         self.lkas_state_change_frames = max(0, self.lkas_state_change_frames - 1)
 
@@ -792,6 +849,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                 steer_maxed, CS, lkas_state_change=lkas_state_change))
 
       if self.CP.openpilotLongitudinalControl:
+        # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
         if is_bosch and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS) and not (self.CP.flags & HondaFlags.BOSCH_CANFD):
           can_sends.append(hondacan.create_radar_hud(self.packer, self.CAN.pt))
         if self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH:
@@ -801,16 +859,23 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           if not is_gas_interceptor:
             self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
-    # Render OP's lane and lead car on the dash.
+    # Render OP's lane and lead car on the dash. On CAN FD these are radar look-alikes that only exist
+    # (and are only allowed by panda safety) when the radar is disabled, i.e. openpilot longitudinal;
+    # in stock ACC the real radar still owns LANE_PATH/HUD_OBJECTS, so don't author them.
     if ((self.frame % 2 == 0 and self.CP.flags & HondaFlags.BOSCH_RADARLESS) or
         (CS.radar_50hz_tick and self.CP.flags & HondaFlags.BOSCH_CANFD and self.CP.openpilotLongitudinalControl
          and not CS.stock_acc_alive)):
       leads = hud_objects.leads_from_model(self.model, CS.out.vEgo)
       lead = leads[0]
-      lead_d = lead.dRel if lead.status else 0.0
+      lead_d = lead.dRel if lead.status else 0.0  # extend the lane out to the lead (0 = no lead)
       self.dash_lane = self.lane_path_fitter.update(self.model, CS.out.vEgo, lead_d)
+      # Important: same mux for lane_path and hud_objects. Lane display freezes if muxes don't match.
       if self.CP.flags & HondaFlags.BOSCH_CANFD:
+        # self.radar_mux advances one step per 50Hz tick (above), so the mux sweep stays contiguous
+        # across missed ticks, unlike a frame-derived mux.
         mux = self.radar_mux
+        # No LKAS_HUD_2 on CAN FD: the dash reads the lane length from the stock radar's in-band
+        # terminator, so reshape the path into the terminated-prefix form (see lane_path.py).
         lane_offsets = lane_path.canfd_lane_offsets(self.dash_lane)
       else:
         mux = lane_path.MUX_CYCLE[(self.frame // 2) % len(lane_path.MUX_CYCLE)]
@@ -818,23 +883,36 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       lane_msg = lane_path.create_lane_path(self.packer, self.CAN.lkas, lane_offsets, mux)
       can_sends.append(lane_msg)
 
+      # CAN FD cars have no camera HUD_OBJECTS to poll (the disabled radar owned it), so there are no
+      # secondary vehicle locations: author OP's lead in slot 0 with the other slots blank (tracks=None).
       tracks = CS.hud_object_tracker.snapshot() if CS.hud_object_tracker is not None else None
       if self.CP.openpilotLongitudinalControl:
+        # For OP long, replace lead car and forward rest of objects
         hud_msg = self.hud_object_author.create(self.packer, self.CAN.lkas, lead, tracks, mux, now_nanos * 1e-9,
                                                 extra_leads=leads[1:])
       else:
+        # For ACC, forward objects but with our mux
         hud_msg = hud_objects.forward_hud_object(self.packer, self.CAN.lkas, mux, tracks)
       can_sends.append(hud_msg)
 
+      # On CAN FD the camera (behind the relay) also consumes these radar look-alikes, and openpilot's
+      # own TX is not forwarded across the open relay. Mirror the identical packed bytes onto the camera
+      # bus (packed once above, so the counter/checksum don't double-increment and both buses match).
       if self.CP.flags & HondaFlags.BOSCH_CANFD:
         for addr, dat, _ in (lane_msg, hud_msg):
           can_sends.append((addr, dat, self.CAN.camera))
 
     if self.frame % 20 == 0 and self.CP.flags & HondaFlags.BOSCH_RADARLESS:
+      # COUNTER_2 trails the packer's COUNTER (frame//20 % 4) by one. TODO: do we need the - 1 trail?
       dl = self.dash_lane
       can_sends.append(lane_path.create_lkas_hud_2(self.packer, self.CAN.lkas, (self.frame // 20 - 1) % 4,
                                                    dl.reach, dl.lane_cross, dl.left_line, dl.right_line))
 
+    # Radarless + CAN FD: when stock LKAS is active, the touch-steering-wheel timer/nag eventually forces an ACC
+    # disengagement (on CAN FD it shows up as a brake tap from the VSA). Disable LKAS automatically and block the
+    # driver's LKAS button from reaching the camera by taking over SCM_BUTTONS on the camera bus while engaged
+    # (panda blocks the forwarded stock SCM_BUTTONS when engaged; the standard button spamming isn't reliably
+    # accepted by the camera).
     if self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD) and CC.enabled and self.frame % 4 == 0 and \
         not pcm_cancel_cmd and not CC.cruiseControl.resume:
       if self.lkas_button_send_remaining == 0 and CS.lkas_hud["LKAS_READY"] and self.frame >= self.last_lkas_button_frame + 500:
@@ -845,13 +923,14 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         self.lkas_button_send_remaining -= 1
         cruise_setting = CruiseSettings.LKAS
       elif CS.cruise_setting == CruiseSettings.LKAS:
-        cruise_setting = 0
+        cruise_setting = 0  # block driver's LKAS button press
       else:
         cruise_setting = CS.cruise_setting
 
       can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CS.cruise_buttons, cruise_setting,
                                                      CS.scm_ambient_light, self.CP, bus=self.CAN.camera))
 
+    # Intelligent Cruise Button Management
     can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CC_SP, CS, self.packer, self.frame,
                                                                        self.last_button_frame, self.CAN))
 

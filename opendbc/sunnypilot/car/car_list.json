@@ -73,7 +73,7 @@
     "package": "All"
   },
   "Acura MDX 2020": {
-    "platform": "ACURA_MDX_3G_MMR",
+    "platform": "ACURA_MDX_3G",
     "make": "Acura",
     "brand": "honda",
     "model": "MDX",
@@ -118,7 +118,7 @@
     "package": "All"
   },
   "Acura MDX Hybrid 2020": {
-    "platform": "ACURA_MDX_3G_MMR",
+    "platform": "ACURA_MDX_3G",
     "make": "Acura",
     "brand": "honda",
     "model": "MDX Hybrid",
