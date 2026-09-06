@@ -262,7 +262,6 @@ class CarInterface(CarInterfaceBase):
         CAR.HONDA_CLARITY,
         CAR.HONDA_ACCORD_9G,
         CAR.ACURA_MDX_3G,
-        CAR.ACURA_MDX_3G_MMR,
         CAR.ACURA_TLX_1G,
       ):
       pass
@@ -405,7 +404,7 @@ class CarInterface(CarInterfaceBase):
         stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2560], [0, 2560]]
         stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.8], [0.24]]
 
-    elif candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR): # source mlocoteta
+    elif candidate == CAR.ACURA_MDX_3G: # source mlocoteta
       stock_cp.autoResumeSng = True
       stock_cp.minEnableSpeed = -1
       stock_cp.steerActuatorDelay = 0.3
