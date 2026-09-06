@@ -46,12 +46,13 @@ class TestLanePathSlew(unittest.TestCase):
     # center -> full-scale (max turn) must take SLEW_FULL_SCALE_SECONDS at the 50 Hz update rate
     fitter = lane_path.LanePathFitter()
     fitter.update(model_at(0.0), V_EGO, 0.0)
-    target = lane_path.encode_lane_path(*_lane_xy(-100.0))  # saturates every offset at OFFSET_VALID_MAX
+    # CAN FD gain saturates at realistic laterals; radarless gain does not at -100 m
+    target = lane_path.encode_lane_path(*_lane_xy(-100.0), canfd=True)
     assert all(t == lane_path.OFFSET_VALID_MAX for t in target)
 
     n_updates = round(lane_path.SLEW_FULL_SCALE_SECONDS * lane_path.SLEW_UPDATE_RATE_HZ)
     for i in range(n_updates):
-      dl = fitter.update(model_at(-100.0), V_EGO, 0.0)
+      dl = fitter.update(model_at(-100.0), V_EGO, 0.0, canfd=True)
       if i < n_updates - 1:
         assert dl.offsets != target
     assert dl.offsets == target
@@ -84,6 +85,25 @@ class TestLanePathSlew(unittest.TestCase):
 def _lane_xy(center_y):
   m = model_at(center_y)
   return m.laneLines[1].x, [(a + b) / 2.0 for a, b in zip(m.laneLines[1].y, m.laneLines[2].y, strict=True)]
+
+
+class TestLanePathGain(unittest.TestCase):
+  def test_canfd_gain_is_higher_than_radarless(self):
+    x, y = _lane_xy(-2.0)
+    radarless = lane_path.encode_lane_path(x, y, canfd=False)
+    canfd = lane_path.encode_lane_path(x, y, canfd=True)
+    assert radarless != canfd
+    assert all(abs(c) >= abs(r) for c, r in zip(canfd, radarless, strict=True))
+
+  def test_radarless_fitter_uses_radarless_gain(self):
+    fitter = lane_path.LanePathFitter()
+    dl = fitter.update(model_at(-2.0), V_EGO, 0.0, canfd=False)
+    assert dl.offsets == lane_path.encode_lane_path(*_lane_xy(-2.0), canfd=False)
+
+  def test_canfd_fitter_uses_canfd_gain(self):
+    fitter = lane_path.LanePathFitter()
+    dl = fitter.update(model_at(-2.0), V_EGO, 0.0, canfd=True)
+    assert dl.offsets == lane_path.encode_lane_path(*_lane_xy(-2.0), canfd=True)
 
 
 if __name__ == "__main__":
