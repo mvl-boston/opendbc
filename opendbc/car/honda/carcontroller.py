@@ -1035,7 +1035,7 @@ class CarController(CarControllerBase):
       leads = hud_objects.leads_from_model(self.model, CS.out.vEgo)
       lead = leads[0]
       lead_d = lead.dRel if lead.status else 0.0  # extend the lane out to the lead (0 = no lead)
-      canfd = bool(self.CP.flags & HondaFlags.BOSCH_CANFD)
+      canfd = self.CP.carFingerprint in HONDA_BOSCH_CANFD
       self.dash_lane = self.lane_path_fitter.update(self.model, CS.out.vEgo, lead_d, canfd)
       # Important: same mux for lane_path and hud_objects. Lane display freezes if muxes don't match.
       if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
