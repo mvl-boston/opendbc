@@ -461,10 +461,8 @@ class CAR(Platforms):
   ACURA_MDX_3G = HondaNidecPlatformConfig(
     [
       HondaCarDocs("Acura MDX 2014-16", "Advance Package"),
-      HondaCarDocs("Acura MDX 2017-19", "All"),
-      HondaCarDocs("Acura MDX 2020", "All"),
-      HondaCarDocs("Acura MDX Hybrid 2017-19", "All"),
-      HondaCarDocs("Acura MDX Hybrid 2020", "All"),
+      HondaCarDocs("Acura MDX 2017-20", "All"),
+      HondaCarDocs("Acura MDX Hybrid 2017-20", "All"),
     ],
     CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
     radar_dbc_dict('acura_mdx_3g_can_generated'),
