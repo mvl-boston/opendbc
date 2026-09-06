@@ -264,10 +264,6 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 32767], [0, 32767]]
       ret.lateralTuning.pid.kf = 0.000035
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
-      
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2047], [0, -2047]]
-      ret.lateralTuning.pid.kf = 0.000035
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     elif candidate == CAR.HONDA_CLARITY: # source Sunnypilot
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
