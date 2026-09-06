@@ -100,6 +100,7 @@ FW_VERSIONS_EXT = {
       b'77959-TZ5-A220\x00\x00',
     ],
     (Ecu.gateway, 0x18daeff1, None): [
+      b'38897-TYR-A010\x00\x00',
       b'38897-TYR-A011\x00\x00', # unknown
       b'38897-TZ5-A110\x00\x00', # unknown
       b'38897-TRX-A220\x00\x00',
