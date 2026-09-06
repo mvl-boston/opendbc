@@ -8,6 +8,7 @@ from opendbc.car.common.conversions import Conversions as CV
 
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
+from opendbc.car.carlog import carlog
 from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, CruiseButtons, CruiseSettings, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
                                      HONDA_BOSCH_TJA_CONTROL, CarControllerParams
@@ -254,6 +255,8 @@ class CarController(CarControllerBase):
     # ~1.5-2.1s engine-off dead time at full authority shows at t=142 and t=243 in that route,
     # so a smaller lead/seed during that time is pure loss, not smoothness.
     self.launch_ev_band = False
+    self.launch_ev_ticks = 0
+    self.speed_lead = 0.0
     # gas-channel recovery window: opened at driver-gas override release, at launch window
     # exit, at openpilot brake release and at engage while rolling. In every case the wire gas
     # is coming out of a known dead state (the concurrent gas+brake guard zeroes it for the
@@ -509,9 +512,12 @@ class CarController(CarControllerBase):
           self.launch_err_sum = 0.0
           self.launch_err_n = 0
           self.launch_ceiling_ticks = 0
+          self.launch_ev_ticks = 0
       else:
         self.launch_ticks += 1
         self.launch_ev_band = CS.engine_rpm < 500
+        if self.launch_ev_band:
+          self.launch_ev_ticks += 1
         if (self.launch_release_tick < 0) and (self.apply_brake_last == 0):
           self.launch_release_tick = self.launch_ticks
         if (self.launch_move_tick < 0) and (CS.out.vEgo > 0.1):
@@ -539,6 +545,8 @@ class CarController(CarControllerBase):
         launch_aborted = (not CC.longActive) or CS.out.gasPressed or CS.out.brakePressed or (actuators.accel < -0.05)
         launch_done = (CS.out.vEgo > 1.5) or (self.launch_ticks >= 300)
         if launch_aborted or launch_done:
+          launch_err = np.nan
+          launch_lurch = np.nan
           if launch_done and not launch_aborted:
             # dv_break owns breakaway dead time vs lurch, one sign-correct update per launch:
             # motion later than 0.6s after brake release (or never, with the brake released >1s)
@@ -576,6 +584,15 @@ class CarController(CarControllerBase):
               self.gas_launch = float(np.clip(self.gas_launch, 40.0, self.params.NIDEC_GAS_MAX))
               self.dv_launch = float(np.clip(self.dv_launch, 1.0, 8.0))
           self.launch_active = False
+          carlog.info({"event": "honda_launch", "aborted": bool(launch_aborted), "ticks": self.launch_ticks,
+                       "release_tick": self.launch_release_tick, "move_tick": self.launch_move_tick,
+                       "ev_ticks": self.launch_ev_ticks, "seed_ticks": self.launch_err_n,
+                       "ceiling_ticks": self.launch_ceiling_ticks,
+                       "err": None if np.isnan(launch_err) else round(float(launch_err), 3),
+                       "lurch": None if np.isnan(launch_lurch) else round(float(launch_lurch), 3),
+                       "v_exit": round(float(CS.out.vEgo), 3),
+                       "dv_break": round(self.dv_break, 3), "dv_launch": round(self.dv_launch, 3),
+                       "gas_launch": round(self.gas_launch, 1)})
           if launch_done and not launch_aborted:
             # hand the general pipeline a recovery window: the seed is usually below the
             # feedforward target at exit, and the +2/tick clip alone spends ~0.5s closing
@@ -621,6 +638,7 @@ class CarController(CarControllerBase):
         else:
           pcm_speed = 0.0
           pcm_accel = int(0.0)
+        self.speed_lead = 0.0
       else:
         if self.launch_active:
           # stock-shaped launch lead (stock uses 9.99 kph): the general sf*accel+alpha lead is both
@@ -631,6 +649,7 @@ class CarController(CarControllerBase):
           speed_lead = self.dv_launch if (CS.out.vEgo > 0.1 and not self.launch_ev_band) else self.dv_break
         else:
           speed_lead = float(sf_eff * self.accel + alpha_eff)
+        self.speed_lead = float(speed_lead)
         pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
         gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
         gf_eff = low_w * self.gasfactor_low + (1.0 - low_w) * self.gasfactor
@@ -1085,15 +1104,47 @@ class CarController(CarControllerBase):
       new_actuators.gas = float(self.gasfactor)
       new_actuators.brake = float(self.windfactor)
     else:
+      # Nidec: the 100 Hz slots carry the fast state that cannot be rebuilt from CAN (the
+      # slow learner scalars are in the 1 Hz "honda_nidec_long" log event below):
+      #   speed          nidec_pid integral added to the plan (m/s2)
+      #   accel          plan + pid, the accel the gas/brake targets were built from (m/s2)
+      #   gas            wire PCM_GAS / NIDEC_GAS_MAX (100 Hz; ACC_HUD on CAN is 10 Hz)
+      #   brake          applied COMPUTER_BRAKE / NIDEC_BRAKE_MAX
+      #   torqueOutputCan gas-channel phase: 0 general, 1 launch EV band, 2 launch learned seed,
+      #                  3 post-launch/override/brake recovery window
+      if self.launch_active:
+        long_phase = 1.0 if self.launch_ev_band else 2.0
+      elif self.gas_recovery_ticks > 0:
+        long_phase = 3.0
+      else:
+        long_phase = 0.0
       new_actuators.speed = float(self.nidec_pid_factor)
       new_actuators.accel = float(self.accel)
-      new_actuators.gas = float(self.average_factor)
-      new_actuators.brake = float(self.sat_accel)
+      new_actuators.gas = float(self.new_accel) / self.params.NIDEC_GAS_MAX
+      new_actuators.brake = float(self.brake)
     new_actuators.torque = self.last_torque
     if self.CP.carFingerprint in HONDA_BOSCH:
       new_actuators.torqueOutputCan = apply_torque
     else:
-      new_actuators.torqueOutputCan = float(self.speedfactor_low)
+      new_actuators.torqueOutputCan = long_phase
+
+    if self.frame % 100 == 0 and CC.enabled and self.CP.carFingerprint not in HONDA_BOSCH:
+      # 1 Hz learner/plant snapshot; lands in the rlog as a logMessage via card's carlog forwarding
+      carlog.info({"event": "honda_nidec_long",
+                   "v": round(float(CS.out.vEgo), 3), "a": round(float(CS.out.aEgo), 3),
+                   "cmd": round(float(actuators.accel), 3), "accel": round(float(self.accel), 3),
+                   "pid_i": round(float(self.nidec_pid.i), 3), "wire": int(self.new_accel),
+                   "lead": round(self.speed_lead, 2), "pcm_speed": round(float(pcm_speed), 2),
+                   "brake": int(self.apply_brake_last), "brake_pid": round(float(self.brake_pid_factor), 3),
+                   "rpm": int(CS.engine_rpm), "car_gas": round(float(CS.car_gas), 1),
+                   "phase": int(long_phase), "recovery": int(self.gas_recovery_ticks), "low_w": round(float(low_w), 2),
+                   "gasfactor": round(self.gasfactor, 4), "gasfactor_low": round(self.gasfactor_low, 4),
+                   "gas_alpha": round(float(self.gas_alpha), 4), "windfactor": round(float(self.windfactor), 4),
+                   "speedfactor": round(self.speedfactor, 3), "speedfactor_low": round(self.speedfactor_low, 3),
+                   "speedalpha": round(float(self.speedalpha), 3), "speedalpha_low": round(float(self.speedalpha_low), 3),
+                   "average_factor": round(self.average_factor, 4), "car_gas_scale": round(self.car_gas_per_pcm_gas, 4),
+                   "sat_accel": round(self.sat_accel, 3), "dv_launch": round(self.dv_launch, 3),
+                   "dv_break": round(self.dv_break, 3), "gas_launch": round(self.gas_launch, 1)})
 
     if self.frame % 6000 == 0:
       if self.CP.carFingerprint in HONDA_BOSCH:
