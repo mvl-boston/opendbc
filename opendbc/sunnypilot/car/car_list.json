@@ -60,7 +60,7 @@
     ],
     "package": "Advance Package"
   },
-  "Acura MDX 2017-19": {
+  "Acura MDX 2017-20": {
     "platform": "ACURA_MDX_3G",
     "make": "Acura",
     "brand": "honda",
@@ -68,16 +68,7 @@
     "year": [
       "2017",
       "2018",
-      "2019"
-    ],
-    "package": "All"
-  },
-  "Acura MDX 2020": {
-    "platform": "ACURA_MDX_3G",
-    "make": "Acura",
-    "brand": "honda",
-    "model": "MDX",
-    "year": [
+      "2019",
       "2020"
     ],
     "package": "All"
@@ -105,7 +96,7 @@
     ],
     "package": "All except Type S"
   },
-  "Acura MDX Hybrid 2017-19": {
+  "Acura MDX Hybrid 2017-20": {
     "platform": "ACURA_MDX_3G",
     "make": "Acura",
     "brand": "honda",
@@ -113,16 +104,7 @@
     "year": [
       "2017",
       "2018",
-      "2019"
-    ],
-    "package": "All"
-  },
-  "Acura MDX Hybrid 2020": {
-    "platform": "ACURA_MDX_3G",
-    "make": "Acura",
-    "brand": "honda",
-    "model": "MDX Hybrid",
-    "year": [
+      "2019",
       "2020"
     ],
     "package": "All"
