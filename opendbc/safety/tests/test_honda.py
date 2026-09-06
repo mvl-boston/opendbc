@@ -278,6 +278,24 @@ class TestHondaNidecSafetyBase(HondaBase):
           send = (controls_allowed and pcm_gas <= self.MAX_GAS) or (pcm_gas == 0 and pcm_speed == 0)
           self.assertEqual(send, self._tx(self._send_acc_hud_msg(pcm_gas, pcm_speed)))
 
+  def test_acc_hud_gas_pressed_passthrough(self):
+    # the carcontroller mirrors the driver's pedal onto ACC_HUD during a gas override; blocking it
+    # makes the PCM drop ACC_STATUS, so the speed/gas checks are waived while the pedal is pressed
+    self.safety.set_controls_allowed(True)
+    self._rx(self._user_gas_msg(1))
+    self.assertTrue(self.safety.get_gas_pressed_prev())
+    for pcm_gas in (0, 1, self.MAX_GAS, 255):
+      for pcm_speed in (0, 1, 99):
+        self.assertTrue(self._tx(self._send_acc_hud_msg(pcm_gas, pcm_speed)))
+
+    # pedal released: back to the standard limits
+    self._rx(self._user_gas_msg(0))
+    self.assertFalse(self.safety.get_gas_pressed_prev())
+    self.assertTrue(self._tx(self._send_acc_hud_msg(self.MAX_GAS, 99)))
+    self.assertFalse(self._tx(self._send_acc_hud_msg(self.MAX_GAS + 1, 0)))
+    self.safety.set_controls_allowed(False)
+    self.assertFalse(self._tx(self._send_acc_hud_msg(1, 0)))
+
   def test_fwd_hook(self):
     # normal operation, not forwarding AEB
     self.FWD_BLACKLISTED_ADDRS[2].append(0x1FA)
