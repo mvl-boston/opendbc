@@ -9,7 +9,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
-from opendbc.car.honda.values import CAR, CruiseButtons, CruiseSettings, HondaFlags, CarControllerParams
+from opendbc.car.honda.values import CAR, CruiseButtons, HondaFlags, CarControllerParams, CruiseSettings
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
@@ -359,17 +359,16 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       accel = 0.0
       gas, brake = 0.0, 0.0
 
-    if CC.longActive and self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
+    if CC.longActive and not (self.CP.flags & HondaFlags.BOSCH):
       accel = self.accel
     if CS.out.gasPressed or not CC.longActive:
-      if self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
-        self.nidec_pid.reset()
+      self.nidec_pid.reset()
 
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
-    if (self.CP.flags & HondaFlags.NIDEC) and (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and \
-        (self.apply_brake_last > 0 or (self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL) and self.new_accel < 1e-5)):  # lower steer limits while braking
+    if (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and \
+        (self.apply_brake_last > 0 or self.new_accel < 1e-5):  # lower steer limits while braking
       brake_limit = float(233.0 / self.params.STEER_MAX)
       limited_torque = float(np.clip(limited_torque, -brake_limit, brake_limit))
     self.last_torque = limited_torque
@@ -389,14 +388,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
-    if (self.CP.flags & HondaFlags.NIDEC):
-      speed_val = np.clip(round(CS.out.vEgo * CV.MS_TO_MPH / 5.0) * 5, 5, 60)
-      currentLatSpeed = f"{speed_val:02d}"
-      if currentLatSpeed in self.latFactors and not CS.out.steeringPressed and CS.steer_control_active:
-        if abs(limited_torque) > 0.9 and self.latFactors[currentLatSpeed] > abs(CS.out.steeringAngleDeg):
-          self.latFactors[currentLatSpeed] /= 1.001
-        if abs(limited_torque) < 0.9 and self.latFactors[currentLatSpeed] < abs(CS.out.steeringAngleDeg):
-          self.latFactors[currentLatSpeed] *= 1.001
+    speed_val = np.clip(round(CS.out.vEgo * CV.MS_TO_MPH / 5.0) * 5, 5, 60)
+    currentLatSpeed = f"{speed_val:02d}"
+    if currentLatSpeed in self.latFactors and not CS.out.steeringPressed and CS.steer_control_active:
+      if abs(limited_torque) > 0.9 and self.latFactors[currentLatSpeed] > abs(CS.out.steeringAngleDeg):
+        self.latFactors[currentLatSpeed] /= 1.001
+      if abs(limited_torque) < 0.9 and self.latFactors[currentLatSpeed] < abs(CS.out.steeringAngleDeg):
+        self.latFactors[currentLatSpeed] *= 1.001
 
     # Send CAN commands
     can_sends = []
@@ -664,8 +662,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and not (self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD)) and not (self.CP.flags & HondaFlags.NIDEC):
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
+      # If using stock ACC, spam cancel command to kill gas when OP disengages.
       if pcm_cancel_cmd:
-        # If using stock ACC, spam cancel command to kill gas when OP disengages.
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.CANCEL, 0, CS.scm_ambient_light, self.CP))
       elif CC.cruiseControl.resume:
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, 0, CS.scm_ambient_light, self.CP))
@@ -790,19 +788,15 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     speed_control = 0 if self.CP.flags & HondaFlags.BOSCH else self.launch_active
 
+    # Send dashboard UI commands. On CAN FD, ACC_HUD is a radar/ADAS look-alike that openpilot only
+    # owns when it has disabled the radar (op longitudinal); in stock ACC the real system sends it and
+    # the non-long safety config doesn't allowlist it.
     if (self.CP.flags & HondaFlags.BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
-        # Send dashboard UI commands. On CAN FD, ACC_HUD is a radar/ADAS look-alike that openpilot only
-        # owns when it has disabled the radar (op longitudinal); in stock ACC the real system sends it and
-        # the non-long safety config doesn't allowlist it.
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, actuators.accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                  self.CP.openpilotLongitudinalControl))
 
     if self.frame % 10 == 0:
-      if CC.longActive and self.CP.carFingerprint == CAR.ACURA_MDX_3G:
-        # standstill disengage
-        if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
-          pcm_speed = 25.0 / 3.6
 
       if self.CP.openpilotLongitudinalControl:
         if not (self.CP.flags & HondaFlags.BOSCH_CANFD):
@@ -934,18 +928,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       new_actuators.gas = float(self.gasfactor)
       new_actuators.brake = float(self.windfactor)
       new_actuators.torqueOutputCan = apply_torque
-    elif self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
+    else:
       new_actuators.speed = float(self.nidec_pid_factor)
       new_actuators.accel = float(self.accel)
       new_actuators.gas = float(self.average_factor)
       new_actuators.brake = float(self.sat_accel)
       new_actuators.torqueOutputCan = float(self.speedfactor_low)
-    else:
-      new_actuators.speed = float(self.gasalpha)
-      new_actuators.accel = self.accel
-      new_actuators.gas = float(self.gasfactor)
-      new_actuators.brake = float(self.windfactor)
-      new_actuators.torqueOutputCan = apply_torque
     new_actuators.torque = self.last_torque
 
     if self.frame % 6000 == 0:
