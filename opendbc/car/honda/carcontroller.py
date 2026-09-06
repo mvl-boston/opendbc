@@ -682,7 +682,7 @@ class CarController(CarControllerBase):
       if self.gas_recovery_ticks > 0:
         # a window can hand over with the wire ABOVE the feedforward target (EV launch band at
         # 198 -> target ~80 at 1 m/s; driver-gas mirror above target). The 1/average_factor lead
-        # then zeroes the wire for a few ticks to drag the modelled PCM average down, i.e. a
+        # then zeroes the wire for a few ticks to drag the modeled PCM average down, i.e. a
         # PCM_GAS=0 gap exactly when the plant is about to respond. Hold at the target instead.
         self.new_accel = max(self.new_accel, min(prior_accel, pcm_accel))
       if self.launch_active:
