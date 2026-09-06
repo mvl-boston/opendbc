@@ -841,7 +841,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           can_sends.append(hondacan.create_radar_hud(self.packer, self.CAN.pt))
         if self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH:
           can_sends.append(hondacan.create_legacy_brake_command(self.packer, self.CAN.pt))
-        if not self.CP.flags & HondaFlags.BOSCH:
+        if not (self.CP.flags & HondaFlags.BOSCH):
           self.speed = pcm_speed
           if not self.CP_SP.enableGasInterceptor:
             self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
