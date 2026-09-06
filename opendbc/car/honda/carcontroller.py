@@ -463,7 +463,21 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         if (CS.out.brakePressed or CS.out.gasPressed or CS.out.vEgo < 1e-5) and (self.nidec_pid.i <= 0.01):
           self.nidec_pid.i += 0.01 # clear out nidec pid integral while acc not controlling car
 
-        brake, creep_impact = compute_gb_honda_nidec(adjust_accel, CS.out.vEgo, self.creep_factor)
+        # Inside a launch window the brake target is the plan alone. adjust_accel carries the hill
+        # term, and on a downhill stop that is a negative offset the brake path reads as a hold
+        # request: route 5e t=191.5 (-4.1 deg, hill_brake -0.70) kept the brake on until the plan
+        # exceeded +0.70 m/s2, 0.8 s after it went positive, and the gas+brake guard zeroed the
+        # launch template on the wire for that whole time (release -> motion was 0.25 s once the
+        # brake finally dropped, i.e. the dead time was all on this side). Grade is the speed
+        # servo's job once rolling and the PCM holds at pcm_speed=0 before that. The creep term is
+        # the same kind of hold against a ~zero plan (a fresh-boot creep_factor of 1.0 adds another
+        # 0.8 s at 0.72 m/s2/s of plan ramp) and has no place in a launch either. Uphill is
+        # unchanged: the window only opens on a positive plan, and a positive hill term never held
+        # the brake. Everything outside the window keeps the hill/creep terms as before.
+        if self.launch_active:
+          brake, creep_impact = compute_gb_honda_nidec(self.accel, CS.out.vEgo, 0.0)
+        else:
+          brake, creep_impact = compute_gb_honda_nidec(adjust_accel, CS.out.vEgo, self.creep_factor)
         gas_error = self.accel - CS.out.aEgo
         if (actuators.longControlState == LongCtrlState.pid) and (not CS.out.stockAeb) and (not CS.out.gasPressed) \
                and (1e-5 <= CS.out.vEgo <= CS.out.cruiseState.speed - 2.):
