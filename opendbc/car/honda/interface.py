@@ -252,7 +252,11 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate == CAR.ACURA_RLX_HYBRID:
       # STEERING_CONTROL is bridged to the EPS on the steer bus by a pre-flashed red panda.
-      # The RLX EPS torque request has the opposite sign from the other Hondas.
+      ret.steerActuatorDelay = 0.3
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 32767], [0, 32767]]
+      ret.lateralTuning.pid.kf = 0.000035
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
+      
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2047], [0, -2047]]
       ret.lateralTuning.pid.kf = 0.000035
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
