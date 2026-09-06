@@ -649,12 +649,16 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       pcm_speed = 0.0
       pcm_accel = int(0.0)
     elif self.CP.flags & HondaFlags.BOSCH:
+      # all of this is only relevant for HONDA NIDEC
       speed_control = 0
       max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
+      # TODO this 1.44 is just to maintain previous behavior
       pcm_speed_BP = [-wind_brake,
                       -wind_brake * (3 / 4),
                       0.0,
                       0.5]
+      # The Honda ODYSSEY seems to have different PCM_ACCEL
+      # msgs, is it other cars too?
       pcm_speed_V = [0.0,
                      np.clip(CS.out.vEgo - 2.0, 0.0, 100.0),
                      np.clip(CS.out.vEgo + 2.0, 0.0, 100.0),
@@ -801,6 +805,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                  self.CP.openpilotLongitudinalControl))
 
     if self.frame % 10 == 0:
+      if CC.longActive and (self.CP.carFingerprint == CAR.ACURA_MDX_3G):
+        # standstill disengage
+        if (accel >= 0.01) and (CS.out.vEgo < 4.0) and (pcm_speed < 25.0 / 3.6):
+          pcm_speed = 25.0 / 3.6
 
       if self.CP.openpilotLongitudinalControl:
         if not (self.CP.flags & HondaFlags.BOSCH_CANFD):
