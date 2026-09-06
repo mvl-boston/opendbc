@@ -462,19 +462,12 @@ class CAR(Platforms):
     [
       HondaCarDocs("Acura MDX 2014-16", "Advance Package"),
       HondaCarDocs("Acura MDX 2017-19", "All"),
-      HondaCarDocs("Acura MDX Hybrid 2017-19", "All"),
-    ],
-    CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
-    radar_dbc_dict('acura_mdx_3g_can_generated'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
-  )
-  ACURA_MDX_3G_MMR = HondaNidecPlatformConfig(
-    [
       HondaCarDocs("Acura MDX 2020", "All"),
+      HondaCarDocs("Acura MDX Hybrid 2017-19", "All"),
       HondaCarDocs("Acura MDX Hybrid 2020", "All"),
     ],
     CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
-    radar_dbc_dict('acura_ilx_2016_can_generated'),
+    radar_dbc_dict('acura_mdx_3g_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_TLX_1G = HondaNidecPlatformConfig(
@@ -521,7 +514,6 @@ STEER_THRESHOLD = {
   # port extensions
   CAR.HONDA_ACCORD_9G: 30,
   CAR.ACURA_MDX_3G: 400,
-  CAR.ACURA_MDX_3G_MMR: 30,
   CAR.ACURA_TLX_1G: 30,
 }
 
