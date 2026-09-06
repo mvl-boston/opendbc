@@ -240,6 +240,18 @@ class CarController(CarControllerBase):
     # clips are loose backstops that should not bind.
     self.dv_launch = 2.8 if (Params().get("HondaLaunchDvParams") is None) else Params().get("HondaLaunchDvParams")  # m/s; stock launches at 9.99 kph
     self.gas_launch = 110.0 if (Params().get("HondaLaunchGasParams") is None) else Params().get("HondaLaunchGasParams")  # PCM_GAS units; stock 104-114
+    # the seed has to sit in the band where the PCM actually applies pedal to it: below ~100 the
+    # wire is treated as no-torque (route 250: gas 1-99 gave +0.02 m/s2, same as gas 0; 100-197
+    # +0.09; 198 +0.57), and stock launches at 104-114. The shrink-on-overshoot update walked the
+    # persisted value down to 60 across EV launches where the seed was not even what produced
+    # the overshoot (breakaway band), and growth needs ceiling evidence (pedal riding the seed)
+    # that a seed in the no-torque band can never produce, so it was a one-way ratchet. Route 5d,
+    # two engine-on launches at seed 60: pedal 0 for the whole 2 s window on the flat one, 4-12
+    # on the +2.8 deg one (1.2 s to first motion, aEgo 0.1-0.3 against a 0.3-0.66 plan, window
+    # timed out at 0.8 m/s). A persisted value below the band is poisoned, not learned: reset it.
+    self.gas_launch_min = 100.0
+    if self.gas_launch < self.gas_launch_min:
+      self.gas_launch = 110.0
     # breakaway lead, used only until first motion: the EV creep response scales with dv, and
     # the stock-sized lead is not enough to break away reliably engine-off.
     # Hands over to dv_launch at first motion so nothing accumulates in the servo low-pass.
@@ -568,7 +580,7 @@ class CarController(CarControllerBase):
               elif launch_err < -0.15:
                 self.gas_launch *= 0.99
                 self.dv_launch *= 0.99
-              self.gas_launch = float(np.clip(self.gas_launch, 40.0, self.params.NIDEC_GAS_MAX))
+              self.gas_launch = float(np.clip(self.gas_launch, self.gas_launch_min, self.params.NIDEC_GAS_MAX))
               self.dv_launch = float(np.clip(self.dv_launch, 1.0, 8.0))
           self.launch_active = False
           if launch_done and not launch_aborted:
