@@ -549,7 +549,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         self.gas_recovery_ticks = 200
       self.long_active_prev = CC.longActive
 
-    if self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and \ 
+    if self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and \
        not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
       max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
       low_w = float(np.interp(CS.out.vEgo, [10.0, 16.0], [1.0, 0.0]))
