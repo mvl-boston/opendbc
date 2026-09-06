@@ -363,7 +363,6 @@ class CarController(CarControllerBase):
     if CC.longActive and self.CP.carFingerprint not in HONDA_BOSCH:
       accel = self.accel
     if CS.out.gasPressed or not CC.longActive:
-      if self.CP.carFingerprint not in HONDA_BOSCH:
         self.nidec_pid.reset()
 
     # *** rate limit steer ***
