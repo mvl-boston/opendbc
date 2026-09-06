@@ -108,6 +108,60 @@ def process_hud_alert(hud_alert):
   return alert_fcw, alert_steer_required
 
 
+# Nidec multi-band gas/speed channels: the old two-band scheme (pure low band below 10 m/s,
+# pure high band above 16 m/s, linear blend between) generalizes to piecewise-linear
+# interpolation across these nodes. The gas channel gets extra nodes at 0/10/20/30 mph and
+# the speed channel at 5/15/25/35 mph, offset from each other so the two channels don't
+# equilibrate on exactly the same frames; the pre-existing low (10 m/s) and high (16 m/s)
+# nodes keep their persisted values and param keys. Tuples are sorted by node speed (m/s).
+NIDEC_GAS_BANDS = (
+  ("00", 0.0),
+  ("10", 10.0 * CV.MPH_TO_MS),
+  ("20", 20.0 * CV.MPH_TO_MS),
+  ("low", 10.0),
+  ("30", 30.0 * CV.MPH_TO_MS),
+  ("high", 16.0),
+)
+NIDEC_SPEED_BANDS = (
+  ("05", 5.0 * CV.MPH_TO_MS),
+  ("15", 15.0 * CV.MPH_TO_MS),
+  ("low", 10.0),
+  ("25", 25.0 * CV.MPH_TO_MS),
+  ("35", 35.0 * CV.MPH_TO_MS),
+  ("high", 16.0),
+)
+
+# the low/high nodes keep the param keys the two-band scheme persisted, so learned state survives
+NIDEC_GAS_FACTOR_KEYS = {band: f"HondaGasFactor{band}Params" for band, _ in NIDEC_GAS_BANDS}
+NIDEC_GAS_FACTOR_KEYS.update({"low": "HondaGasFactorLowParams", "high": "HondaGasFactorParams"})
+NIDEC_GAS_ALPHA_KEYS = {band: f"HondaGasAlpha{band}Params" for band, _ in NIDEC_GAS_BANDS}
+NIDEC_GAS_ALPHA_KEYS.update({"low": "HondaGasAlphaLowParams", "high": "HondaGasAlphaParams"})
+NIDEC_SPEED_FACTOR_KEYS = {band: f"HondaSpeedFactor{band}Params" for band, _ in NIDEC_SPEED_BANDS}
+NIDEC_SPEED_FACTOR_KEYS.update({"low": "HondaSpeedFactorLowParams", "high": "HondaSpeedFactorParams"})
+NIDEC_SPEED_ALPHA_KEYS = {band: f"HondaSpeedAlpha{band}Params" for band, _ in NIDEC_SPEED_BANDS}
+NIDEC_SPEED_ALPHA_KEYS.update({"low": "HondaSpeedAlphaLowParams", "high": "HondaSpeedAlphaParams"})
+
+
+def band_weights(bands, v_ego):
+  # hat-function weights of piecewise-linear interpolation across the band nodes: exactly the
+  # two nodes bracketing v_ego get nonzero weight (summing to 1), and outside the grid the edge
+  # node gets all of it. These weights blend the per-band values into the sent target and gate
+  # how much each band learns from a frame, generalizing the old low_w/(1-low_w) two-band split.
+  weights = {band: 0.0 for band, _ in bands}
+  if v_ego <= bands[0][1]:
+    weights[bands[0][0]] = 1.0
+  elif v_ego >= bands[-1][1]:
+    weights[bands[-1][0]] = 1.0
+  else:
+    for (band_lo, spd_lo), (band_hi, spd_hi) in zip(bands[:-1], bands[1:], strict=True):
+      if spd_lo <= v_ego <= spd_hi:
+        frac = (v_ego - spd_lo) / (spd_hi - spd_lo)
+        weights[band_lo] = 1.0 - frac
+        weights[band_hi] = frac
+        break
+  return weights
+
+
 class HondaParamWriter:
   def __init__(self):
     self._params = Params()
@@ -214,15 +268,51 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.average_factor_sens = 0.0  # d(prior_gas_average)/d(average_factor), recursive model sensitivity
     self.car_gas_per_pcm_gas = 0.3 if (Params().get("HondaCarGasScaleParams") is None) else Params().get("HondaCarGasScaleParams")
     self.creep_factor = 1.0 if (Params().get("HondaCreepFactorParams") is None) else Params().get("HondaCreepFactorParams")
-    self.gas_alpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
-    self.gas_alpha_nomaxspeed = self.gas_alpha
-    self.gasfactor_nomaxspeed = self.gasfactor
-    self.gasfactor_low = self.gasfactor if (Params().get("HondaGasFactorLowParams") is None) else Params().get("HondaGasFactorLowParams")
-    self.gasfactor_low_before_gasmax = self.gasfactor_low_nomaxspeed = self.gasfactor_low
-    self.speedfactor = 4.0 if (Params().get("HondaSpeedFactorParams") is None) else Params().get("HondaSpeedFactorParams")
-    self.speedalpha = 0.0 if (Params().get("HondaSpeedAlphaParams") is None) else Params().get("HondaSpeedAlphaParams")
-    self.speedfactor_low = 4.0 if (Params().get("HondaSpeedFactorLowParams") is None) else Params().get("HondaSpeedFactorLowParams")
-    self.speedalpha_low = 0.0 if (Params().get("HondaSpeedAlphaLowParams") is None) else Params().get("HondaSpeedAlphaLowParams")
+
+    def load_param(key, default):
+      value = Params().get(key)
+      return float(default) if value is None else float(value)
+
+    # Multi-band gas and speed channels (see NIDEC_GAS_BANDS / NIDEC_SPEED_BANDS): each node
+    # carries its own factor/alpha, learns in proportion to its hat weight over the sent target
+    # and persists under its own param key. The banding exists because one scalar per channel
+    # equilibrates on highway frames and leaves the low-speed target wrong: the gas target is
+    # normalized by NIDEC_MAX_ACCEL_V, whose shape (2.4 m/s2 at 4 m/s -> 0.6 at 20) is ~2x too
+    # steep for this car (route 51: smoothed wire 48-97 for cmd 0.3-1.5 at 2-13 m/s with err
+    # +0.18..+0.47, vs authority-limited err +0.05..+0.32 at 13-32 m/s), and the speed servo's
+    # dv gain is lower below ~30 mph with a speed-dependent zero-accel offset (routes 18/19/1a:
+    # undershoot +0.45 below 13.4 m/s vs +0.04 above).
+    # The pre-existing low (10 m/s) / high (16 m/s) nodes load their old params; new nodes seed
+    # from the old two-band blend evaluated at the node speed, so the first drive with this code
+    # reproduces the previous curve exactly and starts from today's operating point.
+    gf_high = load_param("HondaGasFactorParams", 1.0)
+    gf_low = load_param("HondaGasFactorLowParams", gf_high)
+    ga_high = load_param("HondaGasAlphaParams", 0.0)
+    sf_high = load_param("HondaSpeedFactorParams", 4.0)
+    sa_high = load_param("HondaSpeedAlphaParams", 0.0)
+    sf_low = load_param("HondaSpeedFactorLowParams", 4.0)
+    sa_low = load_param("HondaSpeedAlphaLowParams", 0.0)
+
+    def old_two_band_blend(low_val, high_val, band_speed):
+      low_w = float(np.interp(band_speed, [10.0, 16.0], [1.0, 0.0]))
+      return low_w * low_val + (1.0 - low_w) * high_val
+
+    self.gas_factors = {}
+    self.gas_alphas = {}
+    for band, band_speed in NIDEC_GAS_BANDS:
+      self.gas_factors[band] = load_param(NIDEC_GAS_FACTOR_KEYS[band], old_two_band_blend(gf_low, gf_high, band_speed))
+      # gas_alpha used to be a single scalar, so every node seeds from it
+      self.gas_alphas[band] = load_param(NIDEC_GAS_ALPHA_KEYS[band], ga_high)
+    self.gas_factors_before_gasmax = dict(self.gas_factors)
+    self.gas_factors_nomaxspeed = dict(self.gas_factors)
+    self.gas_alphas_nomaxspeed = dict(self.gas_alphas)
+
+    self.speed_factors = {}
+    self.speed_alphas = {}
+    for band, band_speed in NIDEC_SPEED_BANDS:
+      self.speed_factors[band] = load_param(NIDEC_SPEED_FACTOR_KEYS[band], old_two_band_blend(sf_low, sf_high, band_speed))
+      self.speed_alphas[band] = load_param(NIDEC_SPEED_ALPHA_KEYS[band], old_two_band_blend(sa_low, sa_high, band_speed))
+
     self.sat_accel = 0.9 if (Params().get("HondaSatAccelParams") is None) else Params().get("HondaSatAccelParams")
     self.sat_deficit_frames = self.sat_excess_frames = 0
     self.new_accel = 0.0
@@ -329,16 +419,16 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           else:
             self.windfactor_before_brake = self.windfactor
           if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
-            self.gasfactor = self.gasfactor_nomaxspeed
-            self.gasfactor_low = self.gasfactor_low_nomaxspeed
-            self.gas_alpha = self.gas_alpha_nomaxspeed
+            # drop to max values when not near speed limit
+            self.gas_factors = dict(self.gas_factors_nomaxspeed)
+            self.gas_alphas = dict(self.gas_alphas_nomaxspeed)
           if (gas_pedal_force >= self.params.BOSCH_ACCEL_MAX):
-            self.gasfactor = min(self.gasfactor, self.gasfactor_before_gasmax)
-            self.gasfactor_low = min(self.gasfactor_low, self.gasfactor_low_before_gasmax)
+            # don't increase gasfactor nor windfactor at accel max, allow decreases
+            for band in self.gas_factors:
+              self.gas_factors[band] = min(self.gas_factors[band], self.gas_factors_before_gasmax[band])
             self.windfactor = min(self.windfactor, self.windfactor_before_gasmax)
           else:
-            self.gasfactor_before_gasmax = self.gasfactor
-            self.gasfactor_low_before_gasmax = self.gasfactor_low
+            self.gas_factors_before_gasmax = dict(self.gas_factors)
             self.windfactor_before_gasmax = self.windfactor
 
         else:
@@ -552,9 +642,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     if self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and \
        not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
       max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
-      low_w = float(np.interp(CS.out.vEgo, [10.0, 16.0], [1.0, 0.0]))
-      sf_eff = low_w * self.speedfactor_low + (1.0 - low_w) * self.speedfactor
-      alpha_eff = low_w * self.speedalpha_low + (1.0 - low_w) * self.speedalpha
+      # multi-band blends: piecewise-linear hat weights across the band nodes (the two bands
+      # bracketing the current speed carry all the weight; edge bands saturate outside the grid)
+      gas_w = band_weights(NIDEC_GAS_BANDS, CS.out.vEgo)
+      speed_w = band_weights(NIDEC_SPEED_BANDS, CS.out.vEgo)
+      sf_eff = sum(w * self.speed_factors[band] for band, w in speed_w.items())
+      alpha_eff = sum(w * self.speed_alphas[band] for band, w in speed_w.items())
+      # TODO this 1.44 is just to maintain previous behavior
       if not CC.longActive:
         if CC.enabled and CS.out.gasPressed and CS.car_gas_available:
           pcm_speed = float(np.clip(CS.out.vEgo, 0.0, 100.0))
@@ -569,13 +663,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           speed_lead = float(sf_eff * self.accel + alpha_eff)
         pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
         gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
-        gf_eff = low_w * self.gasfactor_low + (1.0 - low_w) * self.gasfactor
-        pcm_accel = int(np.clip((self.gas_alpha + gas_accel * gf_eff / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+        gf_eff = sum(w * self.gas_factors[band] for band, w in gas_w.items())
+        ga_eff = sum(w * self.gas_alphas[band] for band, w in gas_w.items())
+        pcm_accel = int(np.clip((ga_eff + gas_accel * gf_eff / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
       max_speedcontrol = (pcm_speed > 99.999)
-      prior_speedfactor = self.speedfactor
-      prior_speedalpha = self.speedalpha
-      prior_speedfactor_low = self.speedfactor_low
-      prior_speedalpha_low = self.speedalpha_low
+      prior_speed_factors = dict(self.speed_factors)
+      prior_speed_alphas = dict(self.speed_alphas)
 
       prior_accel = int(self.new_accel)
       max_increase = 7 if (self.gas_recovery_ticks > 0 and prior_accel < pcm_accel) else 2
@@ -593,11 +686,17 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       if (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
            (self.apply_brake_last == 0) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
         gasfactor_error = (self.accel - CS.out.aEgo)
-        self.gas_alpha = np.clip(self.gas_alpha + 0.0001 * gasfactor_error / 4.8, -3.0, 3.0)
+        # the 0<wire<198 gate above is the gas channel's own observability condition (a pinned
+        # wire cannot show what more gasfactor would do); the clip is a runaway backstop only.
+        # 5.0 rather than the Bosch path's 3.0 because the Nidec target divides by
+        # NIDEC_MAX_ACCEL_V (2.0-2.4 at 4-10 m/s): pinning the wire at cmd 0.85 there needs
+        # gf ~3.5, which the low bands are expected to learn.
         gf_growth = 0.0001 * gasfactor_error * gas_accel
-        self.gasfactor_low = float(np.clip(self.gasfactor_low * (1 + low_w * gf_growth), 0.1, 5.0))
-        self.gasfactor = float(np.clip(self.gasfactor * (1 + (1.0 - low_w) * gf_growth), 0.1, 5.0))
-      if (not CS.out.gasPressed) and (self.apply_brake_last == 0):
+        # each band learns in proportion to its authority over the sent target
+        for band, w in gas_w.items():
+          self.gas_alphas[band] = float(np.clip(self.gas_alphas[band] + w * 0.0001 * gasfactor_error / 4.8, -3.0, 3.0))
+          self.gas_factors[band] = float(np.clip(self.gas_factors[band] * (1 + w * gf_growth), 0.1, 5.0))
+      if (not CS.out.gasPressed) and (self.apply_brake_last == 0): # adjust speedfactor and average_factor
         speedfactor_error = (self.accel - CS.out.aEgo)
         dv_sent = sf_eff * self.accel + alpha_eff
         dv_sat = max(0.1, sf_eff * self.sat_accel + alpha_eff)
@@ -633,15 +732,22 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             sf_growth = -min(0.0005 * (dv_sent - dv_sat), 0.005)
           else:
             sf_growth = 0.001 * speedfactor_error * self.accel
-          self.speedfactor_low = float(np.clip(self.speedfactor_low * (1 + low_w * sf_growth), 0.01, 99.0))
-          self.speedfactor = float(np.clip(self.speedfactor * (1 + (1.0 - low_w) * sf_growth), 0.01, 99.0))
-          self.speedalpha_low = min(dv_sat, self.speedalpha_low + low_w * 0.001 * speedfactor_error)
-          self.speedalpha = min(dv_sat, self.speedalpha + (1.0 - low_w) * 0.001 * speedfactor_error)
-        if max_speedcontrol or (dv_sent > dv_sat):
-          self.speedfactor = min(prior_speedfactor, self.speedfactor)
-          self.speedfactor_low = min(prior_speedfactor_low, self.speedfactor_low)
-          self.speedalpha = min(prior_speedalpha, self.speedalpha)
-          self.speedalpha_low = min(prior_speedalpha_low, self.speedalpha_low)
+          # each band learns in proportion to its authority over the sent lead
+          for band, w in speed_w.items():
+            self.speed_factors[band] = float(np.clip(self.speed_factors[band] * (1 + w * sf_growth), 0.01, 99.0))
+            self.speed_alphas[band] = min(dv_sat, self.speed_alphas[band] + w * 0.001 * speedfactor_error)
+        if max_speedcontrol or (dv_sent > dv_sat): # only allow learning reductions
+          # speed-channel saturation is a speed-channel condition. gasfactor/gas_alpha used to
+          # be ratcheted here too, which made "pcm_speed at its clip" (68% of low-speed accel
+          # frames on route 51, with speedfactor_low pinned at its clamp) forbid the gas target
+          # from ever growing on exactly the frames that undershoot most: the ratchet was
+          # active on 10% of the gas-learner's gated ticks but those ran err +0.45 vs +0.045
+          # on the rest, and it discarded +0.14 of +0.18 total ln-growth over the drive. The
+          # gas learners keep their own observability gate (0 < wire < 198) above; windfactor
+          # has no saturation gate of its own, so it stays.
+          for band in self.speed_factors:
+            self.speed_factors[band] = min(prior_speed_factors[band], self.speed_factors[band])
+            self.speed_alphas[band] = min(prior_speed_alphas[band], self.speed_alphas[band])
           self.windfactor = min(prior_windfactor, self.windfactor)
 
     elif self.CP_SP.enableGasInterceptor or (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL) or not CC.longActive:
@@ -779,13 +885,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             self.gas_recovery_ticks = 200
 
           if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
-            self.gasfactor_nomaxspeed = self.gasfactor
-            self.gasfactor_low_nomaxspeed = self.gasfactor_low
-            self.gas_alpha_nomaxspeed = self.gas_alpha
+            self.gas_factors_nomaxspeed = dict(self.gas_factors)
+            self.gas_alphas_nomaxspeed = dict(self.gas_alphas)
           else:
-            self.gasfactor_nomaxspeed = min(self.gasfactor_nomaxspeed, self.gasfactor)
-            self.gasfactor_low_nomaxspeed = min(self.gasfactor_low_nomaxspeed, self.gasfactor_low)
-            self.gas_alpha_nomaxspeed = min(self.gas_alpha_nomaxspeed, self.gas_alpha)
+            # store lower than low max speed or current
+            for band in self.gas_factors:
+              self.gas_factors_nomaxspeed[band] = min(self.gas_factors_nomaxspeed[band], self.gas_factors[band])
+              self.gas_alphas_nomaxspeed[band] = min(self.gas_alphas_nomaxspeed[band], self.gas_alphas[band])
 
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
@@ -938,7 +1044,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       new_actuators.accel = float(self.accel)
       new_actuators.gas = float(self.average_factor)
       new_actuators.brake = float(self.sat_accel)
-      new_actuators.torqueOutputCan = float(self.speedfactor_low)
+      new_actuators.torqueOutputCan = float(self.speed_factors["low"])
     new_actuators.torque = self.last_torque
 
     if self.frame % 6000 == 0:
@@ -950,24 +1056,24 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         })
       elif self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and \
            not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
-        self.param_writer.put_many({
+        learned_values = {
           "HondaFeedForwardParams": self.average_factor,
           "HondaBrakePIDParams": self.brake_pid_factor_non_lowspeed,
           "HondaCreepFactorParams": self.creep_factor,
-          "HondaGasAlphaParams": self.gas_alpha_nomaxspeed,
-          "HondaGasFactorParams": self.gasfactor_nomaxspeed,
-          "HondaGasFactorLowParams": self.gasfactor_low_nomaxspeed,
           "HondaWindFactorParams": self.windfactor,
-          "HondaSpeedAlphaParams": self.speedalpha,
-          "HondaSpeedFactorParams": self.speedfactor,
-          "HondaSpeedAlphaLowParams": self.speedalpha_low,
-          "HondaSpeedFactorLowParams": self.speedfactor_low,
           "HondaSatAccelParams": self.sat_accel,
           "HondaCarGasScaleParams": self.car_gas_per_pcm_gas,
           "HondaLaunchDvParams": self.dv_launch,
           "HondaLaunchGasParams": self.gas_launch,
           "HondaLaunchDvBreakParams": self.dv_break,
-        })
+        }
+        for band, _ in NIDEC_GAS_BANDS:
+          learned_values[NIDEC_GAS_FACTOR_KEYS[band]] = self.gas_factors_nomaxspeed[band]
+          learned_values[NIDEC_GAS_ALPHA_KEYS[band]] = self.gas_alphas_nomaxspeed[band]
+        for band, _ in NIDEC_SPEED_BANDS:
+          learned_values[NIDEC_SPEED_FACTOR_KEYS[band]] = self.speed_factors[band]
+          learned_values[NIDEC_SPEED_ALPHA_KEYS[band]] = self.speed_alphas[band]
+        self.param_writer.put_many(learned_values)
       else:
         self.param_writer.put_many({
           "HondaGasAlphaParams": self.gasalpha,
