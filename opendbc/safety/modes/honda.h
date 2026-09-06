@@ -209,7 +209,11 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     bool violation = false;
     violation |= longitudinal_speed_checks(pcm_speed, HONDA_NIDEC_LONG_LIMITS);
     violation |= longitudinal_gas_checks(pcm_gas, HONDA_NIDEC_LONG_LIMITS);
-    if (violation) {
+    // While the driver is on the gas, longitudinal_allowed is false and the checks above only pass an
+    // all-zero ACC_HUD. The carcontroller mirrors the driver's own pedal onto PCM_GAS through the
+    // override; blocking those frames starves the PCM of ACC_HUD and it drops ACC_STATUS
+    // ("Cruise Is Off" takeover on every override), so let them through while the pedal is pressed.
+    if (violation && !gas_pressed) {
       tx = false;
     }
   }
