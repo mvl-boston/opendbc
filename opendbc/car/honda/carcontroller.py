@@ -283,13 +283,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
     pcm_cancel_cmd = CC.cruiseControl.cancel
 
-    is_bosch = self.CP.flags & HondaFlags.BOSCH
-    is_nidec = not is_bosch
-    is_gas_interceptor = is_nidec and self.CP_SP.enableGasInterceptor
-    is_stock_nidec = is_nidec and bool(self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL)
-    is_wire_gas = is_nidec and self.CP.openpilotLongitudinalControl and not is_gas_interceptor and not is_stock_nidec
-    use_0111_steering = is_nidec
-
     if len(CC.orientationNED) == 3:
       self.pitch = CC.orientationNED[1]
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
@@ -304,17 +297,17 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     adjust_accel = 0.0
 
     if CC.longActive:
-      if is_bosch:
+      if self.CP.flags & HondaFlags.BOSCH:
         accel = actuators.accel
         adjust_accel = accel + hill_brake
         brake = 0.0
         gas, brake = compute_gas_brake(adjust_accel, CS.out.vEgo, self.CP)
-      elif is_gas_interceptor or is_stock_nidec:
+      elif self.CP_SP.enableGasInterceptor or (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
         accel = actuators.accel
         if self.CP.carFingerprint == CAR.ACURA_MDX_3G and (accel > max(0, CS.out.aEgo) + 0.1):
           accel = 10000.0  # help with lagged accel until pedal tuning is inserted
         gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP)
-      elif is_wire_gas:
+      elif self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
         if (actuators.longControlState in (LongCtrlState.pid, LongCtrlState.stopping)) and \
            (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
            and (not CS.out.stockAeb) and (not CS.out.gasPressed):
@@ -366,17 +359,17 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       accel = 0.0
       gas, brake = 0.0, 0.0
 
-    if CC.longActive and is_wire_gas:
+    if CC.longActive and self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
       accel = self.accel
     if CS.out.gasPressed or not CC.longActive:
-      if is_wire_gas:
+      if self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
         self.nidec_pid.reset()
 
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
-    if use_0111_steering and (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and \
-        (self.apply_brake_last > 0 or (is_wire_gas and self.new_accel < 1e-5)):  # lower steer limits while braking
+    if (self.CP.flags & HondaFlags.NIDEC) and (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and \
+        (self.apply_brake_last > 0 or (self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL) and self.new_accel < 1e-5)):  # lower steer limits while braking
       brake_limit = float(233.0 / self.params.STEER_MAX)
       limited_torque = float(np.clip(limited_torque, -brake_limit, brake_limit))
     self.last_torque = limited_torque
@@ -396,7 +389,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     apply_torque = int(np.interp(-limited_torque * self.params.STEER_MAX,
                                  self.params.STEER_LOOKUP_BP, self.params.STEER_LOOKUP_V))
 
-    if use_0111_steering:
+    if (self.CP.flags & HondaFlags.NIDEC):
       speed_val = np.clip(round(CS.out.vEgo * CV.MS_TO_MPH / 5.0) * 5, 5, 60)
       currentLatSpeed = f"{speed_val:02d}"
       if currentLatSpeed in self.latFactors and not CS.out.steeringPressed and CS.steer_control_active:
@@ -408,7 +401,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # Send CAN commands
     can_sends = []
 
-    if is_bosch and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
+    if self.CP.flags & HondaFlags.BOSCH and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
       if self.CP.flags & HondaFlags.BOSCH_CANFD and CS.stock_acc_alive:
         # CAN FD: the radar is still transmitting. It is silenced from here rather than from
         # CarInterface.init(), and only once the comma relay is confirmed open: init() ran while the
@@ -491,7 +484,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
 
     # launch governor state machine (wire-gas Nidec)
-    if is_wire_gas:
+    if self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
       if not self.launch_active:
         if CC.longActive and (not CS.out.gasPressed) and (not CS.out.brakePressed) and \
              (CS.out.vEgo < 0.1) and (actuators.accel > 0.05):
@@ -556,7 +549,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         self.gas_recovery_ticks = 200
       self.long_active_prev = CC.longActive
 
-    if is_wire_gas:
+    if self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
       max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
       low_w = float(np.interp(CS.out.vEgo, [10.0, 16.0], [1.0, 0.0]))
       sf_eff = low_w * self.speedfactor_low + (1.0 - low_w) * self.speedfactor
@@ -650,11 +643,11 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.speedalpha_low = min(prior_speedalpha_low, self.speedalpha_low)
           self.windfactor = min(prior_windfactor, self.windfactor)
 
-    elif is_gas_interceptor or is_stock_nidec or not CC.longActive:
+    elif self.CP_SP.enableGasInterceptor or (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL) or not CC.longActive:
       # Gas interceptor (0x201 on bus) and stock-longitudinal mode do not drive PCM_GAS via ACC_HUD
       pcm_speed = 0.0
       pcm_accel = int(0.0)
-    elif is_bosch:
+    elif self.CP.flags & HondaFlags.BOSCH:
       speed_control = 0
       max_accel = np.interp(CS.out.vEgo, self.params.NIDEC_MAX_ACCEL_BP, self.params.NIDEC_MAX_ACCEL_V)
       pcm_speed_BP = [-wind_brake,
@@ -682,7 +675,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       if self.frame % 2 == 0:
         ts = self.frame * DT_CTRL
 
-        if is_bosch:
+        if self.CP.flags & HondaFlags.BOSCH:
           if (accel < 1e-3) and (CS.out.vEgo < 3.0) and not (-1e-3 < CS.out.vEgo < 1e-3):
             brake_addon = self.brake_pid.update(error = accel - CS.out.aEgo, speed = CS.out.vEgo)
             targetaccel = min(accel,accel + brake_addon)
@@ -741,7 +734,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           if not (self.CP.flags & HondaFlags.BOSCH_CANFD and CS.stock_acc_alive):
             can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
                                                           self.stopping_counter, self.CP, gas_pedal_force))
-        elif is_gas_interceptor:
+        elif self.CP_SP.enableGasInterceptor:
           apply_brake_scalar = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           apply_brake, pump_on = self._nidec_brake_apply(apply_brake_scalar, actuators, CS, CC, ts)
 
@@ -765,7 +758,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
               self.windfactor_before_brake = self.windfactor
 
           can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake, self.packer, self.frame))
-        elif is_wire_gas:
+        elif self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
           apply_brake_scalar = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           apply_brake, pump_on = self._nidec_brake_apply(apply_brake_scalar, actuators, CS, CC, ts)
 
@@ -795,7 +788,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
-    speed_control = 0 if is_bosch else self.launch_active
+    speed_control = 0 if self.CP.flags & HondaFlags.BOSCH else self.launch_active
 
     if (self.CP.flags & HondaFlags.BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
         # Send dashboard UI commands. On CAN FD, ACC_HUD is a radar/ADAS look-alike that openpilot only
@@ -814,14 +807,14 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       if self.CP.openpilotLongitudinalControl:
         if not (self.CP.flags & HondaFlags.BOSCH_CANFD):
           # On Nidec, this also controls longitudinal positive acceleration
-          acc_hud_pcm_accel = self.new_accel if is_wire_gas else pcm_accel
+          acc_hud_pcm_accel = self.new_accel if self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL) else pcm_accel
           can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, acc_hud_pcm_accel,
                                                    hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                    self.CP.openpilotLongitudinalControl))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       reduced_steering = CS.out.steeringPressed
-      if is_bosch:
+      if self.CP.flags & HondaFlags.BOSCH:
         steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
       else:
         steer_maxed = (abs(apply_torque) >= self.params.STEER_MAX) or not CS.steer_control_active
@@ -850,13 +843,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
-        if is_bosch and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS) and not (self.CP.flags & HondaFlags.BOSCH_CANFD):
+        if self.CP.flags & HondaFlags.BOSCH and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS) and not (self.CP.flags & HondaFlags.BOSCH_CANFD):
           can_sends.append(hondacan.create_radar_hud(self.packer, self.CAN.pt))
         if self.CP.carFingerprint == CAR.HONDA_CIVIC_BOSCH:
           can_sends.append(hondacan.create_legacy_brake_command(self.packer, self.CAN.pt))
-        if not is_bosch:
+        if not self.CP.flags & HondaFlags.BOSCH:
           self.speed = pcm_speed
-          if not is_gas_interceptor:
+          if not self.CP_SP.enableGasInterceptor:
             self.gas = pcm_accel / self.params.NIDEC_GAS_MAX
 
     # Render OP's lane and lead car on the dash. On CAN FD these are radar look-alikes that only exist
@@ -935,13 +928,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                                        self.last_button_frame, self.CAN))
 
     new_actuators = actuators.as_builder()
-    if is_bosch:
+    if self.CP.flags & HondaFlags.BOSCH:
       new_actuators.speed = float(self.gasalpha)
       new_actuators.accel = self.accel
       new_actuators.gas = float(self.gasfactor)
       new_actuators.brake = float(self.windfactor)
       new_actuators.torqueOutputCan = apply_torque
-    elif is_wire_gas:
+    elif self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
       new_actuators.speed = float(self.nidec_pid_factor)
       new_actuators.accel = float(self.accel)
       new_actuators.gas = float(self.average_factor)
@@ -956,13 +949,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     new_actuators.torque = self.last_torque
 
     if self.frame % 6000 == 0:
-      if is_bosch:
+      if self.CP.flags & HondaFlags.BOSCH:
         self.param_writer.put_many({
           "HondaGasAlphaParams": self.gasalpha,
           "HondaGasFactorParams": self.gasfactor,
           "HondaWindFactorParams": self.windfactor,
         })
-      elif is_wire_gas:
+      elif self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
         self.param_writer.put_many({
           "HondaFeedForwardParams": self.average_factor,
           "HondaBrakePIDParams": self.brake_pid_factor_non_lowspeed,
@@ -988,7 +981,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           "HondaWindFactorParams": self.windfactor,
         })
 
-    if self.frame % 12000 == 30 and use_0111_steering:
+    if self.frame % 12000 == 30 and (self.CP.flags & HondaFlags.NIDEC):
       self.param_writer.put_many({
         "HondaLatAccelFactor05Params": self.latFactors["05"],
         "HondaLatAccelFactor10Params": self.latFactors["10"],
