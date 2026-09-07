@@ -180,16 +180,11 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
                     steer_maxed, CS, lkas_state_change=None):
   commands = []
 
-  if CP.flags & HondaFlags.BOSCH:
-    solid_lanes = hud_control.lanesVisible and not steer_maxed
-  else:
-    solid_lanes = lat_active and not steer_maxed
-
   lkas_hud_values = {
     'LKAS_READY': 1,
     'LKAS_STATE_CHANGE': 1,
     'STEERING_REQUIRED': alert_steer_required,
-    'SOLID_LANES': solid_lanes,
+    'SOLID_LANES': lat_active and not steer_maxed
     'DASHED_LANES': dashed_lanes,
     'BEEP': 0,
   }
