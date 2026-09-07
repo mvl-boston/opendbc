@@ -529,6 +529,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # Send CAN commands
     can_sends = []
 
+    # tester present - w/ no response (keeps radar disabled)
     if self.CP.flags & HondaFlags.BOSCH and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
       if self.CP.flags & HondaFlags.BOSCH_CANFD and CS.stock_acc_alive:
         # CAN FD: the radar is still transmitting. It is silenced from here rather than from
@@ -945,8 +946,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                  self.CP.openpilotLongitudinalControl))
 
+    # Send dashboard UI commands.
     if self.frame % 10 == 0:
-
       if self.CP.openpilotLongitudinalControl:
         if not (self.CP.flags & HondaFlags.BOSCH_CANFD):
           # On Nidec, this also controls longitudinal positive acceleration
