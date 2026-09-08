@@ -40,11 +40,24 @@ def compute_gb_honda_nidec(accel, speed, creep_factor):
   return np.clip(-gb, 0.0, 1.0), creep_impact
 
 
+def compute_gb_honda_interceptor(accel, speed):
+  # gas/brake split for the pedal interceptor: gas from positive accel, brake from negative,
+  # with the fixed creep brake (no learned creep_factor; this is the pre-0111-port behavior)
+  creep_brake = 0.0
+  creep_speed = 2.3
+  creep_brake_value = 0.15
+  if speed < creep_speed:
+    creep_brake = (creep_speed - speed) / creep_speed * creep_brake_value
+  gb = float(accel) / 4.8 - creep_brake
+  return np.clip(gb, 0.0, 1.0), np.clip(-gb, 0.0, 1.0)
+
+
 def compute_gas_brake(accel, speed, CP):
   if CP.flags & HondaFlags.BOSCH:
     return compute_gb_honda_bosch(accel, speed)
   else:
-    return compute_gb_honda_bosch(accel, speed)
+    # only reached with the gas interceptor; wire-gas Nidec uses compute_gb_honda_nidec directly
+    return compute_gb_honda_interceptor(accel, speed)
 
 
 # TODO not clear this does anything useful
@@ -404,7 +417,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         brake = 0.0
         gas, brake = compute_gas_brake(adjust_accel, CS.out.vEgo, self.CP)
       elif self.CP_SP.enableGasInterceptor or (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
-        accel = actuators.accel
+        # interceptor: the plan accel is the brake target for the Nidec brake path below (no PCM
+        # gas servo, so no nidec_pid correction); gas goes out on the interceptor wire
+        self.accel = actuators.accel
+        accel = self.accel
         gas, brake = compute_gas_brake(actuators.accel + hill_brake, CS.out.vEgo, self.CP)
       elif self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH):
         if (actuators.longControlState in (LongCtrlState.pid, LongCtrlState.stopping)) and \
