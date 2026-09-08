@@ -167,6 +167,8 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     acc_hud_values['ACC_ON'] = int(enabled)
     acc_hud_values['PCM_SPEED'] = pcm_speed * CV.MS_TO_KPH
     acc_hud_values['PCM_GAS'] = pcm_accel
+    # stock holds X01 through accelerate-to-target ramps ("1 gives power"), so keep it set for the
+    # whole launch window; outside launches keep the existing at-the-rails behavior
     acc_hud_values['SET_ME_X01'] = 1 if (speed_control or pcm_accel == 0 or pcm_accel == 198) else 0
     acc_hud_values['FCM_OFF'] = acc_hud['FCM_OFF']
     acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
