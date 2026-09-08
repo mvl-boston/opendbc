@@ -1222,7 +1222,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       new_actuators.torqueOutputCan = float(self.speed_factors["low"])
 
     if self.frame % 6000 == 0:
-      if self.CP.flags & HondaFlags.BOSCH:
+      if self.CP.flags & HondaFlags.BOSCH or self.CP_SP.enableGasInterceptor:
+        # the interceptor path learns gasfactor/windfactor like Bosch (gasalpha stays at its loaded value)
         self.param_writer.put_many({
           "HondaGasAlphaParams": self.gasalpha,
           "HondaGasFactorParams": self.gasfactor,
