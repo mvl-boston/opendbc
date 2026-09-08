@@ -1011,8 +1011,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
           if (CS.out.vEgo < 1e-5) and (self.accel < 1e-5): # gradually restore 2m/s pid after stopped
             self.nidec_brake_pid.i = float(np.clip(self.brake_pid_factor_non_lowspeed, self.nidec_brake_pid.i - 0.01, self.nidec_brake_pid.i + 0.01))
-          if (CS.out.vEgo < 1e-5) and (self.accel < 1e-5): # gradually restore 2m/s pid after stopped
-            self.nidec_brake_pid.i = float(np.clip(self.brake_pid_factor_non_lowspeed, self.nidec_brake_pid.i - 0.01, self.nidec_brake_pid.i + 0.01))
           brakefactor = 1 + self.brake_pid_factor
           if (CS.out.vEgo < 1e-5): # prevent stopping brake_jerk
             apply_brake = min(apply_brake * brakefactor, self.last_applied_brake + 0.02) / brakefactor
