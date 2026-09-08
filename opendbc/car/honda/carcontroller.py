@@ -1020,7 +1020,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
               else:
                 self.windfactor_before_brake = self.windfactor
             can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake, self.packer, self.frame))
-          
+
           # during a driver-gas override the wire now carries the pedal mirror set above, so
           # the PCM tracker (and the feedforward state) stay wound to the true operating
           # point; platforms without GAS_PEDAL_2 keep the old zeroing since there is nothing
@@ -1200,7 +1200,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       new_actuators.gas = float(self.average_factor)
       new_actuators.brake = float(self.sat_accel)
       new_actuators.torque = self.last_torque
-    if self.CP.carFingerprint in HONDA_BOSCH:
+    if self.CP.flags & HondaFlags.BOSCH:
       new_actuators.torqueOutputCan = apply_torque
     else:
       new_actuators.torqueOutputCan = float(self.speed_factors["low"])
