@@ -251,13 +251,6 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
-    elif candidate == CAR.ACURA_RLX_HYBRID:
-      # STEERING_CONTROL is bridged to the EPS on the steer bus by a pre-flashed red panda.
-      ret.steerActuatorDelay = 0.3
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 32767], [0, 32767]]
-      ret.lateralTuning.pid.kf = 0.000035
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
-
     # TODO-SP: remove when https://github.com/commaai/opendbc/pull/2687 is merged
     elif candidate in (
         CAR.HONDA_CLARITY,
@@ -430,6 +423,15 @@ class CarInterface(CarInterfaceBase):
       stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 239], [0, 239]]
       stock_cp.lateralTuning.pid.kiBP, stock_cp.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
       stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
+
+    elif candidate == CAR.ACURA_RLX_HYBRID:
+      # STEERING_CONTROL is bridged to the EPS on the steer bus by a pre-flashed red panda.
+      stock_cp.autoResumeSng = True
+      stock_cp.minEnableSpeed = -1
+      stock_cp.steerActuatorDelay = 0.3
+      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 32767], [0, 32767]]
+      stock_cp.lateralTuning.pid.kf = 0.000035
+      stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     if candidate in HONDA_BOSCH:
       pass
