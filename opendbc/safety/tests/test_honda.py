@@ -318,6 +318,12 @@ class TestHondaNidecSafetyBase(HondaBase):
     values = {"PCM_GAS": pcm_gas, "PCM_SPEED": pcm_speed}
     return self.packer.make_can_msg_safety("ACC_HUD", 0, values)
 
+  def _driver_gas_on(self):
+    self._rx(self._user_gas_msg(1))
+
+  def _driver_gas_off(self):
+    self._rx(self._user_gas_msg(0))
+
   def test_acc_hud_safety_check(self):
     for controls_allowed in [True, False]:
       self.safety.set_controls_allowed(controls_allowed)
@@ -330,14 +336,14 @@ class TestHondaNidecSafetyBase(HondaBase):
     # the carcontroller mirrors the driver's pedal onto ACC_HUD during a gas override; blocking it
     # makes the PCM drop ACC_STATUS, so the speed/gas checks are waived while the pedal is pressed
     self.safety.set_controls_allowed(True)
-    self._rx(self._user_gas_msg(1))
+    self._driver_gas_on()
     self.assertTrue(self.safety.get_gas_pressed_prev())
     for pcm_gas in (0, 1, self.MAX_GAS, 255):
       for pcm_speed in (0, 1, 99):
         self.assertTrue(self._tx(self._send_acc_hud_msg(pcm_gas, pcm_speed)))
 
     # pedal released: back to the standard limits
-    self._rx(self._user_gas_msg(0))
+    self._driver_gas_off()
     self.assertFalse(self.safety.get_gas_pressed_prev())
     self.assertTrue(self._tx(self._send_acc_hud_msg(self.MAX_GAS, 99)))
     self.assertFalse(self._tx(self._send_acc_hud_msg(self.MAX_GAS + 1, 0)))
@@ -411,24 +417,6 @@ class TestHondaNidecPcmSafety(HondaPcmEnableBase, TestHondaNidecSafetyBase):
   def test_disable_control_allowed_from_cruise(self):
     pass
 
-  def test_acc_hud_gas_pressed_passthrough(self):
-    # the carcontroller mirrors the driver's pedal onto ACC_HUD during a gas override; blocking it
-    # makes the PCM drop ACC_STATUS, so the speed/gas checks are waived while the pedal is pressed
-    self.safety.set_controls_allowed(True)
-    self._rx(self._user_gas_msg(1))
-    self.assertTrue(self.safety.get_gas_pressed_prev())
-    for pcm_gas in (0, 1, self.MAX_GAS, 255):
-      for pcm_speed in (0, 1, 99):
-        self.assertTrue(self._tx(self._send_acc_hud_msg(pcm_gas, pcm_speed)))
-
-    # pedal released: back to the standard limits
-    self._rx(self._user_gas_msg(0))
-    self.assertFalse(self.safety.get_gas_pressed_prev())
-    self.assertTrue(self._tx(self._send_acc_hud_msg(self.MAX_GAS, 99)))
-    self.assertFalse(self._tx(self._send_acc_hud_msg(self.MAX_GAS + 1, 0)))
-    self.safety.set_controls_allowed(False)
-    self.assertFalse(self._tx(self._send_acc_hud_msg(1, 0)))
-
 
 class TestHondaNidecGasInterceptorSafety(GasInterceptorSafetyTest, HondaButtonEnableBase, TestHondaNidecSafetyBase):
   """
@@ -444,6 +432,12 @@ class TestHondaNidecGasInterceptorSafety(GasInterceptorSafetyTest, HondaButtonEn
     self.safety.set_current_safety_param_sp(HondaSafetyFlagsSP.GAS_INTERCEPTOR)
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, 0)
     self.safety.init_tests()
+
+  def _driver_gas_on(self):
+    self._rx(self._interceptor_user_gas(self.INTERCEPTOR_THRESHOLD + 1))
+
+  def _driver_gas_off(self):
+    self._rx(self._interceptor_user_gas(0))
 
 
 class TestHondaNidecPcmAltSafety(TestHondaNidecPcmSafety):
@@ -483,6 +477,12 @@ class TestHondaNidecAltGasInterceptorSafety(GasInterceptorSafetyTest, HondaButto
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_ALT)
     self.safety.init_tests()
 
+  def _driver_gas_on(self):
+    self._rx(self._interceptor_user_gas(self.INTERCEPTOR_THRESHOLD + 1))
+
+  def _driver_gas_off(self):
+    self._rx(self._interceptor_user_gas(0))
+
   def _acc_state_msg(self, main_on):
     values = {"MAIN_ON": main_on, "COUNTER": self.cnt_acc_state % 4}
     self.__class__.cnt_acc_state += 1
@@ -521,6 +521,9 @@ class TestHondaNidecStockLongitudinalSafety(HondaPcmEnableBase, TestHondaNidecSa
     pass
 
   def test_acc_hud_safety_check(self):
+    pass
+
+  def test_acc_hud_gas_pressed_passthrough(self):
     pass
 
   def test_fwd_hook(self):
