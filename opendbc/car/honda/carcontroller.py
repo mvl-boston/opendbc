@@ -821,6 +821,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           if (wire_gas > 20.0) and (CS.car_gas > 5.0) and (abs(wire_gas - prior_accel) <= 1.0):
             scale_sample = CS.car_gas / wire_gas
             self.car_gas_per_pcm_gas += 0.0005 * (scale_sample - self.car_gas_per_pcm_gas)
+
           self.car_gas_per_pcm_gas = max(0.00001, self.car_gas_per_pcm_gas)
           gas_measured = CS.car_gas / self.car_gas_per_pcm_gas
           averagefactor_error = (gas_measured - self.prior_gas_average) / self.params.NIDEC_GAS_MAX
@@ -909,7 +910,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                        np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
         pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
         pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
-
     if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and not (self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD)) and not (self.CP.flags & HondaFlags.NIDEC):
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
@@ -1194,14 +1194,16 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       new_actuators.accel = self.accel
       new_actuators.gas = float(self.gasfactor)
       new_actuators.brake = float(self.windfactor)
-      new_actuators.torqueOutputCan = apply_torque
     else:
       new_actuators.speed = float(self.nidec_pid_factor)
       new_actuators.accel = float(self.accel)
       new_actuators.gas = float(self.average_factor)
       new_actuators.brake = float(self.sat_accel)
+      new_actuators.torque = self.last_torque
+    if self.CP.carFingerprint in HONDA_BOSCH:
+      new_actuators.torqueOutputCan = apply_torque
+    else:
       new_actuators.torqueOutputCan = float(self.speed_factors["low"])
-    new_actuators.torque = self.last_torque
 
     if self.frame % 6000 == 0:
       if self.CP.flags & HondaFlags.BOSCH:
@@ -1230,12 +1232,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           learned_values[NIDEC_SPEED_FACTOR_KEYS[band]] = self.speed_factors[band]
           learned_values[NIDEC_SPEED_ALPHA_KEYS[band]] = self.speed_alphas[band]
         self.param_writer.put_many(learned_values)
-      else:
-        self.param_writer.put_many({
-          "HondaGasAlphaParams": self.gasalpha,
-          "HondaGasFactorParams": self.gasfactor,
-          "HondaWindFactorParams": self.windfactor,
-        })
 
     if self.frame % 12000 == 30 and (self.CP.flags & HondaFlags.NIDEC):
       self.param_writer.put_many({
