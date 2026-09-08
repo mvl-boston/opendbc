@@ -228,6 +228,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.brake = 0.0
     self.last_torque = 0.0
     self.bosch_last_gas = 0
+    self.last_applied_brake = 0.0
 
     self.lkas_button_send_remaining = 0
     self.last_lkas_button_frame = 0
@@ -950,7 +951,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             else:
               self.brake_pid.reset()
             targetaccel = min(accel,accel + self.brake_pid.i)
-
+          if (CS.out.vEgo < 1e-5): # prevent stopping brake_jerk
+            targetaccel = max(targetaccel, self.last_applied_brake - 0.02)
+          self.last_applied_brake = targetaccel
           self.accel = float(np.clip(targetaccel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
           gas_pedal_force = targetaccel + wind_brake_ms2 * self.windfactor + hill_brake + self.gasalpha
 
@@ -1008,7 +1011,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
           if (CS.out.vEgo < 1e-5) and (self.accel < 1e-5): # gradually restore 2m/s pid after stopped
             self.nidec_brake_pid.i = float(np.clip(self.brake_pid_factor_non_lowspeed, self.nidec_brake_pid.i - 0.01, self.nidec_brake_pid.i + 0.01))
+          if (CS.out.vEgo < 1e-5) and (self.accel < 1e-5): # gradually restore 2m/s pid after stopped
+            self.nidec_brake_pid.i = float(np.clip(self.brake_pid_factor_non_lowspeed, self.nidec_brake_pid.i - 0.01, self.nidec_brake_pid.i + 0.01))
           brakefactor = 1 + self.brake_pid_factor
+          if (CS.out.vEgo < 1e-5): # prevent stopping brake_jerk
+            apply_brake = min(apply_brake * brakefactor, self.last_applied_brake + 0.02) / brakefactor
+          self.last_applied_brake = apply_brake * brakefactor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
