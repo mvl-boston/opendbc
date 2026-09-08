@@ -457,10 +457,10 @@ static safety_config honda_nidec_init(uint16_t param) {
     SET_RX_CHECKS(honda_nidec_common_rx_checks, ret);
   }
 
-  if (enable_gas_interceptor) {
-    SET_TX_MSGS(HONDA_N_INTERCEPTOR_TX_MSGS, ret);
-  } else if (honda_stock_longitudinal) {
+  if (honda_stock_longitudinal) {
     SET_TX_MSGS(HONDA_N_STOCK_LONGITUDINAL_TX_MSGS, ret);
+  } else if (enable_gas_interceptor) {
+    SET_TX_MSGS(HONDA_N_INTERCEPTOR_TX_MSGS, ret);
   } else if (rlx_steer_bridge) {
     SET_TX_MSGS(HONDA_N_RLX_BRIDGE_TX_MSGS, ret);
   } else {
