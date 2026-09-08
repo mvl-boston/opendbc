@@ -174,24 +174,19 @@ class CarState(CarStateBase, CarStateExt):
       self.low_speed_alert = False
     ret.lowSpeedAlert = self.low_speed_alert
 
+    if self.CP.openpilotLongitudinalControl:
+      if self.CP.flags & HondaFlags.BOSCH_RADARLESS:
+        ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
+      elif self.CP.flags & (HondaFlags.BOSCH_CANFD | HondaFlags.BOSCH_TJA_CONTROL) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
+        ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
+      else:
+        ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
+
     # Log non-critical stock ACC/LKAS faults if Nidec (camera) or longitudinal CANFD alt-brake
     if not (self.CP.flags & HondaFlags.BOSCH):
       # RLX: the stock LKAS camera is on the steer bus; the bridge panda relays its LKAS_HUD onto the powertrain bus
       lkas_hud_cp = cp if self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID else cp_cam
       ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or lkas_hud_cp.vl["LKAS_HUD"]["LKAS_PROBLEM"])
-
-    elif self.CP.flags & HondaFlags.BOSCH_RADARLESS:
-      ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
-    else:
-      if self.CP.openpilotLongitudinalControl:
-        if self.CP.flags & (HondaFlags.BOSCH_CANFD | HondaFlags.BOSCH_TJA_CONTROL) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
-          ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
-        else:
-          ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
-
-      # Log non-critical stock ACC/LKAS faults if Nidec (camera)
-      if not (self.CP.flags & HondaFlags.BOSCH):
-        ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
 
     ret.espDisabled = cp.vl["VSA_STATUS"]["ESP_DISABLED"] != 0
 
