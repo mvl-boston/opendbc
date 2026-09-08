@@ -1215,7 +1215,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       new_actuators.accel = float(self.accel)
       new_actuators.gas = float(self.average_factor)
       new_actuators.brake = float(self.sat_accel)
-      new_actuators.torque = self.last_torque
+    new_actuators.torque = self.last_torque
     if self.CP.flags & HondaFlags.BOSCH:
       new_actuators.torqueOutputCan = apply_torque
     else:
