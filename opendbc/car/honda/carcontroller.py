@@ -228,11 +228,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.brake = 0.0
     self.last_torque = 0.0
     self.bosch_last_gas = 0
-    # openpilot's stopping-state ramp toward stopAccel is a fixed 1.0 m/s^2/s now that CarParams.stoppingDecelRate
-    # is gone; 0111-op-honda-dev ran Hondas at 0.1 (0.3 on the City 7G). Reproduce it by rate-limiting the brake
-    # target while longControlState is stopping. The gas/brake block below runs every other frame (50Hz).
-    stopping_decel_rate = 0.3 if self.CP.carFingerprint == CAR.HONDA_CITY_7G else 0.1  # m/s^2/s
-    self.stopping_decel_step = stopping_decel_rate * 2 * DT_CTRL  # m/s^2 per 50Hz call
     self.last_applied_brake = 0.0
 
     self.lkas_button_send_remaining = 0
@@ -956,8 +951,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             else:
               self.brake_pid.reset()
             targetaccel = min(accel,accel + self.brake_pid.i)
-          if actuators.longControlState == LongCtrlState.stopping:  # simulated stoppingDecelRate, see __init__
-            targetaccel = max(targetaccel, self.last_applied_brake - self.stopping_decel_step)
+          if actuators.longControlState == LongCtrlState.stopping:  # simulate the old stoppingDecelRate of 0.1 m/s^2/s @ 50hz
+            targetaccel = max(targetaccel, self.last_applied_brake - 0.002)
           self.last_applied_brake = targetaccel
           self.accel = float(np.clip(targetaccel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
           gas_pedal_force = targetaccel + wind_brake_ms2 * self.windfactor + hill_brake + self.gasalpha
@@ -1017,9 +1012,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           if (CS.out.vEgo < 1e-5) and (self.accel < 1e-5): # gradually restore 2m/s pid after stopped
             self.nidec_brake_pid.i = float(np.clip(self.brake_pid_factor_non_lowspeed, self.nidec_brake_pid.i - 0.01, self.nidec_brake_pid.i + 0.01))
           brakefactor = 1 + self.brake_pid_factor
-          if actuators.longControlState == LongCtrlState.stopping:  # simulated stoppingDecelRate, see __init__
-            # brake fraction is -accel / 4.8 (compute_gb_honda_nidec), so convert the m/s^2 step
-            apply_brake = min(apply_brake * brakefactor, self.last_applied_brake + self.stopping_decel_step / 4.8) / brakefactor
+          if actuators.longControlState == LongCtrlState.stopping:  # simulate the old stoppingDecelRate of 0.1 m/s^2/s @ 50hz
+            apply_brake = min(apply_brake * brakefactor, self.last_applied_brake + 0.00042) / brakefactor
           self.last_applied_brake = apply_brake * brakefactor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
