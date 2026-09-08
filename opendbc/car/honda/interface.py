@@ -270,6 +270,8 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate == CAR.ACURA_RLX_HYBRID:
       # STEERING_CONTROL is bridged to the EPS on the steer bus by a pre-flashed red panda.
+      ret.autoResumeSng = True
+      ret.minEnableSpeed = -1
       ret.steerActuatorDelay = 0.3
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 32767], [0, 32767]]
       ret.lateralTuning.pid.kf = 0.000035
