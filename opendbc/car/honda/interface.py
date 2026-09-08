@@ -257,7 +257,10 @@ class CarInterface(CarInterfaceBase):
         CAR.HONDA_ACCORD_9G,
         CAR.ACURA_MDX_3G,
         CAR.ACURA_TLX_1G,
+        CAR.ACURA_RLX_HYBRID,
       ):
+      # lateral tuning for these lives in _get_params_sp; keep the default PID union here so it is
+      # not swapped to torque by the generic branch below
       pass
 
     elif candidate == CAR.HONDA_FIT_4G:
@@ -413,10 +416,6 @@ class CarInterface(CarInterfaceBase):
       stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 179, 239], [0, 179, 830]]
       stock_cp.lateralTuning.pid.kiBP, stock_cp.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
       stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
-
-    elif candidate == CAR.ACURA_RLX_HYBRID:
-      stock_cp.autoResumeSng = True
-      stock_cp.minEnableSpeed = -1
 
     elif candidate == CAR.HONDA_ACCORD_9G:
       stock_cp.steerActuatorDelay = 0.3
