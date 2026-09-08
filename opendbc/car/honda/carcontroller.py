@@ -1151,20 +1151,18 @@ class CarController(CarControllerBase):
                                                      CS.scm_ambient_light, self.CP.carFingerprint, bus=self.CAN.camera))
 
     new_actuators = actuators.as_builder()
+    new_actuators.torque = self.last_torque
     if self.CP.carFingerprint in HONDA_BOSCH:
       new_actuators.speed = float(self.gasalpha)
       new_actuators.accel = self.accel
       new_actuators.gas = float(self.gasfactor)
       new_actuators.brake = float(self.windfactor)
+      new_actuators.torqueOutputCan = apply_torque
     else:
       new_actuators.speed = float(self.nidec_pid_factor)
       new_actuators.accel = float(self.accel)
       new_actuators.gas = float(self.average_factor)
       new_actuators.brake = float(self.sat_accel)
-    new_actuators.torque = self.last_torque
-    if self.CP.carFingerprint in HONDA_BOSCH:
-      new_actuators.torqueOutputCan = apply_torque
-    else:
       new_actuators.torqueOutputCan = float(self.speed_factors["low"])
 
     if self.frame % 6000 == 0:
