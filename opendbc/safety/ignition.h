@@ -66,6 +66,30 @@ void ignition_can_hook(const CANPacket_t *msg) {
       }
       prev_counter_vw_meb = counter;
     }
+
+    // Honda Nidec exception (SCM_FEEDBACK MAIN_ON on 0x326)
+    if ((msg->addr == 0x326U) && (len == 8)) {
+      int counter = (msg->data[7] >> 4) & 0x3U;
+
+      static int prev_counter_honda_326 = -1;
+      if ((counter == ((prev_counter_honda_326 + 1) % 4)) && (prev_counter_honda_326 != -1)) {
+        ignition_can = GET_BIT(msg, 28U);
+        ignition_can_cnt = 0U;
+      }
+      prev_counter_honda_326 = counter;
+    }
+
+    // Honda Nidec alt SCM exception (MAIN_ON on 0x1A6, e.g. RLX hybrid)
+    if ((msg->addr == 0x1A6U) && (len == 8)) {
+      int counter = (msg->data[7] >> 4) & 0x3U;
+
+      static int prev_counter_honda_1a6 = -1;
+      if ((counter == ((prev_counter_honda_1a6 + 1) % 4)) && (prev_counter_honda_1a6 != -1)) {
+        ignition_can = GET_BIT(msg, 47U);
+        ignition_can_cnt = 0U;
+      }
+      prev_counter_honda_1a6 = counter;
+    }
   }
 
   // TODO: this is too loose, Teslas have 0x222
