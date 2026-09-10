@@ -11,7 +11,7 @@ YELLOW="\e[1;33m"
 RED="\e[1;31m"
 NC='\033[0m'
 
-: "${CPPCHECK_DIR:=$DIR/cppcheck/}"
+: "${CPPCHECK_DIR:=$(python3 -c "import cppcheck; print(cppcheck.DIR)")}"
 
 # ensure checked in coverage table is up to date
 python3 $CPPCHECK_DIR/addons/misra.py -generate-table > coverage_table
@@ -56,7 +56,7 @@ cppcheck() {
 PANDA_OPTS=" --enable=all --enable=unusedFunction --addon=misra"
 
 printf "\n${GREEN}** Safety with CANFD **${NC}\n"
-cppcheck $PANDA_OPTS -DCANFD $BASEDIR/opendbc/safety/main.c
+cppcheck $PANDA_OPTS -DCANFD $BASEDIR/opendbc/safety/tests/misra/main.c
 
 printf "\n${GREEN}Success!${NC} took $SECONDS seconds\n"
 
