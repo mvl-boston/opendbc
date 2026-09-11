@@ -1,7 +1,7 @@
 # functions common among cars
 import numpy as np
 from dataclasses import dataclass, field
-from enum import ReprEnum, StrEnum, EnumType, auto, IntFlag
+from enum import ReprEnum, StrEnum, EnumType, auto
 from dataclasses import replace
 
 from opendbc.car import structs, uds
@@ -180,11 +180,8 @@ class PlatformConfigBase(Freezable):
   dbc_dict: DbcDict
 
   flags: int = 0
-  sp_flags: int = 0
 
   platform_str: str | None = None
-
-  origin_car_docs: list[CarDocs] | list[ExtraCarDocs] = field(init=False)
 
   def __hash__(self) -> int:
     return hash(self.platform_str)
@@ -196,11 +193,7 @@ class PlatformConfigBase(Freezable):
     pass
 
   def __post_init__(self):
-    self.origin_car_docs = self.car_docs
     self.init()
-
-  def get_all_docs(self):
-    return self.origin_car_docs
 
 
 @dataclass
@@ -241,11 +234,3 @@ class Platforms(str, ReprEnum, metaclass=PlatformsType):
   @classmethod
   def create_dbc_map(cls) -> dict[str, DbcDict]:
     return {p: p.config.dbc_dict for p in cls}
-
-  @classmethod
-  def with_flags(cls, flags: IntFlag) -> set['Platforms']:
-    return {p for p in cls if p.config.flags & flags}
-
-  @classmethod
-  def with_sp_flags(cls, sp_flags: IntFlag) -> set['Platforms']:
-    return {p for p in cls if p.config.sp_flags & sp_flags}
