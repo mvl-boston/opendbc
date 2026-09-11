@@ -1,3 +1,13 @@
+CM_ "IMPORT _honda_common.dbc";
+CM_ "IMPORT _nidec_common.dbc";
+CM_ "IMPORT _nidec_scm_group_a.dbc";
+CM_ "IMPORT _lkas_hud_5byte.dbc";
+CM_ "IMPORT _steering_sensors_b.dbc";
+CM_ "IMPORT _gearbox_common.dbc";
+
+CM_ "below is same as _steering_control_c with different steer_status bit";
+CM_ "Both live on a separate steer bus and are bridged to the powertrain bus by a pre-flashed red panda";
+
 BO_ 404 STEERING_CONTROL: 4 EON
  SG_ SET_ME_X00 : 22|7@0+ (1,0) [0|127] "" EPS
  SG_ STEER_TORQUE_REQUEST : 23|1@0+ (1,0) [0|1] "" EPS
@@ -8,7 +18,7 @@ BO_ 404 STEERING_CONTROL: 4 EON
 BO_ 399 STEER_STATUS: 7 EPS
  SG_ STEER_TORQUE_SENSOR : 7|16@0- (-1,0) [-2985|2985] "tbd" EON
  SG_ STEER_ANGLE_RATE : 23|16@0- (-0.1,0) [-31000|31000] "deg/s" EON
- SG_ STEER_STATUS : 43|4@0+ (1,0) [0|15] "" EON
+ SG_ STEER_STATUS : 39|4@0+ (1,0) [0|15] "" EON
  SG_ STEER_CONTROL_ACTIVE : 35|1@0+ (1,0) [0|1] "" EON
  SG_ STEER_CONFIG_INDEX : 43|4@0+ (1,0) [0|15] "" EON
  SG_ CHECKSUM : 51|4@0+ (1,0) [0|15] "" EON
