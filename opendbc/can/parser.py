@@ -207,11 +207,17 @@ class CANParser:
         state.rate_limited_log(self._last_update_nanos, f"counter invalid, {state.counter_fail=} {MAX_BAD_COUNTER=}")
       if not state.valid(self._last_update_nanos, bus_timeout):
         valid = False
-        state.rate_limited_log(self._last_update_nanos, "not valid (timeout or missing)")
 
     # TODO: probably only want to increment this once per update() call
     self.can_invalid_cnt = 0 if valid else min(self.can_invalid_cnt + 1, CAN_INVALID_CNT)
-    return self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
+    result = self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
+
+    if not result:
+      for state in self.message_states.values():
+        if not state.valid(self._last_update_nanos, bus_timeout):
+          state.rate_limited_log(self._last_update_nanos, "not valid (timeout or missing)")
+
+    return result
 
   def update(self, strings, sendcan: bool = False):
     if strings and not isinstance(strings[0], list | tuple):
