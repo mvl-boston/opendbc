@@ -11,6 +11,8 @@ from opendbc.safety import ALTERNATIVE_EXPERIENCE
 from opendbc.safety.tests.libsafety import libsafety_py
 from opendbc.car.lateral import MAX_LATERAL_ACCEL, MAX_LATERAL_JERK
 
+from opendbc.safety.tests.mads_common import MadsSafetyTestBase
+
 MAX_WRONG_COUNTERS = 5
 MAX_SAMPLE_VALS = 6
 VEHICLE_SPEED_FACTOR = 1000
@@ -936,7 +938,9 @@ class SafetyTest(SafetyTestBase):
   SCANNED_ADDRS = [*range(0x800),                      # Entire 11-bit CAN address space
                    *range(0x18DA00F1, 0x18DB00F1, 0x100),   # 29-bit UDS physical addressing
                    *range(0x18DB00F1, 0x18DC00F1, 0x100),   # 29-bit UDS functional addressing
-                   *range(0x3300, 0x3400)]                  # Honda
+                   *range(0x3300, 0x3400),                  # Honda
+                   *range(0x6CD5554, 0x6CD5558),            # Honda Bosch radarless LANE_PATH, HUD_OBJECTS
+                   0xF31AA54]                               # Honda Bosch radarless LKAS_HUD_2
   FWD_BLACKLISTED_ADDRS: dict[int, list[int]] = {}  # {bus: [addr]}
   FWD_BUS_LOOKUP: dict[int, int] = {0: 2, 2: 0}
 
@@ -1010,13 +1014,18 @@ class SafetyTest(SafetyTestBase):
             if {attr, current_test}.issubset({'TestVolkswagenPqSafety', 'TestVolkswagenPqStockSafety', 'TestVolkswagenPqLongSafety'}):
               continue
             if {attr, current_test}.issubset({'TestGmCameraSafety', 'TestGmCameraLongitudinalSafety', 'TestGmAscmSafety',
-                                              'TestGmCameraEVSafety', 'TestGmCameraLongitudinalEVSafety', 'TestGmAscmEVSafety'}):
+                                              'TestGmCameraEVSafety', 'TestGmCameraLongitudinalEVSafety', 'TestGmAscmEVSafety',
+                                              'TestGmCameraNonACCSafety', 'TestGmCameraEVNonACCSafety'}):
               continue
             if attr.startswith('TestFord') and current_test.startswith('TestFord'):
               continue
             if attr.startswith('TestHyundaiCanfd') and current_test.startswith('TestHyundaiCanfd'):
               continue
             if {attr, current_test}.issubset({'TestHyundaiLongitudinalSafety', 'TestHyundaiLongitudinalSafetyCameraSCC', 'TestHyundaiSafetyFCEVLong'}):
+              continue
+            base_tests = {'TestHyundaiLongitudinalSafety', 'TestHyundaiLongitudinalSafetyCameraSCC', 'TestHyundaiSafetyFCEVLong',
+                          'TestHyundaiLongitudinalESCCSafety'}
+            if any(attr.startswith(test) for test in base_tests) and any(current_test.startswith(test) for test in base_tests):
               continue
             volkswagen_shared = ('TestVolkswagenMqb', 'TestVolkswagenMlb', 'TestVolkswagenMeb')
             if attr.startswith(volkswagen_shared) and current_test.startswith(volkswagen_shared):
@@ -1038,10 +1047,14 @@ class SafetyTest(SafetyTestBase):
             if attr == 'TestVolkswagenMqbLongSafety' and current_test.startswith('TestHondaBoschRadarless'):
               tx = list(filter(lambda m: m[0] not in [0x30c, ], tx))
 
+            # Volkswagen MQB and Honda Bosch Canfd ACC HUD messages overlap
+            if attr == 'TestVolkswagenMqbLongSafety' and current_test.startswith('TestHondaBoschCANFD'):
+              tx = list(filter(lambda m: m[0] not in [0x30c, ], tx))
+
             # TODO: Temporary, should be fixed in panda firmware, safety_honda.h
             if attr.startswith('TestHonda'):
               # exceptions for common msgs across different hondas
-              tx = list(filter(lambda m: m[0] not in [0x1FA, 0x30C, 0x33D, 0x33DB], tx))
+              tx = list(filter(lambda m: m[0] not in [0x1FA, 0x30C, 0x33D, 0x33DB, 0x6CD5554, 0xF31AA54, 0x6CD5557], tx))
 
             if attr.startswith('TestHyundaiLongitudinal'):
               # exceptions for common msgs across different Hyundai CAN platforms
@@ -1062,7 +1075,7 @@ class SafetyTest(SafetyTestBase):
 
 
 @add_regen_tests
-class CarSafetyTest(SafetyTest):
+class CarSafetyTest(SafetyTest, MadsSafetyTestBase):
   STANDSTILL_THRESHOLD: float = 0.0
   GAS_PRESSED_THRESHOLD = 0
   RELAY_MALFUNCTION_ADDRS: dict[int, tuple[int, ...]] | None = None
@@ -1246,6 +1259,8 @@ class CarSafetyTest(SafetyTest):
   def test_safety_tick(self):
     self.safety.set_timer(int(2e6))
     self.safety.set_controls_allowed(True)
+    self.safety.set_controls_allowed_lateral(True)
     self.safety.safety_tick_current_safety_config()
     self.assertFalse(self.safety.get_controls_allowed())
+    self.assertFalse(self.safety.get_controls_allowed_lateral())
     self.assertFalse(self.safety.safety_config_valid())

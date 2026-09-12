@@ -120,6 +120,31 @@ int mutation_get_active_mutant(void);
 void ignition_can_hook(const CANPacket_t *msg);
 bool get_ignition_can(void);
 void set_ignition_can(bool c);
+
+bool get_controls_allowed_lateral(void);
+bool get_controls_requested_lateral(void);
+void set_current_safety_param_sp(uint16_t param);
+uint16_t get_current_safety_param_sp(void);
+bool get_enable_mads(void);
+bool get_disengage_lateral_on_brake(void);
+bool get_pause_lateral_on_brake(void);
+void set_mads_button_press(int mads_button_press);
+void set_controls_allowed_lateral(bool c);
+void set_controls_requested_lateral(bool c);
+bool get_mads_acc_main(void);
+void set_acc_main_on(bool c);
+int get_mads_button_press(void);
+void mads_set_current_disengage_reason(int reason);
+int mads_get_current_disengage_reason(void);
+int get_temp_debug(void);
+uint32_t get_acc_main_on_mismatches(void);
+void set_mads_params(bool enable_mads, bool disengage_lateral_on_brake, bool pause_lateral_on_brake);
+void mads_apply_alternative_experience(int mode);
+void tick_mads_state(bool vm, bool acc_main, bool op_allowed, bool braking, bool steering_disengage);
+void set_heartbeat_engaged_mads(bool c);
+void mads_heartbeat_engaged_check(void);
+void set_steering_disengage(bool c);
+int get_gas_interceptor_prev(void);
 """)
 
 class LibSafety:
