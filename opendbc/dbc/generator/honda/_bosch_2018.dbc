@@ -128,6 +128,7 @@ BO_ 586 ADJACENT_RIGHT_LANE_LINE_2: 8 CAM
 BO_ 662 SCM_BUTTONS: 4 SCM
  SG_ CRUISE_BUTTONS : 7|3@0+ (1,0) [0|7] "" EON
  SG_ CRUISE_SETTING : 3|2@0+ (1,0) [0|3] "" EON
+ SG_ AMBIENT_LIGHT_MAYBE : 23|8@0+ (1,0) [0|255] "" EON
  SG_ COUNTER : 29|2@0+ (1,0) [0|3] "" EON
  SG_ CHECKSUM : 27|4@0+ (1,0) [0|15] "" EON
 
@@ -205,6 +206,7 @@ BO_ 13275 LKAS_HUD_B: 8 ADAS
  SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" BDY
 
 CM_ SG_ 228 DRIVER_OVERRIDE "Appears to acknowledge STEER_STATUS.NO_TORQUE_ALERT_1";
+CM_ SG_ 662 AMBIENT_LIGHT_MAYBE "Slow-moving sensor value (possibly the ambient light input for adaptive high beam), undecoded. The camera consumes SCM_BUTTONS content beyond the buttons, so frames sent in its place must echo this byte";
 CM_ SG_ 576 LINE_DISTANCE_VISIBLE "Length of line visible, undecoded";
 CM_ SG_ 577 LINE_FAR_EDGE_POSITION "Appears to be a measure of line thickness, indicates location of the portion of the line furthest from the car, undecoded";
 CM_ SG_ 577 LINE_PARAMETER "Unclear if this is low quality line curvature rate or if this is something else, but it is correlated with line curvature, undecoded";

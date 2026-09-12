@@ -44,8 +44,8 @@ GEAR_SHIFTER_MAP: dict[str, structs.CarState.GearShifter] = {
   'B': GearShifter.brake, 'BRAKE': GearShifter.brake,
 }
 
-TorqueFromLateralAccelCallbackType = Callable[[float, structs.CarParams.LateralTorqueTuning, bool], float]
-LateralAccelFromTorqueCallbackType = Callable[[float, structs.CarParams.LateralTorqueTuning, bool], float]
+TorqueFromLateralAccelCallbackType = Callable[[float, structs.CarParams.LateralTorqueTuning], float]
+LateralAccelFromTorqueCallbackType = Callable[[float, structs.CarParams.LateralTorqueTuning], float]
 
 
 @cache
@@ -86,6 +86,7 @@ class RadarInterfaceBase(ABC):
     self.CP_SP = CP_SP
     self.rcp = None
     self.pts: dict[int, structs.RadarData.RadarPoint] = {}
+    self.track_id: int = 0
     self.frame = 0
 
   def update(self, can_packets: list[tuple[int, list[CanData]]]) -> structs.RadarDataT | None:
@@ -115,9 +116,12 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
     dbc_names = {bus: cp.dbc_name for bus, cp in self.can_parsers.items()}
     self.CC: CarControllerBase = self.CarController(dbc_names, CP, CP_SP)
 
-  def apply(self, c: structs.CarControl, c_sp: structs.CarControlSP, now_nanos: int | None = None) -> tuple[structs.CarControl.Actuators, list[CanData]]:
+  def apply(self, c: structs.CarControl, c_sp: structs.CarControlSP, now_nanos: int | None = None,
+            model=None) -> tuple[structs.CarControl.Actuators, list[CanData]]:
     if now_nanos is None:
       now_nanos = int(time.monotonic() * 1e9)
+    # modelV2 for cars that render it; set as an attr to avoid touching every CarController.update
+    self.CC.model = model
     return self.CC.update(c, c_sp, self.CS, now_nanos)
 
   @staticmethod
@@ -245,11 +249,6 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
     ret.steerRatioRear = 0.  # no rear steering, at least on the listed cars aboveA
     ret.openpilotLongitudinalControl = False
     ret.stopAccel = -2.0
-    ret.stoppingDecelRate = 0.8 # brake_travel/s while trying to stop
-    ret.vEgoStopping = 0.5
-    ret.vEgoStarting = 0.5
-    ret.longitudinalTuning.kpBP = [0.]
-    ret.longitudinalTuning.kpV = [0.]
     ret.longitudinalTuning.kiBP = [0.]
     ret.longitudinalTuning.kiV = [0.]
     # TODO estimate car specific lag, use .15s for now
@@ -405,6 +404,7 @@ class CarControllerBase(ABC):
     self.CP_SP = CP_SP
     self.frame = 0
     self.secoc_key: bytes = b"00" * 16
+    self.model = None
 
   @abstractmethod
   def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS: CarStateBase, now_nanos: int) -> tuple[structs.CarControl.Actuators, list[CanData]]:
