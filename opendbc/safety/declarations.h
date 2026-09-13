@@ -141,7 +141,6 @@ typedef struct {
   const int max_curvature_error;         // rad/m * curvature_to_can, max deviation from measured curvature (0 disables)
   const float curvature_error_min_speed; // min speed for the curvature error check [m/s]
   const int max_steer_power;             // max steer power if EPS supports it (0 disables)
-  const bool inactive_curvature_is_zero; // true resets desired to 0 on violation, false resets to measured curvature
 } CurvatureSteeringLimits;
 
 // parameters for lateral accel/jerk angle limiting using a simple vehicle model
@@ -182,7 +181,6 @@ typedef struct {
   const bool ignore_counter;         // counter check is not performed when set to true
   const uint8_t max_counter;         // maximum value of the counter. 0 means that the counter check is skipped
   const bool ignore_quality_flag;    // true if quality flag check is skipped
-  const bool ignore_frequency_check; // true if minimum frequency enforcement is skipped
 } CanMsgCheck;
 
 typedef struct {
@@ -249,7 +247,6 @@ bool longitudinal_accel_checks(int desired_accel, const LongitudinalLimits limit
 bool longitudinal_speed_checks(int desired_speed, const LongitudinalLimits limits);
 bool longitudinal_gas_checks(int desired_gas, const LongitudinalLimits limits);
 bool longitudinal_brake_checks(int desired_brake, const LongitudinalLimits limits);
-bool longitudinal_interceptor_checks(const CANPacket_t *msg);  // gas interceptor
 void pcm_cruise_check(bool cruise_engaged);
 void speed_mismatch_check(const float speed_2);
 
@@ -273,8 +270,6 @@ extern bool vehicle_moving;
 extern bool acc_main_on; // referred to as "ACC off" in ISO 15622:2018
 extern int cruise_button_prev;
 extern bool safety_rx_checks_invalid;
-extern bool enable_gas_interceptor;
-extern int gas_interceptor_prev;
 
 // for safety modes with torque steering control
 extern int desired_torque_last;       // last desired steer torque
@@ -337,7 +332,6 @@ typedef struct {
 
 extern uint16_t current_safety_mode;
 extern uint16_t current_safety_param;
-extern uint16_t current_safety_param_sp;
 extern safety_config current_safety_config;
 
 int safety_fwd_hook(int bus_num, int addr);
