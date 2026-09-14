@@ -5,7 +5,7 @@ import numpy as np
 
 from opendbc.car.lateral import get_max_angle_delta_vm, get_max_angle_vm
 from opendbc.car.tesla.teslacan import get_steer_ctrl_type
-from opendbc.car.tesla.values import CarControllerParams, TeslaSafetyFlags, TeslaFlags
+from opendbc.car.tesla.values import CarControllerParams, TeslaSafetyFlags, TeslaFlags, CANBUS
 from opendbc.car.tesla.carcontroller import get_safety_CP
 from opendbc.car.structs import CarParams
 from opendbc.car.vehicle_model import VehicleModel
@@ -13,6 +13,8 @@ from opendbc.can import CANDefine
 from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
 from opendbc.safety.tests.common import CANPackerSafety, MAX_SPEED_DELTA, MAX_WRONG_COUNTERS, away_round, round_speed
+
+from opendbc.sunnypilot.car.tesla.values import TeslaSafetyFlagsSP
 
 MSG_DAS_steeringControl = 0x488
 MSG_APS_eacMonitor = 0x27d
@@ -274,7 +276,8 @@ class TestTeslaSafetyBase(common.CarSafetyTest, common.AngleSteeringSafetyTest, 
     self.safety.set_controls_allowed(True)
     for steer_control_type in range(4):
       should_tx = steer_control_type in (self.steer_control_types["NONE"],
-                                         self.steer_control_types["ANGLE_CONTROL"])
+                                         self.steer_control_types["ANGLE_CONTROL"],
+                                         self.steer_control_types["LANE_KEEP_ASSIST"])
       self.assertEqual(should_tx, self._tx(self._angle_cmd_msg(0, state=steer_control_type)))
 
   def test_stock_lkas_passthrough(self):
@@ -485,6 +488,57 @@ class TestTeslaIgnition(unittest.TestCase):
     self.safety.ignition_can_hook(self._msg(2, 2))
     self.safety.ignition_can_hook(self._msg(3, 2))
     self.assertFalse(self.safety.get_ignition_can())
+
+
+class TestTeslaVehicleBusSafety(TestTeslaSafetyBase):
+
+  LONGITUDINAL = False
+
+  def setUp(self):
+    super().setUp()
+    self.safety = libsafety_py.libsafety
+    self.packer_adas = CANPackerSafety("tesla_model3_vehicle")
+    self.safety.set_current_safety_param_sp(TeslaSafetyFlagsSP.HAS_VEHICLE_BUS | TeslaSafetyFlagsSP.MADS_SCREEN_BUTTON_3_FINGER)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.tesla, 0)
+    self.safety.init_tests()
+
+  def _lkas_button_msg(self, enabled):
+    values = {"UI_activeTouchPoints": 3 if enabled else 0}
+    return self.packer_adas.make_can_msg_safety("UI_status2", CANBUS.vehicle, values)
+
+  def _set_mads_screen_button_config(self, finger_flag):
+    param_sp = TeslaSafetyFlagsSP.HAS_VEHICLE_BUS
+    if finger_flag is not None:
+      param_sp |= finger_flag
+    self.safety.set_current_safety_param_sp(param_sp)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.tesla, 0)
+    self.safety.init_tests()
+
+  def _touch_points_msg(self, touch_points):
+    return self.packer_adas.make_can_msg_safety("UI_status2", CANBUS.vehicle, {"UI_activeTouchPoints": touch_points})
+
+  def test_mads_screen_button_finger_count_match(self):
+    """Configured finger count must match received touch-point count to register a MADS button press."""
+    configs = [
+      (TeslaSafetyFlagsSP.MADS_SCREEN_BUTTON_3_FINGER, 3),
+      (TeslaSafetyFlagsSP.MADS_SCREEN_BUTTON_4_FINGER, 4),
+      (TeslaSafetyFlagsSP.MADS_SCREEN_BUTTON_5_FINGER, 5),
+    ]
+    for config_flag, config_count in configs:
+      for actual in (0, 3, 4, 5):
+        with self.subTest(configured=config_count, actual=actual):
+          self._set_mads_screen_button_config(config_flag)
+          self._rx(self._touch_points_msg(actual))
+          expected = 1 if actual == config_count else 0  # PRESSED vs NOT_PRESSED
+          self.assertEqual(expected, self.safety.get_mads_button_press())
+
+  def test_mads_screen_button_disabled(self):
+    """With no finger-count flag set, touch messages must not change the MADS button state from UNAVAILABLE."""
+    self._set_mads_screen_button_config(None)
+    for actual in (0, 3, 4, 5):
+      with self.subTest(actual=actual):
+        self._rx(self._touch_points_msg(actual))
+        self.assertEqual(-1, self.safety.get_mads_button_press())  # UNAVAILABLE
 
 
 if __name__ == "__main__":
