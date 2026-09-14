@@ -258,7 +258,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
 
-    elif candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_MDX_3G_MMR): # source mlocoteta
+    elif candidate == CAR.ACURA_MDX_3G: # source mlocoteta
       ret.steerActuatorDelay = 0.3
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 433], [0, 433]]
       ret.lateralTuning.pid.kf = 0.000035
@@ -308,10 +308,6 @@ class CarInterface(CarInterfaceBase):
     # These cars use alternate user brake msg (0x1BE)
     if 0x1BE in fingerprint[CAN.pt] and candidate in HONDA_BOSCH:
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
-
-    # need to exclude 0x18F since that overlaps with 0x190 and makes both messages appear true
-    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G) and 0x190 in fingerprint[CAN.pt] and 0x18f not in fingerprint[CAN.pt]:
-      ret.flags |= HondaFlags.LEGACY_MDX_STEER.value
 
     if ret.flags & HondaFlags.BOSCH_ALT_BRAKE:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value
