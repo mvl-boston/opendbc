@@ -38,7 +38,7 @@ class CarState(CarStateBase, CarStateExt):
       self.car_state_scm_msg = "SCM_BUTTONS"
 
     self.brake_error_msg = "HYBRID_BRAKE_ERROR" if CP.flags & HondaFlags.HYBRID else "STANDSTILL"
-
+    self.steer_status_msg = "STEER_STATUS"
     self.steer_control_active = False  # whether EPS is reacting to steering messages
 
     self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
@@ -118,10 +118,15 @@ class CarState(CarStateBase, CarStateExt):
       # adaptive high beam error), so it must be echoed on frames sent in the SCM's place.
       self.scm_ambient_light = cp.vl["SCM_BUTTONS"]["AMBIENT_LIGHT_MAYBE"]
 
-    if CP.message_states.get(0x189) is not None and len(CP.message_states[0x189].timestamps) > 0:
-      self.steer_status_msg = "STEER_STATUS"
-    else:
-      self.steer_status_msg = "STEER_STATUS_LEGACY"
+    if self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G):
+      # STEER_STATUS (0x18f) and STEER_STATUS_LEGACY (0x190) overlap on some cars; 0x190 may pass
+      # checksum on 0x18f cars. message_states timestamps are only updated on passing frames.
+      steer_status_seen = cp.message_states.get(0x18f) is not None and len(cp.message_states[0x18f].timestamps) > 0
+      steer_legacy_seen = cp.message_states.get(0x190) is not None and len(cp.message_states[0x190].timestamps) > 0
+      if steer_status_seen:
+        self.steer_status_msg = "STEER_STATUS"
+      elif steer_legacy_seen:
+        self.steer_status_msg = "STEER_STATUS_LEGACY"
 
     # used for car hud message
     # TODO: find CAR_SPEED for HONDA_ODYSSEY_TWN or use ACC_HUD w/ detection
@@ -392,6 +397,9 @@ class CarState(CarStateBase, CarStateExt):
     # Optional on Nidec: some platforms send GAS_PEDAL (0x13C) instead of GAS_PEDAL_2 (0x130).
     # Register before lazy vl access so missing messages do not count against canValid.
     pt_messages = [("GAS_PEDAL_2", math.nan), ("GAS_PEDAL", math.nan)]
+    if CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G):
+      # Register before lazy vl access so missing messages do not count against canValid.
+      pt_messages += [("STEER_STATUS", math.nan), ("STEER_STATUS_LEGACY", math.nan)]
     if CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
       # the bridged stock camera LKAS_HUD must stay alive on the powertrain bus
       pt_messages.append(("LKAS_HUD", 10))
