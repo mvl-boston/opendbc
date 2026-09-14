@@ -293,8 +293,9 @@ class CarInterface(CarInterfaceBase):
     if 0x1BE in fingerprint[CAN.pt] and ret.flags & HondaFlags.BOSCH:
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
 
-    # need to exclude 0x18F since that overlaps with 0x190 and makes both messages appear true
-    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G) and 0x190 in fingerprint[CAN.pt] and 0x18f not in fingerprint[CAN.pt]:
+    # MDX 3G / TLX 1G use STEER_STATUS_LEGACY (0x190) instead of STEER_STATUS (0x18f).
+    # 0x190 can appear after the CAN fingerprint window, so default to legacy unless 0x18f is seen.
+    if candidate in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G) and not any(0x18f in fp for fp in fingerprint.values()):
       ret.flags |= HondaFlags.LEGACY_MDX_STEER.value
 
     if ret.flags & HondaFlags.BOSCH_ALT_BRAKE:
