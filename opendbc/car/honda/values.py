@@ -84,7 +84,6 @@ class HondaFlags(IntFlag):
   BOSCH_TJA_CONTROL = 4096
   LKAS_MINSPEED_CUTOFF = 8192
   HYBRID_ALT_BRAKEHOLD = 16384  # Some Nidec Hybrids use a different brakehold
-  LEGACY_MDX_STEER = 32768
 
 
 # Car button codes
@@ -424,12 +423,6 @@ class CAR(Platforms):
     radar_dbc_dict('acura_mdx_3g_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
-  ACURA_MDX_3G_MMR = HondaNidecPlatformConfig(
-    [], # don't add to cardocs since custom steering board
-    CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
-    radar_dbc_dict('acura_ilx_2016_can_generated'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
-  )
   ACURA_RLX_HYBRID = HondaNidecPlatformConfig(
     # 2017 RLX Sport Hybrid. Don't add to cardocs: the EPS is on a separate steer bus; a
     # pre-flashed red panda bridges steer messages onto the powertrain bus this code sees
@@ -503,7 +496,6 @@ STEER_THRESHOLD = {
   CAR.HONDA_ODYSSEY_5G_MMR: 600,
   CAR.HONDA_ACCORD_9G: 30,
   CAR.ACURA_MDX_3G: 400,
-  CAR.ACURA_MDX_3G_MMR: 400,
   CAR.ACURA_TLX_1G: 200,
   CAR.ACURA_RLX_HYBRID: 2400,
 }
