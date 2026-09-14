@@ -96,6 +96,13 @@ class CarState(CarStateBase, CarStateExt):
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
+    if self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G):
+      # STEER_STATUS (0x18f) and STEER_STATUS_LEGACY (0x190) are mutually exclusive; either may
+      # appear after the fingerprint window, so wait for whichever shows up first.
+      if cp.message_states.get(0x190) is not None and len(cp.message_states[0x190].timestamps) > 0:
+        self.steer_status_msg = "STEER_STATUS_LEGACY"
+      elif cp.message_states.get(0x18f) is not None and len(cp.message_states[0x18f].timestamps) > 0:
+        self.steer_status_msg = "STEER_STATUS"
     if self.CP.enableBsm:
       cp_body = can_parsers[Bus.body]
     if self.CP.flags & HondaFlags.BOSCH_CANFD:
@@ -387,6 +394,9 @@ class CarState(CarStateBase, CarStateExt):
     # Optional on Nidec: some platforms send GAS_PEDAL (0x13C) instead of GAS_PEDAL_2 (0x130).
     # Register before lazy vl access so missing messages do not count against canValid.
     pt_messages = [("GAS_PEDAL_2", math.nan), ("GAS_PEDAL", math.nan)]
+    if CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G):
+      # Register before lazy vl access so missing messages do not count against canValid.
+      pt_messages += [("STEER_STATUS", math.nan), ("STEER_STATUS_LEGACY", math.nan)]
     if CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
       # the bridged stock camera LKAS_HUD must stay alive on the powertrain bus
       pt_messages.append(("LKAS_HUD", 10))
