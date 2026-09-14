@@ -39,6 +39,11 @@ class CarState(CarStateBase, CarStateExt):
 
     self.brake_error_msg = "HYBRID_BRAKE_ERROR" if CP.flags & HondaFlags.HYBRID else "STANDSTILL"
 
+    if CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G) and not (CP.flags & HondaFlags.HYBRID):
+      self.steer_status_msg = "STEER_STATUS_LEGACY"
+    else:
+      self.steer_status_msg = "STEER_STATUS"
+
     self.steer_control_active = False  # whether EPS is reacting to steering messages
 
     self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
@@ -117,11 +122,6 @@ class CarState(CarStateBase, CarStateExt):
       # The camera consumes SCM_BUTTONS content beyond the buttons (losing/zeroing this byte raises an
       # adaptive high beam error), so it must be echoed on frames sent in the SCM's place.
       self.scm_ambient_light = cp.vl["SCM_BUTTONS"]["AMBIENT_LIGHT_MAYBE"]
-
-    if CP.message_states.get(0x189) is not None and len(CP.message_states[0x189].timestamps) > 0:
-      self.steer_status_msg = "STEER_STATUS"
-    else:
-      self.steer_status_msg = "STEER_STATUS_LEGACY"
 
     # used for car hud message
     # TODO: find CAR_SPEED for HONDA_ODYSSEY_TWN or use ACC_HUD w/ detection
