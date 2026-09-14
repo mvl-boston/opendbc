@@ -38,7 +38,10 @@ class CarState(CarStateBase, CarStateExt):
       self.car_state_scm_msg = "SCM_BUTTONS"
 
     self.brake_error_msg = "HYBRID_BRAKE_ERROR" if CP.flags & HondaFlags.HYBRID else "STANDSTILL"
-    self.steer_status_msg = "STEER_STATUS_LEGACY" if (CP.flags & HondaFlags.LEGACY_MDX_STEER) else "STEER_STATUS"
+    if cp.message_states.get(0x190) is not None and len(cp.message_states[0x190].timestamps) > 0:
+      self.steer_status_msg = "STEER_STATUS_LEGACY"
+    else:
+      self.steer_status_msg = "STEER_STATUS"
     self.steer_control_active = False  # whether EPS is reacting to steering messages
 
     self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
