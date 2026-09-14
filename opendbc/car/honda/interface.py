@@ -102,12 +102,8 @@ class CarInterface(CarInterfaceBase):
       # ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
       pass  # moved to opendbc controller
 
-    if candidate == CAR.HONDA_CITY_7G:
-      ret.vEgoStopping = 2.0
-      ret.stoppingDecelRate = 0.3
-    else:
-      ret.vEgoStopping = 0.5
-      ret.stoppingDecelRate = 0.1
+    ret.stoppingDecelRate = 0.1
+    ret.vEgoStopping = 0.3
     ret.vEgoStarting = ret.vEgoStopping
 
     # Disable control if EPS mod detected
