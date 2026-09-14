@@ -1416,7 +1416,7 @@ FW_VERSIONS = {
     ],
     (Ecu.shiftByWire, 0x18da0bf1, None): [
       b'54008-TRX-A710\x00\x00',
-      b'54008-TZ5-A710\x00\x00', # unknown
+      b'54008-TZ5-A710\x00\x00',
       b'54008-TZ5-A911\x00\x00',
       b'54008-TZ5-A910\x00\x00',
       b'77959-TZ5-A110\x00\x00', # unknown
