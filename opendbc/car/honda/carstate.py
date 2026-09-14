@@ -37,7 +37,12 @@ class CarState(CarStateBase):
 
     self.brake_error_msg = "HYBRID_BRAKE_ERROR" if CP.flags & HondaFlags.HYBRID else "STANDSTILL"
     self.brakehold_msg = "BRAKE_HOLD_HYBRID_ALT" if CP.flags & HondaFlags.HYBRID_ALT_BRAKEHOLD else "VSA_STATUS"
-    self.steer_status_msg = "STEER_STATUS_LEGACY" if (self.CP.flags & HondaFlags.LEGACY_MDX_STEER) else "STEER_STATUS"
+
+    if CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G) and not (CP.flags & HondaFlags.HYBRID):
+      self.steer_status_msg = "STEER_STATUS_LEGACY"
+    else:
+      self.steer_status_msg = "STEER_STATUS"
+
     self.steer_control_active = False  # whether EPS is reacting to steering messages
 
     self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
