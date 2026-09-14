@@ -39,6 +39,7 @@ class CarState(CarStateBase, CarStateExt):
 
     self.brake_error_msg = "HYBRID_BRAKE_ERROR" if CP.flags & HondaFlags.HYBRID else "STANDSTILL"
     self.steer_status_msg = "STEER_STATUS_LEGACY" if (CP.flags & HondaFlags.LEGACY_MDX_STEER) else "STEER_STATUS"
+    self._steer_status_msg_locked = False
     self.steer_control_active = False  # whether EPS is reacting to steering messages
 
     self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
@@ -96,13 +97,17 @@ class CarState(CarStateBase, CarStateExt):
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
-    if self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G):
-      # STEER_STATUS (0x18f) and STEER_STATUS_LEGACY (0x190) are mutually exclusive; either may
-      # appear after the fingerprint window, so wait for whichever shows up first.
-      if cp.message_states.get(0x190) is not None and len(cp.message_states[0x190].timestamps) > 0:
-        self.steer_status_msg = "STEER_STATUS_LEGACY"
-      elif cp.message_states.get(0x18f) is not None and len(cp.message_states[0x18f].timestamps) > 0:
+    if self.CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G) and not self._steer_status_msg_locked:
+      # STEER_STATUS (0x18f) and STEER_STATUS_LEGACY (0x190) overlap on some cars; 0x190 may appear
+      # with bad checksum on 0x18f cars. message_states timestamps are only updated on passing frames.
+      steer_status_seen = cp.message_states.get(0x18f) is not None and len(cp.message_states[0x18f].timestamps) > 0
+      steer_legacy_seen = cp.message_states.get(0x190) is not None and len(cp.message_states[0x190].timestamps) > 0
+      if steer_status_seen:
         self.steer_status_msg = "STEER_STATUS"
+        self._steer_status_msg_locked = True
+      elif steer_legacy_seen:
+        self.steer_status_msg = "STEER_STATUS_LEGACY"
+        self._steer_status_msg_locked = True
     if self.CP.enableBsm:
       cp_body = can_parsers[Bus.body]
     if self.CP.flags & HondaFlags.BOSCH_CANFD:
