@@ -474,7 +474,7 @@ class CarController(CarControllerBase):
         (self.apply_brake_last > 0 or self.new_accel < 1e-5): # lower steer limits while braking
       brake_limit = float(233.0 / self.params.STEER_MAX)
       limited_torque = float(np.clip(limited_torque, -brake_limit, brake_limit))
-    self.last_torque = limited_torque
+    self.last_torque = limited_torque if CS.steer_control_active else 0.0
 
     # *** apply brake hysteresis ***
     pre_limit_brake, self.braking, self.brake_steady = actuator_hysteresis(brake, self.braking, self.brake_steady,
