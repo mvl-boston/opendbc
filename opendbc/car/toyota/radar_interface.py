@@ -24,9 +24,8 @@ def _create_radar_can_parser(CP):
 
 
 class RadarInterface(RadarInterfaceBase):
-  def __init__(self, CP, CP_SP):
-    super().__init__(CP, CP_SP)
-
+  def __init__(self, CP):
+    super().__init__(CP)
     if CP.flags & ToyotaFlags.TSS2:
       self.RADAR_A_MSGS = list(range(0x180, 0x190))
       self.RADAR_B_MSGS = list(range(0x190, 0x1a0))
