@@ -33,6 +33,8 @@ int set_safety_hooks(uint16_t mode, uint16_t param);
 
 ffi.cdef("""
 void can_set_checksum(CANPacket_t *packet);
+void mutation_set_active_mutant(int id);
+int mutation_get_active_mutant(void);
 """)
 
 setup_safety_helpers(ffi)
@@ -61,6 +63,11 @@ class Panda(PandaSafety, Protocol):
 
 
 libsafety: Panda = ffi.dlopen(libsafety_fn)
+
+
+def load(path):
+  global libsafety
+  libsafety = ffi.dlopen(str(path))
 
 
 # helpers
