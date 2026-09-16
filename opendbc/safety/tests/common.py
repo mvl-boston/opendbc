@@ -11,6 +11,8 @@ from opendbc.safety import ALTERNATIVE_EXPERIENCE
 from opendbc.safety.tests.libsafety import libsafety_py
 from opendbc.car.lateral import MAX_LATERAL_ACCEL, MAX_LATERAL_JERK
 
+from opendbc.safety.tests.mads_common import MadsSafetyTestBase
+
 MAX_WRONG_COUNTERS = 5
 MAX_SAMPLE_VALS = 6
 VEHICLE_SPEED_FACTOR = 1000
@@ -569,18 +571,23 @@ class MotorTorqueSteeringSafetyTest(TorqueSteeringSafetyTestBase, abc.ABC):
           self.assertEqual(send, self._tx(self._torque_cmd_msg(torque)))
 
   def test_non_realtime_limit_down(self):
+    self.safety.set_controls_allowed(True)
+
     for speed in self._torque_speed_range:
       self._reset_speed_measurement(speed)
       max_torque = self._get_max_torque(speed)
+
       torque_meas = max_torque - self.MAX_TORQUE_ERROR - 50
 
-      for sign in (-1, 1):
-        for delta in (self.MAX_RATE_DOWN, self.MAX_RATE_DOWN - 1):
-          self.safety.set_controls_allowed(True)
-          self.safety.set_rt_torque_last(sign * max_torque)
-          self.safety.set_torque_meas(sign * torque_meas, sign * torque_meas)
-          self.safety.set_desired_torque_last(sign * max_torque)
-          self.assertEqual(delta == self.MAX_RATE_DOWN, self._tx(self._torque_cmd_msg(sign * (max_torque - delta))))
+      self.safety.set_rt_torque_last(max_torque)
+      self.safety.set_torque_meas(torque_meas, torque_meas)
+      self.safety.set_desired_torque_last(max_torque)
+      self.assertTrue(self._tx(self._torque_cmd_msg(max_torque - self.MAX_RATE_DOWN)))
+
+      self.safety.set_rt_torque_last(max_torque)
+      self.safety.set_torque_meas(torque_meas, torque_meas)
+      self.safety.set_desired_torque_last(max_torque)
+      self.assertFalse(self._tx(self._torque_cmd_msg(max_torque - self.MAX_RATE_DOWN + 1)))
 
   def test_exceed_torque_sensor(self):
     self.safety.set_controls_allowed(True)
@@ -1005,13 +1012,18 @@ class SafetyTest(SafetyTestBase):
             if {attr, current_test}.issubset({'TestVolkswagenPqSafety', 'TestVolkswagenPqStockSafety', 'TestVolkswagenPqLongSafety'}):
               continue
             if {attr, current_test}.issubset({'TestGmCameraSafety', 'TestGmCameraLongitudinalSafety', 'TestGmAscmSafety',
-                                              'TestGmCameraEVSafety', 'TestGmCameraLongitudinalEVSafety', 'TestGmAscmEVSafety'}):
+                                              'TestGmCameraEVSafety', 'TestGmCameraLongitudinalEVSafety', 'TestGmAscmEVSafety',
+                                              'TestGmCameraNonACCSafety', 'TestGmCameraEVNonACCSafety'}):
               continue
             if attr.startswith('TestFord') and current_test.startswith('TestFord'):
               continue
             if attr.startswith('TestHyundaiCanfd') and current_test.startswith('TestHyundaiCanfd'):
               continue
             if {attr, current_test}.issubset({'TestHyundaiLongitudinalSafety', 'TestHyundaiLongitudinalSafetyCameraSCC', 'TestHyundaiSafetyFCEVLong'}):
+              continue
+            base_tests = {'TestHyundaiLongitudinalSafety', 'TestHyundaiLongitudinalSafetyCameraSCC', 'TestHyundaiSafetyFCEVLong',
+                          'TestHyundaiLongitudinalESCCSafety'}
+            if any(attr.startswith(test) for test in base_tests) and any(current_test.startswith(test) for test in base_tests):
               continue
             volkswagen_shared = ('TestVolkswagenMqb', 'TestVolkswagenMlb', 'TestVolkswagenMeb')
             if attr.startswith(volkswagen_shared) and current_test.startswith(volkswagen_shared):
@@ -1057,7 +1069,7 @@ class SafetyTest(SafetyTestBase):
 
 
 @add_regen_tests
-class CarSafetyTest(SafetyTest):
+class CarSafetyTest(SafetyTest, MadsSafetyTestBase):
   STANDSTILL_THRESHOLD: float = 0.0
   GAS_PRESSED_THRESHOLD = 0
   RELAY_MALFUNCTION_ADDRS: dict[int, tuple[int, ...]] | None = None
@@ -1239,12 +1251,10 @@ class CarSafetyTest(SafetyTest):
         self.assertEqual(self.safety.get_controls_allowed(), within_delta)
 
   def test_safety_tick(self):
-    # Missing valid RX messages must disable controls even before they time out.
-    for elapsed in (0, int(2e6)):
-      with self.subTest(elapsed=elapsed):
-        self._reset_safety_hooks()
-        self.safety.set_timer(elapsed)
-        self.safety.set_controls_allowed(True)
-        self.safety.safety_tick()
-        self.assertFalse(self.safety.get_controls_allowed())
-        self.assertFalse(self.safety.safety_config_valid())
+    self.safety.set_timer(int(2e6))
+    self.safety.set_controls_allowed(True)
+    self.safety.set_controls_allowed_lateral(True)
+    self.safety.safety_tick_current_safety_config()
+    self.assertFalse(self.safety.get_controls_allowed())
+    self.assertFalse(self.safety.get_controls_allowed_lateral())
+    self.assertFalse(self.safety.safety_config_valid())

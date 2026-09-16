@@ -1,15 +1,20 @@
 from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs
-from opendbc.car.chrysler.values import CUSW_CARS, DBC, STEER_THRESHOLD, RAM_CARS, ChryslerFlags
+from opendbc.car.chrysler.values import CUSW_CARS, DBC, STEER_THRESHOLD, RAM_CARS
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.interfaces import CarStateBase
+
+from opendbc.sunnypilot.car.chrysler.carstate_ext import CarStateExt
+from opendbc.sunnypilot.car.chrysler.mads import MadsCarState
 
 ButtonType = structs.CarState.ButtonEvent.Type
 
 
-class CarState(CarStateBase):
-  def __init__(self, CP):
-    super().__init__(CP)
+class CarState(CarStateBase, MadsCarState, CarStateExt):
+  def __init__(self, CP, CP_SP):
+    CarStateBase.__init__(self, CP, CP_SP)
+    MadsCarState.__init__(self, CP, CP_SP)
+    CarStateExt.__init__(self, CP, CP_SP)
     self.CP = CP
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
 
@@ -24,7 +29,7 @@ class CarState(CarStateBase):
 
     self.distance_button = 0
 
-  def update(self, can_parsers) -> structs.CarState:
+  def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
 
@@ -32,6 +37,7 @@ class CarState(CarStateBase):
       return self.update_cusw(cp, cp_cam)
 
     ret = structs.CarState()
+    ret_sp = structs.CarStateSP()
 
     prev_distance_button = self.distance_button
     self.distance_button = cp.vl["CRUISE_BUTTONS"]["ACC_Distance_Dec"]
@@ -90,19 +96,27 @@ class CarState(CarStateBase):
       ret.steerFaultPermanent = cp.vl["EPS_2"]["LKAS_STATE"] == 4
 
     # blindspot sensors
-    if self.CP.flags & ChryslerFlags.HAS_BSM:
+    if self.CP.enableBsm:
       ret.leftBlindspot = cp.vl["BSM_1"]["LEFT_STATUS"] == 1
       ret.rightBlindspot = cp.vl["BSM_1"]["RIGHT_STATUS"] == 1
 
     self.lkas_car_model = cp_cam.vl["DAS_6"]["CAR_MODEL"]
     self.button_counter = cp.vl["CRUISE_BUTTONS"]["COUNTER"]
 
-    ret.buttonEvents = create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise})
+    MadsCarState.update_mads(self, ret, can_parsers)
+    CarStateExt.update(self, ret, ret_sp, can_parsers)
 
-    return ret
+    ret.buttonEvents = [
+      *create_button_events(self.distance_button, prev_distance_button, {1: ButtonType.gapAdjustCruise}),
+      *create_button_events(self.lkas_button, self.prev_lkas_button, {1: ButtonType.lkas}),
+      *self.button_events,
+    ]
+
+    return ret, ret_sp
 
   def update_cusw(self, cp, cp_cam):
     ret = structs.CarState()
+    ret_sp = structs.CarStateSP()
 
     ret.doorOpen = any([cp.vl["DOORS"]["DOOR_OPEN_FL"],
                         cp.vl["DOORS"]["DOOR_OPEN_FR"],
@@ -140,16 +154,16 @@ class CarState(CarStateBase):
     ret.steeringPressed = abs(ret.steeringTorque) > STEER_THRESHOLD
     ret.steerFaultPermanent = bool(cp.vl["EPS_STATUS"]["LKAS_FAULT"])
 
-    if self.CP.flags & ChryslerFlags.HAS_BSM:
+    if self.CP.enableBsm:
       ret.leftBlindspot = bool(cp.vl["BSM_LEFT"]["LEFT_DETECTED"])
       ret.rightBlindspot = bool(cp.vl["BSM_RIGHT"]["RIGHT_DETECTED"])
 
     self.lkas_car_model = cp_cam.vl["DAS_6"]["CAR_MODEL"]
 
-    return ret
+    return ret, ret_sp
 
   @staticmethod
-  def get_can_parsers(CP):
+  def get_can_parsers(CP, CP_SP):
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 0),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 2),
