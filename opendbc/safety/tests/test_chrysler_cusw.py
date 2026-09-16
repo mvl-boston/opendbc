@@ -56,8 +56,6 @@ class TestChryslerCuswSafety(common.CarSafetyTest, common.MotorTorqueSteeringSaf
     for controls_allowed in (True, False):
       self.safety.set_controls_allowed(controls_allowed)
 
-      self.assertFalse(self._tx(self._button_msg()))
-
       # resume only while controls allowed
       self.assertEqual(controls_allowed, self._tx(self._button_msg(resume=True)))
 

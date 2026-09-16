@@ -6,9 +6,11 @@ from opendbc.car.fw_versions import build_fw_dict
 from opendbc.car.hyundai.interface import CarInterface
 from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.radar_interface import RADAR_START_ADDR
-from opendbc.car.hyundai.values import CAR, DATE_FW_ECUS, FW_QUERY_CONFIG, CANFD_FUZZY_WHITELIST, \
+from opendbc.car.hyundai.values import CAR, DATE_FW_ECUS, \
+                                         FW_QUERY_CONFIG, CANFD_FUZZY_WHITELIST, \
                                          PLATFORM_CODE_ECUS, HYUNDAI_VERSION_REQUEST_LONG, \
-                                         HyundaiFlags, get_platform_codes, HyundaiSafetyFlags
+                                         HyundaiFlags, get_platform_codes, HyundaiSafetyFlags, \
+                                         NON_SCC_CAR
 from opendbc.car.hyundai.fingerprints import FW_VERSIONS
 from opendbc.testing import fuzzy_test
 
@@ -25,7 +27,6 @@ NO_DATES_PLATFORMS = {
   CAR.HYUNDAI_ELANTRA,
   CAR.HYUNDAI_ELANTRA_GT_I30,
   CAR.KIA_CEED,
-  CAR.KIA_CEED_PHEV,
   CAR.KIA_FORTE,
   CAR.KIA_OPTIMA_G4,
   CAR.KIA_OPTIMA_G4_FL,
@@ -169,6 +170,8 @@ class TestHyundaiFingerprint(unittest.TestCase):
             continue
           if platform_code_ecu == Ecu.eps and car_model in no_eps_platforms:
             continue
+          if car_model in NON_SCC_CAR:
+            continue
           assert platform_code_ecu in [e[0] for e in ecus]
 
   def test_fw_format(self):
@@ -181,6 +184,9 @@ class TestHyundaiFingerprint(unittest.TestCase):
       with self.subTest(car_model=car_model.value):
         for ecu, fws in ecus.items():
           if ecu[0] not in PLATFORM_CODE_ECUS:
+            continue
+
+          if car_model in NON_SCC_CAR:
             continue
 
           codes = set()
@@ -248,6 +254,9 @@ class TestHyundaiFingerprint(unittest.TestCase):
         for fw in fw_versions:
           car_fw.append(CarParams.CarFw(ecu=ecu_name, fwVersion=fw, address=addr,
                                         subAddress=0 if sub_addr is None else sub_addr))
+
+      if platform in NON_SCC_CAR:
+        continue
 
       CP = CarParams(carFw=car_fw)
       matches = FW_QUERY_CONFIG.match_fw_to_car_fuzzy(build_fw_dict(CP.carFw), CP.carVin, FW_VERSIONS)

@@ -169,11 +169,6 @@ class TestFordSafetyBase(common.CarSafetyTest):
     }
     return self.packer.make_can_msg_safety("EngBrakeData", 0, values)
 
-  def test_enable_control_allowed_from_queue_assist(self):
-    msg = self.packer.make_can_msg_safety("EngBrakeData", 0, {"BpedDrvAppl_D_Actl": 1, "CcStat_D_Actl": 4})
-    self.assertTrue(self._rx(msg))
-    self.assertTrue(self.safety.get_controls_allowed())
-
   # LKAS command
   def _lkas_command_msg(self, action: int):
     values = {
@@ -463,6 +458,15 @@ class TestFordSafetyBase(common.CarSafetyTest):
       self._rx(self._pcm_status_msg(enabled))
       for bus in (0, 2):
         self.assertEqual(enabled, self._tx(self._acc_button_msg(Buttons.CANCEL, bus)))
+
+  def test_enable_control_allowed_from_acc_main_on(self):
+    for enable_mads in (True, False):
+      with self.subTest("enable_mads", mads_enabled=enable_mads):
+        for main_button_msg_valid in (True, False):
+          with self.subTest("main_button_msg_valid", state_valid=main_button_msg_valid):
+            self.safety.set_mads_params(enable_mads, False, False)
+            self._rx(self._pcm_status_msg(main_button_msg_valid))
+            self.assertEqual(enable_mads and main_button_msg_valid, self.safety.get_controls_allowed_lateral())
 
 
 class TestFordCANFDStockSafety(TestFordSafetyBase):
