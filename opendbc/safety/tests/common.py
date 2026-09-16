@@ -9,6 +9,7 @@ from collections.abc import Callable
 from opendbc.can import CANPacker
 from opendbc.safety import ALTERNATIVE_EXPERIENCE
 from opendbc.safety.tests.libsafety import libsafety_py
+from opendbc.car.lateral import MAX_LATERAL_ACCEL, MAX_LATERAL_JERK
 
 from opendbc.safety.tests.mads_common import MadsSafetyTestBase
 
@@ -824,12 +825,122 @@ class AngleSteeringSafetyTest(VehicleSpeedSafetyTest):
       self.assertTrue(self._tx(self._angle_cmd_msg(0, True, increment_timer=False)))
 
 
+class CurvatureSteeringSafetyTest(VehicleSpeedSafetyTest):
+  MAX_CURVATURE: float
+  MAX_CURVATURE_TEST: float
+  CURVATURE_TO_CAN: float
+  SEND_RATE: float
+
+  @classmethod
+  def setUpClass(cls):
+    if cls.__name__ == "CurvatureSteeringSafetyTest":
+      cls.safety = None
+      raise unittest.SkipTest
+
+  @abc.abstractmethod
+  def _curvature_cmd_msg(self, curvature: float, steer_req: bool):
+    pass
+
+  @abc.abstractmethod
+  def _curvature_meas_msg(self, curvature: float):
+    pass
+
+  def _set_prev_desired_curvature(self, curvature: float):
+    curvature_can = int(round(curvature * self.CURVATURE_TO_CAN))
+    self.safety.set_desired_curvature_last(curvature_can)
+
+  def _reset_curvature_measurement(self, curvature: float):
+    for _ in range(MAX_SAMPLE_VALS):
+      self._rx(self._curvature_meas_msg(curvature))
+
+  def _reset_speed_measurement(self, speed: float):
+    for _ in range(MAX_SAMPLE_VALS):
+      self._rx(self._speed_msg(speed))
+      self._rx(self._speed_msg_2(speed))
+
+  def test_curvature_measurements(self):
+    self._common_measurement_test(self._curvature_meas_msg, -self.MAX_CURVATURE, self.MAX_CURVATURE, self.CURVATURE_TO_CAN,
+                                  self.safety.get_curvature_meas_min, self.safety.get_curvature_meas_max)
+
+  def test_curvature_limit(self):
+    v = 1
+    for sign in (1, -1):
+      max_curvature = self.MAX_CURVATURE_TEST * sign
+      max_curvature_rate = MAX_LATERAL_JERK / v**2
+      max_curvature_delta = max_curvature_rate * self.SEND_RATE * sign
+
+      self._reset_speed_measurement(v)
+      self.safety.set_controls_allowed(True)
+      self._set_prev_desired_curvature(max_curvature)
+
+      self.assertTrue(self._tx(self._curvature_cmd_msg(max_curvature, True)), f"{v} {max_curvature} {max_curvature_delta}")
+      self.assertTrue(self.safety.get_controls_allowed())
+
+      self.assertTrue(self._tx(self._curvature_cmd_msg(max_curvature - max_curvature_delta, True)), f"{v} {max_curvature} {max_curvature_delta}")
+      self.assertTrue(self.safety.get_controls_allowed())
+
+      self.assertTrue(self._tx(self._curvature_cmd_msg(max_curvature, True)), f"{v} {max_curvature} {max_curvature_delta}")
+      self.assertTrue(self.safety.get_controls_allowed())
+
+      self.assertFalse(self._tx(self._curvature_cmd_msg(max_curvature + max_curvature_delta, True)), f"{v} {max_curvature} {max_curvature_delta}")
+
+  def test_iso_accel_limit(self):
+    speeds = [2., 5., 10., 15., 50.]
+    for v in speeds:
+      for sign in (1, -1):
+        max_curvature = np.clip(((MAX_LATERAL_ACCEL / (v - 1)**2) * sign), -self.MAX_CURVATURE_TEST, self.MAX_CURVATURE_TEST)
+        max_curvature_rate = MAX_LATERAL_JERK / (v - 1)**2
+        max_curvature_delta = max_curvature_rate * self.SEND_RATE * sign
+
+        self._reset_speed_measurement(v)
+        self.safety.set_controls_allowed(True)
+        self._set_prev_desired_curvature(max_curvature)
+
+        self.assertTrue(self._tx(self._curvature_cmd_msg(max_curvature, True)), f"{v} {max_curvature} {max_curvature_delta}")
+        self.assertTrue(self.safety.get_controls_allowed())
+
+        self.assertTrue(self._tx(self._curvature_cmd_msg(max_curvature - max_curvature_delta, True)), f"{v} {max_curvature} {max_curvature_delta}")
+        self.assertTrue(self.safety.get_controls_allowed())
+
+        self.assertTrue(self._tx(self._curvature_cmd_msg(max_curvature, True)), f"{v} {max_curvature} {max_curvature_delta}")
+        self.assertTrue(self.safety.get_controls_allowed())
+
+        self.assertFalse(self._tx(self._curvature_cmd_msg(max_curvature + max_curvature_delta, True)), f"{v} {max_curvature} {max_curvature_delta}")
+
+  def test_iso_jerk_limit(self):
+    speeds = [2., 5., 10., 15., 50.]
+    for v in speeds:
+      max_curvature_rate = MAX_LATERAL_JERK / (v - 1)**2
+      max_curvature_delta = max_curvature_rate * self.SEND_RATE
+
+      self._reset_speed_measurement(v)
+      self.safety.set_controls_allowed(True)
+      self._set_prev_desired_curvature(max_curvature_delta)
+
+      self.assertTrue(self._tx(self._curvature_cmd_msg(max_curvature_delta, True)))
+      self.assertTrue(self.safety.get_controls_allowed())
+
+      self.assertTrue(self._tx(self._curvature_cmd_msg(0, True)))
+      self.assertTrue(self.safety.get_controls_allowed())
+
+      self.assertTrue(self._tx(self._curvature_cmd_msg(-max_curvature_delta, True)))
+      self.assertTrue(self.safety.get_controls_allowed())
+
+      self.assertFalse(self._tx(self._curvature_cmd_msg(max_curvature_delta, True)))
+
+      # after violation, prev is reset to 0, going past the jerk limit must fail
+      self.safety.set_controls_allowed(True)
+      self.assertFalse(self._tx(self._curvature_cmd_msg(2 * max_curvature_delta, True)))
+
+
 class SafetyTest(SafetyTestBase):
   TX_MSGS: list[list[int]] = []
   SCANNED_ADDRS = [*range(0x800),                      # Entire 11-bit CAN address space
                    *range(0x18DA00F1, 0x18DB00F1, 0x100),   # 29-bit UDS physical addressing
                    *range(0x18DB00F1, 0x18DC00F1, 0x100),   # 29-bit UDS functional addressing
-                   *range(0x3300, 0x3400)]                  # Honda
+                   *range(0x3300, 0x3400),                  # Honda
+                   *range(0x6CD5554, 0x6CD5558),            # Honda Bosch radarless LANE_PATH, HUD_OBJECTS
+                   0xF31AA54]                               # Honda Bosch radarless LKAS_HUD_2
   FWD_BLACKLISTED_ADDRS: dict[int, list[int]] = {}  # {bus: [addr]}
   FWD_BUS_LOOKUP: dict[int, int] = {0: 2, 2: 0}
 
@@ -884,8 +995,8 @@ class SafetyTest(SafetyTestBase):
     for tf in test_files:
       test = importlib.import_module("opendbc.safety.tests."+tf[:-3])
       for attr in dir(test):
-        if attr.startswith("Test") and attr != current_test:
-          tc = getattr(test, attr)
+        tc = getattr(test, attr)
+        if isinstance(tc, type) and issubclass(tc, SafetyTest) and attr != current_test:
           tx = tc.TX_MSGS
           if tx is not None and not attr.endswith('Base'):
             # No point in comparing different Tesla safety modes
@@ -916,7 +1027,7 @@ class SafetyTest(SafetyTestBase):
                           'TestHyundaiLongitudinalESCCSafety'}
             if any(attr.startswith(test) for test in base_tests) and any(current_test.startswith(test) for test in base_tests):
               continue
-            volkswagen_shared = ('TestVolkswagenMqb', 'TestVolkswagenMlb')
+            volkswagen_shared = ('TestVolkswagenMqb', 'TestVolkswagenMlb', 'TestVolkswagenMeb')
             if attr.startswith(volkswagen_shared) and current_test.startswith(volkswagen_shared):
               continue
 
@@ -936,10 +1047,14 @@ class SafetyTest(SafetyTestBase):
             if attr == 'TestVolkswagenMqbLongSafety' and current_test.startswith('TestHondaBoschRadarless'):
               tx = list(filter(lambda m: m[0] not in [0x30c, ], tx))
 
+            # Volkswagen MQB and Honda Bosch Canfd ACC HUD messages overlap
+            if attr == 'TestVolkswagenMqbLongSafety' and current_test.startswith('TestHondaBoschCANFD'):
+              tx = list(filter(lambda m: m[0] not in [0x30c, ], tx))
+
             # TODO: Temporary, should be fixed in panda firmware, safety_honda.h
             if attr.startswith('TestHonda'):
               # exceptions for common msgs across different hondas
-              tx = list(filter(lambda m: m[0] not in [0x1FA, 0x30C, 0x33D, 0x33DB], tx))
+              tx = list(filter(lambda m: m[0] not in [0x1FA, 0x30C, 0x33D, 0x33DB, 0x6CD5554, 0xF31AA54, 0x6CD5557], tx))
 
             if attr.startswith('TestHyundaiLongitudinal'):
               # exceptions for common msgs across different Hyundai CAN platforms
