@@ -90,7 +90,7 @@ def _create_delphi_mrr_radar_can_parser(CP) -> CANParser:
 
 
 class RadarInterface(RadarInterfaceBase):
-  def __init__(self, CP, CP_SP):
+  def __init__(self, CP, CP_SP=None):
     super().__init__(CP, CP_SP)
 
     self.points: list[list[float]] = []

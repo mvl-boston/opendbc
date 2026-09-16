@@ -39,7 +39,7 @@ def _address_to_track(address):
 
 
 class RadarInterface(RadarInterfaceBase):
-  def __init__(self, CP, CP_SP):
+  def __init__(self, CP, CP_SP=None):
     super().__init__(CP, CP_SP)
     self.rcp = _create_radar_can_parser(CP.carFingerprint)
     self.updated_messages = set()

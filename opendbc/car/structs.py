@@ -11,7 +11,7 @@ try:
   from cereal import car
 except ImportError:
   capnp.remove_import_hook()
-  car = capnp.load(os.path.join(BASEDIR, "car.capnp"))
+  car = capnp.load(os.path.join(BASEDIR, "car.capnp"), imports=[BASEDIR])
 
 CarState = car.CarState
 RadarData = car.RadarData
