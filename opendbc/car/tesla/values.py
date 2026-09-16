@@ -3,7 +3,7 @@ from enum import Enum, IntFlag
 from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms
 from opendbc.car.lateral import AngleSteeringLimitsVM
 from opendbc.car.structs import CarParams, CarState
-from opendbc.car.docs_definitions import CarDocs, CarFootnote, CarHarness, CarParts, Column
+from opendbc.car.docs_definitions import CarDocs, CarFootnote, CarHarness, CarParts, Column, SupportType
 from opendbc.car.fw_query_definitions import FwQueryConfig, Request, StdQueries
 
 Ecu = CarParams.Ecu
@@ -11,8 +11,7 @@ Ecu = CarParams.Ecu
 
 class Footnote(Enum):
   HW_TYPE = CarFootnote(
-    "Model years 2023 and 2024 can have either hardware type, depending on build date and factory. " +
-    "To check which hardware type your vehicle has, look for " +
+    "Some 2023 model years have HW4. To check which hardware type your vehicle has, look for " +
     "<b>Autopilot computer</b> under <b>Software -> Additional Vehicle Information</b> on your vehicle's touchscreen. </br></br>" +
     "See <a href=\"https://www.notateslaapp.com/news/2173/how-to-check-if-your-tesla-has-hardware-4-ai4-or-hardware-3\">this page</a> for more information.",
     Column.MODEL)
@@ -35,31 +34,37 @@ class TeslaCarDocsHW4(CarDocs):
   car_parts: CarParts = field(default_factory=CarParts.common([CarHarness.tesla_b]))
   footnotes: list[Enum] = field(default_factory=lambda: [Footnote.HW_TYPE, Footnote.SETUP])
 
+@dataclass
+class TeslaCarHW4ModelSXDocs(TeslaCarDocsHW4):
+  support_type: SupportType = SupportType.COMMUNITY
+  support_link: str = "community"
+
 
 @dataclass
 class TeslaPlatformConfig(PlatformConfig):
-  dbc_dict: DbcDict = field(default_factory=lambda: {Bus.party: 'tesla_model3_party'})
+  dbc_dict: DbcDict = field(default_factory=lambda: {Bus.party: 'tesla_model3_party', Bus.adas: 'tesla_model3_vehicle'})
 
 
 class CAR(Platforms):
   TESLA_MODEL_3 = TeslaPlatformConfig(
     [
+      # TODO: do we support 2017? It's HW3
       TeslaCarDocsHW3("Tesla Model 3 (with HW3) 2019-23"),
       TeslaCarDocsHW4("Tesla Model 3 (with HW4) 2024-25"),
     ],
     CarSpecs(mass=1899., wheelbase=2.875, steerRatio=12.0),
-    {Bus.party: 'tesla_model3_party', Bus.radar: 'tesla_radar_continental_generated'},
+    {Bus.party: 'tesla_model3_party', Bus.radar: 'tesla_radar_continental_generated', Bus.adas: 'tesla_model3_vehicle'},
   )
   TESLA_MODEL_Y = TeslaPlatformConfig(
     [
-      TeslaCarDocsHW3("Tesla Model Y (with HW3) 2020-24"),
-      TeslaCarDocsHW4("Tesla Model Y (with HW4) 2023-25"),
+      TeslaCarDocsHW3("Tesla Model Y (with HW3) 2020-23"),
+      TeslaCarDocsHW4("Tesla Model Y (with HW4) 2024-25"),
     ],
     CarSpecs(mass=2072., wheelbase=2.890, steerRatio=12.0),
-    {Bus.party: 'tesla_model3_party', Bus.radar: 'tesla_radar_continental_generated'},
+    {Bus.party: 'tesla_model3_party', Bus.radar: 'tesla_radar_continental_generated', Bus.adas: 'tesla_model3_vehicle'},
   )
   TESLA_MODEL_X = TeslaPlatformConfig(
-    [TeslaCarDocsHW4("Tesla Model X (with HW4) 2024")],
+    [TeslaCarHW4ModelSXDocs("Tesla Model X (with HW4) 2024")],
     CarSpecs(mass=2495., wheelbase=2.960, steerRatio=12.0),
   )
 

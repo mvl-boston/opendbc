@@ -61,7 +61,6 @@ class ToyotaSafetyFlags(IntFlag):
 class ToyotaFlags(IntFlag):
   # Detected flags
   HYBRID = 1
-  HAS_BSM = 2  # blind spot monitoring
   DISABLE_RADAR = 4
 
   # Static flags
@@ -71,15 +70,14 @@ class ToyotaFlags(IntFlag):
   RADAR_ACC = 64
   # these cars use the Lane Tracing Assist (LTA) message for lateral control
   ANGLE_CONTROL = 128
+  NO_STOP_TIMER = 256
   # these cars can utilize 2.0 m/s^2
   RAISED_ACCEL_LIMIT = 1024
   SECOC = 2048
 
   # deprecated flags
-  # these cars are speculated to allow stop and go when the DSU is unplugged
+  # these cars are speculated to allow stop and go when the DSU is unplugged or disabled with sDSU
   SNG_WITHOUT_DSU_DEPRECATED = 512
-  # no resume button press required
-  NO_STOP_TIMER_DEPRECATED = 256
 
 
 def dbc_dict(pt, radar):
@@ -109,7 +107,7 @@ class ToyotaTSS2PlatformConfig(PlatformConfig):
   dbc_dict: dict = field(default_factory=lambda: dbc_dict('toyota_nodsu_pt_generated', 'toyota_tss2_adas'))
 
   def init(self):
-    self.flags |= ToyotaFlags.TSS2 | ToyotaFlags.NO_DSU
+    self.flags |= ToyotaFlags.TSS2 | ToyotaFlags.NO_STOP_TIMER | ToyotaFlags.NO_DSU
 
     if self.flags & ToyotaFlags.RADAR_ACC:
       self.dbc_dict = {Bus.pt: 'toyota_nodsu_pt_generated'}
@@ -120,7 +118,7 @@ class ToyotaSecOCPlatformConfig(PlatformConfig):
   dbc_dict: dict = field(default_factory=lambda: dbc_dict('toyota_secoc_pt_generated', 'toyota_tss2_adas'))
 
   def init(self):
-    self.flags |= ToyotaFlags.TSS2 | ToyotaFlags.NO_DSU | ToyotaFlags.SECOC
+    self.flags |= ToyotaFlags.TSS2 | ToyotaFlags.NO_STOP_TIMER | ToyotaFlags.NO_DSU | ToyotaFlags.SECOC
 
     if self.flags & ToyotaFlags.RADAR_ACC:
       self.dbc_dict = {Bus.pt: 'toyota_secoc_pt_generated'}
@@ -158,14 +156,13 @@ class CAR(Platforms):
     ],
     TOYOTA_AVALON.specs,
   )
-  # TODO: determine if TSS-P NO_DSU cars can work with toyota_adas radar DBC and re-enable
   TOYOTA_CAMRY = PlatformConfig(
     [
       ToyotaCarDocs("Toyota Camry 2018-20", video="https://www.youtube.com/watch?v=fkcjviZY9CM", footnotes=[Footnote.CAMRY]),
       ToyotaCarDocs("Toyota Camry Hybrid 2018-20", video="https://www.youtube.com/watch?v=Q2DYY0AWKgk"),
     ],
     CarSpecs(mass=3400. * CV.LB_TO_KG, wheelbase=2.82448, steerRatio=13.7, tireStiffnessFactor=0.7933),
-    {Bus.pt: 'toyota_nodsu_pt_generated'},
+    dbc_dict('toyota_nodsu_pt_generated', 'toyota_adas'),
     flags=ToyotaFlags.NO_DSU,
   )
   TOYOTA_CAMRY_TSS2 = ToyotaTSS2PlatformConfig( # TSS 2.5
@@ -181,7 +178,7 @@ class CAR(Platforms):
       ToyotaCarDocs("Toyota C-HR Hybrid 2017-20"),
     ],
     CarSpecs(mass=3300. * CV.LB_TO_KG, wheelbase=2.63906, steerRatio=13.6, tireStiffnessFactor=0.7933),
-    {Bus.pt: 'toyota_nodsu_pt_generated'},
+    dbc_dict('toyota_nodsu_pt_generated', 'toyota_adas'),
     flags=ToyotaFlags.NO_DSU,
   )
   TOYOTA_CHR_TSS2 = ToyotaTSS2PlatformConfig(
@@ -218,6 +215,7 @@ class CAR(Platforms):
     ],
     CarSpecs(mass=4516. * CV.LB_TO_KG, wheelbase=2.8194, steerRatio=16.0, tireStiffnessFactor=0.8),
     dbc_dict('toyota_tnga_k_pt_generated', 'toyota_adas'),
+    flags=ToyotaFlags.NO_STOP_TIMER,
   )
   TOYOTA_HIGHLANDER_TSS2 = ToyotaTSS2PlatformConfig(
     [
@@ -239,6 +237,7 @@ class CAR(Platforms):
     [ToyotaCarDocs("Toyota Prius v 2017", "Toyota Safety Sense P", min_enable_speed=MIN_ACC_SPEED)],
     CarSpecs(mass=3340. * CV.LB_TO_KG, wheelbase=2.78, steerRatio=17.4, tireStiffnessFactor=0.5533),
     dbc_dict('toyota_new_mc_pt_generated', 'toyota_adas'),
+    flags=ToyotaFlags.NO_STOP_TIMER,
   )
   TOYOTA_PRIUS_TSS2 = ToyotaTSS2PlatformConfig(
     [
@@ -262,6 +261,8 @@ class CAR(Platforms):
     ],
     TOYOTA_RAV4.specs,
     dbc_dict('toyota_tnga_k_pt_generated', 'toyota_adas'),
+    # Note that the ICE RAV4 does not respect positive acceleration commands under 19 mph
+    flags=ToyotaFlags.NO_STOP_TIMER,
   )
   TOYOTA_RAV4_TSS2 = ToyotaTSS2PlatformConfig(
     [
@@ -303,6 +304,7 @@ class CAR(Platforms):
     [ToyotaCarDocs("Toyota Sienna 2018-20", video="https://www.youtube.com/watch?v=q1UPOo4Sh68", min_enable_speed=MIN_ACC_SPEED)],
     CarSpecs(mass=4590. * CV.LB_TO_KG, wheelbase=3.03, steerRatio=15.5, tireStiffnessFactor=0.444),
     dbc_dict('toyota_tnga_k_pt_generated', 'toyota_adas'),
+    flags=ToyotaFlags.NO_STOP_TIMER,
   )
   TOYOTA_SIENNA_4TH_GEN = ToyotaSecOCPlatformConfig(
     [ToyotaSecOcCarDocs("Toyota Sienna 2021-23", min_enable_speed=MIN_ACC_SPEED)],
@@ -587,5 +589,24 @@ STEER_THRESHOLD = 100
 # These cars have non-standard EPS torque scale factors. All others are 73
 EPS_SCALE = defaultdict(lambda: 73,
                         {CAR.TOYOTA_PRIUS: 66, CAR.TOYOTA_COROLLA: 88, CAR.LEXUS_IS: 77, CAR.LEXUS_RC: 77, CAR.LEXUS_CTH: 100, CAR.TOYOTA_PRIUS_V: 100})
+
+# Toyota/Lexus Safety Sense 2.0 and 2.5
+TSS2_CAR = CAR.with_flags(ToyotaFlags.TSS2)
+
+# removed upstream as unused, but sunnypilot's DSU-removed radar support in interface.py still needs it
+NO_DSU_CAR = CAR.with_flags(ToyotaFlags.NO_DSU)
+
+# the DSU uses the AEB message for longitudinal on these cars
+UNSUPPORTED_DSU_CAR = CAR.with_flags(ToyotaFlags.UNSUPPORTED_DSU)
+
+# these cars have a radar which sends ACC messages instead of the camera
+RADAR_ACC_CAR = CAR.with_flags(ToyotaFlags.RADAR_ACC)
+
+ANGLE_CONTROL_CAR = CAR.with_flags(ToyotaFlags.ANGLE_CONTROL)
+
+SECOC_CAR = CAR.with_flags(ToyotaFlags.SECOC)
+
+# no resume button press required
+NO_STOP_TIMER_CAR = CAR.with_flags(ToyotaFlags.NO_STOP_TIMER)
 
 DBC = CAR.create_dbc_map()
