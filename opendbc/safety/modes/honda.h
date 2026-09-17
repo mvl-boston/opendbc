@@ -17,16 +17,6 @@
 #define HONDA_ALT_BRAKE_ADDR_CHECK(pt_bus)                                                                                              \
   {.msg = {{0x1BE, (pt_bus), 3, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* BRAKE_MODULE */  \
 
-#define HONDA_GAS_INTERCEPTOR_ADDR_CHECK \
-  {.msg = {{0x201, 0, 6, 50U, .max_counter = 15U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}}, \
-
-#define HONDA_N_COMMON_TX_MSGS \
-  {0xE4,  0, 5, .check_relay = true},   \
-  {0x194, 0, 4, .check_relay = true},   \
-  {0x1FA, 0, 8, .check_relay = false},  \
-  {0x30C, 0, 8, .check_relay = true},   \
-  {0x33D, 0, 5, .check_relay = true},   \
-
 enum {
   HONDA_BTN_NONE = 0,
   HONDA_BTN_MAIN = 1,
@@ -42,7 +32,6 @@ static bool honda_fwd_brake = false;
 static bool honda_bosch_long = false;
 static bool honda_bosch_radarless = false;
 static bool honda_bosch_canfd = false;
-static bool honda_nidec_hybrid = false;
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
 static HondaHw honda_hw = HONDA_NIDEC;
 
@@ -74,27 +63,12 @@ static uint32_t honda_compute_checksum(const CANPacket_t *msg) {
 }
 
 static uint8_t honda_get_counter(const CANPacket_t *msg) {
-  uint8_t cnt = 0U;
-  if (msg->addr == 0x201U) {
-    // Signal: PEDAL_COUNTER
-    cnt = msg->data[4] & 0x0FU;
-  } else {
-    int counter_byte = GET_LEN(msg) - 1U;
-    cnt = (msg->data[counter_byte] >> 4U) & 0x3U;
-  }
-  return cnt;
-}
-
-static int HONDA_GET_INTERCEPTOR(const CANPacket_t *msg) {
-  uint16_t val1 = (uint16_t)((uint16_t)msg->data[0] << 8U) | (uint16_t)msg->data[1];
-  uint16_t val2 = (uint16_t)((uint16_t)msg->data[2] << 8U) | (uint16_t)msg->data[3];
-  uint16_t avg  = (uint16_t)((val1 + val2) / 2U);
-
-  return (int)avg;
+  int counter_byte = GET_LEN(msg) - 1U;
+  return (msg->data[counter_byte] >> 4U) & 0x3U;
 }
 
 static void honda_rx_hook(const CANPacket_t *msg) {
-  const bool pcm_cruise = ((honda_hw == HONDA_BOSCH) && !honda_bosch_long) || ((honda_hw == HONDA_NIDEC) && !enable_gas_interceptor);
+  const bool pcm_cruise = ((honda_hw == HONDA_BOSCH) && !honda_bosch_long) || (honda_hw == HONDA_NIDEC);
   unsigned int pt_bus = honda_get_pt_bus();
 
   // sample speed
@@ -129,16 +103,8 @@ static void honda_rx_hook(const CANPacket_t *msg) {
 
   // state machine to enter and exit controls for button enabling
   // 0x1A6 for the ILX, 0x296 for the Civic Touring
-  if (((msg->addr == 0x1A6U) || (msg->addr == 0x296U)) && (msg->bus == pt_bus)) {
+  if (msg_matches(msg, 0x1A6U, pt_bus) || msg_matches(msg, 0x296U, pt_bus)) {
     int button = (msg->data[0] & 0xE0U) >> 5;
-
-    int cruise_setting = (msg->data[(msg->addr == 0x296U) ? 0U : 5U] & 0x0CU) >> 2U;
-    if (cruise_setting == 1) {
-      mads_button_press = MADS_BUTTON_PRESSED;
-    } else if (cruise_setting == 0) {
-      mads_button_press = MADS_BUTTON_NOT_PRESSED;
-    } else {
-    }
 
     // enter controls on the falling edge of set or resume
     bool set = (button != HONDA_BTN_SET) && (cruise_button_prev == HONDA_BTN_SET);
@@ -173,34 +139,15 @@ static void honda_rx_hook(const CANPacket_t *msg) {
     }
   }
 
-  // length check because bosch hardware also uses this id (0x201 w/ len = 8)
-  if (msg->addr == 0x201U) {
-    // panda interceptor threshold needs to be equivalent to openpilot threshold to avoid controls mismatches
-    // If thresholds are mismatched then it is possible for panda to see the gas fall and rise while openpilot is in the pre-enabled state
-    // Threshold calculated from DBC gains: round(((83.3 / 0.253984064) + (83.3 / 0.126992032)) / 2) = 492
-    const int honda_gas_interceptor_thrsld = 492;
-
-    int gas_interceptor = HONDA_GET_INTERCEPTOR(msg);
-    gas_pressed = gas_interceptor > honda_gas_interceptor_thrsld;
-
-    gas_interceptor_prev = gas_interceptor;
-  }
-
-  if (!enable_gas_interceptor) {
-    if (msg->addr == 0x17CU) {
-      gas_pressed = msg->data[0] != 0U;
-    }
+  if (msg->addr == 0x17CU) {
+    gas_pressed = msg->data[0] != 0U;
   }
 
   // disable stock Honda AEB in alternative experience
   if (!(alternative_experience & ALT_EXP_DISABLE_STOCK_AEB)) {
-    if ((msg->bus == 2U) && (msg->addr == 0x1FAU)) {
+    if (msg_matches(msg, 0x1FAU, 2U)) {
       bool honda_stock_aeb = GET_BIT(msg, 29U);
       int honda_stock_brake = (msg->data[0] << 2) | (msg->data[1] >> 6);
-
-      if (honda_nidec_hybrid) {
-        honda_stock_brake = (msg->data[6] << 2) | (msg->data[7] >> 6);
-      }
 
       // Forward AEB when stock braking is higher than openpilot braking
       // only stop forwarding when AEB event is over
@@ -238,7 +185,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   unsigned int bus_buttons = (honda_bosch_radarless) ? 2U : bus_pt;  // the camera controls ACC on radarless Bosch cars
 
   // ACC_HUD: safety check (nidec w/o pedal)
-  if ((msg->addr == 0x30CU) && (msg->bus == bus_pt)) {
+  if (msg_matches(msg, 0x30CU, bus_pt)) {
     int pcm_speed = (msg->data[0] << 8) | msg->data[1];
     int pcm_gas = msg->data[2];
 
@@ -251,13 +198,8 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   }
 
   // BRAKE: safety check (nidec)
-  if ((msg->addr == 0x1FAU) && (msg->bus == bus_pt)) {
+  if (msg_matches(msg, 0x1FAU, bus_pt)) {
     honda_brake = (msg->data[0] << 2) + ((msg->data[1] >> 6) & 0x3U);
-
-    if (honda_nidec_hybrid) {
-      honda_brake = (msg->data[6] << 2) + ((msg->data[7] >> 6) & 0x3U);
-    }
-
     if (longitudinal_brake_checks(honda_brake, HONDA_NIDEC_LONG_LIMITS)) {
       tx = false;
     }
@@ -275,7 +217,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   }
 
   // BRAKE/GAS: safety check (bosch)
-  if ((msg->addr == 0x1DFU) && (msg->bus == bus_pt)) {
+  if (msg_matches(msg, 0x1DFU, bus_pt)) {
     int accel = (msg->data[3] << 3) | ((msg->data[4] >> 5) & 0x7U);
     accel = to_signed(accel, 11);
 
@@ -296,7 +238,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   }
 
   // ACCEL: safety check (radarless)
-  if ((msg->addr == 0x1C8U) && (msg->bus == bus_pt)) {
+  if (msg_matches(msg, 0x1C8U, bus_pt)) {
     int accel = (msg->data[0] << 4) | (msg->data[1] >> 4);
     accel = to_signed(accel, 12);
 
@@ -314,7 +256,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
 
   // STEER: safety check
   if ((msg->addr == 0xE4U) || (msg->addr == 0x194U)) {
-    if (!(controls_allowed || controls_allowed_lateral)) {
+    if (!controls_allowed) {
       bool steer_applied = msg->data[0] | msg->data[1];
       if (steer_applied) {
         tx = false;
@@ -324,7 +266,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
 
   // Bosch supplemental control check
   if (msg->addr == 0xE5U) {
-    if ((GET_BYTES(msg, 0, 4) != 0x10800004U) || ((GET_BYTES(msg, 4, 4) & 0x00FFFFFFU) != 0x0U)) {
+    if ((GET_BYTES_64_LE(msg, 0, 8) & 0x00FFFFFFFFFFFFFFULL) != 0x0000000010800004ULL) {
       tx = false;
     }
   }
@@ -332,7 +274,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   // FORCE CANCEL: safety check only relevant when spamming the cancel button in Bosch HW
   // ensuring that only the cancel button press is sent (VAL 2) when controls are off.
   // This avoids unintended engagements while still allowing resume spam
-  if ((msg->addr == 0x296U) && !controls_allowed && (msg->bus == bus_buttons)) {
+  if (msg_matches(msg, 0x296U, bus_buttons) && !controls_allowed) {
     if (((msg->data[0] >> 5) & 0x7U) != 2U) {
       tx = false;
     }
@@ -340,14 +282,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
 
   // Only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
   if (msg->addr == 0x18DAB0F1U) {
-    if ((GET_BYTES(msg, 0, 4) != 0x00803E02U) || (GET_BYTES(msg, 4, 4) != 0x0U)) {
-      tx = false;
-    }
-  }
-
-  // GAS: safety check (interceptor)
-  if (msg->addr == 0x200U) {
-    if (longitudinal_interceptor_checks(msg)) {
+    if (GET_BYTES_64_LE(msg, 0, 8) != 0x0000000000803E02ULL) {
       tx = false;
     }
   }
@@ -359,17 +294,10 @@ static safety_config honda_nidec_init(uint16_t param) {
   // 0x1FA is dynamically forwarded based on stock AEB
   // 0xE4 is steering on all cars except CRV and RDX, 0x194 for CRV and RDX,
   // 0x1FA is brake control, 0x30C is acc hud, 0x33D is lkas hud
-  static CanMsg HONDA_N_TX_MSGS[] = {HONDA_N_COMMON_TX_MSGS};
-
-  static CanMsg HONDA_N_INTERCEPTOR_TX_MSGS[] = {
-    HONDA_N_COMMON_TX_MSGS
-    {0x200, 0, 6, .check_relay = false},
-  };
+  static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
+                                     {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
 
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
-
-  const uint16_t HONDA_PARAM_SP_NIDEC_HYBRID = 1;
-  const uint16_t HONDA_PARAM_GAS_INTERCEPTOR = 2;
 
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
@@ -383,9 +311,6 @@ static safety_config honda_nidec_init(uint16_t param) {
   safety_config ret;
 
   bool enable_nidec_alt = GET_FLAG(param, HONDA_PARAM_NIDEC_ALT);
-
-  honda_nidec_hybrid = GET_FLAG(current_safety_param_sp, HONDA_PARAM_SP_NIDEC_HYBRID);
-  enable_gas_interceptor = GET_FLAG(current_safety_param_sp, HONDA_PARAM_GAS_INTERCEPTOR);
 
   if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
@@ -406,28 +331,6 @@ static safety_config honda_nidec_init(uint16_t param) {
   }
 
   SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
-
-  if (enable_gas_interceptor) {
-    if (enable_nidec_alt) {
-      static RxCheck honda_nidec_alt_interceptor_rx_checks[] = {
-        HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(0)
-        {.msg = {{0x1FA, 2, 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // BRAKE_COMMAND
-        HONDA_GAS_INTERCEPTOR_ADDR_CHECK
-      };
-
-      SET_RX_CHECKS(honda_nidec_alt_interceptor_rx_checks, ret);
-    } else {
-      static RxCheck honda_nidec_common_interceptor_rx_checks[] = {
-        HONDA_COMMON_RX_CHECKS(0)
-        {.msg = {{0x1FA, 2, 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // BRAKE_COMMAND
-        HONDA_GAS_INTERCEPTOR_ADDR_CHECK
-      };
-
-      SET_RX_CHECKS(honda_nidec_common_interceptor_rx_checks, ret);
-    }
-
-    SET_TX_MSGS(HONDA_N_INTERCEPTOR_TX_MSGS, ret);
-  }
 
   return ret;
 }
