@@ -6,37 +6,33 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.rivian.riviancan import create_lka_steering, create_longitudinal, create_wheel_touch, create_adas_status
 from opendbc.car.rivian.values import CarControllerParams, RivianFlags
 
-from opendbc.sunnypilot.car.rivian.mads import MadsCarController
 
-
-class CarController(CarControllerBase, MadsCarController):
-  def __init__(self, dbc_names, CP, CP_SP):
-    CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
-    MadsCarController.__init__(self)
+class CarController(CarControllerBase):
+  def __init__(self, dbc_names, CP):
+    super().__init__(dbc_names, CP)
     self.apply_torque_last = 0
     self.packer = CANPacker(dbc_names[Bus.pt])
 
     self.cancel_frames = 0
 
-  def update(self, CC, CC_SP, CS, now_nanos):
-    MadsCarController.update(self, CC, CC_SP, CS)
+  def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     can_sends = []
 
     apply_torque = 0
     steer_max = round(float(np.interp(CS.out.vEgoRaw, CarControllerParams.STEER_MAX_LOOKUP[0],
                                       CarControllerParams.STEER_MAX_LOOKUP[1])))
-    if self.mads.lat_active:
+    if CC.latActive:
       new_torque = int(round(CC.actuators.torque * steer_max))
       apply_torque = apply_driver_steer_torque_limits(new_torque, self.apply_torque_last,
                                                       CS.out.steeringTorque, CarControllerParams, steer_max)
 
     # send steering command
     self.apply_torque_last = apply_torque
-    can_sends.append(create_lka_steering(self.packer, self.frame, CS.acm_lka_hba_cmd, apply_torque, CC.enabled, CC.latActive, self.mads))
+    can_sends.append(create_lka_steering(self.packer, self.frame, CS.acm_lka_hba_cmd, apply_torque, CC.enabled, CC.latActive))
 
     if self.frame % 5 == 0 and not (self.CP.flags & RivianFlags.GEN2):
-      can_sends.append(create_wheel_touch(self.packer, CS.sccm_wheel_touch, self.mads.lat_active))
+      can_sends.append(create_wheel_touch(self.packer, CS.sccm_wheel_touch, CC.enabled))
 
     # Longitudinal control
     if self.CP.openpilotLongitudinalControl:
