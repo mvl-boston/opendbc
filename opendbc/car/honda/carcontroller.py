@@ -1083,7 +1083,7 @@ class CarController(CarControllerBase):
 
       can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
                                                 steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed, CS,
-                                                lkas_state_change=lkas_state_change))
+                                                lkas_state_change=lkas_state_change, alphalong=op_long))
 
       if op_long:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
@@ -1098,7 +1098,7 @@ class CarController(CarControllerBase):
     # Render OP's lane and lead car on the dash. On CAN FD these are radar look-alikes that only exist
     # (and are only allowed by panda safety) when the radar is disabled, i.e. openpilot longitudinal;
     # in stock ACC the real radar still owns LANE_PATH/HUD_OBJECTS, so don't author them.
-    if ((self.frame % 2 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS) or
+    if ((self.frame % 2 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS and op_long) or
         (CS.radar_50hz_tick and self.CP.carFingerprint in HONDA_BOSCH_CANFD and op_long
          and not CS.stock_acc_alive)):
       leads = hud_objects.leads_from_model(self.model, CS.out.vEgo)
@@ -1139,7 +1139,7 @@ class CarController(CarControllerBase):
         for addr, dat, _ in (lane_msg, hud_msg):
           can_sends.append((addr, dat, self.CAN.camera))
 
-    if self.frame % 20 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    if self.frame % 20 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS and op_long:
       # COUNTER_2 trails the packer's COUNTER (frame//20 % 4) by one. TODO: do we need the - 1 trail?
       dl = self.dash_lane
       can_sends.append(lane_path.create_lkas_hud_2(self.packer, self.CAN.lkas, (self.frame // 20 - 1) % 4,
@@ -1150,7 +1150,9 @@ class CarController(CarControllerBase):
     # driver's LKAS button from reaching the camera by taking over SCM_BUTTONS on the camera bus while engaged
     # (panda blocks the forwarded stock SCM_BUTTONS when engaged; the standard button spamming isn't reliably
     # accepted by the camera).
-    if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD) and CC.enabled and self.frame % 4 == 0 and \
+    radarless_scm_takeover = self.CP.carFingerprint in HONDA_BOSCH_RADARLESS and op_long
+    canfd_scm_takeover = self.CP.carFingerprint in HONDA_BOSCH_CANFD
+    if (radarless_scm_takeover or canfd_scm_takeover) and CC.enabled and self.frame % 4 == 0 and \
         not pcm_cancel_cmd and not CC.cruiseControl.resume:
       if self.lkas_button_send_remaining == 0 and CS.lkas_hud["LKAS_READY"] and self.frame >= self.last_lkas_button_frame + 500:
         self.lkas_button_send_remaining = 3
