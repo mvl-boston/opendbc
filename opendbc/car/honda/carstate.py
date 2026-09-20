@@ -122,11 +122,7 @@ class CarState(CarStateBase):
       ret.steerFaultPermanent = False
       ret.steerFaultTemporary = False
 
-    if (self.CP.carFingerprint == CAR.ACURA_MDX_4G) and (steer_status == "TJA_LOW_SPEED_LOCKOUT"):
-      ret.steerFaultPermanent = False
-      ret.steerFaultTemporary = False
-
-      self.steerControlOn = bool(cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"])
+    self.steerControlOn = bool(cp.vl["STEER_STATUS"]["STEER_CONTROL_ACTIVE"])
 
     # All Honda EPS cut off slightly above standstill, some much higher
     # Don't alert in the near-standstill range, but alert for per-vehicle configured minimums above that
