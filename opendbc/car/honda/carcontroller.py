@@ -713,7 +713,7 @@ class CarController(CarControllerBase):
           # and the post-motion lead alone was not enough to break away engine-off.
           speed_lead = self.dv_launch if CS.out.vEgo > 0.1 else self.dv_break
         else:
-          speed_lead = float(sf_eff * self.accel + alpha_eff)
+          speed_lead = max(-2.778, float(sf_eff * self.accel + alpha_eff)) # min -10kph to prevent fault
         pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
         gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
         gf_eff = sum(w * self.gas_factors[band] for band, w in gas_w.items())
