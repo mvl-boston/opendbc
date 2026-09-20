@@ -15,6 +15,7 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
+from opendbc.car.honda.alphalong import op_long_active
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -376,13 +377,8 @@ class CarController(CarControllerBase):
       "60": 1.0 if (Params().get("HondaLatAccelFactor60Params") is None) else Params().get("HondaLatAccelFactor60Params")
     }
 
-  def _op_long_active(self) -> bool:
-    if self.CP.alphaLongitudinalAvailable:
-      return self._params.get_bool("AlphaLongitudinalEnabled")
-    return self.CP.openpilotLongitudinalControl
-
   def update(self, CC, CS, now_nanos):
-    op_long = self._op_long_active()
+    op_long = op_long_active(self.CP, self._params)
     if op_long != self.op_long_active_prev:
       if not op_long:
         self.radar_reenable_pending = 50

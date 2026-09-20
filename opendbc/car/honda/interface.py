@@ -313,9 +313,7 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value
     if candidate in HONDA_NIDEC_ALT_SCM_MESSAGES:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_ALT.value
-    # Allowlist op-long ACC/radar look-alike TX whenever alpha long can be toggled on in-drive
-    # (see carcontroller AlphaLongitudinalEnabled), not only when it was enabled at startup.
-    if ret.alphaLongitudinalAvailable and candidate in HONDA_BOSCH:
+    if ret.openpilotLongitudinalControl and candidate in HONDA_BOSCH:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_LONG.value
     if candidate in HONDA_BOSCH_RADARLESS:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
