@@ -749,6 +749,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         gf_eff = sum(w * self.gas_factors[band] for band, w in gas_w.items())
         ga_eff = sum(w * self.gas_alphas[band] for band, w in gas_w.items())
         pcm_accel = int(np.clip((ga_eff + gas_accel * gf_eff / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+        if pcm_accl > 0:
+          pcm_speed = max(pcm_speed, 1.0) # prevent fault by always sending positive speed during gas
       max_speedcontrol = (pcm_speed > 99.999)
       prior_speed_factors = dict(self.speed_factors)
       prior_speed_alphas = dict(self.speed_alphas)
