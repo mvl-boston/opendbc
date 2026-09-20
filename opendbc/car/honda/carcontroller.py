@@ -529,9 +529,9 @@ class CarController(CarControllerBase):
 
     if radar_bosch and op_long:
       # Radar silencing is deferred from CarInterface.init() until the stock ACC stream can be
-      # replaced without a comm-loss gap (see CS.stock_acc_alive). On CAN FD, also wait for the
-      # comma relay to open so the replacement ACC_CONTROL stream is not blocked by the safety switch.
-      radar_disable_ready = CS.canfd_relay_open if self.CP.carFingerprint in HONDA_BOSCH_CANFD else True
+      # replaced without a comm-loss gap (see CS.stock_acc_alive) and the comma relay is open so the
+      # replacement ACC_CONTROL stream is not blocked by the safety-mode switch.
+      radar_disable_ready = CS.bosch_relay_open
       if CS.stock_acc_alive:
         if radar_disable_ready:
           if self.radar_disable_counter % 50 == 0:
