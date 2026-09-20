@@ -2,7 +2,7 @@
 import numpy as np
 from opendbc.car import get_safety_config, structs, uds
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.disable_ecu import disable_ecu, clear_all_dtcs, clear_ecu_dtcs
+from opendbc.car.disable_ecu import disable_ecu, clear_all_dtcs, clear_all_faults, clear_ecu_dtcs
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HondaSafetyFlags
@@ -350,6 +350,8 @@ class CarInterface(CarInterfaceBase):
 
   @staticmethod
   def init(CP, can_recv, can_send, communication_control=None):
+    # deinit() re-enters here with an explicit communication_control to re-enable the radar
+    startup = communication_control is None
     if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and CP.openpilotLongitudinalControl:
       if communication_control is None and CP.carFingerprint in HONDA_BOSCH_CANFD:
         # CAN FD: only clear DTCs here; the radar silencing itself is deferred to CarController until
@@ -376,6 +378,22 @@ class CarInterface(CarInterfaceBase):
           communication_control = bytes([uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
                                          uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT])
         disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1, com_cont_req=communication_control)
+
+    # Clear stored faults on every drive when openpilot owns longitudinal. The PCM latches and stores
+    # DTCs when it dislikes the commanded gas/speed pattern (Nidec MDX: "emissions system problem" +
+    # "CMBS problem" on the cluster, POWERTRAIN_DATA byte 4 bits 4/5 set); the code survives ignition
+    # cycles and keeps CMBS disabled on the next drive. Read + log the stored emissions DTCs first so
+    # the cause is preserved in the log, then broadcast OBD-II Mode 04 and UDS 0x14 on the powertrain
+    # and camera buses. Runs after the radar handling above so it never delays the radar silence.
+    # CAN FD Bosch already broadcast-clears in its branch above. Skipped on deinit, which only needs to
+    # re-enable the radar.
+    if startup and CP.openpilotLongitudinalControl and CP.carFingerprint not in HONDA_BOSCH_CANFD:
+      pt_bus = CanBus(CP).pt
+      # physical addresses to poll for stored DTCs: every ECU fingerprinted on the PT bus plus the PCM,
+      # which owns the emissions codes and is not always part of the fingerprint
+      dtc_addrs = {0x18DA10F1}
+      dtc_addrs.update(fw.address for fw in CP.carFw if fw.bus == pt_bus and fw.subAddress == 0 and fw.address > 0x10000000)
+      clear_all_faults(can_recv, can_send, [pt_bus, CanBus(CP).camera], dtc_read_bus=pt_bus, dtc_read_addrs=sorted(dtc_addrs))
 
   @staticmethod
   def deinit(CP, can_recv, can_send):
