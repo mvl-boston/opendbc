@@ -313,7 +313,9 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.ALT_BRAKE.value
     if candidate in HONDA_NIDEC_ALT_SCM_MESSAGES:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_ALT.value
-    if ret.openpilotLongitudinalControl and candidate in HONDA_BOSCH:
+    # Allowlist op-long ACC/radar look-alike TX whenever alpha long can be toggled on in-drive
+    # (see carcontroller AlphaLongitudinalEnabled), not only when it was enabled at startup.
+    if ret.alphaLongitudinalAvailable and candidate in HONDA_BOSCH:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_LONG.value
     if candidate in HONDA_BOSCH_RADARLESS:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
@@ -350,32 +352,20 @@ class CarInterface(CarInterfaceBase):
 
   @staticmethod
   def init(CP, can_recv, can_send, communication_control=None):
-    if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and CP.openpilotLongitudinalControl:
-      if communication_control is None and CP.carFingerprint in HONDA_BOSCH_CANFD:
-        # CAN FD: only clear DTCs here; the radar silencing itself is deferred to CarController until
-        # the comma relay is confirmed open. init() runs while the panda is still in the ELM327 safety
-        # mode, and silencing the radar from here raced the safety-mode switch: openpilot's replacement
-        # ACC_CONTROL stream was blocked until the switch landed, and whenever that took longer than
-        # ~110 ms the brake module (VSA) latched CRUISE_FAULT (accFaulted) for the entire drive.
+    if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS):
+      if communication_control is not None:
+        # Re-enable the radar (deinit path)
+        disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1, com_cont_req=communication_control)
+      elif CP.alphaLongitudinalAvailable and CP.carFingerprint in HONDA_BOSCH_CANFD:
+        # CAN FD: only clear DTCs here; radar silencing is deferred to CarController until the comma
+        # relay is open and AlphaLongitudinalEnabled is on. init() runs in ELM327 safety mode, so
+        # silencing the radar from here raced the safety-mode switch and latched CRUISE_FAULT.
         #
-        # The brake module latches a radar lost-communication DTC when the radar goes silent for more
-        # than ~0.1 s at cutover, and the DTC matures over trips (Honda two-trip detection): once it is
-        # confirmed from a previous drive, the very next comm-loss detection trips
-        # BRAKE_MODULE.CRUISE_FAULT ~0.16 s after the radar is silenced. Broadcast-clear stored DTCs on
-        # all ECUs (powertrain and camera buses) every drive so the maturation counter is reset, and
-        # clear the radar's own stored DTCs so codes accumulated while it was disabled don't re-fault a
-        # later drive. Clearing must precede the radar silence because a DTC clear can take an ECU
-        # several hundred ms to process.
-        # NOTE: ELM327 safety mode allows the 29-bit functional diagnostic address on every bus, so the
-        # broadcast needs no TX allowlist entry in the car safety mode.
+        # Broadcast-clear stored DTCs every drive so radar comm-loss maturation is reset; clear the
+        # radar's own stored DTCs before it is silenced. ELM327 mode allows the functional address.
         clear_all_dtcs(can_send, [CanBus(CP).pt, CanBus(CP).camera])
         clear_ecu_dtcs(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1)
-      else:
-        # 0x80 silences response
-        if communication_control is None:
-          communication_control = bytes([uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
-                                         uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT])
-        disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1, com_cont_req=communication_control)
+      # Bosch non-CAN FD: radar disable is also deferred in CarController (same stock-ACC handoff).
 
   @staticmethod
   def deinit(CP, can_recv, can_send):
