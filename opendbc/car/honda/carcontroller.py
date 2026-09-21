@@ -1274,7 +1274,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     if self.frame % 6000 == 3000:
       self.param_writer.put_many(self.steer_learner.learned_values())
 
-    if self.frame % 12000 == 30 and self.CP.carFingerprint not in HONDA_BOSCH:
+    if self.frame % 12000 == 30 and (self.CP.flags & HondaFlags.NIDEC):
       self.param_writer.put_many({
         "HondaLatAccelFactor05Params": self.latFactors["05"],
         "HondaLatAccelFactor10Params": self.latFactors["10"],
