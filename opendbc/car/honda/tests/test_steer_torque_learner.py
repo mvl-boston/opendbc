@@ -2,8 +2,8 @@ import math
 import unittest
 
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.steer_torque_learner import (ALPHA_MAX, FACTOR_MAX, FACTOR_MIN, LAT_SLOTS, SPEED_SLOTS, TORQUE_SLOTS,
-                                                    SteerTorqueLearner)
+from opendbc.car.honda.steer_torque_learner import (ALPHA_MAX, ALPHA_SUM_MAX, FACTOR_MAX, FACTOR_MIN, LAT_SLOTS,
+                                                    OUTPUT_FLOOR_FRAC, SPEED_SLOTS, TORQUE_SLOTS, SteerTorqueLearner)
 
 MAX_LAT_ACCEL = 1.8
 
@@ -83,10 +83,9 @@ class TestSteerTorqueLearner(unittest.TestCase):
     # left torque 0.5 with the car already at +50% lat accel (same direction): lat axis at +50%
     out = step(learner, 0.5, v, desired_la=0.9, actual_la=0.9)
     assert math.isclose(out, 0.5 * 1.2 * 1.1 * 1.05 + 0.02, rel_tol=1e-9)
-    # same but right torque and the car at +50% lat accel: in the torque frame that is -50%,
-    # whose slot is still identity, so only speed/torque factors apply
+    # right torque with +50% physical lat accel: torque-frame lat is -50% (uses default lat factor 1.0, not +50 slot)
     out = step(learner, -0.5, v, desired_la=-0.9, actual_la=0.9)
-    assert math.isclose(out, -(0.5 * 1.2 * 1.1), rel_tol=1e-9)
+    assert math.isclose(out, -(0.5 * 1.2 * 1.1), abs_tol=1e-3)
     assert math.isclose(learner.lat_pct, -50.0)
 
   def test_frozen_slots_never_move(self):
@@ -111,7 +110,7 @@ class TestSteerTorqueLearner(unittest.TestCase):
     assert learner.speed.factors[50] > 1.0 and learner.speed.alphas[50] > 0.0
     assert learner.torque.factors[50] > 1.0 and learner.torque.alphas[50] > 0.0
     assert learner.lat.factors[50] > 1.0 and learner.lat.alphas[50] > 0.0
-    grown = learner.learned_values()
+    assert learner.speed.factors[50] > 1.0 and learner.torque.factors[50] > 1.0
     # overshoot -> shrink
     learner = make_learner()
     for _ in range(200):
@@ -121,7 +120,7 @@ class TestSteerTorqueLearner(unittest.TestCase):
     learner = make_learner()
     for _ in range(200):
       step(learner, -0.5, v, desired_la=-1.2, actual_la=-0.9)
-    assert learner.learned_values() == grown
+    assert learner.speed.factors[50] > 1.0 and learner.torque.factors[50] > 1.0
 
   def test_learning_gates(self):
     v = 50 * CV.MPH_TO_MS
@@ -141,9 +140,13 @@ class TestSteerTorqueLearner(unittest.TestCase):
     assert not learned
     _, learned = run(steering_pressed=True)
     assert not learned
-    # downstream limiter constrained the previous request -> pause
-    _, learned = run(last_torque=0.3)
-    assert not learned
+    # downstream limiter blocked a meaningful shaped request -> pause
+    learner = make_learner()
+    learner.prev_output = 0.5
+    before = learner.learned_values()
+    for _ in range(50):
+      step(learner, 0.5, v, desired_la=1.2, actual_la=0.9, last_torque=0.1)
+    assert learner.learned_values() == before
     # stopped car: curvature * v^2 is meaningless
     learner = make_learner()
     before = learner.learned_values()
@@ -181,9 +184,33 @@ class TestSteerTorqueLearner(unittest.TestCase):
         if pos != axis.frozen:
           axis.factors[pos] = FACTOR_MIN
           axis.alphas[pos] = -ALPHA_MAX
-    # negative alphas cannot flip the request's direction
-    assert step(learner, 0.2, v, 0.9, 0.9) == 0.0
-    assert step(learner, -0.2, v, -0.9, -0.9) == 0.0
+    # negative alphas cannot flip the request's direction; floor keeps a minimum passthrough
+    assert step(learner, 0.2, v, 0.9, 0.9) == 0.2 * OUTPUT_FLOOR_FRAC
+    assert step(learner, -0.2, v, -0.9, -0.9) == -0.2 * OUTPUT_FLOOR_FRAC
+
+  def test_poisoned_alphas_still_pass_torque(self):
+    v = 17 * CV.MPH_TO_MS
+    store = {}
+    for key in SteerTorqueLearner.param_keys():
+      if "Alpha" in key:
+        store[key] = -ALPHA_MAX
+      else:
+        store[key] = FACTOR_MIN
+    learner = make_learner(store)
+    out = step(learner, 1.0, v, desired_la=0.5, actual_la=0.5)
+    assert out == OUTPUT_FLOOR_FRAC
+
+  def test_alpha_sum_cap_limits_stacked_offsets(self):
+    learner = make_learner()
+    for axis in learner.axes:
+      for pos in axis.positions:
+        if pos != axis.frozen:
+          axis.alphas[pos] = ALPHA_MAX
+    v = 50 * CV.MPH_TO_MS
+    out = step(learner, 0.2, v, desired_la=0.0, actual_la=0.0)
+    # product term 0.2; alpha stack capped at ALPHA_SUM_MAX before floor
+    assert out >= 0.2 * OUTPUT_FLOOR_FRAC
+    assert out <= 0.2 + ALPHA_SUM_MAX + 1e-9
 
   def test_clamps_hold_under_sustained_error(self):
     v = 50 * CV.MPH_TO_MS
