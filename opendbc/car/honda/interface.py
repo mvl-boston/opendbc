@@ -217,10 +217,9 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
 
-    elif candidate == CAR.ACURA_MDX_3G: # source mlocoteta
-      ret.steerActuatorDelay = 0.3
-      ret.lateralTuning.pid.kf = 0.000035
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
+    elif candidate == CAR.ACURA_MDX_3G:
+      ret.steerActuatorDelay = 0.35
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.ACURA_RLX_HYBRID:
       # STEERING_CONTROL is bridged to the EPS on the steer bus by a pre-flashed red panda.
