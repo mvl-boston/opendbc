@@ -345,21 +345,21 @@ class CarInterface(CarInterfaceBase):
         # modified filter output values:  0x009F, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0400, 0x0480
         # note: max request allowed is 4096, but request is capped at 3840 in firmware, so modifications result in 2x max
         stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2560, 8000], [0, 2560, 3840]]
-        stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.1]]
+        CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
 
     elif candidate in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL):
       if ret.flags & HondaFlagsSP.EPS_MODIFIED:
         stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2564, 8000], [0, 2564, 3840]]
-        stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.09]]  # 2.5x Modded EPS
+        CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
 
     elif candidate == CAR.HONDA_CIVIC_2022:
       if ret.flags & HondaFlagsSP.EPS_MODIFIED:
         stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2564, 8000], [0, 2564, 3840]]
-        stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.09]]  # 2.5x Modded EPS
+        CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
 
     elif candidate == CAR.HONDA_ACCORD:
       if ret.flags & HondaFlagsSP.EPS_MODIFIED:
-        stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.09]]
+        CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
 
     elif candidate == CAR.HONDA_CRV_5G:
       if ret.flags & HondaFlagsSP.EPS_MODIFIED:
@@ -367,7 +367,7 @@ class CarInterface(CarInterfaceBase):
         # stock request output values:    0x0000, 0x0500, 0x0A15, 0x0E6D, 0x1100, 0x1200, 0x129A, 0x134D, 0x1400
         # modified request output values: 0x0000, 0x0500, 0x0A15, 0x0E6D, 0x1100, 0x1200, 0x1ACD, 0x239A, 0x2800
         stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2560, 10000], [0, 2560, 3840]]
-        stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.21], [0.07]]
+        CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
 
     elif candidate == CAR.HONDA_CLARITY:
       stock_cp.autoResumeSng = True
@@ -377,10 +377,10 @@ class CarInterface(CarInterfaceBase):
           if fw.ecu == "eps" and b"-" not in fw.fwVersion and b"," in fw.fwVersion:
             stock_cp.lateralTuning.pid.kf = 0.00004
             stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 5760, 15360], [0, 2560, 3840]]
-            stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.1575], [0.05175]]
+            CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
           elif fw.ecu == "eps" and b"-" in fw.fwVersion and b"," in fw.fwVersion:
             stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 5760, 10240], [0, 2560, 3840]]
-            stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.1]]
+            CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
       else:
         stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2560], [0, 2560]]
         CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
