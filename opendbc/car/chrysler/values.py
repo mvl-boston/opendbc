@@ -17,6 +17,7 @@ class ChryslerSafetyFlags(IntFlag):
 class ChryslerFlags(IntFlag):
   # Detected flags
   HIGHER_MIN_STEERING_SPEED = 1
+  HAS_BSM = 2  # blind spot monitoring
 
 
 @dataclass
@@ -109,7 +110,7 @@ class CarControllerParams:
     elif CP.carFingerprint in RAM_DT:
       self.STEER_DELTA_UP = 6
       self.STEER_DELTA_DOWN = 6
-      self.STEER_MAX = 350  # EPS allows more, up to 350?
+      self.STEER_MAX = 261  # EPS allows more, up to 350?
     elif CP.carFingerprint in CUSW_CARS:
       self.STEER_STEP = 1  # 100 Hz
       self.STEER_DELTA_UP = 4
