@@ -48,8 +48,8 @@ exceeds +-1.0.
 from opendbc.car.common.conversions import Conversions as CV
 
 # per-tick (100 Hz) adaptation rates, applied after the hat weight and the 1/3 axis split
-FACTOR_RATE = 0.0003
-ALPHA_RATE = 0.0001
+FACTOR_RATE = 0.003
+ALPHA_RATE = 0.001
 FACTOR_MIN = 0.5
 FACTOR_MAX = 2.0
 ALPHA_MAX = 0.3
