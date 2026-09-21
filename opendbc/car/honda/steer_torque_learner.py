@@ -51,8 +51,8 @@ from opendbc.car.common.conversions import Conversions as CV
 FACTOR_RATE = 0.003
 ALPHA_RATE = 0.001
 FACTOR_MIN = 0.5
-FACTOR_MAX = 2.0
-ALPHA_MAX = 0.3
+FACTOR_MAX = 10.0
+ALPHA_MAX = 0.1
 # below this speed curvature*v^2 is too small a fraction of maxLateralAccel to learn from
 MIN_LEARN_SPEED = 1.0  # m/s
 # torque requests this small have no usable direction for the torque-frame sign convention
