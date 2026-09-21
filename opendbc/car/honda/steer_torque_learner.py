@@ -21,28 +21,24 @@ the operating points the openpilot torque controller (friction, latAccelFactor,
 its own integrator) is expected to own, so the learned tables only describe how
 the car deviates from that baseline across the curve. Because the frozen slots
 are still interpolation nodes, the correction fades smoothly to nothing around
-them and the three axes cannot all absorb the same constant offset.
+them.
 
 Learning compares the requested and observed lateral acceleration. The request
-is ``actuators.curvature * vEgo^2``: the desired curvature handed to the torque
-controller, i.e. the pre-feedforward lateral acceleration demand which already
-carries the steer actuator delay compensation upstream, so a lagged response is
-not billed to the tables as steady-state error. The observation is
-``CC.currentCurvature * vEgo^2`` from the vehicle model. Both are curvature
-based, so roll compensation cancels in the error. The error is expressed in the
-torque frame (positive means more torque in the requested direction would have
-helped), normalized by maxLateralAccel, and split evenly across the three axes
-so the total adaptation rate does not triple.
+is ``actuators.curvature * vEgo^2``: the pre-feedforward lateral demand handed
+to the torque controller. The observation is ``CC.currentCurvature * vEgo^2``.
+Both are curvature based, so roll compensation cancels in the error. A delivery
+term is added when the shaper mutes the request (tables pulled magnitude well
+below |actuators.torque|), so wire understeer from poisoned alphas can still
+drive factors back up even when the curvature signal disagrees.
 
-Learning pauses whenever the effect of a change would not be observable: the
-rate limiter (or any other downstream clip) constrained the previous request,
-the shaped output is already at +-1.0, lateral control is inactive or the EPS is
-not accepting commands, the driver is steering, or the car is (nearly) stopped
-where curvature*v^2 carries no information.
+At apply time, blended alphas from the three axes are summed then clipped to
+``+-ALPHA_SUM_MAX`` so three per-axis integrators cannot stack into a mute.
+Output magnitude is floored at ``OUTPUT_FLOOR_FRAC * |torque|`` so learned tables
+can trim authority but not zero the wire while lateral control is active.
 
-Everything is bounded: per-axis factors clip to [FACTOR_MIN, FACTOR_MAX], alphas
-to +-ALPHA_MAX, and the shaped output never flips the sign of the request or
-exceeds +-1.0.
+Learning pauses when lateral control is inactive, the EPS is not accepting
+commands, the driver is steering, speed is too low, output is saturated at 1.0,
+or the rate limiter blocked a meaningful shaped request on the previous tick.
 """
 
 from opendbc.car.common.conversions import Conversions as CV
@@ -53,6 +49,12 @@ ALPHA_RATE = 0.001
 FACTOR_MIN = 0.5
 FACTOR_MAX = 10.0
 ALPHA_MAX = 0.1
+# cap on lat_a + torque_a + speed_a after blending (per-axis alphas are +-ALPHA_MAX)
+ALPHA_SUM_MAX = 0.12
+# never send less than this fraction of |actuators.torque| (tables trim, not kill)
+OUTPUT_FLOOR_FRAC = 0.4
+# weight on (request - shaped) / |request| added to curvature error for learning
+LEARN_DELIVERY_GAIN = 0.5
 # below this speed curvature*v^2 is too small a fraction of maxLateralAccel to learn from
 MIN_LEARN_SPEED = 1.0  # m/s
 # torque requests this small have no usable direction for the torque-frame sign convention
@@ -175,6 +177,7 @@ class SteerTorqueLearner:
     # telemetry for the last update() call
     self.lat_pct = 0.0
     self.err = 0.0
+    self.curv_err = 0.0
     self.learning = False
     self.output = 0.0
 
@@ -196,12 +199,16 @@ class SteerTorqueLearner:
     """
     torque = float(torque)
     v_ego = float(v_ego)
-    constrained = abs(float(last_torque) - self.prev_output) > CONSTRAINED_TOL
+    # only treat the rate limiter as blocking learning when we asked for meaningful steer last
+    # tick; otherwise last_torque creeping away from a near-zero shaped output freezes learning
+    # for the whole drive (route d9: prev_output=0, last_torque=0.03 every frame -> never learns)
+    constrained = (abs(self.prev_output) > MIN_TORQUE) and (abs(float(last_torque) - self.prev_output) > CONSTRAINED_TOL)
 
     if abs(torque) < MIN_TORQUE:
       # no direction to work in: pass through, learn nothing
       self.lat_pct = 0.0
       self.err = 0.0
+      self.curv_err = 0.0
       self.learning = False
       self.output = self.prev_output = torque
       return torque
@@ -225,14 +232,17 @@ class SteerTorqueLearner:
     torque_f, torque_a = self.torque.blend(torque_w)
     speed_f, speed_a = self.speed.blend(speed_w)
 
-    # factors multiply, alphas add; the shaped magnitude keeps the request's sign and stays in [0, 1]
-    shaped_mag = torque_mag * lat_f * torque_f * speed_f + lat_a + torque_a + speed_a
+    alpha_sum = _clip(lat_a + torque_a + speed_a, -ALPHA_SUM_MAX, ALPHA_SUM_MAX)
+    shaped_mag = torque_mag * lat_f * torque_f * speed_f + alpha_sum
     shaped_mag = _clip(shaped_mag, 0.0, 1.0)
+    shaped_mag = max(shaped_mag, torque_mag * OUTPUT_FLOOR_FRAC)
     output = sign * shaped_mag
 
-    # tracking error in the torque frame, as a fraction of maxLateralAccel: positive when more
-    # torque in the requested direction would have closed the gap
-    self.err = _clip(sign * (desired_lat_accel - actual_lat_accel) / self.max_lat_accel, -1.0, 1.0)
+    # curvature tracking error in the torque frame
+    self.curv_err = _clip(sign * (desired_lat_accel - actual_lat_accel) / self.max_lat_accel, -1.0, 1.0)
+    # when tables mute the wire, the plan still requested |torque| — credit that gap toward growth
+    delivery_err = sign * (torque_mag - shaped_mag) / torque_mag
+    self.err = _clip(self.curv_err + LEARN_DELIVERY_GAIN * delivery_err, -1.0, 1.0)
 
     self.learning = bool(lat_active) and bool(steer_control_active) and (not steering_pressed) and \
                     (v_ego > MIN_LEARN_SPEED) and (not constrained) and (shaped_mag < 1.0)
