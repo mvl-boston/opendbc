@@ -177,13 +177,14 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.05]]
 
-    elif candidate in (CAR.HONDA_HRV, CAR.HONDA_HRV_3G):
+    elif candidate == CAR.HONDA_HRV:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      if candidate == CAR.HONDA_HRV:
-        ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.16], [0.025]]
-        ret.wheelSpeedFactor = 1.025
-      else:
-        ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]  # TODO: can probably use some tuning
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.16], [0.025]]
+      ret.wheelSpeedFactor = 1.025
+
+    elif candidate == CAR.HONDA_HRV_3G:
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4383], [0, 4383]]
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]  # TODO: can probably use some tuning
 
     elif candidate == CAR.ACURA_RDX:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 1000], [0, 1000]]  # TODO: determine if there is a dead zone at the top end
