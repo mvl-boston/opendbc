@@ -382,35 +382,35 @@ class CarInterface(CarInterfaceBase):
             stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 5760, 10240], [0, 2560, 3840]]
             stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.1]]
       else:
-        ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
-        CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+        stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2560], [0, 2560]]
+        CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
 
     elif candidate == CAR.ACURA_MDX_3G: # source mlocoteta
       stock_cp.autoResumeSng = True
       stock_cp.minEnableSpeed = -1
       stock_cp.steerActuatorDelay = 0.3
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 433], [0, 433]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 433], [0, 433]]
+      CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
 
     elif candidate == CAR.ACURA_TLX_1G:
       stock_cp.autoResumeSng = True
       stock_cp.minEnableSpeed = -1
       stock_cp.steerActuatorDelay = 0.3
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 830], [0, 830]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 830], [0, 830]]
+      CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
 
     elif candidate == CAR.HONDA_ACCORD_9G:
       stock_cp.steerActuatorDelay = 0.3
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 239], [0, 239]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 239], [0, 239]]
+      CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
 
     elif candidate == CAR.ACURA_RLX_HYBRID:
       # STEERING_CONTROL is bridged to the EPS on the steer bus by a pre-flashed red panda.
       stock_cp.autoResumeSng = True
       stock_cp.minEnableSpeed = -1
       stock_cp.steerActuatorDelay = 0.3
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 32767], [0, 32767]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 32767], [0, 32767]]
+      CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
 
     if candidate in HONDA_BOSCH:
       pass
