@@ -15,6 +15,7 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
+from opendbc.car.honda.steer_torque_learner import SteerTorqueLearner
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -178,7 +179,12 @@ class HondaParamWriter:
         pass
 
       for key, value in pending.items():
-        self._params.put(key, value)
+        # a key that is not registered in this openpilot build must not take the writer thread
+        # down with it (every other learned value would silently stop persisting)
+        try:
+          self._params.put(key, value)
+        except Exception:
+          pass
 
 class CarController(CarControllerBase):
   def __init__(self, dbc_names, CP):
@@ -358,6 +364,10 @@ class CarController(CarControllerBase):
     self.launch_err_n = 0
     self.launch_ceiling_ticks = 0
 
+    # steering torque shaping learner (see steer_torque_learner.py): learns factor/alpha tables over
+    # lateral accel %, |torque| % and speed, and feeds the shaped request into the rate limiter
+    self.steer_learner = SteerTorqueLearner(CP.maxLateralAccel, Params().get)
+
     self.latFactors = {
       "05": 1.0 if (Params().get("HondaLatAccelFactor05Params") is None) else Params().get("HondaLatAccelFactor05Params"),
       "10": 1.0 if (Params().get("HondaLatAccelFactor10Params") is None) else Params().get("HondaLatAccelFactor10Params"),
@@ -467,8 +477,12 @@ class CarController(CarControllerBase):
       if self.CP.carFingerprint not in HONDA_BOSCH:
         self.nidec_pid.reset()
 
-    # *** rate limit steer ***
-    limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
+    # *** shape steer torque with the learned tables, then rate limit ***
+    # self.last_torque is what actually went to the EPS last tick (rate limiter + MDX brake clip
+    # applied), so the learner can tell when a downstream limit constrained its request and pause.
+    steer_torque = self.steer_learner.update(actuators.torque, self.last_torque, CC.latActive, CS.steer_control_active,
+                                             CS.out.steeringPressed, CS.out.vEgo, actuators.curvature, CC.currentCurvature)
+    limited_torque = rate_limit(steer_torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
     if (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and \
         (self.apply_brake_last > 0 or self.new_accel < 1e-5): # lower steer limits while braking
@@ -1194,6 +1208,9 @@ class CarController(CarControllerBase):
           learned_values[NIDEC_SPEED_FACTOR_KEYS[band]] = self.speed_factors[band]
           learned_values[NIDEC_SPEED_ALPHA_KEYS[band]] = self.speed_alphas[band]
         self.param_writer.put_many(learned_values)
+
+    if self.frame % 6000 == 3000:
+      self.param_writer.put_many(self.steer_learner.learned_values())
 
     if self.frame % 12000 == 30 and self.CP.carFingerprint not in HONDA_BOSCH:
       self.param_writer.put_many({
