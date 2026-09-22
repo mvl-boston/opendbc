@@ -88,6 +88,17 @@ class TestSteerTorqueLearner(unittest.TestCase):
     assert math.isclose(out, -(0.5 * 1.2 * 1.1), abs_tol=1e-3)
     assert math.isclose(learner.lat_pct, -50.0)
 
+  def test_blended_factors_telemetry(self):
+    learner = make_learner()
+    v = 50 * CV.MPH_TO_MS
+    learner.lat.factors[50] = 1.1
+    learner.torque.factors[50] = 1.2
+    learner.speed.factors[50] = 0.9
+    step(learner, 0.5, v, desired_la=0.9, actual_la=0.9)
+    assert math.isclose(learner.blended_lat_factor, 1.1, abs_tol=1e-3)
+    assert math.isclose(learner.blended_torque_factor, 1.2, abs_tol=1e-3)
+    assert math.isclose(learner.blended_speed_factor, 0.9, abs_tol=1e-3)
+
   def test_frozen_slots_never_move(self):
     learner = make_learner()
     v = 30 * CV.MPH_TO_MS  # exactly the frozen speed slot

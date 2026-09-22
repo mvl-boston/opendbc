@@ -180,6 +180,15 @@ class SteerTorqueLearner:
     self.curv_err = 0.0
     self.learning = False
     self.output = 0.0
+    # hat-blended multiplicative factors from the last update() (for actuatorsOutput telemetry)
+    self.blended_lat_factor = 1.0
+    self.blended_torque_factor = 1.0
+    self.blended_speed_factor = 1.0
+
+  def _record_blended_factors(self, lat_pct, torque_pct, speed_mph):
+    self.blended_lat_factor = self.lat.blend(self.lat.weights(lat_pct))[0]
+    self.blended_torque_factor = self.torque.blend(self.torque.weights(torque_pct))[0]
+    self.blended_speed_factor = self.speed.blend(self.speed.weights(speed_mph))[0]
 
   @property
   def axes(self):
@@ -210,6 +219,8 @@ class SteerTorqueLearner:
       self.err = 0.0
       self.curv_err = 0.0
       self.learning = False
+      speed_mph = _clip(v_ego * CV.MS_TO_MPH, 0.0, float(SPEED_SLOTS[-1][0]))
+      self._record_blended_factors(0.0, 0.0, speed_mph)
       self.output = self.prev_output = torque
       return torque
 
@@ -231,6 +242,9 @@ class SteerTorqueLearner:
     lat_f, lat_a = self.lat.blend(lat_w)
     torque_f, torque_a = self.torque.blend(torque_w)
     speed_f, speed_a = self.speed.blend(speed_w)
+    self.blended_lat_factor = lat_f
+    self.blended_torque_factor = torque_f
+    self.blended_speed_factor = speed_f
 
     alpha_sum = _clip(lat_a + torque_a + speed_a, -ALPHA_SUM_MAX, ALPHA_SUM_MAX)
     shaped_mag = torque_mag * lat_f * torque_f * speed_f + alpha_sum
