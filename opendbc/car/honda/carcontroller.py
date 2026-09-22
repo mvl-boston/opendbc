@@ -1229,17 +1229,22 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = self.last_torque
+    steer_f = self.steer_learner
+    # actuatorsOutput gas/brake/speed: steer learner blended lat / |torque| / speed factors (was long-channel telemetry)
+    steer_gas = float(steer_f.blended_lat_factor)
+    steer_brake = float(steer_f.blended_torque_factor)
+    steer_speed = float(steer_f.blended_speed_factor)
     if self.CP.flags & HondaFlags.BOSCH:
-      new_actuators.speed = float(self.gasalpha)
+      new_actuators.speed = steer_speed
       new_actuators.accel = self.accel
-      new_actuators.gas = float(self.gasfactor)
-      new_actuators.brake = float(self.windfactor)
+      new_actuators.gas = steer_gas
+      new_actuators.brake = steer_brake
       new_actuators.torqueOutputCan = apply_torque
     else:
-      new_actuators.speed = float(self.nidec_pid_factor)
+      new_actuators.speed = steer_speed
       new_actuators.accel = float(self.accel)
-      new_actuators.gas = float(self.average_factor)
-      new_actuators.brake = float(self.sat_accel)
+      new_actuators.gas = steer_gas
+      new_actuators.brake = steer_brake
       new_actuators.torqueOutputCan = float(self.speed_factors["low"])
 
     if self.frame % 6000 == 0:
