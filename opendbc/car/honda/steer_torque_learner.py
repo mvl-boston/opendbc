@@ -44,10 +44,10 @@ or the rate limiter blocked a meaningful shaped request on the previous tick.
 from opendbc.car.common.conversions import Conversions as CV
 
 # per-tick (100 Hz) adaptation rates, applied after the hat weight and the 1/3 axis split
-FACTOR_RATE = 0.003
+FACTOR_RATE = 0.01
 ALPHA_RATE = 0.001
 FACTOR_MIN = 0.5
-FACTOR_MAX = 10.0
+FACTOR_MAX = 100.0
 ALPHA_MAX = 0.1
 # cap on lat_a + torque_a + speed_a after blending (per-axis alphas are +-ALPHA_MAX)
 ALPHA_SUM_MAX = 0.12
