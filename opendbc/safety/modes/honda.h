@@ -298,19 +298,16 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     honda_op_buttons_fresh = 10;
   }
 
-  // Only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
-  // On CAN FD the radar is silenced from CarController once the comma relay is open (rather than from
-  // CarInterface.init() under the ELM327 mode, which raced the safety-mode switch and could leave the
-  // brake module without ACC_CONTROL long enough to latch CRUISE_FAULT), so additionally allow exactly
-  // the extended-diagnostic-session request and the suppressed-response CommunicationControl
-  // disableRxAndTx request. The corresponding enable stays blocked: re-enabling the radar into OP's
-  // ACC_CONTROL stream would double up control messages while driving.
+  // Only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address by default.
+  // Bosch w/ physical radar: allow the exact UDS sequence used to silence/re-enable the radar ECU from
+  // CarController and CarInterface.deinit (alpha longitudinal toggle off).
   if (msg->addr == 0x18DAB0F1U) {
     const uint32_t first_bytes = GET_BYTES(msg, 0, 4);
     bool allowed = (first_bytes == 0x00803E02U);
-    if (honda_bosch_canfd) {
+    if ((honda_hw == HONDA_BOSCH) && !honda_bosch_radarless) {
       allowed = allowed || (first_bytes == 0x00031002U);  // 02 10 03: extended diagnostic session
       allowed = allowed || (first_bytes == 0x03832803U);  // 03 28 83 03: CommunicationControl disable rx/tx
+      allowed = allowed || (first_bytes == 0x03828003U);  // 03 28 80 03: CommunicationControl enable rx/tx
     }
     if (!allowed || (GET_BYTES(msg, 4, 4) != 0x0U)) {
       tx = false;
