@@ -163,7 +163,11 @@ def get_car(can_recv: CanRecvCallable, can_send: CanSendCallable, set_obd_multip
   CP.fingerprintSource = source
   CP.fuzzyFingerprint = not exact_match
 
-  return interfaces[CP.carFingerprint](CP)
+  ci = interfaces[CP.carFingerprint](CP)
+  if CP.alphaLongitudinalAvailable:
+    from opendbc.car.controls_lifecycle import wrap_car_interface
+    return wrap_car_interface(ci)
+  return ci
 
 
 def get_demo_car_params():
