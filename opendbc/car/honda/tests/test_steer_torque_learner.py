@@ -2,8 +2,8 @@ import math
 import unittest
 
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.steer_torque_learner import (ALPHA_MAX, ALPHA_SUM_MAX, FACTOR_MAX, FACTOR_MIN, LAT_SLOTS,
-                                                    OUTPUT_FLOOR_FRAC, SPEED_SLOTS, TORQUE_SLOTS, SteerTorqueLearner)
+from opendbc.car.honda.steer_torque_learner import (ALPHA_MAX, FACTOR_MAX, FACTOR_MIN, LAT_ALPHA_MAX, LAT_SLOTS,
+                                                    SPEED_SLOTS, TORQUE_SLOTS, SteerTorqueLearner)
 
 MAX_LAT_ACCEL = 1.8
 
@@ -61,10 +61,12 @@ class TestSteerTorqueLearner(unittest.TestCase):
 
   def test_loads_and_clips_persisted_values(self):
     learner = make_learner({"HondaSteerSpeedFactor50Params": 1.5, "HondaSteerSpeedAlpha50Params": 9.0,
-                            "HondaSteerLatFactorP100Params": "0.7", "HondaSteerTorqueFactor100Params": None})
+                            "HondaSteerLatFactorP100Params": "0.7", "HondaSteerLatAlphaP100Params": 9.0,
+                            "HondaSteerTorqueFactor100Params": None})
     assert learner.speed.factors[50] == 1.5
     assert learner.speed.alphas[50] == ALPHA_MAX
     assert learner.lat.factors[100] == 0.7
+    assert learner.lat.alphas[100] == LAT_ALPHA_MAX
     assert learner.torque.factors[100] == 1.0
     # a param store that raises (unknown key) falls back to defaults instead of crashing
 
@@ -187,41 +189,33 @@ class TestSteerTorqueLearner(unittest.TestCase):
       for pos in axis.positions:
         if pos != axis.frozen:
           axis.factors[pos] = FACTOR_MAX
-          axis.alphas[pos] = ALPHA_MAX
+          axis.alphas[pos] = LAT_ALPHA_MAX if axis.name == "lat" else ALPHA_MAX
     assert step(learner, 0.9, v, 0.9, 0.9) == 1.0
     assert step(learner, -0.9, v, -0.9, -0.9) == -1.0
-    for axis in learner.axes:
-      for pos in axis.positions:
-        if pos != axis.frozen:
-          axis.factors[pos] = FACTOR_MIN
-          axis.alphas[pos] = -ALPHA_MAX
-    # negative alphas cannot flip the request's direction; floor keeps a minimum passthrough
-    assert step(learner, 0.2, v, 0.9, 0.9) == 0.2 * OUTPUT_FLOOR_FRAC
-    assert step(learner, -0.2, v, -0.9, -0.9) == -0.2 * OUTPUT_FLOOR_FRAC
 
-  def test_poisoned_alphas_still_pass_torque(self):
+  def test_negative_alpha_sum_inverts_output(self):
+    v = 50 * CV.MPH_TO_MS
+    learner = make_learner()
+    learner.lat.alphas[50] = -LAT_ALPHA_MAX
+    learner.torque.alphas[50] = -ALPHA_MAX
+    learner.speed.alphas[50] = -ALPHA_MAX
+    out = step(learner, 0.5, v, desired_la=0.9, actual_la=0.9)
+    assert out < 0.0
+    assert out == -1.0  # product 0.5 + alpha sum -1.7 clips to -1.0
+
+  def test_poisoned_alphas_can_drive_output_negative(self):
     v = 17 * CV.MPH_TO_MS
     store = {}
     for key in SteerTorqueLearner.param_keys():
-      if "Alpha" in key:
+      if "LatAlpha" in key:
+        store[key] = -LAT_ALPHA_MAX
+      elif "Alpha" in key:
         store[key] = -ALPHA_MAX
       else:
         store[key] = FACTOR_MIN
     learner = make_learner(store)
     out = step(learner, 1.0, v, desired_la=0.5, actual_la=0.5)
-    assert out == OUTPUT_FLOOR_FRAC
-
-  def test_alpha_sum_cap_limits_stacked_offsets(self):
-    learner = make_learner()
-    for axis in learner.axes:
-      for pos in axis.positions:
-        if pos != axis.frozen:
-          axis.alphas[pos] = ALPHA_MAX
-    v = 50 * CV.MPH_TO_MS
-    out = step(learner, 0.2, v, desired_la=0.0, actual_la=0.0)
-    # product term 0.2; alpha stack capped at ALPHA_SUM_MAX before floor
-    assert out >= 0.2 * OUTPUT_FLOOR_FRAC
-    assert out <= 0.2 + ALPHA_SUM_MAX + 1e-9
+    assert out < 0.0
 
   def test_clamps_hold_under_sustained_error(self):
     v = 50 * CV.MPH_TO_MS
@@ -229,6 +223,7 @@ class TestSteerTorqueLearner(unittest.TestCase):
     for _ in range(200000):
       step(learner, 0.5, v, desired_la=1.8, actual_la=0.0)
     for axis in learner.axes:
+      alpha_lim = LAT_ALPHA_MAX if axis.name == "lat" else ALPHA_MAX
       for pos in axis.positions:
         assert FACTOR_MIN <= axis.factors[pos] <= FACTOR_MAX
-        assert -ALPHA_MAX <= axis.alphas[pos] <= ALPHA_MAX
+        assert -alpha_lim <= axis.alphas[pos] <= alpha_lim
