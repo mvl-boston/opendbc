@@ -586,11 +586,17 @@ class TestHondaBoschLongSafety(HondaButtonEnableBase, TestHondaBoschSafetyBase):
     not_tester_present = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\xAA\xAA\x00\x00\x00\x00\x00")
     self.assertFalse(self._tx(not_tester_present))
 
-    # the radar disable requests are only allowed on CAN FD
     ext_diag = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x10\x03\x00\x00\x00\x00\x00")
-    self.assertFalse(self._tx(ext_diag))
+    self.assertTrue(self._tx(ext_diag))
     comm_control_disable = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\x28\x83\x03\x00\x00\x00\x00")
-    self.assertFalse(self._tx(comm_control_disable))
+    self.assertTrue(self._tx(comm_control_disable))
+    comm_control_enable = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\x28\x80\x03\x00\x00\x00\x00")
+    self.assertTrue(self._tx(comm_control_enable))
+
+    not_tester_present = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\xAA\xAA\x00\x00\x00\x00\x00")
+    self.assertFalse(self._tx(not_tester_present))
+    trailing_bytes = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x10\x03\x00\x00\x00\x00\x01")
+    self.assertFalse(self._tx(trailing_bytes))
 
   def test_gas_safety_check(self):
     for controls_allowed in [True, False]:
@@ -800,9 +806,10 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
     comm_control_disable = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\x28\x83\x03\x00\x00\x00\x00")
     self.assertTrue(self._tx(comm_control_disable))
 
-    # anything else stays blocked, including re-enabling the radar and non-zero trailing bytes
     comm_control_enable = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\x28\x80\x03\x00\x00\x00\x00")
-    self.assertFalse(self._tx(comm_control_enable))
+    self.assertTrue(self._tx(comm_control_enable))
+
+    # anything else stays blocked, including non-zero trailing bytes
     not_tester_present = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\xAA\xAA\x00\x00\x00\x00\x00")
     self.assertFalse(self._tx(not_tester_present))
     trailing_bytes = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x10\x03\x00\x00\x00\x00\x01")
