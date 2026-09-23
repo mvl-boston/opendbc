@@ -31,13 +31,13 @@ term is added when the shaper mutes the request (tables pulled magnitude well
 below |actuators.torque|), so wire understeer from poisoned alphas can still
 drive factors back up even when the curvature signal disagrees.
 
-At apply time, blended alphas from the three axes are summed then clipped to
-``+-ALPHA_SUM_MAX`` so three per-axis integrators cannot stack into a mute.
-Output magnitude is floored at ``OUTPUT_FLOOR_FRAC * |torque|`` so learned tables
-can trim authority but not zero the wire while lateral control is active.
+At apply time, blended alphas from the three axes are summed into the shaped
+request (no cross-axis alpha cap). Lateral slot alphas are clamped to
+``+-LAT_ALPHA_MAX``; torque and speed slot alphas use ``+-ALPHA_MAX``. The shaped
+magnitude may go negative when the alpha stack dominates the multiplicative term.
 
 Learning pauses when lateral control is inactive, the EPS is not accepting
-commands, the driver is steering, speed is too low, output is saturated at 1.0,
+commands, the driver is steering, speed is too low, output is saturated at |1.0|,
 or the rate limiter blocked a meaningful shaped request on the previous tick.
 """
 
@@ -49,10 +49,7 @@ ALPHA_RATE = 0.001
 FACTOR_MIN = 0.5
 FACTOR_MAX = 100.0
 ALPHA_MAX = 0.1
-# cap on lat_a + torque_a + speed_a after blending (per-axis alphas are +-ALPHA_MAX)
-ALPHA_SUM_MAX = 0.12
-# never send less than this fraction of |actuators.torque| (tables trim, not kill)
-OUTPUT_FLOOR_FRAC = 0.4
+LAT_ALPHA_MAX = 1.5
 # weight on (request - shaped) / |request| added to curvature error for learning
 LEARN_DELIVERY_GAIN = 0.5
 # below this speed curvature*v^2 is too small a fraction of maxLateralAccel to learn from
@@ -73,9 +70,10 @@ def _pct_key(pct):
 class LearnedAxis:
   """One input axis: sorted slots, each with a factor/alpha pair, one frozen at identity."""
 
-  def __init__(self, name, slots, frozen, key_fmt, param_get):
+  def __init__(self, name, slots, frozen, key_fmt, param_get, alpha_max=ALPHA_MAX):
     # slots: sequence of (position, key_suffix); positions strictly increasing
     self.name = name
+    self.alpha_max = float(alpha_max)
     self.positions = [pos for pos, _ in slots]
     self.suffixes = dict(slots)
     assert frozen in self.suffixes, f"{name}: frozen slot {frozen} is not a slot"
@@ -89,7 +87,7 @@ class LearnedAxis:
       if pos == frozen:
         continue
       self.factors[pos] = _clip(_load(param_get, self.keys[pos], 1.0), FACTOR_MIN, FACTOR_MAX)
-      self.alphas[pos] = _clip(_load(param_get, self.alpha_keys[pos], 0.0), -ALPHA_MAX, ALPHA_MAX)
+      self.alphas[pos] = _clip(_load(param_get, self.alpha_keys[pos], 0.0), -self.alpha_max, self.alpha_max)
 
   def weights(self, x):
     # hat-function weights of piecewise-linear interpolation across the slots: the two slots
@@ -121,7 +119,7 @@ class LearnedAxis:
       if w == 0.0 or pos == self.frozen:
         continue
       self.factors[pos] = _clip(self.factors[pos] * (1.0 + w * FACTOR_RATE * err * torque_mag), FACTOR_MIN, FACTOR_MAX)
-      self.alphas[pos] = _clip(self.alphas[pos] + w * ALPHA_RATE * err, -ALPHA_MAX, ALPHA_MAX)
+      self.alphas[pos] = _clip(self.alphas[pos] + w * ALPHA_RATE * err, -self.alpha_max, self.alpha_max)
 
   def learned_values(self):
     values = {}
@@ -170,7 +168,7 @@ class SteerTorqueLearner:
     # maxLateralAccel is 0 for cars without torque data; fall back to a typical value so the
     # percentage axis stays finite rather than disabling the learner outright
     self.max_lat_accel = float(max_lat_accel) if max_lat_accel and max_lat_accel > 0.1 else 1.8
-    self.lat = LearnedAxis("lat", LAT_SLOTS, LAT_FROZEN, LAT_KEY_FMT, param_get)
+    self.lat = LearnedAxis("lat", LAT_SLOTS, LAT_FROZEN, LAT_KEY_FMT, param_get, alpha_max=LAT_ALPHA_MAX)
     self.torque = LearnedAxis("torque", TORQUE_SLOTS, TORQUE_FROZEN, TORQUE_KEY_FMT, param_get)
     self.speed = LearnedAxis("speed", SPEED_SLOTS, SPEED_FROZEN, SPEED_KEY_FMT, param_get)
     self.prev_output = 0.0
@@ -246,10 +244,8 @@ class SteerTorqueLearner:
     self.blended_torque_factor = torque_f
     self.blended_speed_factor = speed_f
 
-    alpha_sum = _clip(lat_a + torque_a + speed_a, -ALPHA_SUM_MAX, ALPHA_SUM_MAX)
-    shaped_mag = torque_mag * lat_f * torque_f * speed_f + alpha_sum
-    shaped_mag = _clip(shaped_mag, 0.0, 1.0)
-    shaped_mag = max(shaped_mag, torque_mag * OUTPUT_FLOOR_FRAC)
+    alpha_sum = lat_a + torque_a + speed_a
+    shaped_mag = _clip(torque_mag * lat_f * torque_f * speed_f + alpha_sum, -1.0, 1.0)
     output = sign * shaped_mag
 
     # curvature tracking error in the torque frame
@@ -259,7 +255,7 @@ class SteerTorqueLearner:
     self.err = _clip(self.curv_err + LEARN_DELIVERY_GAIN * delivery_err, -1.0, 1.0)
 
     self.learning = bool(lat_active) and bool(steer_control_active) and (not steering_pressed) and \
-                    (v_ego > MIN_LEARN_SPEED) and (not constrained) and (shaped_mag < 1.0)
+                    (v_ego > MIN_LEARN_SPEED) and (not constrained) and (abs(shaped_mag) < 1.0)
     if self.learning:
       # the same error drives all three axes, so each gets a third of the rate
       err_share = self.err / 3.0
