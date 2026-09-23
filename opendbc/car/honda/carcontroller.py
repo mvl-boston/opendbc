@@ -213,8 +213,11 @@ class CarController(CarControllerBase):
     self.last_lkas_button_frame = 0
     self.radar_disable_counter = 0
     self._params = Params()
-    self.op_long_active_prev = False
+    self.op_long_active_prev = op_long_active(CP, self._params)
+    # UDS radar re-enable spans multiple 100 Hz frames; keep trying long enough to survive an onroad cycle.
     self.radar_reenable_pending = 0
+    if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and not self.op_long_active_prev:
+      self.radar_reenable_pending = 250
 
     self.gasalpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
@@ -381,7 +384,7 @@ class CarController(CarControllerBase):
     op_long = op_long_active(self.CP, self._params)
     if op_long != self.op_long_active_prev:
       if not op_long:
-        self.radar_reenable_pending = 50
+        self.radar_reenable_pending = 250
       self.radar_disable_counter = 0
       self.op_long_active_prev = op_long
 
