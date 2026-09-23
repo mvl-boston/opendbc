@@ -205,6 +205,8 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.HONDA_ODYSSEY_TWN:
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.28], [0.08]]
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 32767], [0, 32767]]  # TODO: determine if there is a dead zone at the top end
+      if not ret.openpilotLongitudinalControl:
+        ret.minEnableSpeed = 19. * CV.MPH_TO_MS
 
     elif candidate in (CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
@@ -268,6 +270,8 @@ class CarInterface(CarInterfaceBase):
       ret.steerActuatorDelay = 0.15
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      if not ret.openpilotLongitudinalControl:
+        ret.minEnableSpeed = 30. * CV.KPH_TO_MS
 
     elif candidate == CAR.ACURA_ADX:
       ret.steerActuatorDelay = 0.15
@@ -309,7 +313,7 @@ class CarInterface(CarInterfaceBase):
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
     # to a negative value, so it won't matter. Otherwise, add 0.5 mph margin to not
     # conflict with PCM acc
-    if (candidate == CAR.HONDA_FIT_4G) and (not ret.openpilotLongitudinalControl):
+    if ret.minEnableSpeed > 0:
       ret.autoResumeSng = False
     elif (ret.transmissionType == TransmissionType.manual) and (not ret.openpilotLongitudinalControl):
       ret.autoResumeSng = False
@@ -317,12 +321,9 @@ class CarInterface(CarInterfaceBase):
       ret.autoResumeSng = bool(ret.flags & HondaFlags.BOSCH) or candidate == CAR.HONDA_CIVIC
     if ret.autoResumeSng:
       ret.minEnableSpeed = -1.
-    elif candidate == CAR.HONDA_ODYSSEY_TWN:
-      ret.minEnableSpeed = 19. * CV.MPH_TO_MS
-    elif candidate == CAR.HONDA_FIT_4G:
-      ret.minEnableSpeed = 30. * CV.KPH_TO_MS
     else:
-      ret.minEnableSpeed = 25.51 * CV.MPH_TO_MS
+      if ret.minEnableSpeed < 0:
+        ret.minEnableSpeed = 25.51 * CV.MPH_TO_MS
 
     ret.steerLimitTimer = 0.8
     ret.radarDelay = 0.1
