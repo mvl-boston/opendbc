@@ -5,9 +5,10 @@ carcontroller's rate limiter, and learns a multiplicative factor and an additive
 alpha (``a*x + b``) as a function of three operating-point inputs, on the same
 pattern as the Nidec speedfactor/speedalpha and gasfactor/gasalpha channels:
 
-* current lateral acceleration as a percentage of the car's maxLateralAccel,
-  signed in the torque frame (negative when the observed acceleration is
-  against the requested torque), slots every 10% from -100% to +100%;
+* lateral acceleration magnitude as a percentage of maxLateralAccel, signed by
+  whether the wheel is moving away from center (+) or back toward center (−)
+  from steering angle and rate (not openpilot's torque×lat-g frame); slots every
+  10% from -100% to +100%;
 * the magnitude of the requested torque (|actuators.torque|, 0..1), slots every
   10% from 0% to 100%;
 * vehicle speed, slots every 10 mph from 0 to 70 mph.
@@ -23,10 +24,11 @@ the car deviates from that baseline across the curve. Because the frozen slots
 are still interpolation nodes, the correction fades smoothly to nothing around
 them.
 
-Learning compares the requested and observed lateral acceleration. The request
-is ``actuators.curvature * vEgo^2``: the pre-feedforward lateral demand handed
-to the torque controller. The observation is ``CC.currentCurvature * vEgo^2``.
-Both are curvature based, so roll compensation cancels in the error. A delivery
+Learning compares requested and observed lateral acceleration in the path frame
+(``actuators.curvature`` and ``CC.currentCurvature``, both × ``vEgo^2``) without
+re-flipping by torque sign. Lat slot factors/alphas persisted on disk use the
+depart/center convention; tables saved under the old torque-frame index are reset
+when ``HondaSteerLatAxisFrameParams`` < 2. A delivery
 term is added when the shaper mutes the request (tables pulled magnitude well
 below |actuators.torque|), so wire understeer from poisoned alphas can still
 drive factors back up even when the curvature signal disagrees.
@@ -54,10 +56,51 @@ LAT_ALPHA_MAX = 1.5
 LEARN_DELIVERY_GAIN = 0.5
 # below this speed curvature*v^2 is too small a fraction of maxLateralAccel to learn from
 MIN_LEARN_SPEED = 1.0  # m/s
-# torque requests this small have no usable direction for the torque-frame sign convention
+# torque requests this small have no usable direction for the output sign
 MIN_TORQUE = 1e-3
 # tolerance for "the downstream limiter changed what we asked for"
 CONSTRAINED_TOL = 1e-4
+# wheel must be off-center and moving to classify away (+) vs toward (−) center
+MIN_DEPART_ANGLE_DEG = 1.0
+MIN_DEPART_RATE_DEG_S = 0.5
+# persisted lat tables: 1 = legacy torque×lat-g index, 2 = away/toward center
+LAT_AXIS_FRAME_VERSION = 2
+LAT_AXIS_FRAME_KEY = "HondaSteerLatAxisFrameParams"
+
+
+def _depart_center_sign(steering_angle_deg, steering_rate_deg):
+  """+1 = |steer| increasing (away from center), −1 = |steer| decreasing, 0 = unknown."""
+  angle = float(steering_angle_deg)
+  rate = float(steering_rate_deg)
+  if abs(angle) < MIN_DEPART_ANGLE_DEG or abs(rate) < MIN_DEPART_RATE_DEG_S:
+    return 0.0
+  return 1.0 if angle * rate > 0.0 else -1.0
+
+
+def path_learning_curv_err(desired_lat_accel, actual_lat_accel, max_lat_accel):
+  """Learning error in path frame: grow when |desired lat g| is under-delivered, same turn direction."""
+  desired_lat_accel = float(desired_lat_accel)
+  actual_lat_accel = float(actual_lat_accel)
+  scale = float(max_lat_accel)
+  if desired_lat_accel * actual_lat_accel >= 0.0:
+    return _clip((abs(desired_lat_accel) - abs(actual_lat_accel)) / scale, -1.0, 1.0)
+  return _clip((desired_lat_accel - actual_lat_accel) / scale, -1.0, 1.0)
+
+
+def lat_pct_depart_frame(actual_lat_accel, max_lat_accel, depart_sign):
+  """Convert openpilot path-frame |lat g| into learner lat-axis coordinate."""
+  if depart_sign == 0.0:
+    return 0.0
+  mag_pct = abs(float(actual_lat_accel)) / float(max_lat_accel) * 100.0
+  return _clip(depart_sign * mag_pct, -100.0, 100.0)
+
+
+def _reset_lat_axis_to_identity(lat_axis):
+  for pos in lat_axis.positions:
+    if pos == lat_axis.frozen:
+      continue
+    lat_axis.factors[pos] = 1.0
+    lat_axis.alphas[pos] = 0.0
 
 
 def _pct_key(pct):
@@ -169,6 +212,8 @@ class SteerTorqueLearner:
     # percentage axis stays finite rather than disabling the learner outright
     self.max_lat_accel = float(max_lat_accel) if max_lat_accel and max_lat_accel > 0.1 else 1.8
     self.lat = LearnedAxis("lat", LAT_SLOTS, LAT_FROZEN, LAT_KEY_FMT, param_get, alpha_max=LAT_ALPHA_MAX)
+    if _load(param_get, LAT_AXIS_FRAME_KEY, 1) < LAT_AXIS_FRAME_VERSION:
+      _reset_lat_axis_to_identity(self.lat)
     self.torque = LearnedAxis("torque", TORQUE_SLOTS, TORQUE_FROZEN, TORQUE_KEY_FMT, param_get)
     self.speed = LearnedAxis("speed", SPEED_SLOTS, SPEED_FROZEN, SPEED_KEY_FMT, param_get)
     self.prev_output = 0.0
@@ -182,6 +227,7 @@ class SteerTorqueLearner:
     self.blended_lat_factor = 1.0
     self.blended_torque_factor = 1.0
     self.blended_speed_factor = 1.0
+    self.depart_sign = 0.0
 
   def _record_blended_factors(self, lat_pct, torque_pct, speed_mph):
     self.blended_lat_factor = self.lat.blend(self.lat.weights(lat_pct))[0]
@@ -193,7 +239,7 @@ class SteerTorqueLearner:
     return (self.lat, self.torque, self.speed)
 
   def update(self, torque, last_torque, lat_active, steer_control_active, steering_pressed,
-             v_ego, desired_curvature, current_curvature):
+             v_ego, desired_curvature, current_curvature, steering_angle_deg=0.0, steering_rate_deg=0.0):
     """Shape the torque request and learn from the lateral acceleration tracking error.
 
     torque:               actuators.torque, the lateral controller's request [-1, 1]
@@ -202,6 +248,8 @@ class SteerTorqueLearner:
                           previous shaped output to detect a constraining limiter
     desired_curvature:    actuators.curvature (pre-feedforward, delay-compensated demand)
     current_curvature:    CC.currentCurvature (vehicle model observation)
+    steering_angle_deg:   carState.steeringAngleDeg (for away/toward center lat indexing)
+    steering_rate_deg:    carState.steeringRateDeg
     Returns the shaped torque to feed the rate limiter instead of actuators.torque.
     """
     torque = float(torque)
@@ -214,6 +262,7 @@ class SteerTorqueLearner:
     if abs(torque) < MIN_TORQUE:
       # no direction to work in: pass through, learn nothing
       self.lat_pct = 0.0
+      self.depart_sign = 0.0
       self.err = 0.0
       self.curv_err = 0.0
       self.learning = False
@@ -228,9 +277,8 @@ class SteerTorqueLearner:
     desired_lat_accel = float(desired_curvature) * v_sq
     actual_lat_accel = float(current_curvature) * v_sq
 
-    # torque-frame inputs: positive lateral accel means the car is already accelerating the way the
-    # torque is pushing, negative means the torque is fighting the current lateral accel
-    self.lat_pct = _clip(sign * actual_lat_accel / self.max_lat_accel * 100.0, -100.0, 100.0)
+    self.depart_sign = _depart_center_sign(steering_angle_deg, steering_rate_deg)
+    self.lat_pct = lat_pct_depart_frame(actual_lat_accel, self.max_lat_accel, self.depart_sign)
     torque_pct = torque_mag * 100.0
     speed_mph = _clip(v_ego * CV.MS_TO_MPH, 0.0, float(SPEED_SLOTS[-1][0]))
 
@@ -248,8 +296,7 @@ class SteerTorqueLearner:
     shaped_mag = _clip(torque_mag * lat_f * torque_f * speed_f + alpha_sum, -1.0, 1.0)
     output = sign * shaped_mag
 
-    # curvature tracking error in the torque frame
-    self.curv_err = _clip(sign * (desired_lat_accel - actual_lat_accel) / self.max_lat_accel, -1.0, 1.0)
+    self.curv_err = path_learning_curv_err(desired_lat_accel, actual_lat_accel, self.max_lat_accel)
     # when tables mute the wire, the plan still requested |torque| — credit that gap toward growth
     delivery_err = sign * (torque_mag - shaped_mag) / torque_mag
     self.err = _clip(self.curv_err + LEARN_DELIVERY_GAIN * delivery_err, -1.0, 1.0)
@@ -267,7 +314,7 @@ class SteerTorqueLearner:
     return output
 
   def learned_values(self):
-    values = {}
+    values = {LAT_AXIS_FRAME_KEY: float(LAT_AXIS_FRAME_VERSION)}
     for axis in self.axes:
       values.update(axis.learned_values())
     return values
