@@ -307,7 +307,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     if ((honda_hw == HONDA_BOSCH) && !honda_bosch_radarless) {
       allowed = allowed || (first_bytes == 0x00031002U);  // 02 10 03: extended diagnostic session
       allowed = allowed || (first_bytes == 0x03832803U);  // 03 28 83 03: CommunicationControl disable rx/tx
-      allowed = allowed || (first_bytes == 0x03828003U);  // 03 28 80 03: CommunicationControl enable rx/tx
+      allowed = allowed || (first_bytes == 0x03802803U);  // 03 28 80 03: CommunicationControl enable rx/tx (LE)
     }
     if (!allowed || (GET_BYTES(msg, 4, 4) != 0x0U)) {
       tx = false;
