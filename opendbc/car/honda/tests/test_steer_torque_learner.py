@@ -2,8 +2,9 @@ import math
 import unittest
 
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.steer_torque_learner import (ALPHA_MAX, FACTOR_MAX, FACTOR_MIN, LAT_ALPHA_MAX, LAT_SLOTS,
-                                                    SPEED_SLOTS, TORQUE_SLOTS, SteerTorqueLearner)
+from opendbc.car.honda.steer_torque_learner import (ALPHA_MAX, FACTOR_MAX, FACTOR_MIN, LAT_ALPHA_MAX, LAT_AXIS_FRAME_KEY,
+                                                    LAT_SLOTS, SPEED_SLOTS, TORQUE_SLOTS, SteerTorqueLearner,
+                                                    lat_pct_depart_frame, path_learning_curv_err)
 
 MAX_LAT_ACCEL = 1.8
 
@@ -14,13 +15,13 @@ def make_learner(params=None):
 
 
 def step(learner, torque, v_ego, desired_la, actual_la, last_torque=None, lat_active=True, steer_control_active=True,
-         steering_pressed=False):
+         steering_pressed=False, steering_angle_deg=15.0, steering_rate_deg=5.0):
   # feed lateral accelerations directly; the learner sees them as curvature * v^2
   v_sq = v_ego * v_ego
   if last_torque is None:
     last_torque = learner.prev_output  # unconstrained: applied exactly what was asked
   return learner.update(torque, last_torque, lat_active, steer_control_active, steering_pressed,
-                        v_ego, desired_la / v_sq, actual_la / v_sq)
+                        v_ego, desired_la / v_sq, actual_la / v_sq, steering_angle_deg, steering_rate_deg)
 
 
 class TestSteerTorqueLearner(unittest.TestCase):
@@ -36,7 +37,7 @@ class TestSteerTorqueLearner(unittest.TestCase):
                      "HondaSteerTorqueAlpha010Params", "HondaSteerSpeedFactor00Params", "HondaSteerSpeedAlpha70Params"):
       assert expected in keys
     learner = make_learner()
-    assert set(learner.learned_values()) == set(keys)
+    assert set(learner.learned_values()) - {LAT_AXIS_FRAME_KEY} == set(keys)
     assert all(pos in dict(LAT_SLOTS) for pos in range(-100, 101, 10))
     assert all(pos in dict(TORQUE_SLOTS) for pos in range(0, 101, 10))
     assert all(pos in dict(SPEED_SLOTS) for pos in range(0, 71, 10))
@@ -62,7 +63,7 @@ class TestSteerTorqueLearner(unittest.TestCase):
   def test_loads_and_clips_persisted_values(self):
     learner = make_learner({"HondaSteerSpeedFactor50Params": 1.5, "HondaSteerSpeedAlpha50Params": 9.0,
                             "HondaSteerLatFactorP100Params": "0.7", "HondaSteerLatAlphaP100Params": 9.0,
-                            "HondaSteerTorqueFactor100Params": None})
+                            "HondaSteerTorqueFactor100Params": None, LAT_AXIS_FRAME_KEY: 2})
     assert learner.speed.factors[50] == 1.5
     assert learner.speed.alphas[50] == ALPHA_MAX
     assert learner.lat.factors[100] == 0.7
@@ -82,13 +83,14 @@ class TestSteerTorqueLearner(unittest.TestCase):
     learner.torque.factors[50] = 1.1
     learner.lat.factors[50] = 1.05
     learner.lat.alphas[50] = 0.02
-    # left torque 0.5 with the car already at +50% lat accel (same direction): lat axis at +50%
-    out = step(learner, 0.5, v, desired_la=0.9, actual_la=0.9)
+    # away from center at +50% |lat g| uses the +50% lat slot (angle/rate same sign)
+    out = step(learner, 0.5, v, desired_la=0.9, actual_la=0.9, steering_angle_deg=15.0, steering_rate_deg=5.0)
     assert math.isclose(out, 0.5 * 1.2 * 1.1 * 1.05 + 0.02, rel_tol=1e-9)
-    # right torque with +50% physical lat accel: torque-frame lat is -50% (uses default lat factor 1.0, not +50 slot)
-    out = step(learner, -0.5, v, desired_la=-0.9, actual_la=0.9)
+    assert math.isclose(learner.lat_pct, 50.0, abs_tol=1e-3)
+    # toward center at the same |lat g| uses the -50% slot (rate opposes angle), not the +50 factors
+    out = step(learner, -0.5, v, desired_la=-0.9, actual_la=0.9, steering_angle_deg=-15.0, steering_rate_deg=5.0)
     assert math.isclose(out, -(0.5 * 1.2 * 1.1), abs_tol=1e-3)
-    assert math.isclose(learner.lat_pct, -50.0)
+    assert math.isclose(learner.lat_pct, -50.0, abs_tol=1e-3)
 
   def test_blended_factors_telemetry(self):
     learner = make_learner()
@@ -96,7 +98,7 @@ class TestSteerTorqueLearner(unittest.TestCase):
     learner.lat.factors[50] = 1.1
     learner.torque.factors[50] = 1.2
     learner.speed.factors[50] = 0.9
-    step(learner, 0.5, v, desired_la=0.9, actual_la=0.9)
+    step(learner, 0.5, v, desired_la=0.9, actual_la=0.9, steering_angle_deg=12.0, steering_rate_deg=4.0)
     assert math.isclose(learner.blended_lat_factor, 1.1, abs_tol=1e-3)
     assert math.isclose(learner.blended_torque_factor, 1.2, abs_tol=1e-3)
     assert math.isclose(learner.blended_speed_factor, 0.9, abs_tol=1e-3)
@@ -106,7 +108,7 @@ class TestSteerTorqueLearner(unittest.TestCase):
     v = 30 * CV.MPH_TO_MS  # exactly the frozen speed slot
     for _ in range(500):
       # tiny torque (0% torque slot), zero current lat accel (0% lat slot), persistent undershoot
-      step(learner, 0.005, v, desired_la=0.9, actual_la=0.0)
+      step(learner, 0.005, v, desired_la=0.9, actual_la=0.0, steering_angle_deg=0.0, steering_rate_deg=0.0)
     assert learner.speed.factors[30] == 1.0 and learner.speed.alphas[30] == 0.0
     assert learner.torque.factors[0] == 1.0 and learner.torque.alphas[0] == 0.0
     assert learner.lat.factors[0] == 1.0 and learner.lat.alphas[0] == 0.0
@@ -132,7 +134,7 @@ class TestSteerTorqueLearner(unittest.TestCase):
     # mirror image: right torque with a right-side undershoot grows the same way
     learner = make_learner()
     for _ in range(200):
-      step(learner, -0.5, v, desired_la=-1.2, actual_la=-0.9)
+      step(learner, -0.5, v, desired_la=-1.2, actual_la=-0.9, steering_angle_deg=-15.0, steering_rate_deg=-5.0)
     assert learner.speed.factors[50] > 1.0 and learner.torque.factors[50] > 1.0
 
   def test_learning_gates(self):
@@ -213,9 +215,34 @@ class TestSteerTorqueLearner(unittest.TestCase):
         store[key] = -ALPHA_MAX
       else:
         store[key] = FACTOR_MIN
+    store[LAT_AXIS_FRAME_KEY] = 2
     learner = make_learner(store)
-    out = step(learner, 1.0, v, desired_la=0.5, actual_la=0.5)
+    out = step(learner, 1.0, v, desired_la=0.5, actual_la=0.5, steering_angle_deg=12.0, steering_rate_deg=4.0)
     assert out < 0.0
+
+  def test_path_learning_curv_err_same_sign_turns(self):
+    assert path_learning_curv_err(1.2, 0.9, MAX_LAT_ACCEL) > 0.0
+    assert path_learning_curv_err(0.6, 0.9, MAX_LAT_ACCEL) < 0.0
+    assert path_learning_curv_err(-1.2, -0.9, MAX_LAT_ACCEL) > 0.0
+
+  def test_depart_center_lat_index(self):
+    assert lat_pct_depart_frame(0.9, MAX_LAT_ACCEL, 1.0) == 50.0
+    assert lat_pct_depart_frame(0.9, MAX_LAT_ACCEL, -1.0) == -50.0
+    assert lat_pct_depart_frame(0.9, MAX_LAT_ACCEL, 0.0) == 0.0
+    learner = make_learner()
+    v = 50 * CV.MPH_TO_MS
+    step(learner, 0.5, v, 0.9, 0.9, steering_angle_deg=20.0, steering_rate_deg=8.0)
+    assert learner.depart_sign == 1.0
+    assert math.isclose(learner.lat_pct, 50.0, abs_tol=1e-3)
+    step(learner, 0.5, v, 0.9, 0.9, steering_angle_deg=20.0, steering_rate_deg=-8.0)
+    assert learner.depart_sign == -1.0
+    assert math.isclose(learner.lat_pct, -50.0, abs_tol=1e-3)
+
+  def test_legacy_lat_table_reset_without_frame_version(self):
+    store = {"HondaSteerLatFactorP050Params": 0.6, "HondaSteerLatAlphaP050Params": 0.5}
+    learner = make_learner(store)
+    assert learner.lat.factors[50] == 1.0
+    assert learner.lat.alphas[50] == 0.0
 
   def test_clamps_hold_under_sustained_error(self):
     v = 50 * CV.MPH_TO_MS
