@@ -481,7 +481,8 @@ class CarController(CarControllerBase):
     # self.last_torque is what actually went to the EPS last tick (rate limiter + MDX brake clip
     # applied), so the learner can tell when a downstream limit constrained its request and pause.
     steer_torque = self.steer_learner.update(actuators.torque, self.last_torque, CC.latActive, CS.steer_control_active,
-                                             CS.out.steeringPressed, CS.out.vEgo, actuators.curvature, CC.currentCurvature)
+                                             CS.out.steeringPressed, CS.out.vEgo, actuators.curvature, CC.currentCurvature,
+                                             CS.out.steeringAngleDeg, CS.out.steeringRateDeg)
     limited_torque = rate_limit(steer_torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
     if (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and \
