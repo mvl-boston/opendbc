@@ -238,6 +238,41 @@ class TestSteerTorqueLearner(unittest.TestCase):
     assert learner.depart_sign == -1.0
     assert math.isclose(learner.lat_pct, -50.0, abs_tol=1e-3)
 
+  def test_torque_factor_scales_magnitude_same_sign(self):
+    v = 50 * CV.MPH_TO_MS
+    for torque in (0.5, -0.5):
+      learner = make_learner()
+      learner.torque.factors[50] = 1.25
+      out_hi = step(learner, torque, v, 0.0, 0.0, steering_angle_deg=0.0, steering_rate_deg=0.0)
+      learner.torque.factors[50] = 0.8
+      out_lo = step(learner, torque, v, 0.0, 0.0, steering_angle_deg=0.0, steering_rate_deg=0.0)
+      assert (out_hi > 0) == (torque > 0)
+      assert (out_lo > 0) == (torque > 0)
+      assert abs(out_hi) > abs(torque)
+      assert abs(out_lo) < abs(torque)
+      assert math.isclose(out_hi, torque * 1.25, abs_tol=1e-3)
+      assert math.isclose(out_lo, torque * 0.8, abs_tol=1e-3)
+
+  def test_negative_alpha_opposes_torque_when_dominant(self):
+    v = 50 * CV.MPH_TO_MS
+    for torque in (0.5, -0.5):
+      learner = make_learner()
+      learner.torque.alphas[50] = -0.6
+      out = step(learner, torque, v, 0.0, 0.0, steering_angle_deg=0.0, steering_rate_deg=0.0)
+      # shaped_mag = 0.5 - 0.6 < 0 → output sign flips vs plan
+      assert (out > 0) != (torque > 0)
+      assert math.isclose(out, -torque * 0.2, abs_tol=1e-3)
+
+  def test_negative_alpha_trims_without_flip_when_small(self):
+    v = 50 * CV.MPH_TO_MS
+    for torque in (0.5, -0.5):
+      learner = make_learner()
+      learner.torque.alphas[50] = -0.1
+      out = step(learner, torque, v, 0.0, 0.0, steering_angle_deg=0.0, steering_rate_deg=0.0)
+      assert (out > 0) == (torque > 0)
+      assert abs(out) < abs(torque)
+      assert math.isclose(out, torque * 0.8, rel_tol=1e-6)
+
   def test_lat_alpha_depart_boosts_left_and_right(self):
     """+lat α at departing slots increases |τ_out| for depart-left and depart-right."""
     v = 50 * CV.MPH_TO_MS
