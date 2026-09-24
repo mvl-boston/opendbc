@@ -2,6 +2,8 @@
 import numpy as np
 from opendbc.car import get_safety_config, structs, uds
 from opendbc.car.common.conversions import Conversions as CV
+from opendbc.car.can_definitions import CanData
+from opendbc.car.carlog import carlog
 from opendbc.car.disable_ecu import disable_ecu, clear_all_dtcs, clear_ecu_dtcs
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
@@ -366,7 +368,22 @@ class CarInterface(CarInterfaceBase):
       # Bosch non-CAN FD: radar disable is also deferred in CarController (same stock-ACC handoff).
 
   @staticmethod
+  def _reenable_bosch_radar(CP, can_send) -> None:
+    # ISO-TP single frames on the radar functional address. These match carcontroller's
+    # radar_reenable bursts and are allowlisted in hondaBosch safety (full IsoTpParallelQuery
+    # deinit uses flow-control frames that safety blocks while onroad).
+    bus = CanBus(CP).pt
+    addr = 0x18DAB0F1
+    for _ in range(5):
+      can_send([CanData(addr, b'\x02\x10\x03\x00\x00\x00\x00\x00', bus)])
+      can_send([CanData(addr, b'\x03\x28\x80\x03\x00\x00\x00\x00', bus)])
+
+  @staticmethod
   def deinit(CP, can_recv, can_send):
+    if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS):
+      carlog.warning("re-enable Bosch radar (raw UDS)")
+      CarInterface._reenable_bosch_radar(CP, can_send)
+      return
     communication_control = bytes([uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.ENABLE_RX_ENABLE_TX,
                                    uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT])
     CarInterface.init(CP, can_recv, can_send, communication_control)
