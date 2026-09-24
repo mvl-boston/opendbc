@@ -238,6 +238,88 @@ class TestSteerTorqueLearner(unittest.TestCase):
     assert learner.depart_sign == -1.0
     assert math.isclose(learner.lat_pct, -50.0, abs_tol=1e-3)
 
+  def test_lat_alpha_depart_boosts_left_and_right(self):
+    """+lat α at departing slots increases |τ_out| for depart-left and depart-right."""
+    v = 50 * CV.MPH_TO_MS
+    la = 0.9  # 50% |lat g|
+    cases = (
+      ("depart_left", -0.5, -20.0, -5.0),
+      ("depart_right", 0.5, 20.0, 5.0),
+    )
+    for _name, torque, angle, rate in cases:
+      learner = make_learner()
+      learner.lat.alphas[50] = 0.15
+      base = step(learner, torque, v, la, la, steering_angle_deg=angle, steering_rate_deg=rate)
+      learner.lat.alphas[50] = 0.0
+      plain = step(learner, torque, v, la, la, steering_angle_deg=angle, steering_rate_deg=rate)
+      assert learner.depart_sign == 1.0
+      assert math.isclose(learner.lat_pct, 50.0, abs_tol=1e-3)
+      assert abs(base) > abs(plain)
+      assert (base > 0) == (torque > 0)
+
+  def test_lat_alpha_center_trims_left_and_right(self):
+    """−lat α at centering slots reduces |τ_out| when unwinding from left or right."""
+    v = 50 * CV.MPH_TO_MS
+    la = 0.9
+    cases = (
+      ("center_from_left", -0.4, -20.0, 5.0),
+      ("center_from_right", 0.4, 20.0, -5.0),
+    )
+    for _name, torque, angle, rate in cases:
+      learner = make_learner()
+      learner.lat.alphas[-50] = -0.15
+      trimmed = step(learner, torque, v, la, la, steering_angle_deg=angle, steering_rate_deg=rate)
+      learner.lat.alphas[-50] = 0.0
+      plain = step(learner, torque, v, la, la, steering_angle_deg=angle, steering_rate_deg=rate)
+      assert learner.depart_sign == -1.0
+      assert math.isclose(learner.lat_pct, -50.0, abs_tol=1e-3)
+      assert abs(trimmed) < abs(plain)
+      assert (trimmed > 0) == (torque > 0)
+
+  def test_learning_corrective_depart_and_center_scenarios(self):
+    """Undershoot grows +depart lat α; overshoot while centering grows −centering lat α (L/R)."""
+    v = 50 * CV.MPH_TO_MS
+
+    def learn_lat(torque, angle, rate, desired_la, actual_la, slot, expect_alpha_up):
+      learner = make_learner()
+      before = learner.lat.alphas[slot]
+      for _ in range(200):
+        step(learner, torque, v, desired_la, actual_la, steering_angle_deg=angle, steering_rate_deg=rate)
+      after = learner.lat.alphas[slot]
+      if expect_alpha_up:
+        assert after > before
+        assert learner.err > 0.0
+      else:
+        assert after < before
+        assert learner.err < 0.0
+
+    # depart left (MDX-style −τ): need more |lat g|
+    learn_lat(-0.5, -20.0, -5.0, -1.2, -0.9, 50, True)
+    # depart right
+    learn_lat(0.5, 20.0, 5.0, 1.2, 0.9, 50, True)
+    # center from left: plan easing but car still has too much |lat g|
+    learn_lat(-0.4, -20.0, 5.0, -0.4, -0.9, -50, False)
+    # center from right
+    learn_lat(0.4, 20.0, -5.0, 0.4, 0.9, -50, False)
+
+  def test_learning_corrective_torque_and_speed_axes(self):
+    v = 50 * CV.MPH_TO_MS
+    learner = make_learner()
+    for _ in range(200):
+      step(learner, 0.5, v, desired_la=1.2, actual_la=0.9, steering_angle_deg=15.0, steering_rate_deg=5.0)
+    assert learner.torque.factors[50] > 1.0 and learner.torque.alphas[50] > 0.0
+    assert learner.speed.factors[50] > 1.0 and learner.speed.alphas[50] > 0.0
+    learner = make_learner()
+    for _ in range(200):
+      step(learner, -0.5, v, desired_la=-1.2, actual_la=-0.9, steering_angle_deg=-15.0, steering_rate_deg=-5.0)
+    assert learner.torque.factors[50] > 1.0 and learner.torque.alphas[50] > 0.0
+    assert learner.speed.factors[50] > 1.0 and learner.speed.alphas[50] > 0.0
+    learner = make_learner()
+    for _ in range(200):
+      step(learner, 0.5, v, desired_la=0.6, actual_la=0.9, steering_angle_deg=15.0, steering_rate_deg=5.0)
+    assert learner.torque.factors[50] < 1.0 and learner.torque.alphas[50] < 0.0
+    assert learner.speed.factors[50] < 1.0 and learner.speed.alphas[50] < 0.0
+
   def test_legacy_lat_table_reset_without_frame_version(self):
     store = {"HondaSteerLatFactorP050Params": 0.6, "HondaSteerLatAlphaP050Params": 0.5}
     learner = make_learner(store)
