@@ -14,6 +14,7 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
+from opendbc.car.honda.steer_torque_learner import SteerTorqueLearner
 
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
 from opendbc.sunnypilot.car.honda.gas_interceptor import GasInterceptorCarController
@@ -195,7 +196,12 @@ class HondaParamWriter:
         pass
 
       for key, value in pending.items():
-        self._params.put(key, value)
+        # a key that is not registered in this openpilot build must not take the writer thread
+        # down with it (every other learned value would silently stop persisting)
+        try:
+          self._params.put(key, value)
+        except Exception:
+          pass
 
 
 class CarController(CarControllerBase, MadsCarController, GasInterceptorCarController, IntelligentCruiseButtonManagementInterface):
@@ -380,6 +386,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.launch_err_n = 0
     self.launch_ceiling_ticks = 0
 
+    # steering torque shaping learner (see steer_torque_learner.py): learns factor/alpha tables over
+    # lateral accel %, |torque| % and speed, and feeds the shaped request into the rate limiter
+    self.steer_learner = SteerTorqueLearner(CP.maxLateralAccel, Params().get)
+
     self.latFactors = {
       "05": 1.0 if (Params().get("HondaLatAccelFactor05Params") is None) else Params().get("HondaLatAccelFactor05Params"),
       "10": 1.0 if (Params().get("HondaLatAccelFactor10Params") is None) else Params().get("HondaLatAccelFactor10Params"),
@@ -496,8 +506,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     if CS.out.gasPressed or not CC.longActive:
       self.nidec_pid.reset()
 
-    # *** rate limit steer ***
-    limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
+    # *** shape steer torque with the learned tables, then rate limit ***
+    # self.last_torque is what actually went to the EPS last tick (rate limiter + MDX brake clip
+    # applied), so the learner can tell when a downstream limit constrained its request and pause.
+    steer_torque = self.steer_learner.update(actuators.torque, self.last_torque, CC.latActive, CS.steer_control_active,
+                                             CS.out.steeringPressed, CS.out.vEgo, actuators.curvature, CC.currentCurvature,
+                                             CS.out.steeringAngleDeg, CS.out.steeringRateDeg)
+    limited_torque = rate_limit(steer_torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
     if (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and \
         (self.apply_brake_last > 0 or self.new_accel < 1e-5): # lower steer limits while braking
@@ -749,6 +764,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         gf_eff = sum(w * self.gas_factors[band] for band, w in gas_w.items())
         ga_eff = sum(w * self.gas_alphas[band] for band, w in gas_w.items())
         pcm_accel = int(np.clip((ga_eff + gas_accel * gf_eff / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
+        if pcm_accel > 0:
+          pcm_speed = max(pcm_speed, 1.0) # prevent fault by always sending positive speed during gas
       max_speedcontrol = (pcm_speed > 99.999)
       prior_speed_factors = dict(self.speed_factors)
       prior_speed_alphas = dict(self.speed_alphas)
@@ -1213,17 +1230,22 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = self.last_torque
+    steer_f = self.steer_learner
+    # actuatorsOutput gas/brake/speed: steer learner blended lat / |torque| / speed factors (was long-channel telemetry)
+    steer_gas = float(steer_f.blended_lat_factor)
+    steer_brake = float(steer_f.blended_torque_factor)
+    steer_speed = float(steer_f.blended_speed_factor)
     if self.CP.flags & HondaFlags.BOSCH:
-      new_actuators.speed = float(self.gasalpha)
+      new_actuators.speed = steer_speed
       new_actuators.accel = self.accel
-      new_actuators.gas = float(self.gasfactor)
-      new_actuators.brake = float(self.windfactor)
+      new_actuators.gas = steer_gas
+      new_actuators.brake = steer_brake
       new_actuators.torqueOutputCan = apply_torque
     else:
-      new_actuators.speed = float(self.nidec_pid_factor)
+      new_actuators.speed = steer_speed
       new_actuators.accel = float(self.accel)
-      new_actuators.gas = float(self.average_factor)
-      new_actuators.brake = float(self.sat_accel)
+      new_actuators.gas = steer_gas
+      new_actuators.brake = steer_brake
       new_actuators.torqueOutputCan = float(self.speed_factors["low"])
 
     if self.frame % 6000 == 0:
@@ -1254,6 +1276,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           learned_values[NIDEC_SPEED_FACTOR_KEYS[band]] = self.speed_factors[band]
           learned_values[NIDEC_SPEED_ALPHA_KEYS[band]] = self.speed_alphas[band]
         self.param_writer.put_many(learned_values)
+
+    if self.frame % 6000 == 3000:
+      self.param_writer.put_many(self.steer_learner.learned_values())
 
     if self.frame % 12000 == 30 and (self.CP.flags & HondaFlags.NIDEC):
       self.param_writer.put_many({
