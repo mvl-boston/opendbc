@@ -46,11 +46,11 @@ or the rate limiter blocked a meaningful shaped request on the previous tick.
 from opendbc.car.common.conversions import Conversions as CV
 
 # per-tick (100 Hz) adaptation rates, applied after the hat weight and the 1/3 axis split
-FACTOR_RATE = 0.01
-ALPHA_RATE = 0.001
-FACTOR_MIN = 0.5
+FACTOR_RATE = 0.03
+ALPHA_RATE = 0.01
+FACTOR_MIN = 0.25
 FACTOR_MAX = 100.0
-ALPHA_MAX = 0.1
+ALPHA_MAX = 0.02
 LAT_ALPHA_MAX = 1.5
 # weight on (request - shaped) / |request| added to curvature error for learning
 LEARN_DELIVERY_GAIN = 0.5
