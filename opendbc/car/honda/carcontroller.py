@@ -14,6 +14,7 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
+from opendbc.car.honda.lateral_model import HondaLateralModel
 
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
 from opendbc.sunnypilot.car.honda.gas_interceptor import GasInterceptorCarController
@@ -380,6 +381,11 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.launch_err_n = 0
     self.launch_ceiling_ticks = 0
 
+    # speed-dependent lateral plant model (see lateral_model.py): identifies m/s^2 per unit wire torque
+    # online and adds a feedforward correction to the torque controller's request
+    self.lat_model = HondaLateralModel(CP.lateralTuning.torque.latAccelFactor if CP.lateralTuning.which() == 'torque' else 0.0,
+                                       Params().get)
+
     self.latFactors = {
       "05": 1.0 if (Params().get("HondaLatAccelFactor05Params") is None) else Params().get("HondaLatAccelFactor05Params"),
       "10": 1.0 if (Params().get("HondaLatAccelFactor10Params") is None) else Params().get("HondaLatAccelFactor10Params"),
@@ -496,8 +502,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     if CS.out.gasPressed or not CC.longActive:
       self.nidec_pid.reset()
 
-    # *** rate limit steer ***
-    limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
+    # *** add the plant model's feedforward correction, then rate limit ***
+    # self.last_torque is what actually went to the EPS last tick (rate limiter + MDX brake clip
+    # applied); the model regresses measured lateral accel on it to identify the car's gain.
+    steer_torque = self.lat_model.update(actuators.torque, self.last_torque, CC.latActive, CS.steer_control_active,
+                                         CS.out.steeringPressed, CS.out.vEgo, actuators.curvature, CC.currentCurvature)
+    limited_torque = rate_limit(steer_torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
     # Lower steer limit only while the brake is actually commanded. It used to also apply whenever the
     # PCM gas command was zero, which pinned the wire at 233/433 through most coasting low-speed turns
@@ -1217,17 +1227,22 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = self.last_torque
+    # actuatorsOutput gas/brake/speed: lateral model gain at this speed (m/s^2 per unit torque), feedforward
+    # correction added this tick, and whether identification ran (was long-channel telemetry)
+    steer_gas = float(self.lat_model.gain_now)
+    steer_brake = float(self.lat_model.ff_correction)
+    steer_speed = 1.0 if self.lat_model.learning else 0.0
     if self.CP.flags & HondaFlags.BOSCH:
-      new_actuators.speed = float(self.gasalpha)
+      new_actuators.speed = steer_speed
       new_actuators.accel = self.accel
-      new_actuators.gas = float(self.gasfactor)
-      new_actuators.brake = float(self.windfactor)
+      new_actuators.gas = steer_gas
+      new_actuators.brake = steer_brake
       new_actuators.torqueOutputCan = apply_torque
     else:
-      new_actuators.speed = float(self.nidec_pid_factor)
+      new_actuators.speed = steer_speed
       new_actuators.accel = float(self.accel)
-      new_actuators.gas = float(self.average_factor)
-      new_actuators.brake = float(self.sat_accel)
+      new_actuators.gas = steer_gas
+      new_actuators.brake = steer_brake
       new_actuators.torqueOutputCan = float(self.speed_factors["low"])
 
     if self.frame % 6000 == 0:
@@ -1258,6 +1273,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           learned_values[NIDEC_SPEED_FACTOR_KEYS[band]] = self.speed_factors[band]
           learned_values[NIDEC_SPEED_ALPHA_KEYS[band]] = self.speed_alphas[band]
         self.param_writer.put_many(learned_values)
+
+    if self.frame % 6000 == 3000:
+      self.param_writer.put_many(self.lat_model.learned_values())
 
     if self.frame % 12000 == 30 and (self.CP.flags & HondaFlags.NIDEC):
       self.param_writer.put_many({
