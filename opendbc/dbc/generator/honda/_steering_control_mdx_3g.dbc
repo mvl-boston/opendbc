@@ -1,4 +1,4 @@
-CM_ "Same as _steering_control_a.dbc except that STEER_TORQUE_SENSOR is re-zeroed: the MDX 3G column torque sensor reads about -172 with hands off (routes 3792d010590cb83a|0000010e and |0000010f, engaged, |wire|<0.1, |rate|<3 deg/s: p50 -176 / -168; standstill -212 / -189)";
+CM_ "Same as _steering_control_a.dbc except that STEER_TORQUE_SENSOR is re-zeroed: the MDX 3G column torque sensor reads about -172 with hands off;
 
 BO_ 228 STEERING_CONTROL: 5 ADAS
  SG_ STEER_TORQUE : 7|16@0- (1,0) [-3840|3840] "" EPS
