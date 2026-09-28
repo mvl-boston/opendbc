@@ -1226,11 +1226,15 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                                        self.last_button_frame, self.CAN))
 
     new_actuators = actuators.as_builder()
-    new_actuators.torque = self.last_torque
+    # request plus only the limiting that actually happened (rate limiter, brake clip, steer_control_active),
+    # NOT the wire torque: controlsd freezes the torque controller's integrator whenever this differs from the
+    # request by >0.01, and torqued fits latAccelFactor to it (see lateral_model.py, "Reporting"). The wire
+    # torque is actuatorsOutput.torque + actuatorsOutput.brake.
+    new_actuators.torque = float(actuators.torque + (self.last_torque - steer_torque))
     # actuatorsOutput gas/brake/speed: lateral model gain at this speed (m/s^2 per unit torque), feedforward
-    # correction added this tick, and whether identification ran (was long-channel telemetry)
+    # correction actually added this tick, and whether identification ran (was long-channel telemetry)
     steer_gas = float(self.lat_model.gain_now)
-    steer_brake = float(self.lat_model.ff_correction)
+    steer_brake = float(self.lat_model.applied_correction)
     steer_speed = 1.0 if self.lat_model.learning else 0.0
     if self.CP.flags & HondaFlags.BOSCH:
       new_actuators.speed = steer_speed
