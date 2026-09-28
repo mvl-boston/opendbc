@@ -109,8 +109,9 @@ def _load(param_get, key, default):
 
 class HondaLateralModel:
   def __init__(self, lat_accel_factor, param_get=None):
-    laf = float(lat_accel_factor) if lat_accel_factor and lat_accel_factor > 0.1 else DEFAULT_LAT_ACCEL_FACTOR
-    self.lat_accel_factor = laf
+    self.lat_accel_factor = (
+      float(lat_accel_factor) if lat_accel_factor and lat_accel_factor > 0.1 else DEFAULT_LAT_ACCEL_FACTOR
+    )
     self.gains = [_clip(_load(param_get, GAIN_KEY_FMT.format(slot=mph), prior), GAIN_MIN, GAIN_MAX)
                   for mph, prior in zip(GAIN_BINS_MPH, GAIN_PRIOR, strict=True)]
     self.wire_hist = deque([0.0] * max(int(round(WIRE_DELAY / DT_CTRL)), 1), maxlen=max(int(round(WIRE_DELAY / DT_CTRL)), 1))
