@@ -29,29 +29,55 @@ Learning compares requested and observed lateral acceleration in the path frame
 re-flipping by torque sign. Lat slot factors/alphas persisted on disk use the
 depart/center convention; tables saved under the old torque-frame index are reset
 when ``HondaSteerLatAxisFrameParams`` < 2. A delivery
-term is added when the shaper mutes the request (tables pulled magnitude well
-below |actuators.torque|), so wire understeer from poisoned alphas can still
-drive factors back up even when the curvature signal disagrees.
+term ``(|request| - |shaped|) / |request|`` is added to that error: it credits a
+muted request toward growth and an amplified one toward shrinking, in the same
+way for left and right requests, so the tables regularize toward unity unless
+the curvature signal shows a sustained deficit or surplus.
 
-At apply time, blended alphas from the three axes are summed into the shaped
-request (no cross-axis alpha cap). Lateral slot alphas are clamped to
-``+-LAT_ALPHA_MAX``; torque and speed slot alphas use ``+-ALPHA_MAX``. The shaped
-magnitude may go negative when the alpha stack dominates the multiplicative term.
+At apply time the three blended factors multiply into one gain and the three
+blended alphas sum into one offset. Both are bounded and low-pass filtered
+before they touch the request:
+
+* The product is a hidden gain inside the lateral feedback loop. The torque
+  PID upstream is tuned for a unity actuator and torqued identifies the car from
+  the wire torque, so neither can see or compensate the ratio; whatever the
+  product is, the loop gain is multiplied by it. Route 0000010f (MDX, 60-70 mph)
+  ran a product of 3-4.5 and limit-cycled at ~1 Hz with the Honda rate limiter
+  binding on 94% of ticks; a closed-loop model of the same loop goes unstable
+  between 3.0 and 3.5. The applied gain is therefore clipped to
+  ``[GAIN_MIN, GAIN_MAX]`` and factor growth pauses while the cap binds so the
+  tables cannot run away behind it.
+* The torque axis is indexed on the controller's own output, so the raw blend
+  moves as fast as the request does. A first-order filter (``GAIN_FILTER_TAU``)
+  keeps the applied gain and offset quasi-static: the tables describe the
+  operating point, which changes over seconds, and must not modulate inside the
+  loop's bandwidth.
+
+Lateral slot alphas are clamped to ``+-LAT_ALPHA_MAX``; torque and speed slot
+alphas use ``+-ALPHA_MAX``. The shaped magnitude may go negative when the alpha
+stack dominates the multiplicative term.
 
 Learning pauses when lateral control is inactive, the EPS is not accepting
 commands, the driver is steering, speed is too low, output is saturated at |1.0|,
 or the rate limiter blocked a meaningful shaped request on the previous tick.
 """
 
+from opendbc.car import DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 
 # per-tick (100 Hz) adaptation rates, applied after the hat weight and the 1/3 axis split
 FACTOR_RATE = 0.03
 ALPHA_RATE = 0.01
-FACTOR_MIN = 1.0
-FACTOR_MAX = 100.0
+FACTOR_MIN = 0.5
+FACTOR_MAX = 2.0
 ALPHA_MAX = 0.02
 LAT_ALPHA_MAX = 1.5
+# bounds on the applied product lat_f * torque_f * speed_f (multiplies the lateral loop gain)
+GAIN_MIN = 0.5
+GAIN_MAX = 1.5
+# first-order time constant of the applied gain / offset (s); attenuates ~1 Hz by ~6x
+GAIN_FILTER_TAU = 1.0
+GAIN_FILTER_ALPHA = DT_CTRL / (GAIN_FILTER_TAU + DT_CTRL)
 # weight on (request - shaped) / |request| added to curvature error for learning
 LEARN_DELIVERY_GAIN = 0.5
 # below this speed curvature*v^2 is too small a fraction of maxLateralAccel to learn from
@@ -154,14 +180,16 @@ class LearnedAxis:
     alpha = sum(w * self.alphas[pos] for pos, w in weights.items())
     return factor, alpha
 
-  def learn(self, weights, err, torque_mag):
+  def learn(self, weights, err, torque_mag, learn_factors=True):
     # multiplicative factor update scaled by the request magnitude (a factor has no authority at
     # zero torque), additive alpha update; each slot learns in proportion to its hat weight,
-    # the frozen slot never moves
+    # the frozen slot never moves. learn_factors=False keeps the factors still while the applied
+    # gain clip is binding in the direction of err (a change there would be unobservable).
     for pos, w in weights.items():
       if w == 0.0 or pos == self.frozen:
         continue
-      self.factors[pos] = _clip(self.factors[pos] * (1.0 + w * FACTOR_RATE * err * torque_mag), FACTOR_MIN, FACTOR_MAX)
+      if learn_factors:
+        self.factors[pos] = _clip(self.factors[pos] * (1.0 + w * FACTOR_RATE * err * torque_mag), FACTOR_MIN, FACTOR_MAX)
       self.alphas[pos] = _clip(self.alphas[pos] + w * ALPHA_RATE * err, -self.alpha_max, self.alpha_max)
 
   def learned_values(self):
@@ -228,11 +256,26 @@ class SteerTorqueLearner:
     self.blended_torque_factor = 1.0
     self.blended_speed_factor = 1.0
     self.depart_sign = 0.0
+    # filtered gain / offset actually applied to the request (see module docstring)
+    self.gain = 1.0
+    self.alpha = 0.0
+    self.gain_capped = False
 
-  def _record_blended_factors(self, lat_pct, torque_pct, speed_mph):
-    self.blended_lat_factor = self.lat.blend(self.lat.weights(lat_pct))[0]
-    self.blended_torque_factor = self.torque.blend(self.torque.weights(torque_pct))[0]
-    self.blended_speed_factor = self.speed.blend(self.speed.weights(speed_mph))[0]
+  def _blend_and_filter(self, lat_w, torque_w, speed_w):
+    """Blend the three axes at the given hat weights, record the raw blends for telemetry and
+    advance the applied gain / offset filters toward them. Returns the unclipped raw gain."""
+    lat_f, lat_a = self.lat.blend(lat_w)
+    torque_f, torque_a = self.torque.blend(torque_w)
+    speed_f, speed_a = self.speed.blend(speed_w)
+    self.blended_lat_factor = lat_f
+    self.blended_torque_factor = torque_f
+    self.blended_speed_factor = speed_f
+    raw_gain = lat_f * torque_f * speed_f
+    # first-order low-pass toward the clipped raw blend; the filter runs on pass-through ticks
+    # too so an engage does not start from a stale operating point
+    self.gain += GAIN_FILTER_ALPHA * (_clip(raw_gain, GAIN_MIN, GAIN_MAX) - self.gain)
+    self.alpha += GAIN_FILTER_ALPHA * (lat_a + torque_a + speed_a - self.alpha)
+    return raw_gain
 
   @property
   def axes(self):
@@ -266,8 +309,9 @@ class SteerTorqueLearner:
       self.err = 0.0
       self.curv_err = 0.0
       self.learning = False
+      self.gain_capped = False
       speed_mph = _clip(v_ego * CV.MS_TO_MPH, 0.0, float(SPEED_SLOTS[-1][0]))
-      self._record_blended_factors(0.0, 0.0, speed_mph)
+      self._blend_and_filter(self.lat.weights(0.0), self.torque.weights(0.0), self.speed.weights(speed_mph))
       self.output = self.prev_output = torque
       return torque
 
@@ -285,30 +329,32 @@ class SteerTorqueLearner:
     lat_w = self.lat.weights(self.lat_pct)
     torque_w = self.torque.weights(torque_pct)
     speed_w = self.speed.weights(speed_mph)
-    lat_f, lat_a = self.lat.blend(lat_w)
-    torque_f, torque_a = self.torque.blend(torque_w)
-    speed_f, speed_a = self.speed.blend(speed_w)
-    self.blended_lat_factor = lat_f
-    self.blended_torque_factor = torque_f
-    self.blended_speed_factor = speed_f
+    raw_gain = self._blend_and_filter(lat_w, torque_w, speed_w)
 
-    alpha_sum = lat_a + torque_a + speed_a
-    shaped_mag = _clip(torque_mag * lat_f * torque_f * speed_f + alpha_sum, -1.0, 1.0)
+    shaped_mag = _clip(torque_mag * self.gain + self.alpha, -1.0, 1.0)
     output = sign * shaped_mag
 
     self.curv_err = path_learning_curv_err(desired_lat_accel, actual_lat_accel, self.max_lat_accel)
-    # when tables mute the wire, the plan still requested |torque| — credit that gap toward growth
-    delivery_err = sign * (torque_mag - shaped_mag) / torque_mag
+    # when tables mute the wire, the plan still requested |torque| — credit that gap toward growth.
+    # Both terms are magnitudes in the request's own direction, so no sign flip: a shaper that
+    # over-delivers must shrink on left and right requests alike (the previous sign * made it grow
+    # on one side and shrink on the other, so the tables followed the road's left/right balance).
+    delivery_err = (torque_mag - shaped_mag) / torque_mag
     self.err = _clip(self.curv_err + LEARN_DELIVERY_GAIN * delivery_err, -1.0, 1.0)
 
     self.learning = bool(lat_active) and bool(steer_control_active) and (not steering_pressed) and \
                     (v_ego > MIN_LEARN_SPEED) and (not constrained) and (abs(shaped_mag) < 1.0)
+    # while the applied gain clip binds in the direction the error is pushing, a factor change
+    # would not reach the wire: hold the factors there (alphas still learn) so they cannot pile
+    # up behind the cap and then all release at once
+    self.gain_capped = (raw_gain >= GAIN_MAX and self.err > 0.0) or (raw_gain <= GAIN_MIN and self.err < 0.0)
     if self.learning:
       # the same error drives all three axes, so each gets a third of the rate
       err_share = self.err / 3.0
-      self.lat.learn(lat_w, err_share, torque_mag)
-      self.torque.learn(torque_w, err_share, torque_mag)
-      self.speed.learn(speed_w, err_share, torque_mag)
+      learn_factors = not self.gain_capped
+      self.lat.learn(lat_w, err_share, torque_mag, learn_factors)
+      self.torque.learn(torque_w, err_share, torque_mag, learn_factors)
+      self.speed.learn(speed_w, err_share, torque_mag, learn_factors)
 
     self.output = self.prev_output = output
     return output
