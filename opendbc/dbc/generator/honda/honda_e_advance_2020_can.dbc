@@ -1,5 +1,5 @@
 CM_ "IMPORT _honda_common.dbc";
-CM_ "IMPORT _bosch_2018.dbc";
+CM_ "IMPORT _bosch_2018_e_advance.dbc";
 CM_ "IMPORT _bosch_radar_acc.dbc";
 CM_ "IMPORT _lkas_hud_8byte.dbc";
 CM_ "IMPORT _bosch_standstill.dbc";

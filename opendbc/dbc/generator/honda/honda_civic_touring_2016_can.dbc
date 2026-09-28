@@ -3,7 +3,7 @@ CM_ "IMPORT _nidec_common.dbc";
 CM_ "IMPORT _lkas_hud_5byte.dbc";
 CM_ "IMPORT _nidec_scm_group_b.dbc";
 CM_ "IMPORT _steering_sensors_a.dbc";
-CM_ "IMPORT _steering_control_a.dbc";
+CM_ "IMPORT _steering_control_honda_civic_2016.dbc";
 CM_ "IMPORT _gearbox_common.dbc";
 
 BO_ 493 HUD_SETTING: 5 XXX
