@@ -33,10 +33,26 @@ an integrator of delay-lag error does, and it is indifferent to rate limiting, c
 because those all act on the wire torque it regresses against. The only unmodelled input is the
 driver, so learning pauses while ``steeringPressed`` and for ``PRESS_HOLDOFF`` afterwards.
 
-Reporting
----------
-``gain_now`` (m/s^2 per unit torque at the current speed), ``ff_correction`` (torque added this tick)
-and ``learning`` (identification ran this tick) are exposed for the actuatorsOutput telemetry slots.
+Reporting, and staying compatible with an unmodified openpilot
+--------------------------------------------------------------
+``gain_now`` (m/s^2 per unit torque at the current speed), ``applied_correction`` (torque actually added
+this tick) and ``learning`` (identification ran this tick) are exposed for the actuatorsOutput telemetry
+slots (gas / brake / speed).
+
+controlsd freezes the torque controller's integrator whenever ``|actuators.torque - actuatorsOutput.torque|``
+exceeds 0.01 (its ``steer_limited_by_safety``), and torqued fits ``latAccelFactor`` to
+``-actuatorsOutput.torque``. If the car controller reported the true wire torque, the correction would
+trip that check on nearly every engaged tick (93-96% in routes 0000010e/0000010f, integrator |I| stuck
+near 0.03) and torqued would learn the highway plant gain, which the model then has to fight. So the
+car controller reports ``request + (wire - corrected request)``: the request plus only the limiting the
+rate limiter / clips actually did. The integrator then freezes only on real limiting, and torqued sees
+the plant *as corrected by this model*, whose feedforward is ``latAccelFactor`` by construction, so its
+live estimate settles on the same number the correction is computed against. The real wire torque is
+recoverable from the log as ``actuatorsOutput.torque + actuatorsOutput.brake``.
+
+Persisting the table needs the ``HondaLatGainNNParams`` keys registered in openpilot's
+``common/params_keys.h`` (``param_keys()`` lists them); unregistered keys are silently dropped by the
+param writer and the table simply restarts from the priors each drive.
 """
 from collections import deque
 
@@ -103,7 +119,8 @@ class HondaLateralModel:
     self.press_holdoff = 0.0
     # telemetry for the last update() call
     self.gain_now = float(np.interp(0.0, GAIN_BINS_MS, self.gains))
-    self.ff_correction = 0.0
+    self.ff_correction = 0.0        # model ff minus controller ff, before the unit-torque clip
+    self.applied_correction = 0.0   # output minus request, i.e. what was actually added this tick
     self.learning = False
     self.output = 0.0
 
@@ -127,11 +144,13 @@ class HondaLateralModel:
     self.gain_now = self.gain(v_ego)
     if not lat_active:
       self.ff_correction = 0.0
+      self.applied_correction = 0.0
       self.output = float(request_torque)
       return self.output
 
     self.ff_correction = self.feedforward_correction(desired_curvature, v_ego)
     self.output = _clip(request_torque + self.ff_correction, -1.0, 1.0)
+    self.applied_correction = self.output - float(request_torque)
     return self.output
 
   def _identify(self, wire_torque, current_curvature, v_ego, active, steering_pressed):
