@@ -510,7 +510,7 @@ STEER_THRESHOLD = {
   CAR.HONDA_ODYSSEY_5G_MMR: 600,
   # port extensions
   CAR.HONDA_ACCORD_9G: 30,
-  CAR.ACURA_MDX_3G: 400,
+  CAR.ACURA_MDX_3G: 300,  # on the re-zeroed STEER_TORQUE_SENSOR (acura_mdx_3g_can.dbc); was 400 on a signal centered at -172
   CAR.ACURA_TLX_1G: 200,
   CAR.ACURA_RLX_HYBRID: 2400,
 }
