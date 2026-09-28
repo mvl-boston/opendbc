@@ -28,7 +28,7 @@ How it learns
 Plant identification rather than tracking-error integration: the measured lateral accel is regressed
 on the wire torque that actually went to the EPS (delayed by the actuator delay, both low-passed at
 ``FILTER_TAU`` so only the quasi-static content is fitted), with a normalized LMS update spread over
-the two neighbouring speed bins. It identifies a bounded physical quantity, so it cannot drift the way
+the two neighboring speed bins. It identifies a bounded physical quantity, so it cannot drift the way
 an integrator of delay-lag error does, and it is indifferent to rate limiting, clipping and saturation
 because those all act on the wire torque it regresses against. The only unmodelled input is the
 driver, so learning pauses while ``steeringPressed`` and for ``PRESS_HOLDOFF`` afterwards.
