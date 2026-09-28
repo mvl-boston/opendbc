@@ -45,9 +45,11 @@ import numpy as np
 from opendbc.car import DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 
-# speed bins (mph, for readable Params keys) and the seed gains in m/s^2 per unit wire torque
+# speed bins (mph, for readable Params keys) and the seed gains in m/s^2 per unit wire torque, identified
+# offline on routes 3792d010590cb83a|0000010e, |0000010f (torque controller) and |00000111 (PID controller,
+# no shaper: 20 mph 1.0-1.3, 30 mph 2.2-2.4, 40 mph 2.6-2.9 agree with the torque routes within ~30%)
 GAIN_BINS_MPH = (5, 10, 15, 20, 30, 40, 50, 60, 70)
-GAIN_PRIOR = (0.10, 0.25, 0.45, 0.70, 1.60, 2.10, 2.20, 2.20, 2.30)
+GAIN_PRIOR = (0.10, 0.25, 0.45, 0.80, 1.90, 2.40, 2.10, 2.30, 2.60)
 GAIN_BINS_MS = tuple(mph * CV.MPH_TO_MS for mph in GAIN_BINS_MPH)
 GAIN_MIN = 0.10
 GAIN_MAX = 3.00
