@@ -138,18 +138,15 @@ NIDEC_SPEED_BANDS = (
   ("high", 16.0),
 )
 
-# Gas interceptor (comma pedal) gain bands. The interceptor gas is accel/4.8 * gasfactor * gas_mult(v),
-# and one scalar gasfactor cannot hold both ends: on the ACURA_ILX (route 2752303cce1f0aba|0000000c)
-# the measured pedal -> accel gain was ~11-15 m/s2 per unit pedal below 6 m/s against the ~8-11 the
-# fixed map assumes (1.4-1.7x hot), and ~1.0x from 10 m/s up. The scalar equilibrates on cruise
-# frames and every launch then overshoots (2.6 m/s2 against a 1.5 command at 3 m/s even with a
-# gentle wire ramp). Two nodes: the low one covers the clutch/converter regime, the high one is
-# the old scalar (same param key), linear blend between. Sorted by node speed (m/s).
-INTERCEPTOR_GAS_BANDS = (
-  ("low", 3.0),
-  ("high", 12.0),
-)
-INTERCEPTOR_GAS_FACTOR_KEYS: dict[str, str] = {"low": "HondaGasFactorLowParams", "high": "HondaGasFactorParams"}
+# The gas interceptor (comma pedal) path shares NIDEC_GAS_BANDS, the gas_factors/gas_alphas state,
+# the per-band learner and the param keys: its wire is accel/4.8 * gasfactor * gas_mult(v) + alpha, and
+# one scalar gasfactor cannot hold both ends there either. On the ACURA_ILX (route
+# 2752303cce1f0aba|0000000c) the measured pedal -> accel gain was ~11-15 m/s2 per unit pedal below
+# 6 m/s against the ~8-11 the fixed map assumes (1.4-1.7x hot), ~1.0x from 10 m/s up, and the
+# zero-accel pedal offset grows from ~0 below 7 m/s to ~0.12 at 13-16 m/s. The scalar equilibrates
+# on cruise frames and every launch then overshoots (2.6 m/s2 against a 1.5 command at 3 m/s even
+# with a gentle wire ramp). The old interceptor scalar persisted under HondaGasFactorParams, which is
+# the "high" node here, so its learned state seeds every node on the first drive with this code.
 
 # the low/high nodes keep the param keys the two-band scheme persisted, so learned state survives
 NIDEC_GAS_FACTOR_KEYS: dict[str, str] = {band: f"HondaGasFactor{band}Params" for band, _ in NIDEC_GAS_BANDS}
@@ -250,11 +247,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.gasalpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
     self.gasfactor_before_gasmax = self.gasfactor
-    # interceptor bands: the high node is the scalar the path persisted until now, the low node seeds
-    # from it so the first drive with this code starts from the same curve
-    self.interceptor_gas_factors = {"high": float(self.gasfactor)}
-    gf_low_param = Params().get("HondaGasFactorLowParams")
-    self.interceptor_gas_factors["low"] = float(self.gasfactor) if gf_low_param is None else float(gf_low_param)
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
     self.pitch = 0.0
@@ -336,6 +328,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.gas_factors_before_gasmax = dict(self.gas_factors)
     self.gas_factors_nomaxspeed = dict(self.gas_factors)
     self.gas_alphas_nomaxspeed = dict(self.gas_alphas)
+    # interceptor telemetry: blended factor/alpha at the current speed, refreshed on each 50 Hz gas frame
+    self.interceptor_gf_eff, self.interceptor_ga_eff = self.gas_band_blend(band_weights(NIDEC_GAS_BANDS, 0.0))
 
     self.speed_factors = {}
     self.speed_alphas = {}
@@ -412,6 +406,24 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       "55": 1.0 if (Params().get("HondaLatAccelFactor55Params") is None) else Params().get("HondaLatAccelFactor55Params"),
       "60": 1.0 if (Params().get("HondaLatAccelFactor60Params") is None) else Params().get("HondaLatAccelFactor60Params")
     }
+
+  def gas_band_blend(self, gas_w):
+    # effective (factor, alpha) at the current speed: hat-weighted blend of the NIDEC_GAS_BANDS nodes
+    gf_eff = sum(w * self.gas_factors[band] for band, w in gas_w.items())
+    ga_eff = sum(w * self.gas_alphas[band] for band, w in gas_w.items())
+    return gf_eff, ga_eff
+
+  def learn_gas_bands(self, gas_w, gasfactor_error, gas_accel, rate=0.0001, factor_max=5.0):
+    # shared gas channel learner (Nidec wire gas and the interceptor pedal): each band learns in
+    # proportion to its authority over the sent target. The factor step scales with the gas accel
+    # it was serving and the alpha (zero-accel offset) step does not, which is what separates the
+    # two from the same tracking error. rate is per call; the Nidec path calls at 100 Hz.
+    # The clip is a runaway backstop only; the caller owns the observability gate (a pinned wire
+    # cannot show what more gasfactor would do).
+    gf_growth = rate * gasfactor_error * gas_accel
+    for band, w in gas_w.items():
+      self.gas_alphas[band] = float(np.clip(self.gas_alphas[band] + w * rate * gasfactor_error / 4.8, -3.0, 3.0))
+      self.gas_factors[band] = float(np.clip(self.gas_factors[band] * (1 + w * gf_growth), 0.1, factor_max))
 
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
@@ -764,8 +776,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           speed_lead = float(sf_eff * self.accel + alpha_eff)
         pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
         gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
-        gf_eff = sum(w * self.gas_factors[band] for band, w in gas_w.items())
-        ga_eff = sum(w * self.gas_alphas[band] for band, w in gas_w.items())
+        gf_eff, ga_eff = self.gas_band_blend(gas_w)
         pcm_accel = int(np.clip((ga_eff + gas_accel * gf_eff / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
         if pcm_accel > 0:
           pcm_speed = max(pcm_speed, 1.0) # prevent fault by always sending positive speed during gas
@@ -813,17 +824,11 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
       if (0 < self.new_accel < self.params.NIDEC_GAS_MAX) and (not CS.out.gasPressed) and \
            (self.apply_brake_last == 0) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
-        gasfactor_error = (self.accel - CS.out.aEgo)
-        # the 0<wire<198 gate above is the gas channel's own observability condition (a pinned
-        # wire cannot show what more gasfactor would do); the clip is a runaway backstop only.
-        # 5.0 rather than the Bosch path's 3.0 because the Nidec target divides by
+        # the 0<wire<198 gate above is the gas channel's own observability condition.
+        # factor_max 5.0 rather than the Bosch path's 3.0 because the Nidec target divides by
         # NIDEC_MAX_ACCEL_V (2.0-2.4 at 4-10 m/s): pinning the wire at cmd 0.85 there needs
         # gf ~3.5, which the low bands are expected to learn.
-        gf_growth = 0.0001 * gasfactor_error * gas_accel
-        # each band learns in proportion to its authority over the sent target
-        for band, w in gas_w.items():
-          self.gas_alphas[band] = float(np.clip(self.gas_alphas[band] + w * 0.0001 * gasfactor_error / 4.8, -3.0, 3.0))
-          self.gas_factors[band] = float(np.clip(self.gas_factors[band] * (1 + w * gf_growth), 0.1, 5.0))
+        self.learn_gas_bands(gas_w, self.accel - CS.out.aEgo, gas_accel, rate=0.0001, factor_max=5.0)
       if (not CS.out.gasPressed) and (self.apply_brake_last == 0): # adjust speedfactor and average_factor
         speedfactor_error = (self.accel - CS.out.aEgo)
         dv_sent = sf_eff * self.accel + alpha_eff
@@ -1050,8 +1055,16 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                          pcm_override, pcm_cancel_cmd, alert_fcw,
                                                          CS.stock_brake, self.CP_SP))
           if self.CP_SP.enableGasInterceptor:
-            gas_w = band_weights(INTERCEPTOR_GAS_BANDS, CS.out.vEgo)
-            gf_eff = sum(w * self.interceptor_gas_factors[band] for band, w in gas_w.items())
+            # same band state, blend and learner as the Nidec wire-gas channel above; the pedal is
+            # gas * factor + alpha, with alpha (m/s2, like the Nidec channel) converted to pedal
+            # fraction through the same 4.8 m/s2 full-pedal scale as the gas itself
+            gas_w = band_weights(NIDEC_GAS_BANDS, CS.out.vEgo)
+            if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
+              # drop to max values when not near speed limit
+              self.gas_factors = dict(self.gas_factors_nomaxspeed)
+              self.gas_alphas = dict(self.gas_alphas_nomaxspeed)
+            gf_eff, ga_eff = self.gas_band_blend(gas_w)
+            self.interceptor_gf_eff, self.interceptor_ga_eff = gf_eff, ga_eff
             gas_error = actuators.accel - CS.out.aEgo
             # The gain learners only see frames where the wire has been at its target for longer
             # than the plant lag (interceptor_gas_settled, from the rise limiter): while the pedal
@@ -1061,19 +1074,25 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
             # still), then 1.28 -> 0.52 during the overshoot. A +-50% swing inside 1.3 s is not a
             # gain estimate.
             if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and self.interceptor_gas_settled:
-              if gas_error != 0.0 and gas > 0.0:
-                # each band learns in proportion to its authority over the sent gas
-                for band, w in gas_w.items():
-                  self.interceptor_gas_factors[band] = float(np.clip(self.interceptor_gas_factors[band] + w * gas_error / 150 * (gas * 4.8),
-                                                                     0.1, 3.0))
-              if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
-                wind_adjust = 1 + (wind_brake * 4.8) / 1000
-                self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
-              if gas <= 0.0: # don't reduce windfactor while braking, allow increases
-                self.windfactor = max(self.windfactor, self.windfactor_before_brake)
-              else:
-                self.windfactor_before_brake = self.windfactor
-            can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * gf_eff, brake, wind_brake, self.packer, self.frame))
+              # 0<wire<1 is the observability gate, as 0<wire<198 is on the Nidec channel. This
+              # block runs at 50 Hz and the settled gate discards the ramp and the 0.5 s after it,
+              # so the rate is 10x the Nidec per-tick rate: the ILX launch in seg 23 moves
+              # the 10 mph node ~4% (replay), i.e. the measured 1.4x low-speed hot gain is learned
+              # out over ~8 launches instead of one (the previous 1/150 rate, a +-50% swing per
+              # event) or ~40 (the raw Nidec rate).
+              # The band alphas are the zero-accel pedal offset, so windfactor is no longer learned
+              # on this path: the two are the same offset with different speed shapes and the
+              # multiplicative windfactor learner moved ~10%/min on the ILX (replaying segs 23-24
+              # eight times: windfactor 1.0 -> 4.2 with the alphas driven negative against it).
+              # windfactor keeps its loaded value and the fixed v^2 wind curve; the alphas learn the
+              # residual per band.
+              if 0.0 < self.gas < 1.0:
+                self.learn_gas_bands(gas_w, gas_error, gas * 4.8, rate=0.001, factor_max=3.0)
+            # alpha is dropped while the brake is applied, the same concurrent gas + brake guard the
+            # Nidec channel applies to its wire above
+            pedal_alpha = ga_eff / 4.8 if apply_brake == 0 else 0.0
+            can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * gf_eff + pedal_alpha, brake, wind_brake,
+                                                                self.packer, self.frame))
 
           # during a driver-gas override the wire now carries the pedal mirror set above, so
           # the PCM tracker (and the feedforward state) stay wound to the true operating
@@ -1257,9 +1276,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       # gasfactor from the GAS_COMMAND wire)
       new_actuators.speed = float(self.gas)  # interceptor wire, fraction of full pedal
       new_actuators.accel = float(self.accel)
-      new_actuators.gas = float(self.interceptor_gas_factors["low"])
+      new_actuators.gas = float(self.interceptor_gf_eff)  # blended gas factor at the current speed
       new_actuators.brake = float(self.windfactor)
-      new_actuators.torqueOutputCan = float(self.interceptor_gas_factors["high"])
+      new_actuators.torqueOutputCan = float(self.interceptor_ga_eff)  # blended gas alpha (m/s2) at the current speed
     else:
       new_actuators.speed = float(self.nidec_pid_factor)
       new_actuators.accel = float(self.accel)
@@ -1268,37 +1287,33 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       new_actuators.torqueOutputCan = float(self.speed_factors["low"])
 
     if self.frame % 6000 == 0:
-      if self.CP_SP.enableGasInterceptor:
-        # the interceptor path learns banded gasfactor/windfactor (gasalpha stays at its loaded value)
-        learned_values = {"HondaWindFactorParams": self.windfactor}
-        for band, _ in INTERCEPTOR_GAS_BANDS:
-          learned_values[INTERCEPTOR_GAS_FACTOR_KEYS[band]] = self.interceptor_gas_factors[band]
-        self.param_writer.put_many(learned_values)
-      elif self.CP.flags & HondaFlags.BOSCH:
+      if self.CP.flags & HondaFlags.BOSCH:
         self.param_writer.put_many({
           "HondaGasAlphaParams": self.gasalpha,
           "HondaGasFactorParams": self.gasfactor,
           "HondaWindFactorParams": self.windfactor,
         })
-      elif self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and not self.CP_SP.enableGasInterceptor and \
-           not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
-        learned_values = {
-          "HondaFeedForwardParams": self.average_factor,
-          "HondaBrakePIDParams": self.brake_pid_factor_non_lowspeed,
-          "HondaCreepFactorParams": self.creep_factor,
-          "HondaWindFactorParams": self.windfactor,
-          "HondaSatAccelParams": self.sat_accel,
-          "HondaCarGasScaleParams": self.car_gas_per_pcm_gas,
-          "HondaLaunchDvParams": self.dv_launch,
-          "HondaLaunchGasParams": self.gas_launch,
-          "HondaLaunchDvBreakParams": self.dv_break,
-        }
+      elif self.CP.openpilotLongitudinalControl and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL):
+        # the gas bands and windfactor are shared by the Nidec wire-gas and interceptor paths; the
+        # rest of the state belongs to the wire-gas servo/feedforward and is inert on the interceptor
+        learned_values = {"HondaWindFactorParams": self.windfactor}
         for band, _ in NIDEC_GAS_BANDS:
           learned_values[NIDEC_GAS_FACTOR_KEYS[band]] = self.gas_factors_nomaxspeed[band]
           learned_values[NIDEC_GAS_ALPHA_KEYS[band]] = self.gas_alphas_nomaxspeed[band]
-        for band, _ in NIDEC_SPEED_BANDS:
-          learned_values[NIDEC_SPEED_FACTOR_KEYS[band]] = self.speed_factors[band]
-          learned_values[NIDEC_SPEED_ALPHA_KEYS[band]] = self.speed_alphas[band]
+        if not self.CP_SP.enableGasInterceptor:
+          learned_values.update({
+            "HondaFeedForwardParams": self.average_factor,
+            "HondaBrakePIDParams": self.brake_pid_factor_non_lowspeed,
+            "HondaCreepFactorParams": self.creep_factor,
+            "HondaSatAccelParams": self.sat_accel,
+            "HondaCarGasScaleParams": self.car_gas_per_pcm_gas,
+            "HondaLaunchDvParams": self.dv_launch,
+            "HondaLaunchGasParams": self.gas_launch,
+            "HondaLaunchDvBreakParams": self.dv_break,
+          })
+          for band, _ in NIDEC_SPEED_BANDS:
+            learned_values[NIDEC_SPEED_FACTOR_KEYS[band]] = self.speed_factors[band]
+            learned_values[NIDEC_SPEED_ALPHA_KEYS[band]] = self.speed_alphas[band]
         self.param_writer.put_many(learned_values)
 
     if self.frame % 12000 == 30 and (self.CP.flags & HondaFlags.NIDEC):
