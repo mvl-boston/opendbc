@@ -483,7 +483,7 @@ STEER_THRESHOLD = {
   # default is 1200, overrides go here
   CAR.ACURA_RDX: 400,
   CAR.HONDA_CRV_EU: 400,
-  CAR.HONDA_ACCORD_11G: 600,
+  CAR.HONDA_ACCORD_11G: 561,  # was 600; openpilotci f39cf149 intercept -67 at zero request (no DBC re-zero on Bosch)
   CAR.HONDA_PILOT_4G: 600,
   CAR.HONDA_PILOT_4G_MMR: 600,
   CAR.HONDA_PASSPORT_4G: 600,
@@ -495,7 +495,7 @@ STEER_THRESHOLD = {
   CAR.HONDA_PASSPORT_4G: 600,
   CAR.HONDA_ODYSSEY_5G_MMR: 600,
   CAR.HONDA_ACCORD_9G: 30,
-  CAR.ACURA_MDX_3G: 300,  # on the re-zeroed STEER_TORQUE_SENSOR (acura_mdx_3g_can.dbc); was 400 on a signal centered at -172
+  CAR.ACURA_MDX_3G: 300,  # pair with DBC +172 re-zero (companion PR); was 400 when centered at ~-172
   CAR.ACURA_TLX_1G: 200,
   CAR.ACURA_RLX_HYBRID: 2400,
 }
