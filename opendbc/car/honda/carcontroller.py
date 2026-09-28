@@ -499,8 +499,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # *** rate limit steer ***
     limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
-    if (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and \
-        (self.apply_brake_last > 0 or self.new_accel < 1e-5): # lower steer limits while braking
+    # Lower steer limit only while the brake is actually commanded. It used to also apply whenever the
+    # PCM gas command was zero, which pinned the wire at 233/433 through most coasting low-speed turns
+    # (26% of sharp-demand time in route 0000010e) while the controller was asking for full torque.
+    if (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and (self.apply_brake_last > 0):
       brake_limit = float(233.0 / self.params.STEER_MAX)
       limited_torque = float(np.clip(limited_torque, -brake_limit, brake_limit))
     self.last_torque = limited_torque if CS.steer_control_active else 0.0
