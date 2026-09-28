@@ -1033,9 +1033,14 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                          CS.stock_brake, self.CP_SP))
           if self.CP_SP.enableGasInterceptor:
             gas_error = actuators.accel - CS.out.aEgo
-            if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid):
+            # no learning while the pedal rise limit is active or for 0.5 s after it releases: the
+            # error there is the plant's lag and overshoot, not the gain (interceptor_gas_learn_paused)
+            if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and (not self.interceptor_gas_learn_paused):
               if gas_error != 0.0 and gas > 0.0:
-                self.gasfactor = np.clip(self.gasfactor + gas_error / 150 * (gas * 4.8), 0.1, 3.0)
+                # 600 rather than 150: replaying the ILX event, the pause alone still let the learner
+                # eat the post-flare overshoot (gasfactor 1.0 -> 0.13, the floor); at 600 it holds
+                # 0.9 (same move as the RDX_3G turbo-lag learn_speed on the Bosch path)
+                self.gasfactor = np.clip(self.gasfactor + gas_error / 600 * (gas * 4.8), 0.1, 3.0)
               if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
                 wind_adjust = 1 + (wind_brake * 4.8) / 1000
                 self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
