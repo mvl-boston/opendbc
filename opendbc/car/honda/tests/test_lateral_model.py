@@ -4,15 +4,14 @@ import numpy as np
 
 from opendbc.car import DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.lateral_model import (FF_CORRECTION_MAX, FILTER_TAU, GAIN_BINS_MPH, GAIN_KEY_FMT, GAIN_MAX, GAIN_MIN,
-                                             GAIN_PRIOR, PRESS_HOLDOFF, HondaLateralModel)
-
-LAF = 1.8
+from opendbc.car.honda.lateral_model import (DEFAULT_LAT_ACCEL_FACTOR, FF_CORRECTION_MAX, FILTER_TAU, GAIN_BINS_MPH,
+                                             GAIN_KEY_FMT, GAIN_MAX, GAIN_MIN, GAIN_PRIOR, PRESS_HOLDOFF,
+                                             HondaLateralModel)
 
 
 def make_model(params=None):
   store = dict(params or {})
-  return HondaLateralModel(LAF, store.get)
+  return HondaLateralModel(DEFAULT_LAT_ACCEL_FACTOR, store.get)
 
 
 def step(model, request, wire, v_ego, desired_la, actual_la, lat_active=True, steer_control_active=True, pressed=False):
@@ -57,20 +56,20 @@ class TestHondaLateralModel(unittest.TestCase):
     model = make_model()
     v = 8.0
     desired_la = 0.5   # left turn: positive lateral accel, positive curvature, negative torque
-    out = step(model, -desired_la / LAF, 0.0, v, desired_la, 0.0)
-    expected = -desired_la / model.gain(v) + desired_la / LAF
+    out = step(model, -desired_la / DEFAULT_LAT_ACCEL_FACTOR, 0.0, v, desired_la, 0.0)
+    expected = -desired_la / model.gain(v) + desired_la / DEFAULT_LAT_ACCEL_FACTOR
     self.assertLess(expected, -0.3)   # the car needs a lot more than latAccelFactor says at 8 m/s
     self.assertAlmostEqual(model.ff_correction, expected)
-    self.assertAlmostEqual(out, -desired_la / LAF + expected)
+    self.assertAlmostEqual(out, -desired_la / DEFAULT_LAT_ACCEL_FACTOR + expected)
     # mirror image to the right
-    out_r = step(model, desired_la / LAF, 0.0, v, -desired_la, 0.0)
+    out_r = step(model, desired_la / DEFAULT_LAT_ACCEL_FACTOR, 0.0, v, -desired_la, 0.0)
     self.assertAlmostEqual(out_r, -out)
 
   def test_feedforward_correction_highway_is_small(self):
     model = make_model()
     v = 28.0
     desired_la = 1.0
-    step(model, -desired_la / LAF, 0.0, v, desired_la, 0.0)
+    step(model, -desired_la / DEFAULT_LAT_ACCEL_FACTOR, 0.0, v, desired_la, 0.0)
     self.assertLess(abs(model.ff_correction), 0.15)
 
   def test_feedforward_correction_is_bounded(self):
