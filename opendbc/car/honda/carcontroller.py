@@ -147,6 +147,9 @@ NIDEC_SPEED_BANDS = (
 MDX_BRAKE_STEER_LIMIT = 233
 MDX_BRAKE_STEER_LIMIT_HOLD = int(1.0 / DT_CTRL)
 MDX_BRAKE_STEER_LIMIT_SLEW = 1.0
+# brake command (of NIDEC_BRAKE_MAX = 256) below which the limit is not engaged: the planner's speed trims
+# through curves are 9 counts median / 28 p90 while steering hard (route 00000114), a real stop is 30-80+
+MDX_BRAKE_STEER_LIMIT_MIN_BRAKE = 32
 
 # the low/high nodes keep the param keys the two-band scheme persisted, so learned state survives
 NIDEC_GAS_FACTOR_KEYS: dict[str, str] = {band: f"HondaGasFactor{band}Params" for band, _ in NIDEC_GAS_BANDS}
@@ -523,24 +526,25 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # applied); the model regresses measured lateral accel on it to identify the car's gain.
     steer_torque = self.lat_model.update(actuators.torque, self.last_torque, CC.latActive, CS.steer_control_active,
                                          CS.out.steeringPressed, CS.out.vEgo, actuators.curvature, CC.currentCurvature)
-    # MDX brake steer limit: only while the brake is actually commanded (the coast half, gas command
-    # zero, pinned the wire at 233/433 through most coasting low-speed turns in route 0000010e), held
-    # for MDX_BRAKE_STEER_LIMIT_HOLD after release so a flickering brake command does not toggle it,
-    # slewed at MDX_BRAKE_STEER_LIMIT_SLEW, and applied to the request ahead of the rate limiter.
-    # Clipping the rate-limited output used to drop the wire 433 -> 232 in a single tick (81 such
-    # steps in routes 0000010e/0000010f, none of them driver induced): the wheel buzzed while the
-    # limit toggled and then let go all at once when it stuck, felt as a sudden centering pull in
-    # hard low-speed turns.
+    # MDX brake steer limit: only while a real brake is commanded (the coast half, gas command zero,
+    # pinned the wire at 233/433 through most coasting low-speed turns in route 0000010e; a >0 trigger
+    # let a 14-count planner trim in route 00000114 09:22:58 cut the wire 407 -> 232 mid-turn while the
+    # driver was already helping), held for MDX_BRAKE_STEER_LIMIT_HOLD after release so a flickering
+    # brake command does not toggle it, slewed at MDX_BRAKE_STEER_LIMIT_SLEW, and applied to the
+    # request ahead of the rate limiter. Clipping the rate-limited output used to drop the wire
+    # 433 -> 232 in a single tick (81 such steps in routes 0000010e/0000010f, none of them driver
+    # induced): the wheel buzzed while the limit toggled and then let go all at once when it stuck,
+    # felt as a sudden centering pull in hard low-speed turns.
     if self.CP.carFingerprint == CAR.ACURA_MDX_3G:
-      if self.apply_brake_last > 0:
+      if self.apply_brake_last >= MDX_BRAKE_STEER_LIMIT_MIN_BRAKE:
         self.brake_steer_limit_frames = MDX_BRAKE_STEER_LIMIT_HOLD
       elif self.brake_steer_limit_frames > 0:
         self.brake_steer_limit_frames -= 1
     target_limit = float(MDX_BRAKE_STEER_LIMIT / self.params.STEER_MAX) if self.brake_steer_limit_frames > 0 else 1.0
     self.steer_limit = rate_limit(target_limit, self.steer_limit, -MDX_BRAKE_STEER_LIMIT_SLEW * DT_CTRL,
                                   MDX_BRAKE_STEER_LIMIT_SLEW * DT_CTRL)
-    steer_torque = float(np.clip(steer_torque, -self.steer_limit, self.steer_limit))
-    limited_torque = rate_limit(steer_torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
+    clipped_torque = float(np.clip(steer_torque, -self.steer_limit, self.steer_limit))
+    limited_torque = rate_limit(clipped_torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
     self.last_torque = limited_torque if CS.steer_control_active else 0.0
 
@@ -1256,10 +1260,11 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                                        self.last_button_frame, self.CAN))
 
     new_actuators = actuators.as_builder()
-    # request plus only the limiting that actually happened (rate limiter, brake clip, steer_control_active),
+    # request plus only the limiting that actually happened (brake clip, rate limiter, steer_control_active),
     # NOT the wire torque: controlsd freezes the torque controller's integrator whenever this differs from the
     # request by >0.01, and torqued fits latAccelFactor to it (see lateral_model.py, "Reporting"). The wire
-    # torque is actuatorsOutput.torque + actuatorsOutput.brake.
+    # torque is actuatorsOutput.torque + actuatorsOutput.brake. steer_torque is the model output before the
+    # brake clip, so the clip is reported (route 00000114 09:22:58: 4.3 s of wire at 232 reported as unlimited).
     new_actuators.torque = float(actuators.torque + (self.last_torque - steer_torque))
     # actuatorsOutput gas/brake/speed: lateral model gain at this speed (m/s^2 per unit torque), feedforward
     # correction actually added this tick, and whether identification ran (was long-channel telemetry)
