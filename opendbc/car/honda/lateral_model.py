@@ -34,15 +34,20 @@ Plant identification rather than tracking-error integration: the measured latera
 on the wire torque that actually went to the EPS (delayed by the actuator delay, both low-passed at
 ``FILTER_TAU`` so only the quasi-static content is fitted), with a normalized LMS update spread over
 the two neighboring speed bins. It identifies a bounded physical quantity, so it cannot drift the way
-an integrator of delay-lag error does, and it is indifferent to rate limiting and clipping because those
-act on the wire torque it regresses against. The only unmodelled input is the
+an integrator of delay-lag error does, and it is indifferent to rate limiting, clipping and saturation
+because those all act on the wire torque it regresses against. The only unmodelled input is the
 driver, so learning pauses while ``steeringPressed`` and for ``PRESS_HOLDOFF`` afterwards.
 
 The two tables are trained on disjoint data so they cannot trade scale: the speed table learns only
 inside the anchor band (gentle curves, where shape == 1 by definition) and the shape table only above
-it, treating the gain as known, and only while the wire has not been pinned at the limit for a few
-seconds (a saturated wire says nothing about how much torque the turn wanted, and letting the gain
-learn from it would drag the speed table to the shape-inflated value instead).
+it, treating the gain as known. Hard turns on these cars are mostly driven with the wire pinned at the
+limit, and that is exactly the sample the shape needs (how much lateral accel full torque buys); if the
+speed table were allowed to learn from it too, it would be dragged to the shape-inflated value.
+
+The correction is added to the controller's output, which is already clipped to unit torque. When that
+output is saturated the P+I+F sum is beyond the clip, so a correction that opposes it (model gain above
+``latAccelFactor``) would take torque away while the loop asks for more than exists; it fades out over
+the last ``FF_SATURATION_FADE`` of request headroom.
 
 Reporting, and staying compatible with an unmodified openpilot
 --------------------------------------------------------------
@@ -95,23 +100,32 @@ SHAPE_MIN = 0.50
 SHAPE_MAX = 2.00
 SHAPE_KEY_FMT = "HondaLatShape{slot:02d}Params"
 SHAPE_LEARN_RATE = 0.001                          # normalized LMS step per tick, slower than the gain table
-SHAPE_MAX_WIRE = 0.95                             # a saturated wire cannot tell how much torque the turn needed
-SHAPE_SATURATION_HOLDOFF = 4.0                    # s, shape learning stays paused this long after a saturated wire sample
 SHAPE_BINS_INTERP = (SHAPE_ANCHOR_LAT_ACCEL,) + SHAPE_BINS_LAT_ACCEL
 
 # identification
 FILTER_TAU = 2.0                                  # s, common low-pass on wire torque and measured lat accel
 FILTER_ALPHA = DT_CTRL / (FILTER_TAU + DT_CTRL)
-WIRE_DELAY = 0.30                                 # s, actuator delay applied to the wire before filtering
+WIRE_DELAY = 0.30                                 # s, actuator delay applied to the wire before the plant lag
+# The car's lateral accel follows the wire as a first-order lag, not instantly: a lag of 1.0-1.3 s (after the
+# 0.3 s delay) maximizes the wire / lat-accel correlation at 10-16 m/s in routes 0000010e, 0000010f and
+# 00000114, and 1.0 s does so above 16 m/s. Regressing on the lagged wire keeps a sample taken mid-turn
+# honest; without it every turn entry read the gain low and every exit read it high.
+PLANT_TAU = 1.0
+PLANT_ALPHA = DT_CTRL / (PLANT_TAU + DT_CTRL)
 LEARN_RATE = 0.002                                # normalized LMS step per tick
 LEARN_NORM_EPS = 0.01                             # torque^2, keeps the normalized step finite near zero
 MIN_LEARN_TORQUE = 0.15                           # |filtered wire| needed for excitation
 MIN_LEARN_LAT_ACCEL = 0.15                        # m/s^2, |filtered lat accel| needed to be in a real curve
+# coarse quasi-static gate: neither filtered signal may be changing by more than this fraction of itself
+# per FILTER_TAU (guards the sign flips of an S-bend, where the lag model is least exact)
+MAX_LEARN_CHANGE = 0.50
 MIN_LEARN_SPEED = 2.0                             # m/s, curvature from steering angle is meaningless below
 PRESS_HOLDOFF = 0.5                               # s, learning stays paused this long after steeringPressed
 
 # feedforward correction
 FF_CORRECTION_MAX = 0.75                          # normalized torque, bound on |model ff - controller ff|
+# normalized torque; a correction that opposes the request fades out over this much request headroom below 1.0
+FF_SATURATION_FADE = 0.10
 DEFAULT_LAT_ACCEL_FACTOR = 1.8
 
 
@@ -150,10 +164,10 @@ class HondaLateralModel:
     self.shapes = [_clip(_load(param_get, SHAPE_KEY_FMT.format(slot=_shape_slot(la)), prior), SHAPE_MIN, SHAPE_MAX)
                    for la, prior in zip(SHAPE_BINS_LAT_ACCEL, SHAPE_PRIOR, strict=True)]
     self.wire_hist = deque([0.0] * max(int(round(WIRE_DELAY / DT_CTRL)), 1), maxlen=max(int(round(WIRE_DELAY / DT_CTRL)), 1))
+    self.wire_lag = 0.0             # delayed wire through the plant lag: the lateral accel the wire has "earned" so far
     self.wire_filt = 0.0
     self.lat_accel_filt = 0.0
     self.press_holdoff = 0.0
-    self.saturation_holdoff = 0.0
     # telemetry for the last update() call
     self.gain_now = float(np.interp(0.0, GAIN_BINS_MS, self.gains))   # effective gain at (v, |desired lat accel|)
     self.shape_now = 1.0
@@ -198,27 +212,37 @@ class HondaLateralModel:
       return self.output
 
     self.ff_correction = self.feedforward_correction(desired_curvature, v_ego)
-    self.output = _clip(request_torque + self.ff_correction, -1.0, 1.0)
+    correction = self.ff_correction
+    # The correction swaps feedforwards; it is not a license to undo feedback. A saturated request means
+    # the controller's P+I+F sum is beyond the unit clip, so a correction that opposes it (model gain above
+    # latAccelFactor) would take torque away while the loop is asking for more than exists: route 00000114
+    # 09:23:21 held the wire at 420/433 with the request at -1.00 and the lane lines solid. Fade it out
+    # over the last FF_SATURATION_FADE of request headroom rather than switching it off at 1.0.
+    if np.sign(correction) == -np.sign(request_torque):
+      correction *= _clip((1.0 - abs(request_torque)) / FF_SATURATION_FADE, 0.0, 1.0)
+    self.output = _clip(request_torque + correction, -1.0, 1.0)
     self.applied_correction = self.output - float(request_torque)
     return self.output
 
   def _identify(self, wire_torque, current_curvature, v_ego, active, steering_pressed):
     delayed_wire = self.wire_hist[0]
     self.wire_hist.append(float(wire_torque))
-    # measured lat accel in torque sign convention (right positive) so that lat_accel ~= gain * wire
+    self.wire_lag += PLANT_ALPHA * (delayed_wire - self.wire_lag)
+    # measured lat accel in torque sign convention (right positive) so that lat_accel ~= gain * wire_lag
     measured = -current_curvature * v_ego * v_ego
-    self.wire_filt += FILTER_ALPHA * (delayed_wire - self.wire_filt)
-    self.lat_accel_filt += FILTER_ALPHA * (measured - self.lat_accel_filt)
+    # the filter's own step is its rate of change over one tick; scaled to FILTER_TAU it is the fraction
+    # of the signal still in transit, which is what the quasi-static gate below looks at
+    dx = FILTER_ALPHA * (self.wire_lag - self.wire_filt)
+    dy = FILTER_ALPHA * (measured - self.lat_accel_filt)
+    self.wire_filt += dx
+    self.lat_accel_filt += dy
 
     self.press_holdoff = PRESS_HOLDOFF if steering_pressed else max(self.press_holdoff - DT_CTRL, 0.0)
-    # the filter remembers a pinned wire long after the raw sample has come off the limit
-    if abs(wire_torque) >= SHAPE_MAX_WIRE:
-      self.saturation_holdoff = SHAPE_SATURATION_HOLDOFF
-    else:
-      self.saturation_holdoff = max(self.saturation_holdoff - DT_CTRL, 0.0)
     x = self.wire_filt
     y = self.lat_accel_filt
-    self.learning = bool(active and self.press_holdoff <= 0.0 and v_ego > MIN_LEARN_SPEED
+    steady = (abs(dx) * FILTER_TAU / DT_CTRL <= MAX_LEARN_CHANGE * abs(x)
+              and abs(dy) * FILTER_TAU / DT_CTRL <= MAX_LEARN_CHANGE * abs(y))
+    self.learning = bool(active and self.press_holdoff <= 0.0 and v_ego > MIN_LEARN_SPEED and steady
                          and abs(x) > MIN_LEARN_TORQUE and abs(y) > MIN_LEARN_LAT_ACCEL and np.sign(x) == np.sign(y))
     self.learning_shape = False
     if not self.learning:
@@ -226,8 +250,9 @@ class HondaLateralModel:
 
     # plant: y = gain(v) * shape(|y|) * x, with shape == 1.0 through the anchor band. Gentle curves train
     # the speed table and only the speed table; harder turns train the shape, seeing the gain as known.
-    # Letting the gain step run in hard turns as well would let a pinned wire (which the shape step must
-    # ignore) drag the speed table down to the shape-inflated value instead.
+    # A pinned wire is a valid sample for both (the regression is on what the EPS actually got), and the
+    # hard turns that define the shape are mostly driven pinned: route 00000114 had the wire at 433 for
+    # 81% of its hard-turn ticks, delivering 1.27 m/s^2 where the speed table alone promised 1.7.
     if abs(y) <= SHAPE_ANCHOR_LAT_ACCEL:
       pos = float(np.interp(v_ego, GAIN_BINS_MS, range(len(GAIN_BINS_MS))))
       lo = int(np.floor(pos))
@@ -240,8 +265,6 @@ class HondaLateralModel:
         self.gains[idx] = _clip(self.gains[idx] + LEARN_RATE * weight * err * x / (x * x + LEARN_NORM_EPS), GAIN_MIN, GAIN_MAX)
       return
 
-    if self.saturation_holdoff > 0.0:
-      return
     self.learning_shape = True
     g = self.gain(v_ego)
     xg = g * x
