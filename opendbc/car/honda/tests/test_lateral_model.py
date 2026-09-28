@@ -6,7 +6,8 @@ from opendbc.car import DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.lateral_model import (DEFAULT_LAT_ACCEL_FACTOR, FF_CORRECTION_MAX, FILTER_TAU, GAIN_BINS_MPH,
                                              GAIN_KEY_FMT, GAIN_MAX, GAIN_MIN, GAIN_PRIOR, PRESS_HOLDOFF,
-                                             HondaLateralModel)
+                                             SHAPE_ANCHOR_LAT_ACCEL, SHAPE_BINS_LAT_ACCEL, SHAPE_KEY_FMT, SHAPE_MAX,
+                                             SHAPE_MAX_WIRE, SHAPE_MIN, HondaLateralModel)
 
 
 def make_model(params=None):
@@ -19,16 +20,24 @@ def step(model, request, wire, v_ego, desired_la, actual_la, lat_active=True, st
   return model.update(request, wire, lat_active, steer_control_active, pressed, v_ego, desired_la / v_sq, actual_la / v_sq)
 
 
-def drive(model, v_ego, gain_true, seconds, wire_fn, pressed=False, lat_active=True):
-  """Constant-speed drive on a first-order plant lat_accel = gain_true * wire (0.5 s lag). Torque sign
-  convention: right positive; curvature is left positive, so measured curvature = -lat_accel / v^2."""
+def drive(model, v_ego, gain_true, seconds, wire_fn, pressed=False, lat_active=True, shape_true=None):
+  """Constant-speed drive on a first-order plant lat_accel = gain_true * shape_true(|lat_accel|) * wire
+  (0.5 s lag). Torque sign convention: right positive; curvature is left positive, so measured
+  curvature = -lat_accel / v^2."""
   la = 0.0
   a = np.exp(-DT_CTRL / 0.5)
   for k in range(int(seconds / DT_CTRL)):
     wire = wire_fn(k * DT_CTRL)
-    la = a * la + (1 - a) * gain_true * wire
+    s = 1.0 if shape_true is None else shape_true(abs(la))
+    la = a * la + (1 - a) * gain_true * s * wire
     step(model, wire, wire, v_ego, -la, -la, pressed=pressed, lat_active=lat_active)
   return la
+
+
+def centering_shape(lat_accel):
+  """A car whose EPS fights back harder in hard turns: unity through the anchor band, 40% less lateral
+  accel per unit torque by 2 m/s^2, flat beyond."""
+  return float(np.interp(lat_accel, [SHAPE_ANCHOR_LAT_ACCEL, 2.0], [1.0, 0.6]))
 
 
 class TestHondaLateralModel(unittest.TestCase):
@@ -50,7 +59,41 @@ class TestHondaLateralModel(unittest.TestCase):
     self.assertAlmostEqual(model.gain(5 * CV.MPH_TO_MS), GAIN_MIN)
     self.assertAlmostEqual(model.gain(40 * CV.MPH_TO_MS), GAIN_PRIOR[GAIN_BINS_MPH.index(40)])
     self.assertEqual(set(model.learned_values()), set(HondaLateralModel.param_keys()))
-    self.assertEqual(len(model.param_keys()), len(GAIN_BINS_MPH))
+    self.assertEqual(len(model.param_keys()), len(GAIN_BINS_MPH) + len(SHAPE_BINS_LAT_ACCEL))
+
+  def test_shape_prior_is_neutral(self):
+    model = make_model()
+    for la in (0.0, 0.5, SHAPE_ANCHOR_LAT_ACCEL, 1.2, 2.5, 4.0):
+      self.assertEqual(model.shape(la), 1.0)
+      self.assertEqual(model.shape(-la), 1.0)
+    # with a neutral shape the correction is the plain per-speed one
+    v = 8.0
+    desired_la = 2.0
+    step(model, 0.0, 0.0, v, desired_la, 0.0)
+    self.assertAlmostEqual(model.ff_correction, max(-desired_la / model.gain(v) + desired_la / DEFAULT_LAT_ACCEL_FACTOR,
+                                                    -FF_CORRECTION_MAX))
+    self.assertEqual(model.shape_now, 1.0)
+    self.assertAlmostEqual(model.gain_now, model.gain(v))
+
+  def test_persisted_shape_loads_clips_and_shapes_the_feedforward(self):
+    params = {SHAPE_KEY_FMT.format(slot=15): 0.8, SHAPE_KEY_FMT.format(slot=20): 0.1, SHAPE_KEY_FMT.format(slot=30): 9.0}
+    model = make_model(params)
+    self.assertAlmostEqual(model.shape(1.5), 0.8)
+    self.assertAlmostEqual(model.shape(2.0), SHAPE_MIN)
+    self.assertAlmostEqual(model.shape(3.0), SHAPE_MAX)
+    self.assertAlmostEqual(model.shape(5.0), SHAPE_MAX)          # held beyond the last bin
+    self.assertEqual(model.shape(SHAPE_ANCHOR_LAT_ACCEL), 1.0)   # the anchor cannot be persisted away
+    self.assertAlmostEqual(model.shape(1.25), 0.9)               # linear between bins
+    self.assertAlmostEqual(model.shape(1.0), 1.0)
+    # a shape below 1 means the car needs more torque per m/s^2 there: the correction grows into the turn
+    v = 25.0
+    desired_la = 1.5
+    step(model, 0.0, 0.0, v, desired_la, 0.0)
+    expected = -desired_la / (model.gain(v) * 0.8) + desired_la / DEFAULT_LAT_ACCEL_FACTOR
+    self.assertAlmostEqual(model.ff_correction, expected)
+    self.assertAlmostEqual(model.shape_now, 0.8)
+    self.assertAlmostEqual(model.gain_now, model.gain(v) * 0.8)
+    self.assertLess(model.ff_correction, -desired_la / model.gain(v) + desired_la / DEFAULT_LAT_ACCEL_FACTOR)
 
   def test_feedforward_correction_low_speed_adds_torque_into_the_turn(self):
     model = make_model()
@@ -115,16 +158,17 @@ class TestHondaLateralModel(unittest.TestCase):
     v = 12.0
     g_true = 2.2
     self.assertNotAlmostEqual(model.gain(v), g_true, delta=0.5)
-    # alternate a held torque left/right so both signs and the filters settle well inside each dwell
-    drive(model, v, g_true, 240.0, lambda t: 0.5 if (t // 15.0) % 2 == 0 else -0.5)
+    # alternate a held torque left/right so both signs and the filters settle well inside each dwell;
+    # gentle enough (|la| ~0.66) to sit in the anchor band, where the speed table is defined
+    drive(model, v, g_true, 240.0, lambda t: 0.3 if (t // 15.0) % 2 == 0 else -0.3)
     self.assertAlmostEqual(model.gain(v), g_true, delta=0.1)
     self.assertTrue(model.learning)
 
   def test_identification_ignores_saturation_and_rate_limits(self):
-    # regressing on the actual wire means a pinned wire is still a valid sample
+    # regressing on the actual wire means a pinned wire is still a valid sample for the speed table
     model = make_model()
     v = 12.0
-    g_true = 0.9
+    g_true = 0.6
     drive(model, v, g_true, 200.0, lambda t: 1.0 if (t // 20.0) % 2 == 0 else -1.0)
     self.assertAlmostEqual(model.gain(v), g_true, delta=0.1)
 
@@ -170,6 +214,64 @@ class TestHondaLateralModel(unittest.TestCase):
       if mph in (20, 30):
         continue
       self.assertAlmostEqual(model.gain(mph * CV.MPH_TO_MS), prior)
+
+  def test_gentle_curves_train_the_gain_table_only(self):
+    # inside the anchor band the shape is 1.0 by definition, so a wrong gain is corrected in the speed
+    # table and the shape table never moves
+    model = make_model()
+    v = 12.0
+    g_true = 2.2
+    drive(model, v, g_true, 200.0, lambda t: 0.25 if (t // 15.0) % 2 == 0 else -0.25)   # |la| ~0.55
+    self.assertAlmostEqual(model.gain(v), g_true, delta=0.1)
+    self.assertEqual(list(model.shapes), [1.0] * len(SHAPE_BINS_LAT_ACCEL))
+    self.assertFalse(model.learning_shape)
+
+  def test_identifies_centering_shape(self):
+    model = make_model()
+    v = 20.0
+    g_true = model.gain(v)   # speed table already right: hard turns must move the shape, not the gain
+
+    # dwell in a gentle (anchor band), a moderate and a hard turn in turn, both signs, like a drive that
+    # is mostly gentle curves with the odd hard corner
+    def wire_fn(t):
+      mag = (0.3, 0.45, 0.85)[int(t // 15.0) % 3]
+      return mag if (t // 90.0) % 2 == 0 else -mag
+    # steady-state lateral accel of the hard dwell on this plant
+    la_hard = 1.0
+    for _ in range(100):
+      la_hard = g_true * 0.85 * centering_shape(la_hard)
+    self.assertGreater(la_hard, 1.25)
+    self.assertLess(g_true * 0.3, SHAPE_ANCHOR_LAT_ACCEL)
+    drive(model, v, g_true, 900.0, wire_fn, shape_true=centering_shape)
+    self.assertTrue(model.learning_shape)
+    self.assertLess(model.shape(la_hard), 0.9)
+    self.assertAlmostEqual(model.shape(la_hard), centering_shape(la_hard), delta=0.1)
+    self.assertAlmostEqual(model.gain(v), g_true, delta=0.1)
+    # bins above the excitation keep their prior
+    self.assertEqual(model.shapes[-1], 1.0)
+
+  def test_shape_ignores_a_saturated_wire(self):
+    model = make_model()
+    v = 20.0
+    g_true = model.gain(v)
+    drive(model, v, g_true, 120.0, lambda t: 1.0 if (t // 20.0) % 2 == 0 else -1.0, shape_true=centering_shape)
+    self.assertEqual(list(model.shapes), [1.0] * len(SHAPE_BINS_LAT_ACCEL))
+    self.assertFalse(model.learning_shape)
+    # just under the saturation bound it does learn
+    wire = SHAPE_MAX_WIRE - 0.05
+    drive(model, v, g_true, 120.0, lambda t: wire if (t // 20.0) % 2 == 0 else -wire, shape_true=centering_shape)
+    self.assertTrue(model.learning_shape)
+    self.assertLess(min(model.shapes), 1.0)
+
+  def test_shapes_stay_bounded(self):
+    model = make_model()
+    v = 20.0
+    g_true = model.gain(v)
+    drive(model, v, g_true, 300.0, lambda t: 0.8 if (t // 15.0) % 2 == 0 else -0.8, shape_true=lambda la: 0.05)
+    self.assertGreaterEqual(min(model.shapes), SHAPE_MIN)
+    model = make_model()
+    drive(model, v, g_true, 300.0, lambda t: 0.6 if (t // 15.0) % 2 == 0 else -0.6, shape_true=lambda la: 5.0)
+    self.assertLessEqual(max(model.shapes), SHAPE_MAX)
 
 
 if __name__ == "__main__":
