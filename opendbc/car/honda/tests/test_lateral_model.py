@@ -98,6 +98,18 @@ class TestHondaLateralModel(unittest.TestCase):
     model = make_model()
     out = step(model, -0.9, 0.0, 8.0, 1.0, 0.0)
     self.assertEqual(out, -1.0)
+    # applied_correction is what the clip let through, so request + applied_correction == output always
+    self.assertAlmostEqual(model.applied_correction, -0.1)
+    self.assertLess(model.ff_correction, model.applied_correction)
+
+  def test_applied_correction_matches_output_minus_request(self):
+    model = make_model()
+    for request, v, desired_la in ((-0.2, 8.0, 0.5), (0.3, 20.0, -0.8), (0.0, 30.0, 0.2)):
+      out = step(model, request, 0.0, v, desired_la, 0.0)
+      self.assertAlmostEqual(out - request, model.applied_correction)
+      self.assertAlmostEqual(model.applied_correction, model.ff_correction)
+    step(model, 0.3, 0.0, 10.0, 0.5, 0.0, lat_active=False)
+    self.assertEqual(model.applied_correction, 0.0)
 
   def test_identifies_plant_gain(self):
     model = make_model()
