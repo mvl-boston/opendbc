@@ -122,6 +122,15 @@ NIDEC_SPEED_BANDS = (
   ("high", 16.0),
 )
 
+# MDX 3G: steer torque bound (CAN counts) while the brake is commanded, how long the bound is held
+# after the brake command returns to zero, and how fast the bound itself moves (normalized torque
+# per second: 433 -> 233 takes ~0.45 s). The Nidec brake command flickers 0 <-> on at low speed
+# (route 0000010e: 469 clipped runs, median 2-3 ticks long, median gap 0.1 s), so without the hold
+# the wire toggles 433 <-> 233 for the whole turn.
+MDX_BRAKE_STEER_LIMIT = 233
+MDX_BRAKE_STEER_LIMIT_HOLD = int(1.0 / DT_CTRL)
+MDX_BRAKE_STEER_LIMIT_SLEW = 1.0
+
 # the low/high nodes keep the param keys the two-band scheme persisted, so learned state survives
 NIDEC_GAS_FACTOR_KEYS: dict[str, str] = {band: f"HondaGasFactor{band}Params" for band, _ in NIDEC_GAS_BANDS}
 NIDEC_GAS_FACTOR_KEYS["low"] = "HondaGasFactorLowParams"
@@ -212,6 +221,8 @@ class CarController(CarControllerBase):
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.steer_limit = 1.0                 # normalized |torque| bound in force this tick (1.0, or the MDX brake limit)
+    self.brake_steer_limit_frames = 0
     self.bosch_last_gas = 0
 
     self.lkas_button_send_remaining = 0
@@ -483,14 +494,25 @@ class CarController(CarControllerBase):
     # applied); the model regresses measured lateral accel on it to identify the car's gain.
     steer_torque = self.lat_model.update(actuators.torque, self.last_torque, CC.latActive, CS.steer_control_active,
                                          CS.out.steeringPressed, CS.out.vEgo, actuators.curvature, CC.currentCurvature)
+    # MDX brake steer limit: only while the brake is actually commanded (the coast half, gas command
+    # zero, pinned the wire at 233/433 through most coasting low-speed turns in route 0000010e), held
+    # for MDX_BRAKE_STEER_LIMIT_HOLD after release so a flickering brake command does not toggle it,
+    # slewed at MDX_BRAKE_STEER_LIMIT_SLEW, and applied to the request ahead of the rate limiter.
+    # Clipping the rate-limited output used to drop the wire 433 -> 232 in a single tick (81 such
+    # steps in routes 0000010e/0000010f, none of them driver induced): the wheel buzzed while the
+    # limit toggled and then let go all at once when it stuck, felt as a sudden centering pull in
+    # hard low-speed turns.
+    if self.CP.carFingerprint == CAR.ACURA_MDX_3G:
+      if self.apply_brake_last > 0:
+        self.brake_steer_limit_frames = MDX_BRAKE_STEER_LIMIT_HOLD
+      elif self.brake_steer_limit_frames > 0:
+        self.brake_steer_limit_frames -= 1
+    target_limit = float(MDX_BRAKE_STEER_LIMIT / self.params.STEER_MAX) if self.brake_steer_limit_frames > 0 else 1.0
+    self.steer_limit = rate_limit(target_limit, self.steer_limit, -MDX_BRAKE_STEER_LIMIT_SLEW * DT_CTRL,
+                                  MDX_BRAKE_STEER_LIMIT_SLEW * DT_CTRL)
+    steer_torque = float(np.clip(steer_torque, -self.steer_limit, self.steer_limit))
     limited_torque = rate_limit(steer_torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
                                 self.params.STEER_DELTA_UP * DT_CTRL)
-    # Lower steer limit only while the brake is actually commanded. It used to also apply whenever the
-    # PCM gas command was zero, which pinned the wire at 233/433 through most coasting low-speed turns
-    # (26% of sharp-demand time in route 0000010e) while the controller was asking for full torque.
-    if (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and (self.apply_brake_last > 0):
-      brake_limit = float(233.0 / self.params.STEER_MAX)
-      limited_torque = float(np.clip(limited_torque, -brake_limit, brake_limit))
     self.last_torque = limited_torque if CS.steer_control_active else 0.0
 
     # *** apply brake hysteresis ***
@@ -1064,7 +1086,10 @@ class CarController(CarControllerBase):
       if self.CP.carFingerprint in HONDA_BOSCH:
         steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
       else:
-        steer_maxed = (abs(apply_torque) >= self.params.STEER_MAX) or not (CS.steer_control_active)
+        # against the bound actually in force, so the lane lines go grey when the MDX brake limit is
+        # what is holding the wire, not only at STEER_MAX. int() mirrors apply_torque's truncation
+        # (233/433 * 433 lands at 232 on one sign).
+        steer_maxed = (abs(apply_torque) >= int(self.steer_limit * self.params.STEER_MAX)) or not (CS.steer_control_active)
 
       lkas_state_change = None
       if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
