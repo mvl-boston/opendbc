@@ -138,6 +138,19 @@ NIDEC_SPEED_BANDS = (
   ("high", 16.0),
 )
 
+# Gas interceptor (comma pedal) gain bands. The interceptor gas is accel/4.8 * gasfactor * gas_mult(v),
+# and one scalar gasfactor cannot hold both ends: on the ACURA_ILX (route 2752303cce1f0aba|0000000c)
+# the measured pedal -> accel gain was ~11-15 m/s2 per unit pedal below 6 m/s against the ~8-11 the
+# fixed map assumes (1.4-1.7x hot), and ~1.0x from 10 m/s up. The scalar equilibrates on cruise
+# frames and every launch then overshoots (2.6 m/s2 against a 1.5 command at 3 m/s even with a
+# gentle wire ramp). Two nodes: the low one covers the clutch/converter regime, the high one is
+# the old scalar (same param key), linear blend between. Sorted by node speed (m/s).
+INTERCEPTOR_GAS_BANDS = (
+  ("low", 3.0),
+  ("high", 12.0),
+)
+INTERCEPTOR_GAS_FACTOR_KEYS: dict[str, str] = {"low": "HondaGasFactorLowParams", "high": "HondaGasFactorParams"}
+
 # the low/high nodes keep the param keys the two-band scheme persisted, so learned state survives
 NIDEC_GAS_FACTOR_KEYS: dict[str, str] = {band: f"HondaGasFactor{band}Params" for band, _ in NIDEC_GAS_BANDS}
 NIDEC_GAS_FACTOR_KEYS["low"] = "HondaGasFactorLowParams"
@@ -237,6 +250,11 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.gasalpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
     self.gasfactor_before_gasmax = self.gasfactor
+    # interceptor bands: the high node is the scalar the path persisted until now, the low node seeds
+    # from it so the first drive with this code starts from the same curve
+    self.interceptor_gas_factors = {"high": float(self.gasfactor)}
+    gf_low_param = Params().get("HondaGasFactorLowParams")
+    self.interceptor_gas_factors["low"] = float(self.gasfactor) if gf_low_param is None else float(gf_low_param)
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
     self.pitch = 0.0
@@ -1032,10 +1050,22 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                          pcm_override, pcm_cancel_cmd, alert_fcw,
                                                          CS.stock_brake, self.CP_SP))
           if self.CP_SP.enableGasInterceptor:
+            gas_w = band_weights(INTERCEPTOR_GAS_BANDS, CS.out.vEgo)
+            gf_eff = sum(w * self.interceptor_gas_factors[band] for band, w in gas_w.items())
             gas_error = actuators.accel - CS.out.aEgo
-            if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid):
+            # The gain learners only see frames where the wire has been at its target for longer
+            # than the plant lag (interceptor_gas_settled, from the rise limiter): while the pedal
+            # is still climbing, or for ~0.5 s after it lands, the undershoot is lag, not gain.
+            # Replaying the fault event above with the unconditional learner: gasfactor 1.00 -> 1.28
+            # during the 0.4 s the plant took to answer the step (which pushed the wire higher
+            # still), then 1.28 -> 0.52 during the overshoot. A +-50% swing inside 1.3 s is not a
+            # gain estimate.
+            if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and self.interceptor_gas_settled:
               if gas_error != 0.0 and gas > 0.0:
-                self.gasfactor = np.clip(self.gasfactor + gas_error / 150 * (gas * 4.8), 0.1, 3.0)
+                # each band learns in proportion to its authority over the sent gas
+                for band, w in gas_w.items():
+                  self.interceptor_gas_factors[band] = float(np.clip(self.interceptor_gas_factors[band] + w * gas_error / 150 * (gas * 4.8),
+                                                                     0.1, 3.0))
               if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
                 wind_adjust = 1 + (wind_brake * 4.8) / 1000
                 self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
@@ -1043,7 +1073,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                 self.windfactor = max(self.windfactor, self.windfactor_before_brake)
               else:
                 self.windfactor_before_brake = self.windfactor
-            can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake, self.packer, self.frame))
+            can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * gf_eff, brake, wind_brake, self.packer, self.frame))
 
           # during a driver-gas override the wire now carries the pedal mirror set above, so
           # the PCM tracker (and the feedforward state) stay wound to the true operating
@@ -1221,6 +1251,15 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       new_actuators.gas = float(self.gasfactor)
       new_actuators.brake = float(self.windfactor)
       new_actuators.torqueOutputCan = apply_torque
+    elif self.CP_SP.enableGasInterceptor:
+      # interceptor debug slots: the Nidec wire-gas learners below are inert on this path, and the
+      # interceptor's own state was not logged at all (the ILX fault analysis had to reconstruct
+      # gasfactor from the GAS_COMMAND wire)
+      new_actuators.speed = float(self.gas)  # interceptor wire, fraction of full pedal
+      new_actuators.accel = float(self.accel)
+      new_actuators.gas = float(self.interceptor_gas_factors["low"])
+      new_actuators.brake = float(self.windfactor)
+      new_actuators.torqueOutputCan = float(self.interceptor_gas_factors["high"])
     else:
       new_actuators.speed = float(self.nidec_pid_factor)
       new_actuators.accel = float(self.accel)
@@ -1229,8 +1268,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       new_actuators.torqueOutputCan = float(self.speed_factors["low"])
 
     if self.frame % 6000 == 0:
-      if self.CP.flags & HondaFlags.BOSCH or self.CP_SP.enableGasInterceptor:
-        # the interceptor path learns gasfactor/windfactor like Bosch (gasalpha stays at its loaded value)
+      if self.CP_SP.enableGasInterceptor:
+        # the interceptor path learns banded gasfactor/windfactor (gasalpha stays at its loaded value)
+        learned_values = {"HondaWindFactorParams": self.windfactor}
+        for band, _ in INTERCEPTOR_GAS_BANDS:
+          learned_values[INTERCEPTOR_GAS_FACTOR_KEYS[band]] = self.interceptor_gas_factors[band]
+        self.param_writer.put_many(learned_values)
+      elif self.CP.flags & HondaFlags.BOSCH:
         self.param_writer.put_many({
           "HondaGasAlphaParams": self.gasalpha,
           "HondaGasFactorParams": self.gasfactor,
