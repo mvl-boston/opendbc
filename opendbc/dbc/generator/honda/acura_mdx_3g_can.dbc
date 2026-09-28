@@ -4,10 +4,10 @@ CM_ "IMPORT _nidec_common.dbc";
 CM_ "IMPORT _lkas_hud_5byte.dbc";
 CM_ "IMPORT _nidec_scm_group_a.dbc";
 CM_ "IMPORT _steering_sensors_b.dbc";
-CM_ "IMPORT _steering_control_a.dbc";
+CM_ "IMPORT _steering_control_mdx_3g.dbc";
 CM_ "IMPORT _gearbox_common.dbc";
 
-CM_ "Above is identical to 2016 ILX"
+CM_ "Above is identical to 2016 ILX, except the steering control import: STEER_STATUS.STEER_TORQUE_SENSOR (hybrid MDX 3G) is re-zeroed by +172. STEER_STATUS_LEGACY (non-hybrid MDX, TLX) is left as is"
 
 BO_ 400 STEER_STATUS_LEGACY: 5 EPS
  SG_ STEER_TORQUE_SENSOR : 0|9@1- (6.667,0) [-256|256] "" XXX
