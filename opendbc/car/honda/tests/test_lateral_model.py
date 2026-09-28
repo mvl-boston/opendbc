@@ -4,10 +4,10 @@ import numpy as np
 
 from opendbc.car import DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.lateral_model import (DEFAULT_LAT_ACCEL_FACTOR, FF_CORRECTION_MAX, FILTER_TAU, GAIN_BINS_MPH,
-                                             GAIN_KEY_FMT, GAIN_MAX, GAIN_MIN, GAIN_PRIOR, PRESS_HOLDOFF,
+from opendbc.car.honda.lateral_model import (DEFAULT_LAT_ACCEL_FACTOR, FF_CORRECTION_MAX, FF_SATURATION_FADE, FILTER_TAU,
+                                             GAIN_BINS_MPH, GAIN_KEY_FMT, GAIN_MAX, GAIN_MIN, GAIN_PRIOR, PRESS_HOLDOFF,
                                              SHAPE_ANCHOR_LAT_ACCEL, SHAPE_BINS_LAT_ACCEL, SHAPE_KEY_FMT, SHAPE_MAX,
-                                             SHAPE_MAX_WIRE, SHAPE_MIN, HondaLateralModel)
+                                             SHAPE_MIN, HondaLateralModel)
 
 
 def make_model(params=None):
@@ -20,12 +20,15 @@ def step(model, request, wire, v_ego, desired_la, actual_la, lat_active=True, st
   return model.update(request, wire, lat_active, steer_control_active, pressed, v_ego, desired_la / v_sq, actual_la / v_sq)
 
 
+PLANT_LAG_SIM = 0.8   # s; the routes fit 1.0-1.3 s, deliberately not the model's PLANT_TAU so the tests see a mismatch
+
+
 def drive(model, v_ego, gain_true, seconds, wire_fn, pressed=False, lat_active=True, shape_true=None):
   """Constant-speed drive on a first-order plant lat_accel = gain_true * shape_true(|lat_accel|) * wire
-  (0.5 s lag). Torque sign convention: right positive; curvature is left positive, so measured
+  (PLANT_LAG_SIM lag). Torque sign convention: right positive; curvature is left positive, so measured
   curvature = -lat_accel / v^2."""
   la = 0.0
-  a = np.exp(-DT_CTRL / 0.5)
+  a = np.exp(-DT_CTRL / PLANT_LAG_SIM)
   for k in range(int(seconds / DT_CTRL)):
     wire = wire_fn(k * DT_CTRL)
     s = 1.0 if shape_true is None else shape_true(abs(la))
@@ -250,18 +253,41 @@ class TestHondaLateralModel(unittest.TestCase):
     # bins above the excitation keep their prior
     self.assertEqual(model.shapes[-1], 1.0)
 
-  def test_shape_ignores_a_saturated_wire(self):
+  def test_shape_learns_from_a_pinned_wire(self):
+    # route 00000114: the wire sat at 433 for 81% of the hard-turn ticks, delivering 1.27 m/s^2 where the
+    # speed table promised 1.7. That sample is the shape, and it must not touch the speed table.
     model = make_model()
-    v = 20.0
+    v = 13.4
     g_true = model.gain(v)
-    drive(model, v, g_true, 120.0, lambda t: 1.0 if (t // 20.0) % 2 == 0 else -1.0, shape_true=centering_shape)
-    self.assertEqual(list(model.shapes), [1.0] * len(SHAPE_BINS_LAT_ACCEL))
-    self.assertFalse(model.learning_shape)
-    # just under the saturation bound it does learn
-    wire = SHAPE_MAX_WIRE - 0.05
-    drive(model, v, g_true, 120.0, lambda t: wire if (t // 20.0) % 2 == 0 else -wire, shape_true=centering_shape)
+    la_pinned = 1.0
+    for _ in range(100):
+      la_pinned = g_true * 1.0 * centering_shape(la_pinned)
+    drive(model, v, g_true, 300.0, lambda t: 1.0 if (t // 20.0) % 2 == 0 else -1.0, shape_true=centering_shape)
     self.assertTrue(model.learning_shape)
-    self.assertLess(min(model.shapes), 1.0)
+    self.assertLess(model.shape(la_pinned), 0.9)
+    self.assertAlmostEqual(model.shape(la_pinned), centering_shape(la_pinned), delta=0.1)
+    self.assertAlmostEqual(model.gain(v), g_true)
+
+  def test_correction_does_not_oppose_a_saturated_request(self):
+    # model gain above latAccelFactor: the correction wants to take torque away
+    params = {GAIN_KEY_FMT.format(slot=30): 2.6, GAIN_KEY_FMT.format(slot=40): 2.6}
+    model = make_model(params)
+    v = 30 * CV.MPH_TO_MS
+    desired_la = 1.8
+    out = step(model, -0.5, 0.0, v, desired_la, 0.0)
+    self.assertGreater(model.ff_correction, 0.05)
+    self.assertAlmostEqual(out, -0.5 + model.ff_correction)        # unsaturated: full correction
+    out = step(model, -1.0, 0.0, v, desired_la, 0.0)
+    self.assertEqual(out, -1.0)                                      # saturated: none of it
+    self.assertEqual(model.applied_correction, 0.0)
+    out = step(model, -(1.0 - FF_SATURATION_FADE / 2), 0.0, v, desired_la, 0.0)
+    self.assertAlmostEqual(out, -(1.0 - FF_SATURATION_FADE / 2) + 0.5 * model.ff_correction)   # half way: half of it
+    # a correction into the turn is never faded
+    out = step(model, -1.0, 0.0, 8.0, 1.0, 0.0)
+    self.assertLess(model.ff_correction, 0.0)
+    self.assertEqual(out, -1.0)
+    out = step(model, -0.5, 0.0, 8.0, 1.0, 0.0)
+    self.assertAlmostEqual(out, max(-0.5 + model.ff_correction, -1.0))
 
   def test_shapes_stay_bounded(self):
     model = make_model()
