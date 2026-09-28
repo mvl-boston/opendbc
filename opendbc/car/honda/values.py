@@ -483,21 +483,21 @@ STEER_THRESHOLD = {
   # default is 1200, overrides go here
   CAR.ACURA_RDX: 400,
   CAR.HONDA_CRV_EU: 400,
-  CAR.HONDA_ACCORD_11G: 561,  # was 600; openpilotci f39cf149 intercept -67 at zero request (no DBC re-zero on Bosch)
-  CAR.HONDA_PILOT_4G: 600,
+  CAR.HONDA_ACCORD_11G: 950,  # was 600; CI f39cf149: |tq| p99.9 ~920 on engaged hands-off straight, T=600/561 false-presses ~0.07–9% in turns
+  CAR.HONDA_PILOT_4G: 1100,  # was 600; CI f9c43864: need T>=1075 for <0.1% FP on hands-off straight (LKAS wire reaction)
   CAR.HONDA_PILOT_4G_MMR: 600,
   CAR.HONDA_PASSPORT_4G: 600,
-  CAR.ACURA_MDX_4G_MMR: 600,
-  CAR.HONDA_CRV: 600,
+  CAR.ACURA_MDX_4G_MMR: 1200,  # was 600; CI ad984055: p99~900, T=600 false-presses ~1.3% hands-off / ~14% engaged
+  CAR.HONDA_CRV: 225,  # was 600; CI 68aac44: hands-off |tq| p99~90, T=600 never trips but misses light driver input
   CAR.HONDA_CRV_6G: 600,
   CAR.HONDA_CITY_7G: 600,
-  CAR.HONDA_NBOX_2G: 600,
-  CAR.HONDA_PASSPORT_4G: 600,
-  CAR.HONDA_ODYSSEY_5G_MMR: 600,
+  CAR.HONDA_NBOX_2G: 1200,  # was 600; CI 414af838: hands-off |tq| p99~1140, T=600 false-presses ~13% hands-off
+  CAR.HONDA_ODYSSEY_5G_MMR: 400,  # was 600; CI d7233a42: hands-off |tq| p99~175, T=600 overly conservative
   CAR.HONDA_ACCORD_9G: 30,
   CAR.ACURA_MDX_3G: 300,  # pair with DBC +172 re-zero (companion PR); was 400 when centered at ~-172
   CAR.ACURA_TLX_1G: 200,
   CAR.ACURA_RLX_HYBRID: 2400,
+  CAR.HONDA_CIVIC_BOSCH: 475,  # default 1200; CI 0a78dfbacc: T>=475 for <0.1% FP on hands-off straight (optional tighter override)
 }
 
 
