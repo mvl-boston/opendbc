@@ -106,6 +106,10 @@ class CarState(CarStateBase, CarStateExt):
     self.abs_counter_prev = self.abs_checksum_prev = None
     self.lowspeed_source = 0.0
 
+    # Experimental lead spoof: whether the camera currently reports a nearest forward object (slot 0)
+    self.lead_spoof = bool(CP.flags & HondaFlags.BOSCH_LEAD_SPOOF) and not CP.openpilotLongitudinalControl
+    self.camera_lead_present = False
+
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
@@ -403,6 +407,11 @@ class CarState(CarStateBase, CarStateExt):
       *create_button_events(self.cruise_buttons, prev_cruise_buttons, BUTTONS_DICT),
       *create_button_events(self.cruise_setting, prev_cruise_setting, SETTINGS_BUTTONS_DICT),
     ]
+
+    if self.lead_spoof:
+      # Camera's nearest forward-object slot (0x280). STATUS 0xF and RANGE_RAW 0xFFF mean the slot is empty.
+      cam_obj = cp_cam.vl["BOSCH_A_S00_F0"]
+      self.camera_lead_present = cam_obj["STATUS"] != 0xF and cam_obj["RANGE_RAW"] != 0xFFF
 
     CarStateExt.update(self, ret, ret_sp, can_parsers)
 
