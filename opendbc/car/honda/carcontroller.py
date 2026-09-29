@@ -1071,9 +1071,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                          CS.stock_brake, self.CP_SP))
           if self.CP_SP.enableGasInterceptor:
             gas_error = actuators.accel - CS.out.aEgo
-            if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid):
+            if (not CS.out.gasPressed) and (actuators.longControlState == LongCtrlState.pid) and (self.gasint_nolearn_ticks > 0):
               if gas_error != 0.0 and gas > 0.0:
-                self.gasfactor = np.clip(self.gasfactor + gas_error / 150 * (gas * 4.8), 0.1, 3.0)
+                self.gasfactor = np.clip(self.gasfactor + gas_error / 600 * (gas * 4.8), 0.1, 3.0)
               if gas_error != 0.0 and (not CS.out.brakePressed) and (CS.out.vEgo > 0.0):
                 wind_adjust = 1 + (wind_brake * 4.8) / 1000
                 self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 5.0)
@@ -1082,6 +1082,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
               else:
                 self.windfactor_before_brake = self.windfactor
             can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake, self.packer, self.frame))
+            self.gasint_nolearn_ticks = max (0, self.gasint_nolearn_ticks - 1)
 
           # during a driver-gas override the wire now carries the pedal mirror set above, so
           # the PCM tracker (and the feedforward state) stay wound to the true operating
