@@ -1044,7 +1044,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
               else:
                 self.windfactor_before_brake = self.windfactor
             can_sends.extend(GasInterceptorCarController.update(self, CC, CS, gas * self.gasfactor, brake, wind_brake, self.packer, self.frame))
-            self.gasint_nolearn_ticks = max (0, self.gasint_nolearn_ticks - 1)
+            self.gasint_nolearn_ticks = max(0, self.gasint_nolearn_ticks - 1)
 
           # during a driver-gas override the wire now carries the pedal mirror set above, so
           # the PCM tracker (and the feedforward state) stay wound to the true operating
