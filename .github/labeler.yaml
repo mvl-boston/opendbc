@@ -23,10 +23,6 @@ body:
   - changed-files:
     - any-glob-to-any-file: 'opendbc/car/body/**'
 
-byd:
-  - changed-files:
-    - any-glob-to-any-file: 'opendbc/car/byd/**'
-
 chrysler:
   - changed-files:
     - any-glob-to-any-file: 'opendbc/car/chrysler/**'
