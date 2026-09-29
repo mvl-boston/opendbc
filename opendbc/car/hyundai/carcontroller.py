@@ -8,12 +8,6 @@ from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR
 from opendbc.car.interfaces import CarControllerBase
 
-from opendbc.sunnypilot.car.hyundai.escc import EsccCarController
-from opendbc.sunnypilot.car.hyundai.icbm import IntelligentCruiseButtonManagementInterface
-from opendbc.sunnypilot.car.hyundai.longitudinal.controller import LongitudinalController
-from opendbc.sunnypilot.car.hyundai.lead_data_ext import LeadDataCarController
-from opendbc.sunnypilot.car.hyundai.mads import MadsCarController
-
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 
@@ -54,15 +48,9 @@ def process_hud_alert(enabled, fingerprint, hud_control):
   return sys_warning, sys_state, left_lane_warning, right_lane_warning
 
 
-class CarController(CarControllerBase, EsccCarController, LeadDataCarController, LongitudinalController, MadsCarController,
-                    IntelligentCruiseButtonManagementInterface):
-  def __init__(self, dbc_names, CP, CP_SP):
-    CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
-    EsccCarController.__init__(self, CP, CP_SP)
-    MadsCarController.__init__(self)
-    LeadDataCarController.__init__(self, CP)
-    LongitudinalController.__init__(self, CP, CP_SP)
-    IntelligentCruiseButtonManagementInterface.__init__(self, CP, CP_SP)
+class CarController(CarControllerBase):
+  def __init__(self, dbc_names, CP):
+    super().__init__(dbc_names, CP)
     self.CAN = CanBus(CP)
     self.params = CarControllerParams(CP)
     self.packer = CANPacker(dbc_names[Bus.pt])
@@ -74,13 +62,7 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     self.last_button_frame = 0
     self.cancel_counter = 0
 
-  def update(self, CC, CC_SP, CS, now_nanos):
-    EsccCarController.update(self, CS)
-    LeadDataCarController.update(self, CC_SP)
-    MadsCarController.update(self, self.CP, CC, CC_SP, self.frame)
-    if self.frame % 5 == 0:
-      LongitudinalController.update(self, CC, CS)
-
+  def update(self, CC, CS, now_nanos):
     actuators = CC.actuators
     hud_control = CC.hudControl
 
@@ -108,8 +90,7 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     # *** common hyundai stuff ***
 
     # tester present - w/ no response (keeps relevant ECU disabled)
-    if self.frame % 100 == 0 and not ((self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC) or self.ESCC.enabled) and \
-            self.CP.openpilotLongitudinalControl:
+    if self.frame % 100 == 0 and not (self.CP.flags & HyundaiFlags.CANFD_CAMERA_SCC) and self.CP.openpilotLongitudinalControl:
       # for longitudinal control, either radar or ADAS driving ECU
       addr, bus = 0x7d0, self.CAN.ECAN if self.CP.flags & HyundaiFlags.CANFD else 0
       if self.CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG.value:
@@ -136,13 +117,10 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
       can_sends.extend(self.create_can_msgs(apply_steer_req, apply_torque, torque_fault, set_speed_in_units, accel,
                                             stopping, hud_control, actuators, CS, CC))
 
-    # Intelligent Cruise Button Management
-    can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CS, CC_SP, self.packer, self.frame, self.last_button_frame, self.CAN))
-
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / self.params.STEER_MAX
     new_actuators.torqueOutputCan = apply_torque
-    new_actuators.accel = self.tuning.actual_accel
+    new_actuators.accel = accel
 
     self.frame += 1
     return new_actuators, can_sends
@@ -157,8 +135,7 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     can_sends.append(hyundaican.create_lkas11(self.packer, self.frame, self.CP, apply_torque, apply_steer_req,
                                               torque_fault, CS.lkas11, sys_warning, sys_state, CC.enabled,
                                               hud_control.leftLaneVisible, hud_control.rightLaneVisible,
-                                              left_lane_warning, right_lane_warning,
-                                              self.lkas_icon))
+                                              left_lane_warning, right_lane_warning))
 
     # Button messages
     if not self.CP.openpilotLongitudinalControl:
@@ -177,20 +154,19 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
       jerk = 3.0 if actuators.longControlState == LongCtrlState.pid else 1.0
       use_fca = self.CP.flags & HyundaiFlags.USE_FCA.value
       can_sends.extend(hyundaican.create_acc_commands(self.packer, CC.enabled, accel, jerk, int(self.frame / 2),
-                                                      self.lead_data, hud_control, set_speed_in_units, stopping,
-                                                      CC.cruiseControl.override, use_fca, self.CP,
-                                                      CS.main_cruise_enabled, self.tuning, self.ESCC))
+                                                      hud_control, set_speed_in_units, stopping,
+                                                      CC.cruiseControl.override, use_fca, self.CP))
 
     # 20 Hz LFA MFA message
     if self.frame % 5 == 0 and self.CP.flags & HyundaiFlags.SEND_LFA.value:
-      can_sends.append(hyundaican.create_lfahda_mfc(self.packer, CC.enabled, self.lfa_icon))
+      can_sends.append(hyundaican.create_lfahda_mfc(self.packer, CC.enabled))
 
     # 5 Hz ACC options
     if self.frame % 20 == 0 and self.CP.openpilotLongitudinalControl:
-      can_sends.extend(hyundaican.create_acc_opt(self.packer, self.CP, self.ESCC))
+      can_sends.extend(hyundaican.create_acc_opt(self.packer, self.CP))
 
     # 2 Hz front radar options
-    if self.frame % 50 == 0 and self.CP.openpilotLongitudinalControl and not self.ESCC.enabled:
+    if self.frame % 50 == 0 and self.CP.openpilotLongitudinalControl:
       can_sends.append(hyundaican.create_frt_radar_opt(self.packer))
 
     return can_sends
@@ -202,7 +178,7 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     lka_steering_long = lka_steering and self.CP.openpilotLongitudinalControl
 
     # steering control
-    can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_torque, self.lkas_icon))
+    can_sends.extend(hyundaicanfd.create_steering_messages(self.packer, self.CP, self.CAN, CC.enabled, apply_steer_req, apply_torque))
 
     # prevent LFA from activating on LKA steering cars by sending "no lane lines detected" to ADAS ECU
     if self.frame % 5 == 0 and lka_steering:
@@ -211,7 +187,7 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
 
     # LFA and HDA icons
     if self.frame % 5 == 0 and (not lka_steering or lka_steering_long):
-      can_sends.append(hyundaicanfd.create_lfahda_cluster(self.packer, self.CAN, CC.enabled, self.lfa_icon))
+      can_sends.append(hyundaicanfd.create_lfahda_cluster(self.packer, self.CAN, CC.enabled))
 
     # blinkers
     if lka_steering and self.CP.flags & HyundaiFlags.CANFD_ENABLE_BLINKERS:
@@ -224,7 +200,7 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
         can_sends.extend(hyundaicanfd.create_fca_warning_light(self.packer, self.CAN, self.frame))
       if self.frame % 2 == 0:
         can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
-                                                         set_speed_in_units, hud_control, self.lead_data, CS.main_cruise_enabled, self.tuning))
+                                                         set_speed_in_units, hud_control))
         self.accel_last = accel
     else:
       # button presses
