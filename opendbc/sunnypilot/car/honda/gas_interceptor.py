@@ -37,7 +37,7 @@ class GasInterceptorCarController:
         self.gas = float(np.clip(gas_mult * (gas - brake + wind_brake * 3 / 4), 0., 1.))
       else:
         self.gas = 0.0
-      send_gas = min (self.gas, self.last_gasint + 0.004)
+      send_gas = min(self.gas, self.last_gasint + 0.004)
       if send_gas != self.gas:
         self.gasint_nolearn_ticks = 25
         self.gas = send_gas
