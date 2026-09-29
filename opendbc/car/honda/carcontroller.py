@@ -144,6 +144,28 @@ NIDEC_SPEED_ALPHA_KEYS: dict[str, str] = {band: f"HondaSpeedAlpha{band}Params" f
 NIDEC_SPEED_ALPHA_KEYS["low"] = "HondaSpeedAlphaLowParams"
 NIDEC_SPEED_ALPHA_KEYS["high"] = "HondaSpeedAlphaParams"
 
+# Speed-channel learner backstops. These are plant-plausibility bounds, not tuning: a persisted
+# value outside them is a poisoned learner state, not something a Nidec PCM can have taught us.
+# The speed factor is m/s of PCM_SPEED lead per m/s2 of requested accel; the servo's dv gain
+# was identified at 0.33-0.46 (m/s2)/(m/s) on the MDX (speedfactor 2.2-3.0), and a gain above
+# 1 (m/s2)/(m/s), i.e. a factor below 1.0, is not a plausible comfort-tuned ACC servo.
+NIDEC_SPEED_FACTOR_DEFAULT = 4.0
+NIDEC_SPEED_FACTOR_MIN = 1.0
+NIDEC_SPEED_FACTOR_MAX = 99.0
+# zero-accel servo offset, m/s; measured -0.18..+0.46 per speed band on the MDX
+NIDEC_SPEED_ALPHA_MAX = 1.5
+# speed-channel ceiling, m/s2; every Nidec PCM sustains at least this on its speed channel
+# (stock ramps run +0.5..0.8 m/s2), so a lower value is a collapsed learner, not a measurement
+NIDEC_SAT_ACCEL_DEFAULT = 0.9
+NIDEC_SAT_ACCEL_MIN = 0.3
+# derived knee bounds, m/s of lead. Below DV_SAT_MIN the servo is never treated as saturated:
+# stock itself launches with a 2.8 m/s lead and the MDX's linear band extends to ~2.5 m/s, so
+# an undershoot with less lead than that is speedfactor's information, not the ceiling's.
+# Beyond DV_SAT_MAX the lead is provably past servo response (marginal dv gain 0.009 in the
+# 30-90 m/s band, route 1d7), so surplus lead there is bled regardless of what sat_accel says.
+NIDEC_DV_SAT_MIN = 2.5
+NIDEC_DV_SAT_MAX = 10.0
+
 
 def band_weights(bands, v_ego):
   # hat-function weights of piecewise-linear interpolation across the band nodes: exactly the
@@ -291,13 +313,26 @@ class CarController(CarControllerBase):
     # The pre-existing low (10 m/s) / high (16 m/s) nodes load their old params; new nodes seed
     # from the old two-band blend evaluated at the node speed, so the first drive with this code
     # reproduces the previous curve exactly and starts from today's operating point.
+    # A persisted speed factor below the plausibility floor is the signature of the learner
+    # collapse fixed in update() (Pilot route b29245576c122ee6/3a booted with HondaSpeedFactorParams
+    # 0.086 and HondaSatAccelParams 0.1: a 0.15 m/s lead at cmd +0.9, i.e. "hold speed" sent to
+    # the servo while the planner asked for acceleration for 40 s). Nothing learnable lives
+    # below the floor, so it is reset to the default rather than clipped, the same way gas_launch
+    # and average_factor sanitize their poisoned persisted values.
+    def load_speed_factor(key, default):
+      value = load_param(key, default)
+      return value if value >= NIDEC_SPEED_FACTOR_MIN else NIDEC_SPEED_FACTOR_DEFAULT
+
+    def load_speed_alpha(key, default):
+      return float(np.clip(load_param(key, default), -NIDEC_SPEED_ALPHA_MAX, NIDEC_SPEED_ALPHA_MAX))
+
     gf_high = load_param("HondaGasFactorParams", 1.0)
     gf_low = load_param("HondaGasFactorLowParams", gf_high)
     ga_high = load_param("HondaGasAlphaParams", 0.0)
-    sf_high = load_param("HondaSpeedFactorParams", 4.0)
-    sa_high = load_param("HondaSpeedAlphaParams", 0.0)
-    sf_low = load_param("HondaSpeedFactorLowParams", 4.0)
-    sa_low = load_param("HondaSpeedAlphaLowParams", 0.0)
+    sf_high = load_speed_factor("HondaSpeedFactorParams", NIDEC_SPEED_FACTOR_DEFAULT)
+    sa_high = load_speed_alpha("HondaSpeedAlphaParams", 0.0)
+    sf_low = load_speed_factor("HondaSpeedFactorLowParams", NIDEC_SPEED_FACTOR_DEFAULT)
+    sa_low = load_speed_alpha("HondaSpeedAlphaLowParams", 0.0)
 
     def old_two_band_blend(low_val, high_val, band_speed):
       low_w = float(np.interp(band_speed, [10.0, 16.0], [1.0, 0.0]))
@@ -316,12 +351,16 @@ class CarController(CarControllerBase):
     self.speed_factors = {}
     self.speed_alphas = {}
     for band, band_speed in NIDEC_SPEED_BANDS:
-      self.speed_factors[band] = load_param(NIDEC_SPEED_FACTOR_KEYS[band], old_two_band_blend(sf_low, sf_high, band_speed))
-      self.speed_alphas[band] = load_param(NIDEC_SPEED_ALPHA_KEYS[band], old_two_band_blend(sa_low, sa_high, band_speed))
+      self.speed_factors[band] = load_speed_factor(NIDEC_SPEED_FACTOR_KEYS[band], old_two_band_blend(sf_low, sf_high, band_speed))
+      self.speed_alphas[band] = load_speed_alpha(NIDEC_SPEED_ALPHA_KEYS[band], old_two_band_blend(sa_low, sa_high, band_speed))
 
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
-    self.sat_accel = 0.9 if (Params().get("HondaSatAccelParams") is None) else Params().get("HondaSatAccelParams")
+    # a ceiling estimate below the floor is the other half of the same collapse (see update());
+    # reset it so the derived knee is meaningful from frame 1
+    self.sat_accel = load_param("HondaSatAccelParams", NIDEC_SAT_ACCEL_DEFAULT)
+    if not (NIDEC_SAT_ACCEL_MIN <= self.sat_accel <= self.params.NIDEC_ACCEL_MAX - 0.1):
+      self.sat_accel = NIDEC_SAT_ACCEL_DEFAULT
     self.sat_deficit_frames = self.sat_excess_frames = 0
     self.new_accel = 0.0
 
@@ -813,8 +852,22 @@ class CarController(CarControllerBase):
           self.gas_factors[band] = float(np.clip(self.gas_factors[band] * (1 + w * gf_growth), 0.1, 5.0))
       if (not CS.out.gasPressed) and (self.apply_brake_last == 0): # adjust speedfactor and average_factor
         speedfactor_error = (self.accel - CS.out.aEgo)
-        dv_sent = sf_eff * self.accel + alpha_eff
-        dv_sat = max(0.1, sf_eff * self.sat_accel + alpha_eff)
+        # The knee (dv_sat) is where the responsive line sf*accel meets the ceiling sf*sat_accel,
+        # bounded to the range a Nidec servo can plausibly saturate in. Both sides are alpha-free:
+        # with alpha inside both, dv_sent > dv_sat reduced to accel > sat_accel and the comparison
+        # carried no information about the lead actually on the wire.
+        # The unbounded knee is what collapsed the Pilot (route b29245576c122ee6/3a): a few
+        # sustained highway pulls where the car lagged the plan dragged sat_accel down (symmetric
+        # 0.002 rate, no maxed-channel evidence required), which shrank the knee, which turned
+        # every undershoot into a bleed of the speed factor (rate ~ sf*(accel - sat), so it never
+        # bottoms out), which cut the lead, which made the car undershoot more, until
+        # HondaSatAccelParams sat on its 0.1 floor and HondaSpeedFactorParams at 0.086: the wire
+        # carried PCM_SPEED = vEgo + 0.15 m/s with the plan at +0.9 m/s2, and with dv_sent > dv_sat
+        # still true (0.15 > 0.1) the reductions-only ratchet made that state absorbing.
+        dv_lead = sf_eff * self.accel
+        dv_sat = float(np.clip(sf_eff * self.sat_accel, NIDEC_DV_SAT_MIN, NIDEC_DV_SAT_MAX))
+        in_sat = dv_lead > dv_sat
+        gas_pinned = self.new_accel >= self.params.NIDEC_GAS_MAX
 
         # average_factor learner: direct measurement (system ID), not tracking-error integration.
         # average_factor models the PCM's one-pole smoothing of our PCM_GAS commands, and
@@ -863,8 +916,17 @@ class CarController(CarControllerBase):
           self.average_factor = float(np.clip(self.average_factor + np.clip(averagefactor_step, -0.0001, 0.0001),
                                               0.02, 1.0))
 
-        # ceiling learner: identifies max accel capability, learn situation exist for a second before adjusting
-        if (CS.out.aEgo > self.sat_accel) and (not CS.out.gasPressed) and (CC.longActive):
+        # ceiling learner: identifies max accel capability, learn situation exist for a second before adjusting.
+        # A ceiling is a max-type quantity, so the two directions carry different evidence and
+        # run at different rates: the car demonstrably beating the estimate for a second is
+        # direct proof (fast), while a deficit is only ceiling evidence when the channel is
+        # provably maxed: lead past the knee, wire gas pinned, and an undershoot that has
+        # outlasted the plant's ~1 s response lag (10x slower, so lag dips and gas-limited
+        # pulls cannot eat the ceiling the way they did on the Pilot). Gating the deficit on the
+        # knee rather than on accel >= sat_accel also makes a too-high estimate falsifiable:
+        # once the lead has grown to the DV_SAT_MAX clip, undershoot pulls it down even when the
+        # planner never asks for sat_accel itself.
+        if (CS.out.aEgo > self.sat_accel) and (not CS.out.gasPressed) and (CC.longActive) and (not self.launch_active):
           self.sat_excess_frames += 1
         else:
           self.sat_excess_frames = 0
@@ -873,32 +935,48 @@ class CarController(CarControllerBase):
         # aEgo < 0 against cmd +1.25 while the wire ramped and the pedal applied ~2s late), so
         # counting those ticks drags sat_accel down for a gas-transient it does not own
         # (sat_accel fell 1.01 -> 0.86 between routes 33 and 34 while cruise tracking was clean)
-        if (CS.out.aEgo < self.sat_accel <= self.accel) and (not CS.out.gasPressed) and (CC.longActive) and \
-             (not self.launch_active) and (self.gas_recovery_ticks == 0):
+        if in_sat and gas_pinned and (CS.out.aEgo < self.sat_accel) and (speedfactor_error > 0.1) and \
+             (not CS.out.gasPressed) and (CC.longActive) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
           self.sat_deficit_frames += 1
         else:
           self.sat_deficit_frames = 0
-        if (self.sat_excess_frames > 100) or (self.sat_deficit_frames > 100):
-          self.sat_accel = float(np.clip(self.sat_accel + 0.002 * (CS.out.aEgo - self.sat_accel), 0.1, self.params.NIDEC_ACCEL_MAX - 0.1))
+        if self.sat_excess_frames > 100:
+          sat_rate = 0.002
+        elif self.sat_deficit_frames > 150:
+          sat_rate = 0.0002
+        else:
+          sat_rate = 0.0
+        if sat_rate > 0.0:
+          self.sat_accel = float(np.clip(self.sat_accel + sat_rate * (CS.out.aEgo - self.sat_accel),
+                                         NIDEC_SAT_ACCEL_MIN, self.params.NIDEC_ACCEL_MAX - 0.1))
 
         # recovery windows are excluded like launch windows: the undershoot there is gas-channel
         # dead time, not speed-servo response, and it was double-billed — growing/bleeding
         # sf and alpha (sf_low fell 1.27 -> 0.60 across routes 33/34, mostly in these windows)
         if CC.longActive and (CS.out.vEgo > 1e-5) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
-          if (speedfactor_error > 0) and (dv_sent > dv_sat):
-            # beyond the knee surplus dv provably does nothing, so undershoot there is not
-            # growth fuel (that loop is what rode speedfactor to ~511): bleed toward the knee
+          if (speedfactor_error > 0) and (dv_lead > NIDEC_DV_SAT_MAX):
+            # beyond DV_SAT_MAX surplus lead provably does nothing, so undershoot there is not
+            # growth fuel (that loop is what rode speedfactor to ~511): bleed toward the clip
             # instead (min-norm: prefer the smallest lead with the same output), rate-limited
             # to 0.5%/tick. The ratchet below only prevents growth; this is the convergence
-            # force that actually deflates a poisoned state.
-            sf_growth = -min(0.0005 * (dv_sent - dv_sat), 0.005)
+            # force that actually deflates a poisoned-high state.
+            # The bleed used to run whenever dv_sent > dv_sat, i.e. whenever accel > sat_accel:
+            # there its rate scales with sf itself, so it is a multiplicative decay with no
+            # floor, and it is exactly what ground the Pilot's speed factor from 4.0 to 0.086.
+            # Below the clip, a ceiling-limited pull is the ceiling learner's information and
+            # the ratchet alone keeps it from being growth fuel.
+            sf_growth = -min(0.0005 * (dv_lead - NIDEC_DV_SAT_MAX), 0.005)
           else:
             sf_growth = 0.001 * speedfactor_error * self.accel
           # each band learns in proportion to its authority over the sent lead
           for band, w in speed_w.items():
-            self.speed_factors[band] = float(np.clip(self.speed_factors[band] * (1 + w * sf_growth), 0.01, 99.0))
-            self.speed_alphas[band] = min(dv_sat, self.speed_alphas[band] + w * 0.001 * speedfactor_error)
-        if max_speedcontrol or (dv_sent > dv_sat): # only allow learning reductions
+            self.speed_factors[band] = float(np.clip(self.speed_factors[band] * (1 + w * sf_growth),
+                                                     NIDEC_SPEED_FACTOR_MIN, NIDEC_SPEED_FACTOR_MAX))
+            # alpha's cap used to be dv_sat itself, which is self-referential (alpha was inside
+            # dv_sat) and pinned alpha at 0.1 on the Pilot once the knee had collapsed
+            self.speed_alphas[band] = float(np.clip(self.speed_alphas[band] + w * 0.001 * speedfactor_error,
+                                                    -NIDEC_SPEED_ALPHA_MAX, NIDEC_SPEED_ALPHA_MAX))
+        if max_speedcontrol or in_sat: # only allow learning reductions
           # speed-channel saturation is a speed-channel condition. gasfactor/gas_alpha used to
           # be ratcheted here too, which made "pcm_speed at its clip" (68% of low-speed accel
           # frames on route 51, with speedfactor_low pinned at its clamp) forbid the gas target
