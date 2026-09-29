@@ -33,3 +33,35 @@ CM_ SG_ 479 AEB_BRAKING "set when braking is commanded during AEB event";
 CM_ SG_ 479 AEB_PREPARE "set 1s before AEB";
 CM_ SG_ 479 MAYBE_DISENGAGE_COMMAND "Might signal the powertrain to disengage or prevent engagement on radar-side ACC faults";
 CM_ SG_ 479 MAYBE_DISENGAGE_ALERT "Signals the instrument cluster to display an ACC fault";
+
+BO_ 640 BOSCH_A_S00_F0: 8 CAM
+ SG_ STATUS : 15|4@0+ (1,0) [0|15] "" XXX
+ SG_ FRAME_IDX : 27|4@0+ (1,0) [0|15] "" XXX
+ SG_ RANGE_RAW : 23|12@0+ (1,0) [0|4095] "" XXX
+ SG_ RANGE : 23|12@0+ (0.05712,-3.0) [-3.0|231.7965] "m" XXX
+ SG_ AZIMUTH_RAW : 39|11@0+ (1,0) [0|2047] "" XXX
+ SG_ RANGE_SIGMA_RAW : 7|7@0+ (1,0) [0|127] "" XXX
+
+BO_ 641 BOSCH_A_S00_F1: 8 CAM
+ SG_ FRAME_IDX : 28|4@0+ (1,0) [0|15] "" XXX
+ SG_ OBJECT_EXISTENCE_PROBABILITY_RAW : 46|7@0+ (1,0) [0|127] "" XXX
+
+BO_ 642 BOSCH_A_S00_F2: 8 CAM
+ SG_ FRAME_IDX : 11|4@0+ (1,0) [0|15] "" XXX
+ SG_ LIFECYCLE_RAW : 7|12@0+ (1,0) [0|4095] "" XXX
+
+BO_ 643 BOSCH_A_S00_F3: 8 CAM
+ SG_ FRAME_IDX : 12|4@0+ (1,0) [0|15] "" XXX
+ SG_ TRACK_ID : 55|8@0+ (1,0) [0|255] "" XXX
+
+BO_ 712 BOSCH_A_S00_AUX: 8 CAM
+ SG_ FRAME_IDX : 12|4@0+ (1,0) [0|15] "" XXX
+ SG_ REL_VELOCITY_RAW : 7|11@0+ (1,0) [0|2047] "" XXX
+ SG_ RANGE_RATIO_RAW : 55|10@0+ (1,0) [0|1023] "" XXX
+
+CM_ "The Bosch-A camera emits a 16-slot forward-object bank (slot 0 = nearest object, msgs 0x280-0x283 + aux 0x2C8) that the radar fuses for its low-speed TJA lead gate. Only slot 0 is modeled here; layout/scaling from opendbc PR mvl-boston/opendbc#669.";
+CM_ SG_ 640 STATUS "0xF = empty slot (no object)";
+CM_ SG_ 640 RANGE_RAW "0xFFF = invalid range";
+CM_ SG_ 640 AZIMUTH_RAW "1024 = straight ahead";
+CM_ SG_ 642 LIFECYCLE_RAW "increments by 2 each sweep for a persistent track";
+CM_ SG_ 712 REL_VELOCITY_RAW "864 = zero relative velocity, scale 1/64 m/s";
