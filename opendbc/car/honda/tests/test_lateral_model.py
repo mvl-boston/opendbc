@@ -5,7 +5,7 @@ import numpy as np
 from opendbc.car import DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.lateral_model import (DEFAULT_LAT_ACCEL_FACTOR, FF_CORRECTION_MAX, FF_SATURATION_FADE, FILTER_TAU,
-                                             GAIN_BINS_MPH, GAIN_KEY_FMT, GAIN_MAX, GAIN_MIN, GAIN_PRIOR, MAX_LAT_ACCEL,
+                                             GAIN_BINS_MPH, GAIN_BINS_MS, GAIN_KEY_FMT, GAIN_MAX, GAIN_MIN, GAIN_PRIOR, MAX_LAT_ACCEL,
                                              MAX_LAT_JERK_DOWN, MAX_LAT_JERK_UP, PRESS_HOLDOFF, SHAPE_ANCHOR_LAT_ACCEL,
                                              SHAPE_BINS_LAT_ACCEL, SHAPE_KEY_FMT, SHAPE_MAX, SHAPE_MIN, WIRE_RATE_MAX,
                                              HondaLateralModel)
@@ -315,8 +315,49 @@ class TestHondaLateralWireLimits(unittest.TestCase):
   def test_targets_are_iso_11270(self):
     self.assertEqual(MAX_LAT_JERK_DOWN, ISO_LATERAL_JERK)
     self.assertEqual(MAX_LAT_JERK_UP, ISO_LATERAL_JERK)
-    self.assertGreaterEqual(MAX_LAT_ACCEL, ISO_LATERAL_ACCEL)
-    self.assertLess(MAX_LAT_ACCEL, ISO_LATERAL_ACCEL + 1.0)
+    self.assertEqual(MAX_LAT_ACCEL, ISO_LATERAL_ACCEL)
+
+  def test_0_5s_jerk_and_max_lateral_accel_match_test_lateral_limits(self):
+    # opendbc/car/tests/test_lateral_limits.py measures a torque car's jerk as the lateral accel its rate
+    # limiter lets it reach in 0.5 s from center (and give back in 0.5 s from full lock), through one
+    # linear gain, and caps the plant gain at ISO_LATERAL_ACCEL. It has no STEER_DELTA to evaluate for
+    # Honda, so the same measurement is made here against limit() itself: at every speed bin and between
+    # bins, with the priors and with the tables saturated at GAIN_MAX, using the model's own gain as the
+    # linear plant. Symmetric 5 m/s^3 is the planner's own bound (drive_helpers.clip_curvature).
+    ticks = int(round(0.5 / DT_CTRL))
+    for params in (None, {GAIN_KEY_FMT.format(slot=mph): GAIN_MAX for mph in GAIN_BINS_MPH}):
+      speeds = list(GAIN_BINS_MS) + [0.5 * (a + b) for a, b in zip(GAIN_BINS_MS[:-1], GAIN_BINS_MS[1:], strict=True)]
+      for v in speeds + [0.0, 45.0]:
+        model = make_model(params)
+        g = model.gain(v)
+        self.assertLessEqual(g * 1.0, ISO_LATERAL_ACCEL + 1e-9)               # test_max_lateral_accel
+
+        up = run_limit(model, v, lambda k: 1.0, ticks)
+        up_jerk = g * abs(up[-1]) / 0.5
+        self.assertLessEqual(up_jerk, ISO_LATERAL_JERK + 1e-9, msg=f"v={v:.1f} up {up_jerk:.3f}")
+
+        down = run_limit(model, v, lambda k: 0.0, ticks, last=1.0)
+        down_jerk = g * (1.0 - down[-1]) / 0.5
+        self.assertLessEqual(down_jerk, ISO_LATERAL_JERK + 1e-9, msg=f"v={v:.1f} down {down_jerk:.3f}")
+
+        # a full reversal from lock to lock is a down leg then an up leg and may not go faster than either
+        rev = run_limit(model, v, lambda k: -1.0, ticks, last=1.0)
+        rev_jerk = g * (1.0 - rev[-1]) / 0.5
+        self.assertLessEqual(rev_jerk, ISO_LATERAL_JERK + 1e-9, msg=f"v={v:.1f} reversal {rev_jerk:.3f}")
+
+  def test_any_request_sequence_stays_inside_iso_per_tick(self):
+    # per tick, whatever the controller asks for: |gain * wire| <= 3 m/s^2 and |d(gain * wire)| <= 5 m/s^3 * DT
+    rng = np.random.default_rng(0)
+    for params in (None, {GAIN_KEY_FMT.format(slot=mph): GAIN_MAX for mph in GAIN_BINS_MPH}):
+      for v in (3.0, 8.0, 13.0, 20.0, 30.0):
+        model = make_model(params)
+        g = model.gain(v)
+        req = np.concatenate((rng.uniform(-3.0, 3.0, 400), np.tile([1.0, -1.0], 100), rng.normal(0.0, 0.3, 400)))
+        wire = run_limit(model, v, req.__getitem__, len(req))
+        la = g * wire
+        self.assertLessEqual(np.max(np.abs(la)), ISO_LATERAL_ACCEL + 1e-9)
+        self.assertLessEqual(np.max(np.abs(np.diff(np.concatenate(([0.0], la))))), ISO_LATERAL_JERK * DT_CTRL + 1e-9)
+        self.assertLessEqual(np.max(np.abs(wire)), 1.0)
 
   def test_jerk_bound_is_constant_in_lateral_accel_across_speeds(self):
     # a step request from 0 to full torque: the wire may only climb at MAX_LAT_JERK_UP in lateral accel,
