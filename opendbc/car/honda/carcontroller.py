@@ -351,24 +351,19 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # The pre-existing low (10 m/s) / high (16 m/s) nodes load their old params; new nodes seed
     # from the old two-band blend evaluated at the node speed, so the first drive with this code
     # reproduces the previous curve exactly and starts from today's operating point.
-    # Persisted speed-channel state is clipped into the learnable range, never reset: a value
-    # sitting on a bound is the visible trace of a learner bug (Pilot route b29245576c122ee6/3a
-    # booted with HondaSpeedFactorParams 0.086 and HondaSatAccelParams 0.1, i.e. a 0.15 m/s lead
-    # at cmd +0.9 sent to the servo as "hold speed" for 40 s) and a reset would hide it. The
-    # learner in update() is required to walk back from every corner of the box on its own.
-    def load_speed_factor(key, default):
-      return float(np.clip(load_param(key, default), NIDEC_SPEED_FACTOR_MIN, NIDEC_SPEED_FACTOR_MAX))
-
-    def load_speed_alpha(key, default):
-      return float(np.clip(load_param(key, default), -NIDEC_SPEED_ALPHA_MAX, NIDEC_SPEED_ALPHA_MAX))
-
+    # Persisted speed-channel state is loaded as-is, never sanitized: a value outside the learner's
+    # bounds is the visible trace of a learner bug (Pilot route b29245576c122ee6/3a booted with
+    # HondaSpeedFactorParams 0.086 and HondaSatAccelParams 0.1, i.e. a 0.15 m/s lead at cmd +0.9
+    # sent to the servo as "hold speed" for 40 s) and a boot-time fix-up would hide it. The
+    # learner's own clips in update() move it onto the bound on its first tick, and it is
+    # required to walk back from every corner of the box on its own.
     gf_high = load_param("HondaGasFactorParams", 1.0)
     gf_low = load_param("HondaGasFactorLowParams", gf_high)
     ga_high = load_param("HondaGasAlphaParams", 0.0)
-    sf_high = load_speed_factor("HondaSpeedFactorParams", NIDEC_SPEED_FACTOR_DEFAULT)
-    sa_high = load_speed_alpha("HondaSpeedAlphaParams", 0.0)
-    sf_low = load_speed_factor("HondaSpeedFactorLowParams", NIDEC_SPEED_FACTOR_DEFAULT)
-    sa_low = load_speed_alpha("HondaSpeedAlphaLowParams", 0.0)
+    sf_high = load_param("HondaSpeedFactorParams", NIDEC_SPEED_FACTOR_DEFAULT)
+    sa_high = load_param("HondaSpeedAlphaParams", 0.0)
+    sf_low = load_param("HondaSpeedFactorLowParams", NIDEC_SPEED_FACTOR_DEFAULT)
+    sa_low = load_param("HondaSpeedAlphaLowParams", 0.0)
 
     def old_two_band_blend(low_val, high_val, band_speed):
       low_w = float(np.interp(band_speed, [10.0, 16.0], [1.0, 0.0]))
@@ -387,13 +382,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.speed_factors = {}
     self.speed_alphas = {}
     for band, band_speed in NIDEC_SPEED_BANDS:
-      self.speed_factors[band] = load_speed_factor(NIDEC_SPEED_FACTOR_KEYS[band], old_two_band_blend(sf_low, sf_high, band_speed))
-      self.speed_alphas[band] = load_speed_alpha(NIDEC_SPEED_ALPHA_KEYS[band], old_two_band_blend(sa_low, sa_high, band_speed))
+      self.speed_factors[band] = load_param(NIDEC_SPEED_FACTOR_KEYS[band], old_two_band_blend(sf_low, sf_high, band_speed))
+      self.speed_alphas[band] = load_param(NIDEC_SPEED_ALPHA_KEYS[band], old_two_band_blend(sa_low, sa_high, band_speed))
 
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
-    self.sat_accel = float(np.clip(load_param("HondaSatAccelParams", NIDEC_SAT_ACCEL_DEFAULT),
-                                   NIDEC_SAT_ACCEL_MIN, self.params.NIDEC_ACCEL_MAX - 0.1))
+    self.sat_accel = load_param("HondaSatAccelParams", NIDEC_SAT_ACCEL_DEFAULT)
     self.sat_deficit_frames = self.sat_excess_frames = 0
     # (accel, wire gas pinned, speed-channel learn gate) per frame, read back a servo lag later
     self.speed_cmd_hist: deque[tuple[float, bool, bool]] = deque([(0.0, False, False)] * NIDEC_SERVO_LAG_FRAMES,
