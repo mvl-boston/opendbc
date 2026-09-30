@@ -62,6 +62,11 @@ class TestLateralLimits(unittest.TestCase):
     return accel_up_0_5_sec / JERK_MEAS_T, accel_down_0_5_sec / JERK_MEAS_T
 
   def test_jerk_limits(self):
+    # Brands without a fixed torque rate bound lateral jerk through an identified plant model instead
+    # (Honda: opendbc/car/honda/lateral_model.py, covered by opendbc/car/honda/tests/test_lateral_model.py).
+    # The linear calculation here has no rate to evaluate for them.
+    if not hasattr(self.control_params, 'STEER_DELTA_UP'):
+      raise unittest.SkipTest('lateral jerk bounded by the plant model, not STEER_DELTA')
     up_jerk, down_jerk = self.calculate_0_5s_jerk(self.control_params, self.torque_params)
     assert up_jerk <= MAX_LAT_JERK_UP + MAX_LAT_JERK_UP_TOLERANCE
     assert down_jerk <= MAX_LAT_JERK_DOWN

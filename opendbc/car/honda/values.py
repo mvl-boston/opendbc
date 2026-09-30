@@ -36,8 +36,8 @@ class CarControllerParams:
   BOSCH_GAS_LOOKUP_V = [0, 1600]
 
   STEER_STEP = 1  # 100 Hz
-  STEER_DELTA_UP = 3  # min/max in 0.33s for all Honda
-  STEER_DELTA_DOWN = 3
+  # No STEER_DELTA_UP/DOWN: the steer torque rate is bounded by ISO 11270 lateral jerk through the
+  # identified lateral plant model instead (opendbc/car/honda/lateral_model.py, HondaLateralModel.limit).
   STEER_GLOBAL_MIN_SPEED = 3 * CV.MPH_TO_MS
 
   def __init__(self, CP):
@@ -511,7 +511,7 @@ STEER_THRESHOLD = {
   CAR.HONDA_ODYSSEY_5G_MMR: 600,
   # port extensions
   CAR.HONDA_ACCORD_9G: 30,
-  CAR.ACURA_MDX_3G: 400,
+  CAR.ACURA_MDX_3G: 300,  # on the re-zeroed STEER_TORQUE_SENSOR (acura_mdx_3g_can.dbc); was 400 on a signal centered at -172
   CAR.ACURA_TLX_1G: 200,
   CAR.ACURA_RLX_HYBRID: 2400,
 }
