@@ -85,8 +85,11 @@ class TestHondaLateralModel(unittest.TestCase):
     model = make_model(params)
     self.assertAlmostEqual(model.shape(1.5), 0.8)
     self.assertAlmostEqual(model.shape(2.0), SHAPE_MIN)
-    self.assertAlmostEqual(model.shape(3.0), SHAPE_MAX)
-    self.assertAlmostEqual(model.shape(5.0), SHAPE_MAX)          # held beyond the last bin
+    # non-increasing: the bins above the last measured one inherit its saturation, a persisted value
+    # above 1.0 (the tables written before the bound) or above its lower neighbor is projected down
+    self.assertAlmostEqual(model.shape(2.5), SHAPE_MIN)
+    self.assertAlmostEqual(model.shape(3.0), SHAPE_MIN)
+    self.assertAlmostEqual(model.shape(5.0), SHAPE_MIN)          # held beyond the last bin
     self.assertEqual(model.shape(SHAPE_ANCHOR_LAT_ACCEL), 1.0)   # the anchor cannot be persisted away
     self.assertAlmostEqual(model.shape(1.25), 0.9)               # linear between bins
     self.assertAlmostEqual(model.shape(1.0), 1.0)
@@ -99,6 +102,10 @@ class TestHondaLateralModel(unittest.TestCase):
     self.assertAlmostEqual(model.shape_now, 0.8)
     self.assertAlmostEqual(model.gain_now, model.gain(v) * 0.8)
     self.assertLess(model.ff_correction, -desired_la / model.gain(v) + desired_la / DEFAULT_LAT_ACCEL_FACTOR)
+    # the tables route 0000011f drove with (1.5-1.6, i.e. a feedforward cut where the car was undershooting)
+    model = make_model({SHAPE_KEY_FMT.format(slot=10): 1.6, SHAPE_KEY_FMT.format(slot=15): 1.5})
+    self.assertEqual(list(model.shapes), [SHAPE_MAX] * len(SHAPE_BINS_LAT_ACCEL))
+    self.assertEqual(SHAPE_MAX, 1.0)
 
   def test_feedforward_correction_low_speed_adds_torque_into_the_turn(self):
     model = make_model()
@@ -252,8 +259,76 @@ class TestHondaLateralModel(unittest.TestCase):
     self.assertLess(model.shape(la_hard), 0.9)
     self.assertAlmostEqual(model.shape(la_hard), centering_shape(la_hard), delta=0.1)
     self.assertAlmostEqual(model.gain(v), g_true, delta=0.1)
-    # bins above the excitation keep their prior
-    self.assertEqual(model.shapes[-1], 1.0)
+    # bins above the excitation are held at the saturation the last measured bin showed, never above it
+    self.assertLessEqual(model.shapes[-1], model.shape(la_hard) + 1e-9)
+    self.assertEqual(model.shapes, sorted(model.shapes, reverse=True))
+
+  def test_shape_learns_from_short_pinned_dwells_between_corrections(self):
+    # route 0000011f: 136 pinned, unpressed dwells, median 0.06 s, the longest 1.45 s, the driver pressing
+    # in between. The shape must learn from those; the speed table's 2 s filter never admitted one.
+    model = make_model()
+    v = 14.5
+    g_true = model.gain(v)
+    la_pinned = 1.0
+    for _ in range(100):
+      la_pinned = g_true * 1.0 * centering_shape(la_pinned)
+    self.assertGreater(la_pinned, 1.0)
+    la = 0.0
+    a = np.exp(-DT_CTRL / PLANT_LAG_SIM)
+    n_shape = 0
+    n_gain = 0
+    for k in range(int(240.0 / DT_CTRL)):
+      t = k * DT_CTRL
+      cycle = t % 6.0                                   # 6 s turn cycles: pinned right, pressed 0.4 s every 1.5 s
+      wire = 1.0 if (t // 6.0) % 2 == 0 else -1.0
+      if cycle > 4.0:                                   # 2 s straight between turns
+        wire = 0.0
+      pressed = (cycle % 1.5) < 0.4 and cycle <= 4.0
+      la = a * la + (1 - a) * g_true * centering_shape(abs(la)) * wire
+      step(model, wire, wire, v, -la, -la, pressed=pressed)
+      n_shape += model.learning_shape
+      n_gain += model.learning_gain
+    self.assertGreater(n_shape, 200)
+    self.assertEqual(n_gain, 0)                          # a pinned hard turn is never a speed-table sample
+    self.assertAlmostEqual(model.shape(la_pinned), centering_shape(la_pinned), delta=0.12)
+    self.assertAlmostEqual(model.gain(v), g_true)
+
+  def test_shape_never_learns_above_one(self):
+    # a car that delivered *more* per unit torque in hard turns than in gentle ones would be a sign error
+    # somewhere else (driver help, lag mismatch); the bound keeps it from cutting the feedforward
+    model = make_model()
+    v = 20.0
+    drive(model, v, model.gain(v), 300.0, lambda t: 0.6 if (t // 15.0) % 2 == 0 else -0.6, shape_true=lambda la: 1.6)
+    self.assertTrue(model.learning_shape)
+    self.assertEqual(max(model.shapes), 1.0)
+
+  def test_shape_feedforward_carries_the_return_without_an_integrator(self):
+    # 33 mph, the plant of route 0000011f: shape 0.6 at 1.0 m/s^2 and 0.5 from 1.5 up. The driver has been
+    # overriding in a pinned turn, so the torque controller's integrator holds nothing; the request into
+    # the model is the controller's linear feedforward alone. As the planner's desired lateral accel comes
+    # back down through the knee, the model's feedforward must leave the torque limit on its own and
+    # reach the anchor-band value, with nothing accumulated during the press.
+    params = {SHAPE_KEY_FMT.format(slot=10): 0.6, SHAPE_KEY_FMT.format(slot=15): 0.5, SHAPE_KEY_FMT.format(slot=20): 0.5,
+              GAIN_KEY_FMT.format(slot=30): 2.5, GAIN_KEY_FMT.format(slot=40): 2.5}
+    model = make_model(params)
+    v = 33 * CV.MPH_TO_MS
+    lin_factor = DEFAULT_LAT_ACCEL_FACTOR
+    outs = []
+    for des in (1.6, 1.4, 1.2, 1.1, 1.0, 0.9, 0.8, 0.75, 0.5):
+      outs.append(step(model, des / lin_factor, 1.0, v, -des, -1.1, pressed=False))
+    self.assertEqual(outs[0], 1.0)                                                  # beyond the car: pinned
+    self.assertLess(outs[3], 1.0)                                                   # 1.1 m/s^2: already off the limit
+    self.assertEqual(outs, sorted(outs, reverse=True))                              # monotone unwind of the request
+    self.assertAlmostEqual(outs[7], 0.75 / model.gain(v))                           # anchor band: the model's own feedforward
+    self.assertAlmostEqual(outs[-1], 0.5 / model.gain(v))
+    self.assertAlmostEqual(model.ff_correction, 0.5 / model.gain(v) - 0.5 / lin_factor)   # i.e. the plain speed correction
+    # the correction has no state: the same desired lateral accel gives the same torque whether or not
+    # the driver was pressing for the last minute
+    out_a = step(model, 1.0 / lin_factor, 1.0, v, -1.0, -1.1)
+    for _ in range(int(60.0 / DT_CTRL)):
+      step(model, 1.0, 1.0, v, -1.6, -1.1, pressed=True)
+    out_b = step(model, 1.0 / lin_factor, 1.0, v, -1.0, -1.1)
+    self.assertEqual(out_a, out_b)
 
   def test_shape_learns_from_a_pinned_wire(self):
     # route 00000114: the wire sat at 433 for 81% of the hard-turn ticks, delivering 1.27 m/s^2 where the
