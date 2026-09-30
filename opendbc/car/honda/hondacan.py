@@ -182,7 +182,9 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
 
 
 def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed, CS,
-                    lkas_state_change=None):
+                    lkas_state_change=None, alphalong=None):
+  if alphalong is None:
+    alphalong = CP.openpilotLongitudinalControl
   commands = []
 
   if CP.carFingerprint in HONDA_BOSCH:
@@ -241,7 +243,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     lkas_hud_values['DASHED_LANES'] = steering_available
     lkas_hud_values['SOLID_LANES'] = lat_active
 
-  if CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
+  if CP.flags & HondaFlags.BOSCH_EXT_HUD and not alphalong:
     commands.append(packer.make_can_msg('LKAS_HUD_A', bus, lkas_hud_values))
     commands.append(packer.make_can_msg('LKAS_HUD_B', bus, lkas_hud_values))
   else:
