@@ -106,7 +106,7 @@ from collections import deque
 
 import numpy as np
 
-from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, DT_CTRL
+from opendbc.car import DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.lateral import ISO_LATERAL_ACCEL, ISO_LATERAL_JERK
 
@@ -161,11 +161,13 @@ FF_CORRECTION_MAX = 0.75                          # normalized torque, bound on 
 FF_SATURATION_FADE = 0.10
 DEFAULT_LAT_ACCEL_FACTOR = 1.8
 
-# wire limits (see the module docstring). Jerk is symmetric at the ISO value the planner already
-# holds the desired curvature to; test_lateral_limits' 2.5 m/s^3 up-rate is a comfort margin on top
-# of the same linear calculation, and on this plant the 1 s response lag provides that margin.
-AVERAGE_ROAD_ROLL = 0.06                          # ~3.4 deg superelevation, as in opendbc/safety/lateral.h
-MAX_LAT_ACCEL = ISO_LATERAL_ACCEL + ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL   # ~3.6 m/s^2
+# wire limits (see the module docstring): the same 3 m/s^2 / 5 m/s^3 the planner holds the desired
+# curvature to for every car (selfdrive/controls/lib/drive_helpers.py clip_curvature), applied here to
+# the wire so the limit does not depend on the controller upstream. Jerk is symmetric; test_lateral_limits'
+# 2.5 m/s^3 up-rate is a comfort margin on top of the same linear calculation, and on this plant the
+# 1 s response lag provides that margin. No roll allowance: the planner adds it to the desired curvature,
+# and with GAIN_MAX at 3.0 a unit of wire torque cannot command more than 3 m/s^2 anyway.
+MAX_LAT_ACCEL = ISO_LATERAL_ACCEL                 # m/s^2
 MAX_LAT_JERK_UP = ISO_LATERAL_JERK                # m/s^3, |lat accel| increasing
 MAX_LAT_JERK_DOWN = ISO_LATERAL_JERK              # m/s^3, |lat accel| decreasing (return to center)
 WIRE_RATE_MAX = 10.0                              # normalized torque per second, EPS / hands-on backstop
