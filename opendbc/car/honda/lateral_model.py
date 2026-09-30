@@ -49,6 +49,38 @@ output is saturated the P+I+F sum is beyond the clip, so a correction that oppos
 ``latAccelFactor``) would take torque away while the loop asks for more than exists; it fades out over
 the last ``FF_SATURATION_FADE`` of request headroom.
 
+Wire limits: ISO 11270 in lateral-accel space instead of a torque rate
+-------------------------------------------------------------------
+openpilot bounds lateral jerk and lateral accel to ISO 11270 (``opendbc/car/lateral.py``: 3.0 m/s^2,
+5.0 m/s^3; the planner's ``clip_curvature`` uses the same two numbers; the angle-car safety check in
+``opendbc/safety/lateral.h`` uses 3.0 + 0.06 g of road-roll tolerance for both). On torque cars that
+target has been implemented as a per-car torque rate, ``STEER_DELTA_UP/DOWN``, and
+``opendbc/car/tests/test_lateral_limits.py`` checks the rate against the jerk targets assuming the
+plant is linear: ``lat_accel = MAX_LAT_ACCEL_MEASURED * torque`` at every speed. On the Nidec Hondas the
+plant is not: the same torque rate is 0.3 m/s^3 at 5 mph (30x under the limit, so the wheel unwinds no
+faster than the rate limiter lets it) and 7-8 m/s^3 at 35 mph (above it). The Honda rate limiter also
+ran in normalized torque per tick (``STEER_DELTA * DT_CTRL`` = 0.03/tick, full scale in 0.33 s) while
+the test evaluated it in CAN counts per tick (3/433), so the test never saw the number the car got.
+
+``limit()`` replaces that rate limiter. It maps the last wire torque and the new request into lateral
+accel with the identified speed gain, applies the ISO jerk and accel bounds there, and maps back, all
+before the torque is scaled into CAN counts. The bound is therefore a constant vehicle response at
+every speed: the allowed torque rate is ``MAX_LAT_JERK / gain(v)`` per second, small on the highway
+where a unit of torque buys 2.5 m/s^2 and large in town where it buys 0.3. Only the speed table is
+used, not the centering shape: the shape is trained on pinned hard turns where the lagged, filtered
+wire and the measured lateral accel are least in step, and a wrong shape would scale the bound
+directly (route 0000011f learned shape 1.5-1.6 at 1-2 m/s^2 while the wire pinned at 0.9-1.0
+delivered 1.3 m/s^2 over 2 s dwells). The wire torque is not the vehicle's lateral accel: it goes
+through ``WIRE_DELAY`` and ``PLANT_TAU`` first, so the bound applied here is on the quasi-static
+lateral accel the wire commands, which is how ``test_lateral_limits`` defines it and an upper bound
+on what the car does (route 0000011f measured lateral jerk p99 0.9 m/s^3 against a wire-implied p99
+of 6.9 under the old limiter).
+
+``WIRE_RATE_MAX`` is a separate backstop on the normalized torque rate. It is not an ISO term: below
+~15 mph the gain is small enough that the jerk bound alone would let the wire swing full scale in a
+few ticks, and the EPS and the driver's hands see the torque step itself. It permits a full swing in
+0.1 s (the old limiter took 0.33 s) and never binds above ~15 mph.
+
 Reporting, and staying compatible with an unmodified openpilot
 --------------------------------------------------------------
 ``gain_now`` (effective m/s^2 per unit torque at the current speed and desired lateral accel, i.e.
@@ -74,8 +106,9 @@ from collections import deque
 
 import numpy as np
 
-from opendbc.car import DT_CTRL
+from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
+from opendbc.car.lateral import ISO_LATERAL_ACCEL, ISO_LATERAL_JERK
 
 # speed bins (mph, for readable Params keys) and the seed gains in m/s^2 per unit wire torque, identified
 # offline on routes 3792d010590cb83a|0000010e, |0000010f (torque controller) and |00000111 (PID controller,
@@ -128,6 +161,15 @@ FF_CORRECTION_MAX = 0.75                          # normalized torque, bound on 
 FF_SATURATION_FADE = 0.10
 DEFAULT_LAT_ACCEL_FACTOR = 1.8
 
+# wire limits (see the module docstring). Jerk is symmetric at the ISO value the planner already
+# holds the desired curvature to; test_lateral_limits' 2.5 m/s^3 up-rate is a comfort margin on top
+# of the same linear calculation, and on this plant the 1 s response lag provides that margin.
+AVERAGE_ROAD_ROLL = 0.06                          # ~3.4 deg superelevation, as in opendbc/safety/lateral.h
+MAX_LAT_ACCEL = ISO_LATERAL_ACCEL + ACCELERATION_DUE_TO_GRAVITY * AVERAGE_ROAD_ROLL   # ~3.6 m/s^2
+MAX_LAT_JERK_UP = ISO_LATERAL_JERK                # m/s^3, |lat accel| increasing
+MAX_LAT_JERK_DOWN = ISO_LATERAL_JERK              # m/s^3, |lat accel| decreasing (return to center)
+WIRE_RATE_MAX = 10.0                              # normalized torque per second, EPS / hands-on backstop
+
 
 def _clip(value, lo, hi):
   return float(min(max(value, lo), hi))
@@ -176,6 +218,9 @@ class HondaLateralModel:
     self.learning = False
     self.learning_shape = False
     self.output = 0.0
+    self.jerk_limited = False       # limit() clipped the wire on the lateral jerk bound this tick
+    self.accel_limited = False      # limit() clipped the wire on the lateral accel bound this tick
+    self.rate_limited = False       # limit() clipped the wire on the torque-rate backstop this tick
 
   def gain(self, v_ego):
     return float(np.interp(v_ego, GAIN_BINS_MS, self.gains))
@@ -223,6 +268,37 @@ class HondaLateralModel:
     self.output = _clip(request_torque + correction, -1.0, 1.0)
     self.applied_correction = self.output - float(request_torque)
     return self.output
+
+  def lat_accel_from_torque(self, torque, v_ego):
+    """Quasi-static lateral accel the wire commands at this speed, speed table only (see module docstring)."""
+    return self.gain(v_ego) * float(torque)
+
+  def torque_from_lat_accel(self, lat_accel, v_ego):
+    return float(lat_accel) / self.gain(v_ego)
+
+  def limit(self, torque, last_torque, v_ego):
+    """Bound the wire to ISO 11270 lateral jerk and lateral accel, computed in lateral-accel space with the
+    identified speed gain, then to the torque-rate backstop and unit torque. torque: corrected request this
+    tick; last_torque: what went to the EPS last tick. Returns the torque to send (normalized)."""
+    la_last = self.lat_accel_from_torque(last_torque, v_ego)
+    la_req = self.lat_accel_from_torque(torque, v_ego)
+    up = MAX_LAT_JERK_UP * DT_CTRL
+    down = MAX_LAT_JERK_DOWN * DT_CTRL
+    # up-rate while |lat accel| grows, down-rate while it shrinks; a move through zero is down to zero
+    # and up beyond it (same structure as apply_driver_steer_torque_limits)
+    if la_last > 0.0:
+      lo, hi = max(la_last - down, -up), la_last + up
+    else:
+      lo, hi = la_last - up, min(la_last + down, up)
+    la_jerk = _clip(la_req, lo, hi)
+    la_out = _clip(la_jerk, -MAX_LAT_ACCEL, MAX_LAT_ACCEL)
+    self.jerk_limited = la_jerk != la_req
+    self.accel_limited = la_out != la_jerk
+    # untouched requests pass through bit-exact; only a bound that bit is mapped back through the gain
+    out = float(torque) if la_out == la_req else self.torque_from_lat_accel(la_out, v_ego)
+    backstop = _clip(out, last_torque - WIRE_RATE_MAX * DT_CTRL, last_torque + WIRE_RATE_MAX * DT_CTRL)
+    self.rate_limited = backstop != out
+    return _clip(backstop, -1.0, 1.0)
 
   def _identify(self, wire_torque, current_curvature, v_ego, active, steering_pressed):
     delayed_wire = self.wire_hist[0]
