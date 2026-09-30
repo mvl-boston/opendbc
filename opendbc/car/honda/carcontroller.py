@@ -517,16 +517,19 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     if CS.out.gasPressed or not CC.longActive:
       self.nidec_pid.reset()
 
-    # *** add the plant model's feedforward correction, then rate limit ***
-    # self.last_torque is what actually went to the EPS last tick (rate limiter + MDX brake clip
+    # *** add the plant model's feedforward correction, then bound the wire ***
+    # self.last_torque is what actually went to the EPS last tick (wire limits + MDX brake clip
     # applied); the model regresses measured lateral accel on it to identify the car's gain.
     steer_torque = self.lat_model.update(actuators.torque, self.last_torque, CC.latActive, CS.steer_control_active,
                                          CS.out.steeringPressed, CS.out.vEgo, actuators.curvature, CC.currentCurvature)
-    limited_torque = rate_limit(steer_torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
-                                self.params.STEER_DELTA_UP * DT_CTRL)
+    # ISO 11270 lateral jerk / lateral accel, applied in lateral-accel space through the identified speed
+    # gain (see lateral_model.limit). This replaces the fixed STEER_DELTA torque rate, which was the same
+    # jerk target evaluated with one linear gain for every speed: at town speeds it held the wheel's
+    # return to center to a fraction of the ISO rate, on the highway it allowed more than the ISO rate.
+    limited_torque = self.lat_model.limit(steer_torque, self.last_torque, CS.out.vEgo)
     # MDX brake steer limit: 233 counts is an EPS fault boundary while the brake is commanded, so it
     # clips the rate-limited output on the same tick the brake command goes non-zero (a wire above 233
-    # for even the rate limiter's 0.15 s descent is not acceptable). Only while the brake is actually
+    # for even the rate limiter's descent is not acceptable). Only while the brake is actually
     # commanded: the coast half (gas command zero) pinned the wire at 233/433 through most coasting
     # low-speed turns in route 0000010e. Held for MDX_BRAKE_STEER_LIMIT_HOLD after the brake command
     # returns to zero, so the flickering low-speed brake command does not toggle the wire 433 <-> 233

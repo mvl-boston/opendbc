@@ -5,9 +5,11 @@ import numpy as np
 from opendbc.car import DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.lateral_model import (DEFAULT_LAT_ACCEL_FACTOR, FF_CORRECTION_MAX, FF_SATURATION_FADE, FILTER_TAU,
-                                             GAIN_BINS_MPH, GAIN_KEY_FMT, GAIN_MAX, GAIN_MIN, GAIN_PRIOR, PRESS_HOLDOFF,
-                                             SHAPE_ANCHOR_LAT_ACCEL, SHAPE_BINS_LAT_ACCEL, SHAPE_KEY_FMT, SHAPE_MAX,
-                                             SHAPE_MIN, HondaLateralModel)
+                                             GAIN_BINS_MPH, GAIN_KEY_FMT, GAIN_MAX, GAIN_MIN, GAIN_PRIOR, MAX_LAT_ACCEL,
+                                             MAX_LAT_JERK_DOWN, MAX_LAT_JERK_UP, PRESS_HOLDOFF, SHAPE_ANCHOR_LAT_ACCEL,
+                                             SHAPE_BINS_LAT_ACCEL, SHAPE_KEY_FMT, SHAPE_MAX, SHAPE_MIN, WIRE_RATE_MAX,
+                                             HondaLateralModel)
+from opendbc.car.lateral import ISO_LATERAL_ACCEL, ISO_LATERAL_JERK
 
 
 def make_model(params=None):
@@ -298,6 +300,128 @@ class TestHondaLateralModel(unittest.TestCase):
     model = make_model()
     drive(model, v, g_true, 300.0, lambda t: 0.6 if (t // 15.0) % 2 == 0 else -0.6, shape_true=lambda la: 5.0)
     self.assertLessEqual(max(model.shapes), SHAPE_MAX)
+
+
+def run_limit(model, v_ego, request_fn, ticks, last=0.0):
+  """Feed a request sequence through limit() the way the car controller does; returns the wire trace."""
+  wire = []
+  for k in range(ticks):
+    last = model.limit(request_fn(k), last, v_ego)
+    wire.append(last)
+  return np.array(wire)
+
+
+class TestHondaLateralWireLimits(unittest.TestCase):
+  def test_targets_are_iso_11270(self):
+    self.assertEqual(MAX_LAT_JERK_DOWN, ISO_LATERAL_JERK)
+    self.assertEqual(MAX_LAT_JERK_UP, ISO_LATERAL_JERK)
+    self.assertGreaterEqual(MAX_LAT_ACCEL, ISO_LATERAL_ACCEL)
+    self.assertLess(MAX_LAT_ACCEL, ISO_LATERAL_ACCEL + 1.0)
+
+  def test_jerk_bound_is_constant_in_lateral_accel_across_speeds(self):
+    # a step request from 0 to full torque: the wire may only climb at MAX_LAT_JERK_UP in lateral accel,
+    # i.e. by MAX_LAT_JERK_UP * DT_CTRL / gain(v) in torque per tick, at every speed
+    for v in (10.0, 15.0, 25.0, 30.0):
+      model = make_model()
+      g = model.gain(v)
+      wire = run_limit(model, v, lambda k: 1.0, 5)
+      la = g * wire
+      steps = np.diff(np.concatenate(([0.0], la)))
+      for s in steps:
+        self.assertAlmostEqual(s, MAX_LAT_JERK_UP * DT_CTRL, places=9)
+      self.assertTrue(model.jerk_limited)
+      self.assertFalse(model.accel_limited)
+
+  def test_return_to_center_runs_at_the_down_rate(self):
+    v = 15.0
+    model = make_model()
+    g = model.gain(v)
+    # hold a right turn, then request zero
+    wire = run_limit(model, v, lambda k: 0.8, 300)
+    self.assertAlmostEqual(wire[-1], 0.8)
+    unwind = run_limit(model, v, lambda k: 0.0, 200, last=wire[-1])
+    la_steps = -np.diff(np.concatenate(([g * 0.8], g * unwind)))
+    binding = la_steps > 1e-9
+    self.assertTrue(binding[0])
+    for s in la_steps[binding][:-1]:         # every full step runs at the down rate; the last one is the remainder
+      self.assertAlmostEqual(s, MAX_LAT_JERK_DOWN * DT_CTRL, places=9)
+    self.assertLessEqual(la_steps[binding][-1], MAX_LAT_JERK_DOWN * DT_CTRL + 1e-9)
+    # and it takes gain * 0.8 / MAX_LAT_JERK_DOWN seconds to get there
+    ticks_needed = int(np.ceil(g * 0.8 / (MAX_LAT_JERK_DOWN * DT_CTRL)))
+    self.assertEqual(int(np.argmax(unwind <= 1e-9)), ticks_needed - 1)
+
+  def test_crossing_zero_is_down_then_up(self):
+    v = 15.0
+    model = make_model()
+    g = model.gain(v)
+    la_last = 0.03            # small right lateral accel commanded
+    last = la_last / g
+    out = model.limit(-1.0, last, v)
+    # one down-rate step carries it through zero (0.03 -> -0.02); the up bound caps how far past zero it may land
+    self.assertAlmostEqual(g * out, la_last - MAX_LAT_JERK_DOWN * DT_CTRL)
+    self.assertGreaterEqual(g * out, -MAX_LAT_JERK_UP * DT_CTRL)
+    out = model.limit(-1.0, 0.2 / g, v)     # from further right, the same step stops on the up bound instead
+    self.assertAlmostEqual(g * out, 0.2 - MAX_LAT_JERK_DOWN * DT_CTRL)
+    out = model.limit(-1.0, 0.04 / g, v)
+    self.assertAlmostEqual(g * out, -0.01)
+    out = model.limit(-1.0, 0.001 / g, v)   # almost centered: one step, and never further past zero than the up rate
+    self.assertAlmostEqual(g * out, max(0.001 - MAX_LAT_JERK_DOWN * DT_CTRL, -MAX_LAT_JERK_UP * DT_CTRL))
+
+  def test_low_speed_return_is_no_longer_held_to_the_old_torque_rate(self):
+    # the old limiter took 0.33 s for a full swing at every speed; at town speeds a unit of torque buys so
+    # little lateral accel that the ISO jerk bound is much looser than that, so only the wire-rate
+    # backstop remains, at 0.1 s
+    v = 10.0 * CV.MPH_TO_MS
+    model = make_model()
+    self.assertLess(model.gain(v), MAX_LAT_JERK_DOWN / WIRE_RATE_MAX)     # jerk bound looser than backstop here
+    first = model.limit(0.0, -1.0, v)
+    self.assertTrue(model.rate_limited)
+    self.assertAlmostEqual(first, -1.0 + WIRE_RATE_MAX * DT_CTRL)
+    self.assertGreater(MAX_LAT_JERK_DOWN * DT_CTRL / model.gain(v), WIRE_RATE_MAX * DT_CTRL)   # jerk step alone was larger
+    unwind = run_limit(model, v, lambda k: 0.0, 50, last=-1.0)
+    self.assertLessEqual(int(np.argmax(unwind >= -1e-9)), int(1.0 / (WIRE_RATE_MAX * DT_CTRL)))
+    # while on the highway the ISO bound is the tighter one and the backstop never binds
+    v = 30.0
+    model = make_model()
+    self.assertGreater(model.gain(v), MAX_LAT_JERK_DOWN / WIRE_RATE_MAX)
+    run_limit(model, v, lambda k: 0.0, 5, last=-1.0)
+    self.assertTrue(model.jerk_limited)
+    self.assertFalse(model.rate_limited)
+
+  def test_highway_rate_is_tighter_than_the_old_limiter(self):
+    # the old fixed rate was 0.03/tick regardless of speed; through gain(v) at 30 m/s the ISO rate is lower
+    v = 30.0
+    model = make_model()
+    per_tick = MAX_LAT_JERK_UP * DT_CTRL / model.gain(v)
+    self.assertLess(per_tick, 0.03)
+    wire = run_limit(model, v, lambda k: 1.0, 1)
+    self.assertAlmostEqual(wire[0], per_tick)
+
+  def test_lateral_accel_bound_holds_for_any_learned_gain(self):
+    # the accel bound never lets the wire command more than MAX_LAT_ACCEL, and with the gain table clipped at
+    # GAIN_MAX a unit of torque cannot exceed it anyway
+    self.assertLessEqual(GAIN_MAX * 1.0, MAX_LAT_ACCEL)
+    params = {GAIN_KEY_FMT.format(slot=mph): 9.0 for mph in GAIN_BINS_MPH}
+    model = make_model(params)
+    v = 30.0
+    wire = run_limit(model, v, lambda k: 1.0, 2000)
+    self.assertLessEqual(model.gain(v) * abs(wire[-1]), MAX_LAT_ACCEL + 1e-9)
+    self.assertAlmostEqual(wire[-1], 1.0)
+
+  def test_unbound_request_passes_through_bit_exact(self):
+    v = 15.0
+    model = make_model()
+    g = model.gain(v)
+    last = 0.31
+    small = last + 0.5 * MAX_LAT_JERK_UP * DT_CTRL / g
+    self.assertEqual(model.limit(small, last, v), small)
+    self.assertFalse(model.jerk_limited or model.accel_limited or model.rate_limited)
+
+  def test_output_is_unit_torque_bounded(self):
+    v = 15.0
+    model = make_model()
+    self.assertEqual(model.limit(5.0, 0.999, v), 1.0)
+    self.assertEqual(model.limit(-5.0, -0.999, v), -1.0)
 
 
 if __name__ == "__main__":
