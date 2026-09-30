@@ -40,9 +40,29 @@ driver, so learning pauses while ``steeringPressed`` and for ``PRESS_HOLDOFF`` a
 
 The two tables are trained on disjoint data so they cannot trade scale: the speed table learns only
 inside the anchor band (gentle curves, where shape == 1 by definition) and the shape table only above
-it, treating the gain as known. Hard turns on these cars are mostly driven with the wire pinned at the
-limit, and that is exactly the sample the shape needs (how much lateral accel full torque buys); if the
-speed table were allowed to learn from it too, it would be dragged to the shape-inflated value.
+it, treating the gain as known. The shape is bounded at 1.0 and non-increasing in lateral accel: a
+saturating EPS never delivers more per unit torque in a hard turn than in a gentle one. Route 0000011f
+measured it at 29-36 mph: 2.7 m/s^2 per unit of lagged wire torque below 0.3, 1.9 at 0.4-0.5, 1.4 at
+0.7-0.8, 1.27 at 0.8-0.9 (shape 1.0 -> 0.5 between 0.85 and 1.05 m/s^2), and 1.1-1.3 m/s^2 with the
+wire pinned at 433 counts. The tables persisted before this bound held 1.5-1.6 there, which put the
+feedforward *below* the linear one exactly where the car was undershooting with the wire pinned.
+
+The shape path uses its own short filter (``SHAPE_FILTER_TAU``) on the lag-aligned pair rather than the
+``FILTER_TAU`` one the speed table uses: hard-turn dwells between the driver's corrections last 0.5-1.5
+s (route 0000011f: 136 pinned, unpressed dwells, median 0.06 s, none over 1.5 s), and a 2 s filter with
+a quasi-static gate never admitted one (0 pinned samples in that route). The lag model does the work
+instead; a trend gate on the filtered pair (``SHAPE_MAX_LEARN_JERK`` / ``SHAPE_MAX_LEARN_TORQUE_RATE``)
+drops the S-bend transitions where it is least exact. Sub-threshold hand torque does not bias the
+sample (pinned frames with |driver torque| 0-50 vs 200-300 counts measured 1.08 vs 1.14 m/s^2), and the
+estimate does not move with a longer press hold-off (0.5-2.0 s), so ``PRESS_HOLDOFF`` stays short.
+
+The correction is a function of the desired lateral accel and speed only, with no state of its own, so
+the return from a hard turn does not depend on anything the torque controller's integrator accumulated
+while the driver was overriding (openpilot freezes that integrator on ``steeringPressed``; the fork adds
+a reset). With the shape below 1 above the anchor band the model's feedforward for a hard turn is larger
+than the linear one and falls steeply as the desired lateral accel drops back through the knee, so the
+request leaves the torque limit as soon as the planner asks for less than the car can deliver, before
+the feedback has seen any error.
 
 The correction is added to the controller's output, which is already clipped to unit torque. When that
 output is saturated the P+I+F sum is beyond the clip, so a correction that opposes it (model gain above
@@ -67,10 +87,12 @@ accel with the identified speed gain, applies the ISO jerk and accel bounds ther
 before the torque is scaled into CAN counts. The bound is therefore a constant vehicle response at
 every speed: the allowed torque rate is ``MAX_LAT_JERK / gain(v)`` per second, small on the highway
 where a unit of torque buys 2.5 m/s^2 and large in town where it buys 0.3. Only the speed table is
-used, not the centering shape: the shape is trained on pinned hard turns where the lagged, filtered
-wire and the measured lateral accel are least in step, and a wrong shape would scale the bound
-directly (route 0000011f learned shape 1.5-1.6 at 1-2 m/s^2 while the wire pinned at 0.9-1.0
-delivered 1.3 m/s^2 over 2 s dwells). The wire torque is not the vehicle's lateral accel: it goes
+used, not the centering shape: a shape error scales the bound directly, and whether the saturation
+is a function of lateral accel (as the shape table assumes) or of torque (an EPS assist limit; the
+knee in route 0000011f sits at ~0.35-0.4 of full torque at the one speed with hard turns) is not yet
+settled. With the shape in the bound the unwind from a pinned wire would run the first 0.7 of torque
+in ~0.1 s (it buys only ~0.4 m/s^2 there) and the rest at the anchor-band rate; that is the next step
+once the shape has been learned on more than one speed. The wire torque is not the vehicle's lateral accel: it goes
 through ``WIRE_DELAY`` and ``PLANT_TAU`` first, so the bound applied here is on the quasi-static
 lateral accel the wire commands, which is how ``test_lateral_limits`` defines it and an upper bound
 on what the car does (route 0000011f measured lateral jerk p99 0.9 m/s^3 against a wire-implied p99
@@ -124,20 +146,29 @@ GAIN_KEY_FMT = "HondaLatGain{slot:02d}Params"
 # delivered per unit wire torque is not the same in a hard turn as in a gentle one. shape(|lat_accel|)
 # multiplies gain(v): the effective plant is lat_accel = gain(v) * shape(|lat_accel|) * torque. The shape
 # is anchored at 1.0 for |lat_accel| <= SHAPE_ANCHOR_LAT_ACCEL (that band defines what gain(v) means) and
-# learned above it in the bins below, so the two tables cannot trade scale. Priors are neutral (1.0) and
-# the bounds cap the extra torque at high lateral accel to 2x the linear feedforward.
+# learned above it in the bins below, so the two tables cannot trade scale. Priors are neutral (1.0). The
+# table is bounded at 1.0 and kept non-increasing in lateral accel (a saturating EPS: each unit of torque
+# buys less in a hard turn than in a gentle one, never more), so the extra torque at high lateral accel
+# is at most 1 / SHAPE_MIN times the linear feedforward. Route 0000011f measured 0.5-0.7 at 1.0-1.3
+# m/s^2 (29-36 mph); a persisted value above 1.0 clips to 1.0 at load.
 SHAPE_ANCHOR_LAT_ACCEL = 0.75                     # m/s^2, shape == 1.0 at and below this
 SHAPE_BINS_LAT_ACCEL = (1.0, 1.5, 2.0, 2.5, 3.0)  # m/s^2, learned bins (keys use tenths: 10, 15, ...)
 SHAPE_PRIOR = (1.0, 1.0, 1.0, 1.0, 1.0)
-SHAPE_MIN = 0.50
-SHAPE_MAX = 2.00
+SHAPE_MIN = 0.40
+SHAPE_MAX = 1.00
 SHAPE_KEY_FMT = "HondaLatShape{slot:02d}Params"
-SHAPE_LEARN_RATE = 0.001                          # normalized LMS step per tick, slower than the gain table
+SHAPE_LEARN_RATE = 0.005                          # normalized LMS step per tick (samples are scarce: ~100-300 per route)
 SHAPE_BINS_INTERP = (SHAPE_ANCHOR_LAT_ACCEL,) + SHAPE_BINS_LAT_ACCEL
+# shape samples come from the lag-aligned pair through a short filter with a trend gate (see the module
+# docstring): hard-turn dwells between the driver's corrections are 0.5-1.5 s long
+SHAPE_FILTER_TAU = 0.30                           # s
+SHAPE_MAX_LEARN_JERK = 0.50                       # m/s^3, |filtered lat accel| trend allowed for a shape sample
+SHAPE_MAX_LEARN_TORQUE_RATE = 0.50                # normalized torque per second, same for the lagged wire
 
 # identification
 FILTER_TAU = 2.0                                  # s, common low-pass on wire torque and measured lat accel
 FILTER_ALPHA = DT_CTRL / (FILTER_TAU + DT_CTRL)
+SHAPE_FILTER_ALPHA = DT_CTRL / (SHAPE_FILTER_TAU + DT_CTRL)
 WIRE_DELAY = 0.30                                 # s, actuator delay applied to the wire before the plant lag
 # The car's lateral accel follows the wire as a first-order lag, not instantly: a lag of 1.0-1.3 s (after the
 # 0.3 s delay) maximizes the wire / lat-accel correlation at 10-16 m/s in routes 0000010e, 0000010f and
@@ -207,17 +238,21 @@ class HondaLateralModel:
                   for mph, prior in zip(GAIN_BINS_MPH, GAIN_PRIOR, strict=True)]
     self.shapes = [_clip(_load(param_get, SHAPE_KEY_FMT.format(slot=_shape_slot(la)), prior), SHAPE_MIN, SHAPE_MAX)
                    for la, prior in zip(SHAPE_BINS_LAT_ACCEL, SHAPE_PRIOR, strict=True)]
+    self._project_shapes()
     self.wire_hist = deque([0.0] * max(int(round(WIRE_DELAY / DT_CTRL)), 1), maxlen=max(int(round(WIRE_DELAY / DT_CTRL)), 1))
     self.wire_lag = 0.0             # delayed wire through the plant lag: the lateral accel the wire has "earned" so far
-    self.wire_filt = 0.0
+    self.wire_filt = 0.0            # FILTER_TAU pair, speed table
     self.lat_accel_filt = 0.0
+    self.wire_fast = 0.0            # SHAPE_FILTER_TAU pair, shape table
+    self.lat_accel_fast = 0.0
     self.press_holdoff = 0.0
     # telemetry for the last update() call
     self.gain_now = float(np.interp(0.0, GAIN_BINS_MS, self.gains))   # effective gain at (v, |desired lat accel|)
     self.shape_now = 1.0
     self.ff_correction = 0.0        # model ff minus controller ff, before the unit-torque clip
     self.applied_correction = 0.0   # output minus request, i.e. what was actually added this tick
-    self.learning = False
+    self.learning = False           # either table updated this tick
+    self.learning_gain = False
     self.learning_shape = False
     self.output = 0.0
     self.jerk_limited = False       # limit() clipped the wire on the lateral jerk bound this tick
@@ -314,24 +349,28 @@ class HondaLateralModel:
     dy = FILTER_ALPHA * (measured - self.lat_accel_filt)
     self.wire_filt += dx
     self.lat_accel_filt += dy
+    dxf = SHAPE_FILTER_ALPHA * (self.wire_lag - self.wire_fast)
+    dyf = SHAPE_FILTER_ALPHA * (measured - self.lat_accel_fast)
+    self.wire_fast += dxf
+    self.lat_accel_fast += dyf
 
     self.press_holdoff = PRESS_HOLDOFF if steering_pressed else max(self.press_holdoff - DT_CTRL, 0.0)
-    x = self.wire_filt
-    y = self.lat_accel_filt
-    steady = (abs(dx) * FILTER_TAU / DT_CTRL <= MAX_LEARN_CHANGE * abs(x)
-              and abs(dy) * FILTER_TAU / DT_CTRL <= MAX_LEARN_CHANGE * abs(y))
-    self.learning = bool(active and self.press_holdoff <= 0.0 and v_ego > MIN_LEARN_SPEED and steady
-                         and abs(x) > MIN_LEARN_TORQUE and abs(y) > MIN_LEARN_LAT_ACCEL and np.sign(x) == np.sign(y))
+    self.learning_gain = False
     self.learning_shape = False
-    if not self.learning:
+    self.learning = False
+    if not (active and self.press_holdoff <= 0.0 and v_ego > MIN_LEARN_SPEED):
       return
 
     # plant: y = gain(v) * shape(|y|) * x, with shape == 1.0 through the anchor band. Gentle curves train
     # the speed table and only the speed table; harder turns train the shape, seeing the gain as known.
-    # A pinned wire is a valid sample for both (the regression is on what the EPS actually got), and the
-    # hard turns that define the shape are mostly driven pinned: route 00000114 had the wire at 433 for
-    # 81% of its hard-turn ticks, delivering 1.27 m/s^2 where the speed table alone promised 1.7.
-    if abs(y) <= SHAPE_ANCHOR_LAT_ACCEL:
+    # Both regress on what the EPS actually got, so a pinned or clipped wire is a valid sample.
+    x = self.wire_filt
+    y = self.lat_accel_filt
+    steady = (abs(dx) * FILTER_TAU / DT_CTRL <= MAX_LEARN_CHANGE * abs(x)
+              and abs(dy) * FILTER_TAU / DT_CTRL <= MAX_LEARN_CHANGE * abs(y))
+    if (steady and abs(x) > MIN_LEARN_TORQUE and abs(y) > MIN_LEARN_LAT_ACCEL and np.sign(x) == np.sign(y)
+        and abs(y) <= SHAPE_ANCHOR_LAT_ACCEL):
+      self.learning_gain = True
       pos = float(np.interp(v_ego, GAIN_BINS_MS, range(len(GAIN_BINS_MS))))
       lo = int(np.floor(pos))
       hi = min(lo + 1, len(self.gains) - 1)
@@ -341,21 +380,40 @@ class HondaLateralModel:
           continue
         err = y - self.gains[idx] * x
         self.gains[idx] = _clip(self.gains[idx] + LEARN_RATE * weight * err * x / (x * x + LEARN_NORM_EPS), GAIN_MIN, GAIN_MAX)
-      return
 
-    self.learning_shape = True
-    g = self.gain(v_ego)
-    xg = g * x
-    pos = float(np.interp(abs(y), SHAPE_BINS_INTERP, range(len(SHAPE_BINS_INTERP))))
-    lo = int(np.floor(pos))
-    hi = min(lo + 1, len(SHAPE_BINS_INTERP) - 1)
-    frac = pos - lo
-    for idx, weight in ((lo, 1.0 - frac), (hi, frac)):
-      if weight <= 0.0 or idx == 0:   # index 0 is the anchor, fixed at 1.0
-        continue
-      err = y - self.shapes[idx - 1] * xg
-      self.shapes[idx - 1] = _clip(self.shapes[idx - 1] + SHAPE_LEARN_RATE * weight * err * xg / (xg * xg + LEARN_NORM_EPS),
-                                   SHAPE_MIN, SHAPE_MAX)
+    # shape: the short-filtered pair, admitted while neither is trending (the lag model has aligned them;
+    # what is left out is the S-bend transition it is least exact in)
+    xf = self.wire_fast
+    yf = self.lat_accel_fast
+    trending = (abs(dyf) / DT_CTRL > SHAPE_MAX_LEARN_JERK or abs(dxf) / DT_CTRL > SHAPE_MAX_LEARN_TORQUE_RATE)
+    if (not trending and abs(xf) > MIN_LEARN_TORQUE and abs(yf) > SHAPE_ANCHOR_LAT_ACCEL and np.sign(xf) == np.sign(yf)):
+      self.learning_shape = True
+      xg = self.gain(v_ego) * xf
+      # a sample above the bound (more lateral accel than the speed table predicts for this torque) only
+      # says "not saturated here"; it counts as a 1.0, not as its ratio, so it cannot outvote the saturated
+      # samples in the same bin (route 0000011f: 1000 samples at 0.75-1.0 m/s^2 reading 1.1-1.3 against
+      # 60 at 1.0-1.1 reading 0.5)
+      yf = float(np.sign(yf) * min(abs(yf), SHAPE_MAX * abs(xg)))
+      pos = float(np.interp(abs(yf), SHAPE_BINS_INTERP, range(len(SHAPE_BINS_INTERP))))
+      lo = int(np.floor(pos))
+      hi = min(lo + 1, len(SHAPE_BINS_INTERP) - 1)
+      frac = pos - lo
+      for idx, weight in ((lo, 1.0 - frac), (hi, frac)):
+        if weight <= 0.0 or idx == 0:   # index 0 is the anchor, fixed at 1.0
+          continue
+        err = yf - self.shapes[idx - 1] * xg
+        self.shapes[idx - 1] = _clip(self.shapes[idx - 1] + SHAPE_LEARN_RATE * weight * err * xg / (xg * xg + LEARN_NORM_EPS),
+                                     SHAPE_MIN, SHAPE_MAX)
+      self._project_shapes()
+    self.learning = self.learning_gain or self.learning_shape
+
+  def _project_shapes(self):
+    # non-increasing in lateral accel, from the anchor's 1.0 down: a bin with no data of its own inherits
+    # the saturation the last measured one showed rather than the neutral prior
+    ceiling = SHAPE_MAX
+    for i, s in enumerate(self.shapes):
+      ceiling = min(ceiling, s)
+      self.shapes[i] = ceiling
 
   def learned_values(self):
     values = {GAIN_KEY_FMT.format(slot=mph): float(g) for mph, g in zip(GAIN_BINS_MPH, self.gains, strict=True)}
