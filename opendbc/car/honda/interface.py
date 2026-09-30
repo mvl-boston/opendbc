@@ -385,10 +385,10 @@ class CarInterface(CarInterfaceBase):
         stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2560], [0, 2560]]
         CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
 
-    elif candidate == CAR.ACURA_MDX_3G: # source mlocoteta
+    elif candidate == CAR.ACURA_MDX_3G:
       stock_cp.autoResumeSng = True
       stock_cp.minEnableSpeed = -1
-      stock_cp.steerActuatorDelay = 0.3
+      stock_cp.steerActuatorDelay = 0.35
       stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 433], [0, 433]]
       CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
 
