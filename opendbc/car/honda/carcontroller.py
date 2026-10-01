@@ -298,7 +298,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.nidec_pid = PIDController(k_p=([0,], [0,]),
                                    k_i=([0.01, 5., 35.], [1.2, 0.8, 0.5]),
                                    k_f=1,
-                                   pos_limit=0., # self.params.NIDEC_ACCEL_MAX,
+                                   pos_limit=1.0,
                                    neg_limit=self.params.NIDEC_ACCEL_MIN)
     self.nidec_pid.reset()
 
@@ -335,19 +335,24 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # The pre-existing low (10 m/s) / high (16 m/s) nodes load their old params; new nodes seed
     # from the old two-band blend evaluated at the node speed, so the first drive with this code
     # reproduces the previous curve exactly and starts from today's operating point.
-    # Persisted speed-channel state is loaded as-is, never sanitized: a value outside the learner's
-    # bounds is the visible trace of a learner bug (Pilot route b29245576c122ee6/3a booted with
-    # HondaSpeedFactorParams 0.086 and HondaSatAccelParams 0.1, i.e. a 0.15 m/s lead at cmd +0.9
-    # sent to the servo as "hold speed" for 40 s) and a boot-time fix-up would hide it. The
-    # learner's own clips in update() move it onto the bound on its first tick, and it is
-    # required to walk back from every corner of the box on its own.
+    # Persisted speed-channel state is clipped into the learnable range at load: the send path runs
+    # before the learner's per-frame clip, so a poisoned value (Pilot route b29245576c122ee6/3a:
+    # HondaSpeedFactorParams 0.086, HondaSatAccelParams 0.1) must not reach frame 1 on the wire.
+    # The learner still walks values back from the bounds during the drive; clipping only prevents
+    # an absorbing collapsed state from blocking ACC on the first boot after a bad persist.
+    def load_speed_factor(key, default):
+      return float(np.clip(load_param(key, default), NIDEC_SPEED_FACTOR_MIN, NIDEC_SPEED_FACTOR_MAX))
+
+    def load_speed_alpha(key, default):
+      return float(np.clip(load_param(key, default), -NIDEC_SPEED_ALPHA_MAX, NIDEC_SPEED_ALPHA_MAX))
+
     gf_high = load_param("HondaGasFactorParams", 1.0)
     gf_low = load_param("HondaGasFactorLowParams", gf_high)
     ga_high = load_param("HondaGasAlphaParams", 0.0)
-    sf_high = load_param("HondaSpeedFactorParams", NIDEC_SPEED_FACTOR_DEFAULT)
-    sa_high = load_param("HondaSpeedAlphaParams", 0.0)
-    sf_low = load_param("HondaSpeedFactorLowParams", NIDEC_SPEED_FACTOR_DEFAULT)
-    sa_low = load_param("HondaSpeedAlphaLowParams", 0.0)
+    sf_high = load_speed_factor("HondaSpeedFactorParams", NIDEC_SPEED_FACTOR_DEFAULT)
+    sa_high = load_speed_alpha("HondaSpeedAlphaParams", 0.0)
+    sf_low = load_speed_factor("HondaSpeedFactorLowParams", NIDEC_SPEED_FACTOR_DEFAULT)
+    sa_low = load_speed_alpha("HondaSpeedAlphaLowParams", 0.0)
 
     def old_two_band_blend(low_val, high_val, band_speed):
       low_w = float(np.interp(band_speed, [10.0, 16.0], [1.0, 0.0]))
@@ -366,12 +371,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.speed_factors = {}
     self.speed_alphas = {}
     for band, band_speed in NIDEC_SPEED_BANDS:
-      self.speed_factors[band] = load_param(NIDEC_SPEED_FACTOR_KEYS[band], old_two_band_blend(sf_low, sf_high, band_speed))
-      self.speed_alphas[band] = load_param(NIDEC_SPEED_ALPHA_KEYS[band], old_two_band_blend(sa_low, sa_high, band_speed))
+      self.speed_factors[band] = load_speed_factor(NIDEC_SPEED_FACTOR_KEYS[band], old_two_band_blend(sf_low, sf_high, band_speed))
+      self.speed_alphas[band] = load_speed_alpha(NIDEC_SPEED_ALPHA_KEYS[band], old_two_band_blend(sa_low, sa_high, band_speed))
 
     self.windfactor = 1.0 if (Params().get("HondaWindFactorParams") is None) else Params().get("HondaWindFactorParams")
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
-    self.sat_accel = load_param("HondaSatAccelParams", NIDEC_SAT_ACCEL_DEFAULT)
+    self.sat_accel = float(np.clip(load_param("HondaSatAccelParams", NIDEC_SAT_ACCEL_DEFAULT),
+                                   NIDEC_SAT_ACCEL_MIN, self.params.NIDEC_ACCEL_MAX - 0.1))
     self.sat_deficit_frames = self.sat_excess_frames = 0
     # (accel, wire gas pinned, speed-channel learn gate) per frame, read back a servo lag later
     self.speed_cmd_hist: deque[tuple[float, bool, bool]] = deque([(0.0, False, False)] * NIDEC_SERVO_LAG_FRAMES,
@@ -763,8 +769,11 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       # bracketing the current speed carry all the weight; edge bands saturate outside the grid)
       gas_w = band_weights(NIDEC_GAS_BANDS, CS.out.vEgo)
       speed_w = band_weights(NIDEC_SPEED_BANDS, CS.out.vEgo)
-      sf_eff = sum(w * self.speed_factors[band] for band, w in speed_w.items())
-      alpha_eff = sum(w * self.speed_alphas[band] for band, w in speed_w.items())
+      sf_eff = sum(w * float(np.clip(self.speed_factors[band], NIDEC_SPEED_FACTOR_MIN, NIDEC_SPEED_FACTOR_MAX))
+                   for band, w in speed_w.items())
+      alpha_eff = sum(w * float(np.clip(self.speed_alphas[band], -NIDEC_SPEED_ALPHA_MAX, NIDEC_SPEED_ALPHA_MAX))
+                      for band, w in speed_w.items())
+      sat_accel_eff = float(np.clip(self.sat_accel, NIDEC_SAT_ACCEL_MIN, self.params.NIDEC_ACCEL_MAX - 0.1))
       # TODO this 1.44 is just to maintain previous behavior
       if not CC.longActive:
         if CC.enabled and CS.out.gasPressed and CS.car_gas_available:
@@ -879,7 +888,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         # carried PCM_SPEED = vEgo + 0.15 m/s with the plan at +0.9 m/s2, and with dv_sent > dv_sat
         # still true (0.15 > 0.1) the reductions-only ratchet made that state absorbing.
         dv_lead = sf_eff * accel_lag
-        dv_sat = float(np.clip(sf_eff * self.sat_accel, NIDEC_DV_SAT_MIN, NIDEC_DV_SAT_MAX))
+        dv_sat = float(np.clip(sf_eff * sat_accel_eff, NIDEC_DV_SAT_MIN, NIDEC_DV_SAT_MAX))
         in_sat = dv_lead > dv_sat
 
         # average_factor learner: direct measurement (system ID), not tracking-error integration.
