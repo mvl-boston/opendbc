@@ -19,6 +19,8 @@ class GasInterceptorCarController:
 
     self.gas = 0.
     self.interceptor_gas_cmd = 0.
+    self.gasint_nolearn_ticks = 0
+    self.last_gasint = 0.0
 
   def update(self, CC: structs.CarControl, CS: structs.CarState, gas: float, brake: float, wind_brake: float,
              packer, frame: int) -> list[CanData]:
@@ -35,6 +37,11 @@ class GasInterceptorCarController:
         self.gas = float(np.clip(gas_mult * (gas - brake + wind_brake * 3 / 4), 0., 1.))
       else:
         self.gas = 0.0
+      send_gas = min(self.gas, self.last_gasint + 0.004)
+      if send_gas != self.gas:
+        self.gasint_nolearn_ticks = 25
+        self.gas = send_gas
+      self.last_gasint = self.gas
       can_sends.append(create_gas_interceptor_command(packer, self.gas, frame // 2))
 
     return can_sends
