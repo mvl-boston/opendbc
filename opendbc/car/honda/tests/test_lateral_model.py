@@ -396,6 +396,25 @@ def levels_fn(levels, dwell, half_period):
   return lambda t: levels[int(t // dwell) % len(levels)] * (1.0 if (t // half_period) % 2 == 0 else -1.0)
 
 
+# wire levels for the ceiling tests: a real wire holds many different levels on both sides of the ceiling. With
+# only two levels above the lowest candidate every candidate fits them exactly (a line through two points)
+CEILING_LEVELS = (0.3, 0.5, 0.6, 0.7, 0.85, 1.0, 0.45, 0.8, 0.55, 0.95)
+CEILING_DWELL = 10.0
+CEILING_HALF_PERIOD = 100.0
+
+
+def ceiling_levels():
+  return levels_fn(CEILING_LEVELS, CEILING_DWELL, CEILING_HALF_PERIOD)
+
+
+def clamp_plant(ceiling):
+  return lambda g, w, la: g * np.clip(w, -ceiling, ceiling)
+
+
+def linear_plant(g, w, la):
+  return g * w
+
+
 class TestHondaLateralEpsCeiling(unittest.TestCase):
   def test_prior_is_no_ceiling_and_persisted_value_loads_and_clips(self):
     model = make_model()
@@ -431,43 +450,58 @@ class TestHondaLateralEpsCeiling(unittest.TestCase):
     self.assertEqual(model.limit(5.0, 0.999, v), 1.0)
     self.assertFalse(model.ceiling_limited)
 
-  def test_tables_regress_on_the_wire_the_eps_acted_on(self):
+  def test_shape_regresses_on_the_wire_the_eps_acted_on_and_the_speed_table_skips_it(self):
     # a car that clamps at 0.5: pinned at 1.0 it delivers g_true * 0.5. With the ceiling known, the speed
-    # table must read g_true, not g_true / 2, from those pinned dwells
+    # table must read g_true from the dwells the clip did not shape and leave the pinned ones alone
     v = 12.0
     g_true = 1.2
-    plant = lambda g, w, la: g * np.clip(w, -0.5, 0.5)  # noqa: E731
     wire_fn = levels_fn((0.3, 0.5, 1.0), 15.0, 45.0)
     model = make_model({CEILING_KEY: 0.5})
-    drive_through_limit(model, v, g_true, 270.0, wire_fn, plant)
+    drive_through_limit(model, v, g_true, 270.0, wire_fn, clamp_plant(0.5))
     self.assertAlmostEqual(model.ceiling, 0.5, delta=0.06)
     self.assertAlmostEqual(model.gain(v), g_true, delta=0.1)
     # without it the pinned dwells read the gain low (and the shape table then has to make up the difference)
     model = make_model()
     model.ceiling_samples = -10**9   # hold the bank out of it
-    drive_through_limit(model, v, g_true, 270.0, wire_fn, plant)
+    drive_through_limit(model, v, g_true, 270.0, wire_fn, clamp_plant(0.5))
     self.assertLess(model.gain(v), g_true - 0.2)
 
+  def test_speed_table_does_not_learn_from_a_clipped_sample(self):
+    # a persisted ceiling below the car's: the gain must not be regressed on the wire the clip left, which
+    # would read the car's response per unit of a wire it never got (route 00000129: 2-3x the measured gain)
+    v = 12.0
+    g_true = 1.2
+    model = make_model({CEILING_KEY: 0.4})
+    drive(model, v, g_true, 200.0, levels_fn((1.0,), 20.0, 20.0))
+    self.assertEqual(model.gain(v), make_model().gain(v))
+    # a wire inside the ceiling trains it as before
+    model = make_model({CEILING_KEY: 0.4})
+    drive(model, v, g_true, 200.0, levels_fn((0.3,), 20.0, 20.0))
+    self.assertAlmostEqual(model.gain(v), g_true, delta=0.1)
+
   def test_learns_a_torque_clamp(self):
-    # a plant that ignores everything above 0.55 of full torque, driven at several levels on both sides of it
+    # a plant that ignores everything above 0.55 of full torque, driven at many levels on both sides of it
     v = 15.0
     model = make_model()
     g_true = model.gain(v)
-    drive_through_limit(model, v, g_true, 400.0, levels_fn((0.3, 0.5, 0.7, 1.0), 10.0, 80.0),
-                        lambda g, w, la: g * np.clip(w, -0.55, 0.55))
+    drive_through_limit(model, v, g_true, 400.0, ceiling_levels(), clamp_plant(0.55))
     self.assertTrue(model.learning_ceiling)
     self.assertAlmostEqual(model.ceiling, 0.55, delta=0.06)
     self.assertAlmostEqual(model.wire_limit, 0.55 + CEILING_PROBE, delta=0.06)
-    # the shape table has little left to explain once the ceiling is in (it learned from the pinned dwells
-    # before the ceiling came down, and recovers toward 1.0 afterwards)
-    self.assertGreater(min(model.shapes), 0.75)
+    # the shape table has little left to explain at the lateral accel the car reaches once the ceiling is
+    # in (it learned from the pinned dwells before the ceiling came down, and recovers afterwards)
+    self.assertGreater(model.shape(g_true * 0.55), 0.85)
     # and the learned value is persisted
     self.assertAlmostEqual(model.learned_values()[CEILING_KEY], model.ceiling)
+    # a higher clamp is found where it is
+    model = make_model()
+    drive_through_limit(model, v, g_true, 400.0, ceiling_levels(), clamp_plant(0.7))
+    self.assertAlmostEqual(model.ceiling, 0.7, delta=0.06)
 
   def test_no_clamp_is_learned_on_a_linear_plant(self):
     v = 15.0
     model = make_model()
-    drive_through_limit(model, v, model.gain(v), 400.0, levels_fn((0.3, 0.5, 0.7, 1.0), 10.0, 80.0), lambda g, w, la: g * w)
+    drive_through_limit(model, v, model.gain(v), 400.0, ceiling_levels(), linear_plant)
     self.assertAlmostEqual(model.ceiling, CEILING_MAX, places=2)
     # nor on a pinned one, where a clamp and a shape cannot be told apart
     model = make_model()
@@ -484,22 +518,54 @@ class TestHondaLateralEpsCeiling(unittest.TestCase):
     la_full = 0.0
     for _ in range(100):
       la_full = g_true * 0.85 * centering_shape(la_full)
-    drive_through_limit(model, v, g_true, 600.0, levels_fn((0.3, 0.45, 0.85), 15.0, 90.0),
-                        lambda g, w, la: g * centering_shape(abs(la)) * w)
+    plant = lambda g, w, la: g * centering_shape(abs(la)) * w  # noqa: E731
+    drive_through_limit(model, v, g_true, 600.0, levels_fn((0.3, 0.45, 0.85), 15.0, 90.0), plant)
     self.assertGreaterEqual(model.ceiling, 0.6)
     la_limited = 0.0
     for _ in range(100):
       la_limited = g_true * min(0.85, model.wire_limit) * centering_shape(la_limited)
     self.assertGreater(la_limited, 0.95 * la_full)
+    model = make_model()
+    drive_through_limit(model, v, g_true, 600.0, ceiling_levels(), plant)
+    self.assertGreaterEqual(model.ceiling, 0.6)
 
   def test_recovers_from_a_persisted_ceiling_that_is_too_low(self):
-    # the probe band lets the bank see torque above the ceiling; on a car that answers to it the ceiling climbs
+    # the probe band lets the bank see torque above the ceiling; on a car that answers to it the ceiling climbs.
+    # On a linear plant the last step is slow: the band above the ceiling carries little of the variance
     v = 15.0
     model = make_model({CEILING_KEY: 0.45})
     self.assertAlmostEqual(model.wire_limit, 0.55)
-    drive_through_limit(model, v, model.gain(v), 300.0, levels_fn((0.3, 0.5, 0.7, 1.0), 10.0, 80.0), lambda g, w, la: g * w)
-    self.assertAlmostEqual(model.ceiling, CEILING_MAX, places=2)
-    self.assertEqual(model.wire_limit, 1.0)
+    drive_through_limit(model, v, model.gain(v), 600.0, ceiling_levels(), linear_plant)
+    self.assertGreaterEqual(model.ceiling, 0.85)
+    # and on a car with a clamp above the persisted value it climbs to the clamp (route 00000129 left the
+    # MDX 3G at 0.416 against a measured 0.50-0.58)
+    model = make_model({CEILING_KEY: 0.416})
+    drive_through_limit(model, v, model.gain(v), 400.0, ceiling_levels(), clamp_plant(0.55))
+    self.assertAlmostEqual(model.ceiling, 0.55, delta=0.06)
+
+  def test_inflated_gain_table_does_not_pull_the_ceiling_down(self):
+    # route 00000129's tables: 2-3x the measured gain at 10-20 mph. Whatever the table says, the bank's score is
+    # about how |lat accel| follows |wire| and the ceiling stays where the car's clamp is while the table corrects
+    gains = (0.39, 0.77, 1.12, 1.57, 2.63, 2.86, 2.1, 2.3, 2.6)
+    params = {GAIN_KEY_FMT.format(slot=mph): g for mph, g in zip(GAIN_BINS_MPH, gains, strict=True)}
+    params[CEILING_KEY] = 0.538
+    for v, g_true in ((10.0, 0.4), (15.0, 1.2), (20.0, 2.0), (25.0, 2.4)):
+      model = make_model(params)
+      drive_through_limit(model, v, g_true, 400.0, ceiling_levels(), clamp_plant(0.55))
+      self.assertGreaterEqual(model.ceiling, 0.53, msg=f"v={v}")
+      self.assertLessEqual(model.ceiling, 0.61, msg=f"v={v}")
+      self.assertAlmostEqual(model.gain(v), g_true, delta=0.15 * g_true, msg=f"v={v}")
+
+  def test_ceiling_holds_without_settled_dwells(self):
+    # a wire that never holds a level above the lowest candidate (a town drive: routes 00000127 and 00000129
+    # had no settled, unpressed dwell above 0.42) is no evidence either way, whatever the plant
+    v = 15.0
+    sweep = lambda t: 0.75 * np.sin(2 * np.pi * t / 6.0) + 0.25 * np.sin(2 * np.pi * t / 2.3)  # noqa: E731
+    for prior, plant in ((0.538, clamp_plant(0.55)), (0.538, linear_plant), (1.0, clamp_plant(0.55))):
+      model = make_model({CEILING_KEY: prior})
+      drive_through_limit(model, v, model.gain(v), 300.0, sweep, plant)
+      self.assertAlmostEqual(model.ceiling, prior, places=3)
+      self.assertEqual(model.ceiling_samples, 0)
 
   def test_ceiling_does_not_learn_while_pressed(self):
     v = 15.0
@@ -507,7 +573,7 @@ class TestHondaLateralEpsCeiling(unittest.TestCase):
     g_true = model.gain(v)
     la = 0.0
     a = np.exp(-DT_CTRL / PLANT_LAG_SIM)
-    wire_fn = levels_fn((0.3, 0.5, 0.7, 1.0), 10.0, 80.0)
+    wire_fn = ceiling_levels()
     for k in range(int(200.0 / DT_CTRL)):
       wire = wire_fn(k * DT_CTRL)
       la = a * la + (1 - a) * g_true * float(np.clip(wire, -0.55, 0.55))
