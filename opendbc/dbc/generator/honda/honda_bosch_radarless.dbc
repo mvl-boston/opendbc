@@ -7,7 +7,7 @@ CM_ "IMPORT _gearbox_common.dbc";
 
 BO_ 456 ACC_CONTROL: 8 XXX
  SG_ ACCEL_COMMAND : 7|12@0- (0.01,0) [0|0] "m/s^2" XXX
- SG_ IDLESTOP_ALLOW : 8|1@0+ (1,0) [0|1] "" XXX
+ SG_ BRAKE_REQUEST : 8|1@0+ (1,0) [0|1] "" XXX
  SG_ STANDSTILL : 9|1@0+ (1,0) [0|1] "" XXX
  SG_ CONTROL_ON : 10|1@0+ (1,0) [0|1] "" XXX
  SG_ BOH : 23|1@0+ (1,0) [0|1] "" XXX
@@ -40,7 +40,7 @@ BO_ 254913108 LKAS_HUD_2: 8 ADAS
  SG_ LKAS_BOH_1 : 15|6@0+ (1,0) [0|63] "" XXX
  SG_ LEFT_LANE : 23|2@0+ (1,0) [0|3] "" XXX
  SG_ RIGHT_LANE : 21|2@0+ (1,0) [0|3] "" XXX
- SG_ LKAS_BOH_2 : 30|5@0+ (1,0) [0|31] "" XXX
+ SG_ LKAS_BOH_2 : 31|6@0+ (1,0) [0|63] "" XXX
  SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
  SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" XXX
 
