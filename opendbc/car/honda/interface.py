@@ -105,10 +105,10 @@ class CarInterface(CarInterfaceBase):
     if candidate == CAR.HONDA_CIVIC:
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[1.1], [0.33]]
 
-    elif candidate in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.ACURA_INTEGRA):
+    elif candidate in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
 
-    elif candidate == CAR.HONDA_CIVIC_2022:
+    elif candidate in (CAR.HONDA_CIVIC_2022, CAR.ACURA_INTEGRA):
       ret.steerActuatorDelay = 0.15
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
