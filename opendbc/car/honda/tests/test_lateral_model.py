@@ -4,11 +4,11 @@ import numpy as np
 
 from opendbc.car import DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.lateral_model import (DEFAULT_LAT_ACCEL_FACTOR, FF_CORRECTION_MAX, FF_SATURATION_FADE, FILTER_TAU,
-                                             GAIN_BINS_MPH, GAIN_BINS_MS, GAIN_KEY_FMT, GAIN_MAX, GAIN_MIN, GAIN_PRIOR, MAX_LAT_ACCEL,
-                                             MAX_LAT_JERK_DOWN, MAX_LAT_JERK_UP, PRESS_HOLDOFF, SHAPE_ANCHOR_LAT_ACCEL,
-                                             SHAPE_BINS_LAT_ACCEL, SHAPE_KEY_FMT, SHAPE_MAX, SHAPE_MIN, WIRE_RATE_MAX,
-                                             HondaLateralModel)
+from opendbc.car.honda.lateral_model import (CEILING_KEY, CEILING_MAX, CEILING_MIN, CEILING_PROBE, DEFAULT_LAT_ACCEL_FACTOR,
+                                             FF_CORRECTION_MAX, FF_SATURATION_FADE, FILTER_TAU, GAIN_BINS_MPH, GAIN_BINS_MS,
+                                             GAIN_KEY_FMT, GAIN_MAX, GAIN_MIN, GAIN_PRIOR, MAX_LAT_ACCEL, MAX_LAT_JERK_DOWN,
+                                             MAX_LAT_JERK_UP, PRESS_HOLDOFF, SHAPE_ANCHOR_LAT_ACCEL, SHAPE_BINS_LAT_ACCEL,
+                                             SHAPE_KEY_FMT, SHAPE_MAX, SHAPE_MIN, WIRE_RATE_MAX, HondaLateralModel)
 from opendbc.car.lateral import ISO_LATERAL_ACCEL, ISO_LATERAL_JERK
 
 
@@ -64,7 +64,8 @@ class TestHondaLateralModel(unittest.TestCase):
     self.assertAlmostEqual(model.gain(5 * CV.MPH_TO_MS), GAIN_MIN)
     self.assertAlmostEqual(model.gain(40 * CV.MPH_TO_MS), GAIN_PRIOR[GAIN_BINS_MPH.index(40)])
     self.assertEqual(set(model.learned_values()), set(HondaLateralModel.param_keys()))
-    self.assertEqual(len(model.param_keys()), len(GAIN_BINS_MPH) + len(SHAPE_BINS_LAT_ACCEL))
+    self.assertEqual(len(model.param_keys()), len(GAIN_BINS_MPH) + len(SHAPE_BINS_LAT_ACCEL) + 1)
+    self.assertTrue(CEILING_KEY in model.learned_values())
 
   def test_shape_prior_is_neutral(self):
     model = make_model()
@@ -375,6 +376,144 @@ class TestHondaLateralModel(unittest.TestCase):
     model = make_model()
     drive(model, v, g_true, 300.0, lambda t: 0.6 if (t // 15.0) % 2 == 0 else -0.6, shape_true=lambda la: 5.0)
     self.assertLessEqual(max(model.shapes), SHAPE_MAX)
+
+
+def drive_through_limit(model, v_ego, g_true, seconds, wire_fn, plant):
+  """Like drive(), but the request goes through limit() first the way the car controller sends it, so the
+  EPS ceiling clip acts on the wire the plant sees. plant(g, wire, la) is the steady-state lateral accel."""
+  la = 0.0
+  last = 0.0
+  a = np.exp(-DT_CTRL / PLANT_LAG_SIM)
+  for k in range(int(seconds / DT_CTRL)):
+    req = wire_fn(k * DT_CTRL)
+    last = model.limit(req, last, v_ego)
+    la = a * la + (1 - a) * plant(g_true, last, la)
+    step(model, req, last, v_ego, -la, -la)
+  return la
+
+
+def levels_fn(levels, dwell, half_period):
+  return lambda t: levels[int(t // dwell) % len(levels)] * (1.0 if (t // half_period) % 2 == 0 else -1.0)
+
+
+class TestHondaLateralEpsCeiling(unittest.TestCase):
+  def test_prior_is_no_ceiling_and_persisted_value_loads_and_clips(self):
+    model = make_model()
+    self.assertEqual(model.ceiling, CEILING_MAX)
+    self.assertEqual(model.wire_limit, 1.0)
+    self.assertEqual(model.effective_wire(0.9), 0.9)
+    model = make_model({CEILING_KEY: 0.55})
+    self.assertAlmostEqual(model.ceiling, 0.55)
+    self.assertAlmostEqual(model.wire_limit, 0.55 + CEILING_PROBE)
+    self.assertAlmostEqual(model.effective_wire(-0.9), -0.55)
+    self.assertEqual(model.effective_wire(0.3), 0.3)
+    self.assertEqual(make_model({CEILING_KEY: 0.1}).ceiling, CEILING_MIN)
+    self.assertEqual(make_model({CEILING_KEY: 7.0}).ceiling, CEILING_MAX)
+    # a car-specific seed is used only when nothing is persisted
+    self.assertAlmostEqual(HondaLateralModel(DEFAULT_LAT_ACCEL_FACTOR, {}.get, ceiling_prior=0.6).ceiling, 0.6)
+    self.assertAlmostEqual(HondaLateralModel(DEFAULT_LAT_ACCEL_FACTOR, {CEILING_KEY: 0.8}.get, ceiling_prior=0.6).ceiling, 0.8)
+
+  def test_limit_holds_the_wire_to_the_ceiling_plus_the_probe_band(self):
+    model = make_model({CEILING_KEY: 0.55})
+    v = 15.0
+    wire = run_limit(model, v, lambda k: 1.0, 400)
+    self.assertAlmostEqual(wire[-1], 0.55 + CEILING_PROBE)
+    self.assertTrue(model.ceiling_limited)
+    wire = run_limit(model, v, lambda k: -1.0, 400)
+    self.assertAlmostEqual(wire[-1], -(0.55 + CEILING_PROBE))
+    # inside the band nothing changes
+    model = make_model({CEILING_KEY: 0.55})
+    wire = run_limit(model, v, lambda k: 0.5, 400)
+    self.assertAlmostEqual(wire[-1], 0.5)
+    self.assertFalse(model.ceiling_limited)
+    # and with no ceiling the unit clip is all there is
+    model = make_model()
+    self.assertEqual(model.limit(5.0, 0.999, v), 1.0)
+    self.assertFalse(model.ceiling_limited)
+
+  def test_tables_regress_on_the_wire_the_eps_acted_on(self):
+    # a car that clamps at 0.5: pinned at 1.0 it delivers g_true * 0.5. With the ceiling known, the speed
+    # table must read g_true, not g_true / 2, from those pinned dwells
+    v = 12.0
+    g_true = 1.2
+    plant = lambda g, w, la: g * np.clip(w, -0.5, 0.5)  # noqa: E731
+    wire_fn = levels_fn((0.3, 0.5, 1.0), 15.0, 45.0)
+    model = make_model({CEILING_KEY: 0.5})
+    drive_through_limit(model, v, g_true, 270.0, wire_fn, plant)
+    self.assertAlmostEqual(model.ceiling, 0.5, delta=0.06)
+    self.assertAlmostEqual(model.gain(v), g_true, delta=0.1)
+    # without it the pinned dwells read the gain low (and the shape table then has to make up the difference)
+    model = make_model()
+    model.ceiling_samples = -10**9   # hold the bank out of it
+    drive_through_limit(model, v, g_true, 270.0, wire_fn, plant)
+    self.assertLess(model.gain(v), g_true - 0.2)
+
+  def test_learns_a_torque_clamp(self):
+    # a plant that ignores everything above 0.55 of full torque, driven at several levels on both sides of it
+    v = 15.0
+    model = make_model()
+    g_true = model.gain(v)
+    drive_through_limit(model, v, g_true, 400.0, levels_fn((0.3, 0.5, 0.7, 1.0), 10.0, 80.0),
+                        lambda g, w, la: g * np.clip(w, -0.55, 0.55))
+    self.assertTrue(model.learning_ceiling)
+    self.assertAlmostEqual(model.ceiling, 0.55, delta=0.06)
+    self.assertAlmostEqual(model.wire_limit, 0.55 + CEILING_PROBE, delta=0.06)
+    # the shape table has little left to explain once the ceiling is in (it learned from the pinned dwells
+    # before the ceiling came down, and recovers toward 1.0 afterwards)
+    self.assertGreater(min(model.shapes), 0.75)
+    # and the learned value is persisted
+    self.assertAlmostEqual(model.learned_values()[CEILING_KEY], model.ceiling)
+
+  def test_no_clamp_is_learned_on_a_linear_plant(self):
+    v = 15.0
+    model = make_model()
+    drive_through_limit(model, v, model.gain(v), 400.0, levels_fn((0.3, 0.5, 0.7, 1.0), 10.0, 80.0), lambda g, w, la: g * w)
+    self.assertAlmostEqual(model.ceiling, CEILING_MAX, places=2)
+    # nor on a pinned one, where a clamp and a shape cannot be told apart
+    model = make_model()
+    drive(model, 12.0, 0.6, 200.0, levels_fn((1.0,), 20.0, 20.0))
+    self.assertAlmostEqual(model.ceiling, CEILING_MAX, places=2)
+
+  def test_centering_shape_is_not_mistaken_for_a_clamp(self):
+    # the plant of test_identifies_centering_shape: lateral accel saturates with lateral accel, not torque.
+    # The data cannot separate the two perfectly (both say the top of the wire buys little), but the ceiling
+    # may not collapse: whatever it settles on costs at most a few percent of lateral accel on such a car
+    v = 20.0
+    model = make_model()
+    g_true = model.gain(v)
+    la_full = 0.0
+    for _ in range(100):
+      la_full = g_true * 0.85 * centering_shape(la_full)
+    drive_through_limit(model, v, g_true, 600.0, levels_fn((0.3, 0.45, 0.85), 15.0, 90.0),
+                        lambda g, w, la: g * centering_shape(abs(la)) * w)
+    self.assertGreaterEqual(model.ceiling, 0.6)
+    la_limited = 0.0
+    for _ in range(100):
+      la_limited = g_true * min(0.85, model.wire_limit) * centering_shape(la_limited)
+    self.assertGreater(la_limited, 0.95 * la_full)
+
+  def test_recovers_from_a_persisted_ceiling_that_is_too_low(self):
+    # the probe band lets the bank see torque above the ceiling; on a car that answers to it the ceiling climbs
+    v = 15.0
+    model = make_model({CEILING_KEY: 0.45})
+    self.assertAlmostEqual(model.wire_limit, 0.55)
+    drive_through_limit(model, v, model.gain(v), 300.0, levels_fn((0.3, 0.5, 0.7, 1.0), 10.0, 80.0), lambda g, w, la: g * w)
+    self.assertAlmostEqual(model.ceiling, CEILING_MAX, places=2)
+    self.assertEqual(model.wire_limit, 1.0)
+
+  def test_ceiling_does_not_learn_while_pressed(self):
+    v = 15.0
+    model = make_model()
+    g_true = model.gain(v)
+    la = 0.0
+    a = np.exp(-DT_CTRL / PLANT_LAG_SIM)
+    wire_fn = levels_fn((0.3, 0.5, 0.7, 1.0), 10.0, 80.0)
+    for k in range(int(200.0 / DT_CTRL)):
+      wire = wire_fn(k * DT_CTRL)
+      la = a * la + (1 - a) * g_true * float(np.clip(wire, -0.55, 0.55))
+      step(model, wire, wire, v, -la, -la, pressed=True)
+    self.assertEqual(model.ceiling, CEILING_MAX)
+    self.assertEqual(model.ceiling_samples, 0)
 
 
 def run_limit(model, v_ego, request_fn, ticks, last=0.0):
