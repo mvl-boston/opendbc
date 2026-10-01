@@ -298,7 +298,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.nidec_pid = PIDController(k_p=([0,], [0,]),
                                    k_i=([0.01, 5., 35.], [1.2, 0.8, 0.5]),
                                    k_f=1,
-                                   pos_limit=1.0,
+                                   pos_limit=0., # self.params.NIDEC_ACCEL_MAX,
                                    neg_limit=self.params.NIDEC_ACCEL_MIN)
     self.nidec_pid.reset()
 
@@ -335,11 +335,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # The pre-existing low (10 m/s) / high (16 m/s) nodes load their old params; new nodes seed
     # from the old two-band blend evaluated at the node speed, so the first drive with this code
     # reproduces the previous curve exactly and starts from today's operating point.
-    # Persisted speed-channel state is clipped into the learnable range at load: the send path runs
-    # before the learner's per-frame clip, so a poisoned value (Pilot route b29245576c122ee6/3a:
-    # HondaSpeedFactorParams 0.086, HondaSatAccelParams 0.1) must not reach frame 1 on the wire.
-    # The learner still walks values back from the bounds during the drive; clipping only prevents
-    # an absorbing collapsed state from blocking ACC on the first boot after a bad persist.
+    # Persisted speed-channel state is clipped into the learnable range at load. The learner's own
+    # clips only run on frames where its gate is open (long active, no pedal, brake released), so a
+    # poisoned persisted value (Pilot route b29245576c122ee6/3a: HondaSpeedFactorParams 0.086,
+    # HondaSatAccelParams 0.1) would otherwise sit on the wire until the first such frame. Route
+    # 44 telemetry showed sat_accel 0.1 on the first engaged frames. The learner is still required
+    # to walk back from the bounds on its own; the clip is a floor, not a reset.
     def load_speed_factor(key, default):
       return float(np.clip(load_param(key, default), NIDEC_SPEED_FACTOR_MIN, NIDEC_SPEED_FACTOR_MAX))
 
@@ -769,11 +770,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       # bracketing the current speed carry all the weight; edge bands saturate outside the grid)
       gas_w = band_weights(NIDEC_GAS_BANDS, CS.out.vEgo)
       speed_w = band_weights(NIDEC_SPEED_BANDS, CS.out.vEgo)
-      sf_eff = sum(w * float(np.clip(self.speed_factors[band], NIDEC_SPEED_FACTOR_MIN, NIDEC_SPEED_FACTOR_MAX))
-                   for band, w in speed_w.items())
-      alpha_eff = sum(w * float(np.clip(self.speed_alphas[band], -NIDEC_SPEED_ALPHA_MAX, NIDEC_SPEED_ALPHA_MAX))
-                      for band, w in speed_w.items())
-      sat_accel_eff = float(np.clip(self.sat_accel, NIDEC_SAT_ACCEL_MIN, self.params.NIDEC_ACCEL_MAX - 0.1))
+      sf_eff = sum(w * self.speed_factors[band] for band, w in speed_w.items())
+      alpha_eff = sum(w * self.speed_alphas[band] for band, w in speed_w.items())
       # TODO this 1.44 is just to maintain previous behavior
       if not CC.longActive:
         if CC.enabled and CS.out.gasPressed and CS.car_gas_available:
@@ -888,7 +886,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         # carried PCM_SPEED = vEgo + 0.15 m/s with the plan at +0.9 m/s2, and with dv_sent > dv_sat
         # still true (0.15 > 0.1) the reductions-only ratchet made that state absorbing.
         dv_lead = sf_eff * accel_lag
-        dv_sat = float(np.clip(sf_eff * sat_accel_eff, NIDEC_DV_SAT_MIN, NIDEC_DV_SAT_MAX))
+        dv_sat = float(np.clip(sf_eff * self.sat_accel, NIDEC_DV_SAT_MIN, NIDEC_DV_SAT_MAX))
         in_sat = dv_lead > dv_sat
 
         # average_factor learner: direct measurement (system ID), not tracking-error integration.
