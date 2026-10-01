@@ -16,7 +16,7 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
-from opendbc.car.honda.lateral_model import HondaLateralModel
+from opendbc.car.honda.lateral_model import CEILING_PRIOR, HondaLateralModel
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -423,9 +423,12 @@ class CarController(CarControllerBase):
     self.launch_ceiling_ticks = 0
 
     # speed-dependent lateral plant model (see lateral_model.py): identifies m/s^2 per unit wire torque
-    # online and adds a feedforward correction to the torque controller's request
+    # online and adds a feedforward correction to the torque controller's request. The EPS torque ceiling
+    # is learned per car; the MDX 3G is seeded at the value its routes measured (the same 233 counts the
+    # EPS faults above while braking), every other car starts with no ceiling until it shows one.
+    ceiling_prior = MDX_BRAKE_STEER_LIMIT / self.params.STEER_MAX if CP.carFingerprint == CAR.ACURA_MDX_3G else CEILING_PRIOR
     self.lat_model = HondaLateralModel(CP.lateralTuning.torque.latAccelFactor if CP.lateralTuning.which() == 'torque' else 0.0,
-                                       Params().get)
+                                       Params().get, ceiling_prior=ceiling_prior)
 
     self.latFactors = {
       "05": 1.0 if (Params().get("HondaLatAccelFactor05Params") is None) else Params().get("HondaLatAccelFactor05Params"),
@@ -558,7 +561,10 @@ class CarController(CarControllerBase):
         self.brake_steer_limit_frames = MDX_BRAKE_STEER_LIMIT_HOLD
       elif self.brake_steer_limit_frames > 0:
         self.brake_steer_limit_frames -= 1
-    self.steer_limit = float(MDX_BRAKE_STEER_LIMIT / self.params.STEER_MAX) if self.brake_steer_limit_frames > 0 else 1.0
+    brake_steer_limit = float(MDX_BRAKE_STEER_LIMIT / self.params.STEER_MAX) if self.brake_steer_limit_frames > 0 else 1.0
+    # the bound in force on the wire: the brake clip or the learned EPS ceiling (plus its probe band), whichever
+    # is lower; steer_maxed below reports against it
+    self.steer_limit = min(brake_steer_limit, self.lat_model.wire_limit)
     limited_torque = float(np.clip(limited_torque, -self.steer_limit, self.steer_limit))
     self.last_torque = limited_torque if CS.steer_control_active else 0.0
 
@@ -1309,10 +1315,11 @@ class CarController(CarControllerBase):
     # brake clip, so the clip is reported (route 00000114 09:22:58: 4.3 s of wire at 232 reported as unlimited).
     new_actuators.torque = float(actuators.torque + (self.last_torque - steer_torque))
     # actuatorsOutput gas/brake/speed: lateral model gain at this speed (m/s^2 per unit torque), feedforward
-    # correction actually added this tick, and whether identification ran (was long-channel telemetry)
+    # correction actually added this tick, and the learned EPS torque ceiling (normalized, 0.4-1.0) plus 2.0
+    # while identification ran this tick (was long-channel telemetry)
     steer_gas = float(self.lat_model.gain_now)
     steer_brake = float(self.lat_model.applied_correction)
-    steer_speed = 1.0 if self.lat_model.learning else 0.0
+    steer_speed = float(self.lat_model.ceiling) + (2.0 if self.lat_model.learning else 0.0)
     if self.CP.carFingerprint in HONDA_BOSCH:
       new_actuators.speed = steer_speed
       new_actuators.accel = self.accel
