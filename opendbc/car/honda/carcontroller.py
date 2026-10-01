@@ -1,5 +1,6 @@
 import math
 import threading
+import time
 from collections import deque
 from queue import Empty, Queue
 
@@ -221,33 +222,53 @@ def band_weights(bands, v_ego):
 
 
 class HondaParamWriter:
+  # Each Params.put is write + fsync + rename + fsync(dir); the dir fsync forces an ext4 journal
+  # commit that first flushes every dirty page in the filesystem (loggerd's buffered video). The
+  # band learners grew the per-minute flush to ~33 keys, and firing those back-to-back is ~66
+  # fsyncs in one burst that other synchronous params users (hardwared, mapd) then wait behind.
+  # Writes are paced one key per PARAM_WRITE_SPACING and unchanged values are skipped.
+  PARAM_WRITE_SPACING = 1.0  # s
+
   def __init__(self):
     self._params = Params()
     self._queue = Queue()
+    self._written: dict[str, float] = {}
     self._thread = threading.Thread(target=self._run, name="honda-param-writer", daemon=True)
     self._thread.start()
 
   def put_many(self, values):
     self._queue.put({key: float(value) for key, value in values.items()})
 
+  def _drain(self, pending, block):
+    # Collapse queued snapshots so delayed writes keep only the newest value per key.
+    try:
+      if block:
+        pending.update(self._queue.get())
+      while True:
+        pending.update(self._queue.get_nowait())
+    except Empty:
+      pass
+
   def _run(self):
+    pending: dict[str, float] = {}
     while True:
-      pending = self._queue.get()
+      self._drain(pending, block=not pending)
 
-      # Collapse queued snapshots so delayed writes keep only the newest value per key.
+      key, value = next(iter(pending.items()))
+      del pending[key]
+      if self._written.get(key) == value:
+        continue
+
+      # block=True keeps the pacing on the disk op itself rather than on a handoff to the
+      # C++ async queue, which would re-create the burst
+      # a key that is not registered in this openpilot build must not take the writer thread
+      # down with it (every other learned value would silently stop persisting)
       try:
-        while True:
-          pending.update(self._queue.get_nowait())
-      except Empty:
+        self._params.put(key, value, block=True)
+        self._written[key] = value
+      except Exception:
         pass
-
-      for key, value in pending.items():
-        # a key that is not registered in this openpilot build must not take the writer thread
-        # down with it (every other learned value would silently stop persisting)
-        try:
-          self._params.put(key, value)
-        except Exception:
-          pass
+      time.sleep(self.PARAM_WRITE_SPACING)
 
 
 class CarController(CarControllerBase, MadsCarController, GasInterceptorCarController, IntelligentCruiseButtonManagementInterface):
