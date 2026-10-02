@@ -128,6 +128,7 @@ BO_ 586 ADJACENT_RIGHT_LANE_LINE_2: 8 CAM
 BO_ 662 SCM_BUTTONS: 4 SCM
  SG_ CRUISE_BUTTONS : 7|3@0+ (1,0) [0|7] "" EON
  SG_ CRUISE_SETTING : 3|2@0+ (1,0) [0|3] "" EON
+ SG_ AMBIENT_LIGHT_MAYBE : 23|8@0+ (1,0) [0|255] "" EON
  SG_ COUNTER : 29|2@0+ (1,0) [0|3] "" EON
  SG_ CHECKSUM : 27|4@0+ (1,0) [0|15] "" EON
 
@@ -205,6 +206,7 @@ BO_ 13275 LKAS_HUD_B: 8 ADAS
  SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" BDY
 
 CM_ SG_ 228 DRIVER_OVERRIDE "Appears to acknowledge STEER_STATUS.NO_TORQUE_ALERT_1";
+CM_ SG_ 662 AMBIENT_LIGHT_MAYBE "Slow-moving sensor value (possibly the ambient light input for adaptive high beam), undecoded. The camera consumes SCM_BUTTONS content beyond the buttons, so frames sent in its place must echo this byte";
 CM_ SG_ 576 LINE_DISTANCE_VISIBLE "Length of line visible, undecoded";
 CM_ SG_ 577 LINE_FAR_EDGE_POSITION "Appears to be a measure of line thickness, indicates location of the portion of the line furthest from the car, undecoded";
 CM_ SG_ 577 LINE_PARAMETER "Unclear if this is low quality line curvature rate or if this is something else, but it is correlated with line curvature, undecoded";
@@ -212,7 +214,7 @@ CM_ SG_ 577 LINE_DASHED "1 = line is dashed";
 CM_ SG_ 577 LINE_SOLID "1 = line is solid";
 
 VAL_ 228 CONTROL_STATE 0 "init" 1 "standby" 2 "lka_active" 3 "driver_override" 5 "rdm_active";
-VAL_ 399 STEER_STATUS 6 "tmp_fault" 5 "fault_1" 4 "no_torque_alert_2" 3 "low_speed_lockout" 2 "no_torque_alert_1" 0 "normal";
+VAL_ 399 STEER_STATUS 6 "tmp_fault" 5 "fault_1" 4 "no_torque_alert_2" 3 "low_speed_lockout" 2 "no_torque_alert_1" 1 "tja_low_speed_lockout" 0 "normal";
 VAL_ 662 CRUISE_BUTTONS 7 "tbd" 6 "tbd" 5 "tbd" 4 "accel_res" 3 "decel_set" 2 "cancel" 1 "main" 0 "none" ;
 VAL_ 662 CRUISE_SETTING 3 "distance_adj" 2 "tbd" 1 "lkas_button" 0 "none" ;
 VAL_ 806 CMBS_STATES 3 "pressed" 0 "released" ;
