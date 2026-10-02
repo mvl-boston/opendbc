@@ -17,7 +17,7 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
-from opendbc.car.honda.lateral_model import CEILING_PRIOR, HondaLateralModel
+from opendbc.car.honda.lateral_model import HondaLateralModel, clamp_shape
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -132,14 +132,20 @@ NIDEC_SPEED_BANDS = (
 MDX_BRAKE_STEER_LIMIT = 233
 MDX_BRAKE_STEER_LIMIT_HOLD = int(1.0 / DT_CTRL)
 
-# EPS torque ceiling seeds (normalized wire torque) for the cars it has been measured on; every other car
-# starts at CEILING_PRIOR (no ceiling) and learns it. Integra: route 3792d010590cb83a|00000139, STEER_MAX
-# 5120: the steer rate a wire increment buys is linear to ~2500-3000 counts and flat from there to 5120 at
-# every steering angle (an input clamp, not centering); clamp fits of steer rate peak at 2500-3500 counts in
-# every 10-20 m/s band and the online steer-rate bank picks 0.55 (knee 0.60) from the 1.0 prior. 0.55 is
-# 2816 counts; the probe band puts the wire bound at 0.65 (3328), above the flat region's start.
-CEILING_SEEDS = {
-  CAR.ACURA_INTEGRA: 0.55,
+# EPS wire response shape seeds (see lateral_model.py): the marginal response per unit of wire torque in the
+# bands 0.4-0.5, 0.5-0.6, 0.6-0.7, 0.7-0.8, 0.8-0.9, 0.9-1.0 of STEER_MAX, relative to the band below 0.4, for
+# the cars it has been measured on; every other car starts linear and learns it.
+# Integra (route 3792d010590cb83a|00000139, STEER_MAX 5120): the steer rate a wire increment buys is linear
+# to ~2500-3000 counts and 3-20% of that from there to 5120 at every steering angle (a function of the command
+# level, not of the angle); the constrained per-band fit over the drive reads (1.0, 0.2-0.3, 0.03-0.1, 0.03,
+# 0.03, 0.03) and the online learner from the linear prior reaches (0.94, 0.29, 0.21, ...) in the one drive. The
+# seed keeps every band alive (the wire still runs to 5120, through the inverse shape at twice the wire per
+# unit above 0.6) and leaves it to the learner to mark the top bands dead when more drives read them at 0.03.
+# The MDX 3G is seeded in __init__ from its measured clamp (233 of 433 counts, the number the EPS faults
+# above while braking): full response to 0.5, 0.38 of it over 0.5-0.6, nothing above (the per-band fit on
+# route 00000127 reads 0.4, 0.2, 0.2, 0.02, ...).
+WIRE_SEEDS = {
+  CAR.ACURA_INTEGRA: (1.0, 0.3, 0.1, 0.1, 0.1, 0.1),
 }
 
 # the low/high nodes keep the param keys the two-band scheme persisted, so learned state survives
@@ -454,16 +460,16 @@ class CarController(CarControllerBase):
     self.launch_ceiling_ticks = 0
 
     # speed-dependent lateral plant model (see lateral_model.py): identifies m/s^2 per unit wire torque
-    # online and adds a feedforward correction to the torque controller's request. The EPS torque ceiling
-    # is learned per car; the MDX 3G is seeded at the value its routes measured (the same 233 counts the
-    # EPS faults above while braking), the Integra at its measured value (CEILING_SEEDS), every other car
-    # starts with no ceiling until it shows one.
+    # online and adds a feedforward correction to the torque controller's request. The EPS wire response
+    # shape is learned per car; the MDX 3G is seeded as a clamp at the value its routes measured (the same
+    # 233 counts the EPS faults above while braking), the Integra at its measured shape (WIRE_SEEDS), every
+    # other car starts linear until it shows otherwise.
     if CP.carFingerprint == CAR.ACURA_MDX_3G:
-      ceiling_prior = MDX_BRAKE_STEER_LIMIT / self.params.STEER_MAX
+      wire_prior = clamp_shape(MDX_BRAKE_STEER_LIMIT / self.params.STEER_MAX)
     else:
-      ceiling_prior = CEILING_SEEDS.get(CP.carFingerprint, CEILING_PRIOR)
+      wire_prior = WIRE_SEEDS.get(CP.carFingerprint)
     self.lat_model = HondaLateralModel(CP.lateralTuning.torque.latAccelFactor if CP.lateralTuning.which() == 'torque' else 0.0,
-                                       Params().get, ceiling_prior=ceiling_prior)
+                                       Params().get, wire_prior=wire_prior)
 
     self.latFactors = {
       "05": 1.0 if (Params().get("HondaLatAccelFactor05Params") is None) else Params().get("HondaLatAccelFactor05Params"),
@@ -578,7 +584,7 @@ class CarController(CarControllerBase):
     # self.last_torque is what actually went to the EPS last tick (wire limits + MDX brake clip
     # applied); the model regresses measured lateral accel on it to identify the car's gain.
     # steeringAngleDeg / steeringRateDeg share the wire's sign (a positive actuators.torque turns the angle
-    # positive); the steer-rate ceiling bank regresses on them
+    # positive); the response-shape learner regresses on them
     steer_torque = self.lat_model.update(actuators.torque, self.last_torque, CC.latActive, CS.steer_control_active,
                                          CS.out.steeringPressed, CS.out.vEgo, actuators.curvature, CC.currentCurvature,
                                          CS.out.steeringAngleDeg, CS.out.steeringRateDeg)
@@ -586,6 +592,8 @@ class CarController(CarControllerBase):
     # gain (see lateral_model.limit). This replaces the fixed STEER_DELTA torque rate, which was the same
     # jerk target evaluated with one linear gain for every speed: at town speeds it held the wheel's
     # return to center to a fraction of the ISO rate, on the highway it allowed more than the ISO rate.
+    # The result is the wire: the request (effective torque) mapped through the inverse of the EPS's learned
+    # response shape, bounded where the EPS stops answering.
     limited_torque = self.lat_model.limit(steer_torque, self.last_torque, CS.out.vEgo)
     # MDX brake steer limit: 233 counts is an EPS fault boundary while the brake is commanded, so it
     # clips the rate-limited output on the same tick the brake command goes non-zero (a wire above 233
@@ -600,7 +608,7 @@ class CarController(CarControllerBase):
       elif self.brake_steer_limit_frames > 0:
         self.brake_steer_limit_frames -= 1
     brake_steer_limit = float(MDX_BRAKE_STEER_LIMIT / self.params.STEER_MAX) if self.brake_steer_limit_frames > 0 else 1.0
-    # the bound in force on the wire: the brake clip or the learned EPS ceiling (plus its probe band), whichever
+    # the bound in force on the wire: the brake clip or the learned dead band (plus its probe band), whichever
     # is lower; steer_maxed below reports against it
     self.steer_limit = min(brake_steer_limit, self.lat_model.wire_limit)
     limited_torque = float(np.clip(limited_torque, -self.steer_limit, self.steer_limit))
@@ -1345,15 +1353,17 @@ class CarController(CarControllerBase):
                                                      CS.scm_ambient_light, self.CP.carFingerprint, bus=self.CAN.camera))
 
     new_actuators = actuators.as_builder()
-    # request plus only the limiting that actually happened (brake clip, rate limiter, steer_control_active),
-    # NOT the wire torque: controlsd freezes the torque controller's integrator whenever this differs from the
-    # request by >0.01, and torqued fits latAccelFactor to it (see lateral_model.py, "Reporting"). The wire
-    # torque is actuatorsOutput.torque + actuatorsOutput.brake. steer_torque is the model output before the
-    # brake clip, so the clip is reported (route 00000114 09:22:58: 4.3 s of wire at 232 reported as unlimited).
-    new_actuators.torque = float(actuators.torque + (self.last_torque - steer_torque))
+    # request plus only the limiting that actually happened (brake clip, rate limiter, steer_control_active, and
+    # the part of the wire the EPS does not answer to), in effective torque, NOT the raw wire torque: controlsd
+    # freezes the torque controller's integrator whenever this differs from the request by >0.01, and torqued
+    # fits latAccelFactor to it (see lateral_model.py, "Reporting"). The effective wire torque is
+    # actuatorsOutput.torque + actuatorsOutput.brake; the raw wire is on the CAN. steer_torque is the model
+    # output before the brake clip, so the clip is reported (route 00000114 09:22:58: 4.3 s of wire at 232
+    # reported as unlimited).
+    new_actuators.torque = float(actuators.torque + (self.lat_model.effective_wire(self.last_torque) - steer_torque))
     # actuatorsOutput gas/brake/speed: lateral model gain at this speed (m/s^2 per unit torque), feedforward
-    # correction actually added this tick, and the learned EPS torque ceiling (normalized, 0.4-1.0) plus 2.0
-    # while identification ran this tick (was long-channel telemetry)
+    # correction actually added this tick, and the start of the wire band the EPS no longer answers to
+    # (normalized, 0.4-1.0) plus 2.0 while identification ran this tick (was long-channel telemetry)
     steer_gas = float(self.lat_model.gain_now)
     steer_brake = float(self.lat_model.applied_correction)
     steer_speed = float(self.lat_model.ceiling) + (2.0 if self.lat_model.learning else 0.0)
