@@ -82,152 +82,135 @@ faster than the rate limiter lets it) and 7-8 m/s^3 at 35 mph (above it). The Ho
 ran in normalized torque per tick (``STEER_DELTA * DT_CTRL`` = 0.03/tick, full scale in 0.33 s) while
 the test evaluated it in CAN counts per tick (3/433), so the test never saw the number the car got.
 
-``limit()`` replaces that rate limiter. It maps the last wire torque and the new request into lateral
-accel with the identified speed gain, applies the ISO jerk and accel bounds there, and maps back, all
+``limit()`` replaces that rate limiter. It maps the last wire torque (through the EPS response shape
+below, i.e. the part of it the EPS acted on) and the new request into lateral accel with the identified
+speed gain, applies the ISO jerk and accel bounds there, and maps back through the inverse shape, all
 before the torque is scaled into CAN counts. The bound is therefore a constant vehicle response at
-every speed: the allowed torque rate is ``MAX_LAT_JERK / gain(v)`` per second, small on the highway
-where a unit of torque buys 2.5 m/s^2 and large in town where it buys 0.3. Only the speed table is
-used, not the centering shape: a shape error scales the bound directly, and whether the saturation
-is a function of lateral accel (as the shape table assumes) or of torque (an EPS assist limit; the
-knee in route 0000011f sits at ~0.35-0.4 of full torque at the one speed with hard turns) is not yet
-settled. With the shape in the bound the unwind from a pinned wire would run the first 0.7 of torque
-in ~0.1 s (it buys only ~0.4 m/s^2 there) and the rest at the anchor-band rate; that is the next step
-once the shape has been learned on more than one speed. The wire torque is not the vehicle's lateral accel: it goes
-through ``WIRE_DELAY`` and ``PLANT_TAU`` first, so the bound applied here is on the quasi-static
-lateral accel the wire commands, which is how ``test_lateral_limits`` defines it and an upper bound
-on what the car does (route 0000011f measured lateral jerk p99 0.9 m/s^3 against a wire-implied p99
-of 6.9 under the old limiter).
+every speed: the allowed effective torque rate is ``MAX_LAT_JERK / gain(v)`` per second, small on the
+highway where a unit of torque buys 2.5 m/s^2 and large in town where it buys 0.3. Only the speed table
+is used, not the centering shape: a shape error scales the bound directly, and whether the saturation
+is a function of lateral accel (as the shape table assumes) or of torque (the response shape, which has
+turned out to be the larger effect on both cars measured) is not settled per car. The wire torque is
+not the vehicle's lateral accel: it goes through ``WIRE_DELAY`` and ``PLANT_TAU`` first, so the bound
+applied here is on the quasi-static lateral accel the wire commands, which is how ``test_lateral_limits``
+defines it and an upper bound on what the car does (route 0000011f measured lateral jerk p99 0.9 m/s^3
+against a wire-implied p99 of 6.9 under the old limiter).
 
-``WIRE_RATE_MAX`` is a separate backstop on the normalized torque rate. It is not an ISO term: below
-~15 mph the gain is small enough that the jerk bound alone would let the wire swing full scale in a
-few ticks, and the EPS and the driver's hands see the torque step itself. It permits a full swing in
-0.1 s (the old limiter took 0.33 s) and never binds above ~15 mph.
+``WIRE_RATE_MAX`` is a separate backstop on the normalized torque rate, applied to the raw wire after
+the inverse shape. It is not an ISO term: below ~15 mph the gain is small enough that the jerk bound
+alone would let the wire swing full scale in a few ticks, and the EPS and the driver's hands see the
+torque step itself. It permits a full swing in 0.1 s (the old limiter took 0.33 s) and never binds
+above ~15 mph.
 
 Reporting, and staying compatible with an unmodified openpilot
 --------------------------------------------------------------
 ``gain_now`` (effective m/s^2 per unit torque at the current speed and desired lateral accel, i.e.
-``gain(v) * shape``), ``applied_correction`` (torque actually added this tick), ``ceiling`` and ``learning``
-(identification ran this tick) are exposed for the actuatorsOutput telemetry slots: gas is the gain,
-brake the correction, speed the ceiling (0.4-1.0) plus 2.0 while learning.
+``gain(v) * shape``), ``applied_correction`` (torque actually added this tick), ``ceiling`` (start of
+the wire band the EPS no longer answers to, 1.0 if there is none) and ``learning`` (identification ran
+this tick) are exposed for the actuatorsOutput telemetry slots: gas is the gain, brake the correction,
+speed the ceiling (0.4-1.0) plus 2.0 while learning.
 
 controlsd freezes the torque controller's integrator whenever ``|actuators.torque - actuatorsOutput.torque|``
 exceeds 0.01 (its ``steer_limited_by_safety``), and torqued fits ``latAccelFactor`` to
-``-actuatorsOutput.torque``. If the car controller reported the true wire torque, the correction would
+``-actuatorsOutput.torque``. If the car controller reported the raw wire torque, the correction would
 trip that check on nearly every engaged tick (93-96% in routes 0000010e/0000010f, integrator |I| stuck
 near 0.03) and torqued would learn the highway plant gain, which the model then has to fight. So the
-car controller reports ``request + (wire - corrected request)``: the request plus only the limiting the
-rate limiter / clips actually did. The integrator then freezes only on real limiting, and torqued sees
-the plant *as corrected by this model*, whose feedforward is ``latAccelFactor`` by construction, so its
-live estimate settles on the same number the correction is computed against. The real wire torque is
-recoverable from the log as ``actuatorsOutput.torque + actuatorsOutput.brake``.
+car controller reports ``request + (effective_wire(wire) - corrected request)``: the request plus only
+the limiting that actually happened, in effective torque (rate limiter, clips, and the part of the wire
+the EPS did not answer to). The integrator then freezes only on real limiting, including the EPS's own,
+and torqued sees the plant *as corrected by this model*, whose feedforward is ``latAccelFactor`` by
+construction, so its live estimate settles on the same number the correction is computed against. The
+effective wire torque is recoverable from the log as ``actuatorsOutput.torque + actuatorsOutput.brake``;
+the raw wire is on the CAN (``torqueOutputCan`` on the Bosch cars).
 
-EPS torque ceiling
-------------------
-The EPS does not act on the whole of the torque range the car controller can command. On the MDX 3G
-the steering angle and lateral accel the car settles at stop depending on the wire above ~0.5-0.55 of
-STEER_MAX (215-240 of 433 counts), and the steer rate a wire increment buys does the same: a first-order
-plant fit (steer rate on wire and centering) over 10-18 m/s prefers a saturation at 190-250 counts in
-both the torque-controller routes (00000127) and the angle-PID routes before them (00000048, 00000058),
-and the fit degrades monotonically as the saturation is moved toward 433. The same bend at the same
-speed (route 00000127 21:32:25 vs 00000058) reached the same 17.5 deg / 1.3 m/s^2 with the wire pinned
-at 433 as it had with the wire at 300-400; the extra ~100 counts bought nothing. 233 is also the
-number the EPS faults above while braking, so the simplest reading is an input clamp in the EPS.
+EPS wire response shape
+-----------------------
+The EPS does not answer to the whole of the torque range the car controller can command, and not
+linearly to the part it does answer to. On the MDX 3G the steer rate a wire increment buys, and the
+angle and lateral accel the car settles at, all stop depending on the wire above ~0.5-0.55 of
+STEER_MAX (215-240 of 433 counts; 233 is also the number the EPS faults above while braking): the same
+bend at the same speed (route 00000127 21:32:25 vs 00000058) reached the same 17.5 deg / 1.3 m/s^2 with
+the wire pinned at 433 as with the wire at 300-400. On the Acura Integra (route 00000139, STEER_MAX
+5120) the steer rate a wire increment buys is linear to ~2500-3000 counts and a few percent of that from
+there to 5120, in every steering-angle band including 0-4 deg where the self-aligning torque is
+negligible, so it is a function of the command level and not of the angle. The lateral accel in that
+drive keeps growing for 1-2 s after the wire pins at 5120 (525-532 s): that is the plant lag carrying
+the car to the level the first ~2600-3000 counts command, not the torque above it buying more, and the
+per-band fit below is what separates the two readings (a marginal response of 0.03-0.2 above 0.6 of
+STEER_MAX, against 1.0 below it).
 
-Whether the clamp is in the EPS firmware or an assist limit the self-aligning torque balances against
-makes no difference to the controller: above the ceiling the marginal response is zero, and every
-layer that assumes 433 counts of authority accounts wrongly (the integrator only freezes at a wire of
-1.0, the jerk limiter spends its budget ramping the wire through torque the EPS ignores, the wire has to
-unwind through that dead band before the car feels anything on the exit, torqued and the tables here
-regress on torque that was never delivered). The number is a property of the car, not of the tuning,
-and it is not known for the other Nidec cars, so it is learned per car:
+Whether that is a clamp in the EPS firmware or an assist limit the self-aligning torque balances against
+makes no difference to the controller, but the shape of it does: a cutoff and a reduced slope want
+different handling. Above a cutoff the wire buys nothing and should be bounded. Through a reduced slope
+every unit of response costs more wire, and a controller that does not know it runs at a lower loop gain
+there (sluggish, then the integrator winds up) and at the full one again as soon as the wire comes back
+below the knee (the overshoot on the exit); and every layer that assumes full linear authority accounts
+wrongly (the integrator only freezes at a wire of 1.0, the jerk limiter spends its budget ramping the
+wire through torque the EPS ignores, the wire has to unwind through that band before the car feels
+anything on the exit, torqued and the tables here regress on torque that was never delivered).
 
-``ceiling`` is the normalized wire torque above which the EPS is taken to deliver nothing more. It is
-identified with a bank of candidates (``CEILING_CANDIDATES``): each candidate runs the raw wire clipped
-at its own value through the same delay / plant lag / short filter as the shape path, and the bank keeps
-exponentially weighted moments of (|clipped wire|, |lateral accel|) over the samples on which the
-candidates disagree: the lagged wire above the lowest candidate, in a real curve, while the wire is
-holding a level and the lag-aligned signals have settled (``CEILING_DWELL_TOL``, ``CEILING_MAX_LEARN_*``).
-Each candidate is scored by the least-squares line through its samples, as the fraction of the variance
-of |lateral accel| it leaves unexplained. On a car with a clamp that score falls as the candidate rises
-toward it and rises again above it, where the candidate keeps torque that moves while the car does not;
-on a linear car it falls all the way to 1.0. The knee is the highest candidate within ``CEILING_TOL`` of
-the best (the ones below tie with it whenever the wire rarely visits the band between), and ``ceiling``
-moves toward the knee at ``CEILING_LEARN_RATE`` only while the candidate at its current value is worse
-than the best by ``CEILING_EVIDENCE``: the ceiling is a property of the car, and a drive whose samples
-do not disagree with where it is leaves it where it is. The bank sees the raw wire, the shape table
-sees the wire clipped at the ceiling (what the EPS acted on), the speed table only the samples the clip
-did not shape (``GAIN_MAX_CLIP``), and ``limit()`` clips the wire at ``ceiling + CEILING_PROBE``: the
-probe band is what keeps the bank able to see that more torque *does* do something on a car whose
-ceiling is higher than the persisted one (the candidates above the ceiling then beat the one at it, and
-it walks back up), and on a car with a real clamp it costs nothing. A prior of 1.0 is no clamp; the car
-controller seeds the MDX 3G at its measured value. On a car whose saturation really is a function of
-lateral accel the knee sits where the wire had stopped buying much anyway, and the cost of taking it for
-a clamp is a few percent of lateral accel at most.
+``effective_wire(w)`` is the model of it: the wire in bands of STEER_MAX (``WIRE_CUTS``: 0-0.4,
+0.4-0.5, ... 0.9-1.0), each with a marginal response ``wire_gains[k]`` in [0, 1] relative to the first
+band, whose 1.0 defines the unit the gain table is in; the gains are non-increasing in wire level (a
+saturating EPS never delivers more per unit at a higher command than at a lower one). A clamp at 0.55
+is (1, 1, 0.5, 0, 0, 0, 0); a linear car is all ones, which is the prior; the car controller seeds the
+cars that have been measured. Everything downstream is in effective torque: the gain and centering
+tables regress on it (the speed table skipping the samples the shape bent, ``GAIN_MAX_CLIP``); the
+torque controller's output is taken as effective torque (torqued fits ``latAccelFactor`` to the
+effective torque this reports, so that is the unit it already works in); and ``limit()`` bounds it in
+lateral-accel space and maps it to the wire through the inverse shape, sending ``1 / wire_gains[k]`` of
+wire per unit of effective torque in band k, so the loop gain the controller sees is the same in every
+band. That inverse slope is capped at ``1 / WIRE_INVERT_MIN_GAIN`` (2x): the stability margin of this
+loop is a factor of 3-4.5 (route 0000010f's limit cycle), a learned gain that is too low in a band the
+car actually answers to is amplified into exactly that, and 2x is as far as the inversion goes; beyond
+it the shortfall is reported as limiting and the integrator freezes (``limit()`` itself tracks the last
+wire through the floored slopes, ``commanded_wire``, so the jerk budget walks the wire through a weak
+band at the floor's rate instead of stalling at the first wire the band swallows). A band with a gain below
+``WIRE_DEAD_GAIN`` is dead: ``ceiling`` is the start of the first dead band and the wire is bounded at
+``ceiling + WIRE_PROBE``, the probe band keeping the learner able to see whether torque there does
+something after all (on a car whose persisted shape is lower than its real one the band above the
+ceiling then reads alive and the ceiling walks up; on a car whose band really is dead it costs
+nothing). With no dead band the wire runs to 1.0: the steering power above the knee is kept, delivered
+through the inverse at up to twice the wire per unit the linear part needs.
 
-The score is deliberately scale-free. The first version of the bank fitted one bounded multiplier on
-``gain(v)`` per candidate by LMS and compared mean squared residuals, which made the pick depend on the
-gain table's scale: in route 00000129 the table at 10-20 mph had grown to 2-3x the measured gain
-(regressed on a wire clipped at a ceiling that was already too low), every candidate then fitted inside
-the bound, the residuals were compared mid-convergence, and the "lowest candidate within tolerance"
-rule walked the ceiling from 0.538 to 0.416 in one 7-minute drive, which put the wire bound (0.516)
-below the knee the offline fits measure (0.50-0.58) and cost the car authority it had. The same drive
-replayed through this bank holds 0.538. The samples the first version learned from were, for the most
-part, not dwells either: the decay after a hard turn's exit also separates the candidates, but only
-through the lag model's onset timing (the car's delay is longer than ``WIRE_DELAY``, which reads as a
-lower ceiling), and a turn entry's rising edge makes every clipped candidate an affine copy of the same
-exponential, which a free line fits equally well.
+``_identify_wire`` learns the shape from the steer rate, which answers the wire within ``RATE_DELAY``
+(far shorter than the lateral-accel lag, so transients are usable and a wire that never holds a level,
+which is how the torque controller drives, is enough). It keeps exponentially weighted normal equations
+(``RATE_TAU``) of ``steer_rate = sum_k beta_k * band_k(wire) + a * angle + b * lat_accel + d`` over the
+ticks with the delayed wire above ``RATE_MIN_WIRE`` at road speed (``RATE_MIN_SPEED``), unpressed. The
+angle and lateral-accel terms carry the centering, so a plant that saturates with lateral accel rather
+than torque is explained by them and not by the bands. Every ``RATE_SCORE_INTERVAL`` ticks the system is
+solved under ``beta_0 >= beta_1 >= ... >= 0`` (projected gradient with a pool-adjacent-violators
+projection, warm-started from the last solution). Unconstrained, the band coefficients are
+ill-conditioned: a wire that is pinned at 1.0 for part of a turn makes the top band an indicator of
+"pinned", which a free fit uses to absorb whatever the centering terms left over; the constraint is what
+makes them an estimate of the response. The fit has to explain a fair share of the steering
+(``RATE_MIN_R2``) and the first band must turn the wheel its own way; a band moves only while the window
+holds samples with the wire in or above it (``WIRE_MIN_BAND_ACTIVITY``) and the fit disagrees with it
+by more than ``WIRE_TOL``, toward the fit at ``WIRE_LEARN_RATE`` per counted tick, and the bands above
+an informed one inherit its saturation (non-increasing). Replays from the linear prior (see the tests
+and the PR notes): the Integra's route 00000139 reads 1.0 to 0.6 of STEER_MAX and ~0.05-0.2 above, the
+MDX's 00000127 1.0 to 0.5 and 0.3-0.4 to 0.7, the Integra's angle-PID drive 00000135 (R^2 0.12-0.25) is
+rejected by the fit gate and holds.
 
-Known limits of the identification: it uses ``steeringPressed`` to exclude the driver, and on the MDX
-that flag is set by the EPS's own torque-sensor oscillation in hard turns (route 00000127: 76% of the
-ticks with the wire above 0.42), so a town drive yields no settled, unpressed dwell above the lowest
-candidate at all (routes 00000127, 00000129: none) and the ceiling only moves on drives with long
-sweepers; a car starting from the 1.0 prior needs several such drives to settle, and the MDX 3G relies
-on its seed. Below ~20 mph the lateral accel a wire increment buys is too small against the noise for
-the bank to decide anything (``CEILING_MIN_LAT_ACCEL_SPREAD``). The speed dependence of the ceiling
-below 10 m/s is not established (the rate fit is flat there in one route and not in another); a single
-number is learned.
+The first version of this learned one clamp level, from settled dwells of lateral accel and from a bank
+of clip candidates on the steer rate. The dwell bank counted zero samples on the Integra's drive (the
+torque controller never holds the wire), and a clamp cannot say what a reduced slope does.
+``HondaLatCeilingParams`` is still written (the dead-band start) and is read as a clamp when no shape
+has been persisted yet, so the MDX's 0.538 carries over.
 
-Steer-rate evidence for the ceiling
------------------------------------
-The dwell bank above needs the wire to hold a level for a few seconds. The torque controller does not
-drive that way: in a hard turn it runs the wire from 0.3 to 1.0 and back inside a second, and on the
-Acura Integra (route 00000139, STEER_MAX 5120, no seed) the dwell bank counted zero informative
-samples in a 14-minute drive (every tick above the lowest candidate failed the dwell gate, 95% the
-trend gate too) while the wire sat pinned at 5120 for 1.7 s at a time and the car settled at 0.87
-m/s^2 against a planner asking 2.0. The same drive, regressed in steer rate, shows the clamp plainly:
-the steer rate a wire increment buys is linear up to ~2500-3000 counts and flat from there to 5120, in
-every steering-angle band including 0-4 deg where the self-aligning torque is negligible, so it is a
-function of the command level and not of the angle; a clamp model beats a linear wire with a free
-centering curve (R^2 0.45 vs 0.40), and the knee is the same fraction of STEER_MAX the MDX 3G has
-(0.50-0.55 of 433).
+Known limits: ``steeringPressed`` excludes the driver, and on the MDX that flag is set by the EPS's own
+torque-sensor oscillation in hard turns (route 00000127: 76% of the ticks with the wire above 0.42), so
+the shape there learns from the gaps between; below ~10 m/s the fit degrades (large angles, the
+centering terms least exact) and nothing is learned; one shape is learned for all speeds.
 
-``_identify_ceiling_rate`` is a second bank on the same candidates that scores them on the steer rate
-instead of the settled lateral accel. Per candidate it keeps exponentially weighted normal equations of
-``steer_rate = K * clip(wire, +-c) + a * angle + b * lat_accel + d`` over the ticks with the delayed
-wire above ``RATE_MIN_WIRE`` (``RATE_DELAY`` is the wire-to-rate delay, much shorter than the
-lateral-accel lag the dwell bank works through), and the score is the fraction of the steer-rate
-variance the line leaves unexplained. The angle and lateral-accel terms carry the centering, so a
-plant that saturates with lateral accel rather than torque is explained by them and not by the clip;
-the clipped wire is the only term that differs between candidates. Transients are what this bank
-learns from: a turn entry that ramps the wire through the clamp is a rising rate that stops rising at
-the clamp while the wire keeps going, which separates the candidates at once, where the dwell bank saw
-only affine copies of one exponential through the 1 s plant lag. The knee rule and the evidence gate
-are the dwell bank's, in relative terms (``RATE_TOL``, ``RATE_EVIDENCE``): the residual variances differ
-by a few percent between neighboring candidates on a noisy per-tick regression, so the knee is the
-highest candidate within ``RATE_TOL`` of the best residual, and the ceiling moves only while the
-candidate at it is worse than the best by ``RATE_EVIDENCE``. Replays from the 1.0 prior: Integra route
-00000139 -> best 0.55, knee 0.60, candidate 1.0 worse by 14%; MDX route 00000127 -> best 0.55, knee
-0.60 (the offline rate fits give 0.50-0.58, the seed is 0.538), 1.0 worse by 30%; the Integra's earlier
-angle-PID drive 00000135 (STEER_MAX 4096, R^2 0.12) -> no clamp, ceiling holds. Whichever bank has
-evidence moves the ceiling; when both do, toward the higher knee (the cost of erring low is authority
-the car had).
-
-Persisting the tables needs the ``HondaLatGainNNParams``, ``HondaLatShapeNNParams`` and
-``HondaLatCeilingParams`` keys registered in openpilot's ``common/params_keys.h`` (``param_keys()``
-lists them); unregistered keys are silently dropped by the param writer and that table simply restarts
-from the priors each drive.
+Persisting the tables needs the ``HondaLatGainNNParams``, ``HondaLatShapeNNParams``,
+``HondaLatWireNNParams`` and ``HondaLatCeilingParams`` keys registered in openpilot's
+``common/params_keys.h`` (``param_keys()`` lists them); unregistered keys are silently dropped by the
+param writer and that table simply restarts from the priors each drive.
 """
 from collections import deque
+from math import copysign
 
 import numpy as np
 
@@ -306,76 +289,64 @@ MAX_LAT_JERK_UP = ISO_LATERAL_JERK                # m/s^3, |lat accel| increasin
 MAX_LAT_JERK_DOWN = ISO_LATERAL_JERK              # m/s^3, |lat accel| decreasing (return to center)
 WIRE_RATE_MAX = 10.0                              # normalized torque per second, EPS / hands-on backstop
 
-# EPS torque ceiling (see the module docstring): normalized wire torque above which the EPS delivers nothing more
-CEILING_CANDIDATES = tuple(round(0.40 + 0.05 * i, 2) for i in range(13))   # 0.40 .. 1.00
-CEILING_MIN = CEILING_CANDIDATES[0]
-CEILING_MAX = CEILING_CANDIDATES[-1]
-CEILING_PRIOR = 1.0                               # no clamp until the car shows one; the car controller may seed a measured value
-CEILING_KEY = "HondaLatCeilingParams"
-CEILING_PROBE = 0.10                              # normalized torque the wire may run above the ceiling so the bank keeps seeing it
-# Each candidate's score is the fraction of the variance of |lateral accel| its clipped wire leaves unexplained,
-# 0..1, so the scores compare across candidates and across cars without reference to the gain table's scale.
-# The knee is the highest candidate within CEILING_TOL of the best: candidates below the knee tie with it
-# whenever the wire rarely visits the band between them (a shallow minimum), and the cost of erring low is
-# authority the car had (route 00000129: 0.538 -> 0.416 in one drive, the wire bound below the measured knee)
-CEILING_TOL = 0.02
-# the ceiling starts moving once the candidate at its current value scores worse than the best by
-# CEILING_EVIDENCE and stops once the margin is down to CEILING_EVIDENCE_SETTLED: the ceiling is a property
-# of the car, and a drive whose few seconds of samples do not disagree with where it is leaves it where it is
-CEILING_EVIDENCE = 0.04
-CEILING_EVIDENCE_SETTLED = 0.01
-# per informative tick, toward the knee: informative samples are settled dwells above the lowest candidate,
-# a few seconds per drive at best on this car, so one drive moves the ceiling a fraction of the way and
-# several settle it
-CEILING_LEARN_RATE = 0.001
-CEILING_RESID_TAU = 20.0                          # s of informative samples; EW moments per candidate
-CEILING_RESID_ALPHA = DT_CTRL / (CEILING_RESID_TAU + DT_CTRL)
-CEILING_MIN_SAMPLES = int(round(5.0 / DT_CTRL))   # informative ticks before the ceiling first moves
-CEILING_MIN_LAT_ACCEL_SPREAD = 0.05               # m/s^2, standard deviation of |lat accel| over the samples before they are scored
-CEILING_MIN_SPREAD = 0.02                         # normalized torque the top and bottom candidates must disagree by for a sample to count
-# a sample counts only while the raw wire is holding a level: its EW standard deviation over CEILING_DWELL_TAU
-# must be within CEILING_DWELL_TOL. On a rising or falling edge every clipped candidate is an affine copy of
-# the same exponential and the fit cannot tell them apart; what is left to score there is the lag model's
-# timing, which is not evidence about the ceiling (route 00000127's unpressed samples above 0.42 were five
-# sub-second slices of turn entries, and read "linear to 1.0" against the dwells' knee)
-CEILING_DWELL_TAU = 1.0                           # s
-CEILING_DWELL_ALPHA = DT_CTRL / (CEILING_DWELL_TAU + DT_CTRL)
-CEILING_DWELL_TOL = 0.03                          # normalized torque
-# the speed table may not learn from a FILTER_TAU sample the ceiling clip shaped by more than this (normalized
-# torque): a ceiling that is too low would otherwise teach it the car's response per unit of a wire it never
-# got, and the table is the feedforward and the jerk bound (route 00000129: 0.77 m/s^2 per unit at 10 mph
-# against 0.4 measured, half the torque the turns needed)
+# EPS wire response shape (see the module docstring): the marginal response of the EPS per unit of wire torque, in
+# bands of STEER_MAX, relative to the first band (whose 1.0 is the unit the gain table is in). The upper edge of each
+# band is a cut; band k is [WIRE_CUTS[k-1], WIRE_CUTS[k]). The cuts start where both measured cars are still linear
+# (0.4) and the knees sit (MDX 3G 0.50-0.55, Integra 0.55-0.60), in steps a town drive's wire visits often enough
+# to tell apart
+WIRE_CUTS = (0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0)
+WIRE_BAND_LO = (0.0,) + WIRE_CUTS[:-1]
+WIRE_BAND_WIDTH = tuple(hi - lo for lo, hi in zip(WIRE_BAND_LO, WIRE_CUTS, strict=True))
+WIRE_BANDS = len(WIRE_CUTS)
+WIRE_PRIOR = (1.0,) * (WIRE_BANDS - 1)            # learned bands (all but the first): linear until the car shows otherwise
+WIRE_GAIN_MIN = 0.0
+WIRE_GAIN_MAX = 1.0
+WIRE_KEY_FMT = "HondaLatWire{slot:d}Params"       # slot: the band's upper edge in percent of STEER_MAX (50 .. 100)
+# a band whose marginal response is below this is dead: the wire is bounded at its start plus the probe band. Above it
+# the wire runs through the band at the inverse gain; the cost of a dead band taken for alive is wire the EPS ignores
+# (what the probe band spends anyway), the cost of an alive band taken for dead is authority
+WIRE_DEAD_GAIN = 0.05
+# the inverse shape never sends more than 1 / this of wire per unit of effective torque: a learned gain that is too
+# low in a band the car answers to would otherwise be amplified into loop gain (route 0000010f's limit cycle sat at
+# 3-4.5x). Below it the shortfall is reported as limiting and the integrator freezes, as for any saturation
+WIRE_INVERT_MIN_GAIN = 0.5
+WIRE_PROBE = 0.10                                 # normalized torque the wire may run into the dead band so the learner keeps seeing it
+CEILING_KEY = "HondaLatCeilingParams"             # start of the dead band, written for telemetry / older versions; read as a clamp when no shape is persisted
+CEILING_MIN = WIRE_CUTS[0]
+CEILING_MAX = 1.0
+# the speed table may not learn from a FILTER_TAU sample the response shape bent by more than this (normalized
+# torque): a shape that is too low would otherwise teach it the car's response per unit of a wire it never got,
+# and the table is the feedforward and the jerk bound (route 00000129: 0.77 m/s^2 per unit at 10 mph against
+# 0.4 measured, half the torque the turns needed)
 GAIN_MAX_CLIP = 0.02
-# the bank's own trend gate, a settledness test on the lag-aligned pair rather than the shape table's
-# transition filter: the candidates are static models, and a 0.1 step in the wire passes the dwell gate
-# above within half a second while the lagged signals take ~3 s to arrive, so the lagged wire and the
-# lateral accel must themselves have stopped moving before a sample is scored
-CEILING_MAX_LEARN_JERK = 0.03                     # m/s^3
-CEILING_MAX_LEARN_TORQUE_RATE = 0.03              # normalized torque per second
 
-# EPS torque ceiling, steer-rate evidence (see the module docstring): the same candidates scored on how the
-# steer rate follows the clipped wire, over transients rather than dwells
+# learning the response shape from the steer rate (see the module docstring)
 RATE_DELAY = 0.15                                 # s, wire to steer rate (route 00000139: the fit is best at 0.10-0.15 s)
 RATE_DELAY_TICKS = max(int(round(RATE_DELAY / DT_CTRL)), 1)
 RATE_TAU = 60.0                                   # s of samples; a per-tick regression at R^2 ~0.4 needs the memory
 RATE_ALPHA = DT_CTRL / (RATE_TAU + DT_CTRL)
-RATE_MIN_WIRE = 0.25                              # normalized, |delayed wire| for a tick to count: the line needs its linear part
+RATE_MIN_WIRE = 0.25                              # normalized, |delayed wire| for a tick to count: the fit needs its linear part
 # below ~10 m/s the fit degrades (large angles, the centering terms least exact) and in the Integra's angle-PID
 # drive 00000135 the 5-10 m/s rows alone read "linear" against knees the 10-20 m/s rows show
 RATE_MIN_SPEED = 10.0                             # m/s
-RATE_MIN_SAMPLES = int(round(10.0 / DT_CTRL))     # counted ticks before the bank first scores (MDX town route 00000127: 14 s above 10 m/s)
-RATE_SCORE_INTERVAL = 5                           # ticks between scorings (13 small solves)
-RATE_MIN_RATE_STD = 2.0                           # deg/s, steer-rate spread over the samples before they are scored
-# the line has to explain a fair share of the steering before where it bends is evidence: routes 00000139 and
-# 00000127 fit at 0.46 / 0.76, the angle-PID drive 00000135 at 0.12-0.25 with a knee within 20% of its STEER_MAX
+RATE_MIN_SAMPLES = int(round(10.0 / DT_CTRL))     # counted ticks before the first fit (MDX town route 00000127: 14 s above 10 m/s)
+RATE_SCORE_INTERVAL = 5                           # ticks between fits
+RATE_MIN_RATE_STD = 2.0                           # deg/s, steer-rate spread over the samples before they are fitted
+# the fit has to explain a fair share of the steering before its shape is evidence: routes 00000139 and 00000127
+# fit at 0.46 / 0.76, the angle-PID drive 00000135 at 0.12-0.25 with a knee within 20% of its STEER_MAX
 RATE_MIN_R2 = 0.30
-RATE_TOL = 0.02                                   # relative: knee = highest candidate within 2% of the best residual variance
-RATE_EVIDENCE = 0.05                              # relative: the candidate at the ceiling must be this much worse to move it
-RATE_EVIDENCE_SETTLED = 0.01
-# per counted tick, toward the knee: this bank counts ~100 s of ticks in a town drive (the dwell bank a few seconds),
-# so a drive with a clear knee gets most of the way there and the next one settles it
-RATE_LEARN_RATE = 0.0002
 RATE_RIDGE = 1e-9
+# regressor scales for the normal equations (band regressors in band widths, angle in ~20 deg, lat accel in ~2 m/s^2),
+# so the projected-gradient solve is reasonably conditioned; the fit is scale-free in the result
+RATE_SCALE = np.array([0.1] * WIRE_BANDS + [20.0, 2.0, 1.0])
+WIRE_FIT_ITERS = 50                               # projected-gradient steps per fit, warm-started from the last fit
+# a band moves only while the window holds samples with the wire in or above it: its scaled regressor's mean square
+# (0..1, the fraction of the window fully in or above the band) must be at least this
+WIRE_MIN_BAND_ACTIVITY = 0.005
+WIRE_TOL = 0.03                                   # a band moves only while the fit disagrees with it by more than this
+# per counted tick, toward the fit: a town drive counts ~100 s of ticks, so a drive with a clear knee gets most of the
+# way there and the next one settles it
+WIRE_LEARN_RATE = 0.0002
 
 
 def _clip(value, lo, hi):
@@ -387,24 +358,50 @@ def _shape_slot(lat_accel):
   return int(round(lat_accel * 10))
 
 
+def _wire_slot(cut):
+  # Params key slot for a wire band: its upper edge in percent of STEER_MAX (0.6 -> 60)
+  return int(round(cut * 100))
+
+
 def _load(param_get, key, default):
   # a missing or not-yet-registered key must never take the car controller down
   if param_get is None:
-    return float(default)
+    return default
   try:
     value = param_get(key)
   except Exception:
-    return float(default)
+    return default
   if value is None:
-    return float(default)
+    return default
   try:
     return float(value)
   except (TypeError, ValueError):
-    return float(default)
+    return default
+
+
+def _pava_nonincreasing(values):
+  """Euclidean projection of a sequence onto {v_0 >= v_1 >= ... >= 0} (pool adjacent violators)."""
+  blocks = []
+  for v in values:
+    blocks.append([float(v), 1])
+    while len(blocks) > 1 and blocks[-2][0] < blocks[-1][0]:
+      v2, n2 = blocks.pop()
+      v1, n1 = blocks.pop()
+      blocks.append([(v1 * n1 + v2 * n2) / (n1 + n2), n1 + n2])
+  out = []
+  for v, n in blocks:
+    out.extend([max(v, 0.0)] * n)
+  return out
+
+
+def clamp_shape(ceiling):
+  """The response shape of a hard clamp at this normalized wire torque: the learned bands' gains."""
+  return tuple(_clip(round((ceiling - lo) / width, 6), WIRE_GAIN_MIN, WIRE_GAIN_MAX)
+               for lo, width in zip(WIRE_BAND_LO[1:], WIRE_BAND_WIDTH[1:], strict=True))
 
 
 class HondaLateralModel:
-  def __init__(self, lat_accel_factor, param_get=None, ceiling_prior=CEILING_PRIOR):
+  def __init__(self, lat_accel_factor, param_get=None, wire_prior=None):
     self.lat_accel_factor = (
       float(lat_accel_factor) if lat_accel_factor and lat_accel_factor > 0.1 else DEFAULT_LAT_ACCEL_FACTOR
     )
@@ -413,53 +410,40 @@ class HondaLateralModel:
     self.shapes = [_clip(_load(param_get, SHAPE_KEY_FMT.format(slot=_shape_slot(la)), prior), SHAPE_MIN, SHAPE_MAX)
                    for la, prior in zip(SHAPE_BINS_LAT_ACCEL, SHAPE_PRIOR, strict=True)]
     self._project_shapes()
-    self.ceiling = _clip(_load(param_get, CEILING_KEY, ceiling_prior), CEILING_MIN, CEILING_MAX)
+    # the response shape: persisted bands first; a persisted clamp (the previous version's ceiling) when there are
+    # none; the car's seed otherwise; linear when there is no seed
+    prior = tuple(WIRE_PRIOR if wire_prior is None else wire_prior)
+    persisted = [_load(param_get, WIRE_KEY_FMT.format(slot=_wire_slot(cut)), None) for cut in WIRE_CUTS[1:]]
+    if any(p is not None for p in persisted):
+      learned = [prior[i] if p is None else p for i, p in enumerate(persisted)]
+    else:
+      ceiling = _load(param_get, CEILING_KEY, None)
+      learned = clamp_shape(ceiling) if ceiling is not None and ceiling < CEILING_MAX else prior
+    self.wire_gains = [1.0] + [_clip(g, WIRE_GAIN_MIN, WIRE_GAIN_MAX) for g in learned]
+    self._project_wire_gains()
     self.wire_hist = deque([0.0] * max(int(round(WIRE_DELAY / DT_CTRL)), 1), maxlen=max(int(round(WIRE_DELAY / DT_CTRL)), 1))
-    self.wire_lag = 0.0             # delayed wire through the plant lag: the lateral accel the wire has "earned" so far
-    self.clip_lag = 0.0             # what the ceiling clip took off the delayed wire, through the same lag and filter
+    self.wire_lag = 0.0             # delayed effective wire through the plant lag: the lateral accel the wire has "earned" so far
+    self.clip_lag = 0.0             # what the response shape took off the delayed wire, through the same lag and filter
     self.wire_filt = 0.0            # FILTER_TAU pair, speed table
     self.lat_accel_filt = 0.0
     self.clip_filt = 0.0
     self.wire_fast = 0.0            # SHAPE_FILTER_TAU pair, shape table
     self.lat_accel_fast = 0.0
-    # ceiling bank: per candidate, the raw delayed wire clipped at the candidate through the plant lag and the
-    # short filter, and EW moments of (gain(v) * |clipped wire|, |lat accel|) over the samples that tell the
-    # candidates apart; each candidate is scored by the least-squares line through those
-    n_cand = len(CEILING_CANDIDATES)
-    self.ceiling_candidates = np.array(CEILING_CANDIDATES)
-    # the bank's speed normalization, frozen at start-up: the live table moves while a drive's samples sit in
-    # the bank's window, and a table correcting itself by 2x (route 00000129's) would rescale the same wire
-    # level from one dwell to the next
-    self.ceiling_gains = list(self.gains)
-    self.ceiling_lag = np.zeros(n_cand)
-    self.ceiling_fast = np.zeros(n_cand)
-    self.wire_dwell_mean = 0.0      # EW mean and mean square of the raw delayed wire over CEILING_DWELL_TAU
-    self.wire_dwell_sq = 0.0
-    self.ceiling_mx = np.zeros(n_cand)
-    self.ceiling_mxx = np.zeros(n_cand)
-    self.ceiling_mxy = np.zeros(n_cand)
-    self.ceiling_my = 0.0
-    self.ceiling_myy = 0.0
-    self.ceiling_slope = np.ones(n_cand)      # telemetry: fitted |lat accel| per unit of gain(v) * |clipped wire|
-    self.ceiling_resid = np.ones(n_cand)      # telemetry: fraction of the |lat accel| variance each candidate leaves unexplained
-    self.ceiling_weight = 0.0       # EW weight accumulated, normalizes the moments while the average is young
-    self.ceiling_samples = 0
-    self.ceiling_moving = False     # the bank has evidence against the current ceiling and is moving it
-    self.ceiling_scored = False     # the bank scored a sample this tick
-    self.ceiling_knee = self.ceiling  # the bank's current pick, telemetry
-    # steer-rate bank: per candidate, EW normal equations of steer_rate on [clipped wire, angle, lat accel, 1]
+    # response-shape learner: EW normal equations of steer_rate on [band regressors, angle, lat accel, 1]
+    n = len(RATE_SCALE)
     self.rate_hist = deque([0.0] * RATE_DELAY_TICKS, maxlen=RATE_DELAY_TICKS)
-    self.rate_xtx = np.zeros((n_cand, 4, 4))
-    self.rate_xty = np.zeros((n_cand, 4))
+    self.rate_xtx = np.zeros((n, n))
+    self.rate_xty = np.zeros(n)
     self.rate_sy = 0.0
     self.rate_syy = 0.0
     self.rate_weight = 0.0
     self.rate_samples = 0
-    self.rate_resid = np.ones(n_cand)         # telemetry: fraction of the steer-rate variance each candidate leaves unexplained
-    self.rate_slope = np.zeros(n_cand)        # telemetry: fitted deg/s per unit of clipped wire
-    self.rate_moving = False
-    self.rate_counted = False       # the bank took a sample this tick
-    self.rate_knee = self.ceiling
+    self.rate_beta = np.zeros(n)              # last constrained solution (scaled regressors), the next fit's warm start
+    self.rate_r2 = 0.0                        # telemetry: share of the steer-rate variance the last fit explained
+    self.rate_slope = 0.0                     # telemetry: fitted deg/s per unit of wire in the first band
+    self.wire_fit = np.array(self.wire_gains)  # telemetry: the last fit's shape, relative to the first band
+    self.wire_evidence = np.zeros(WIRE_BANDS, dtype=bool)   # bands the last fit disagrees with, on enough data
+    self.rate_counted = False       # the learner took a sample this tick
     self.press_holdoff = 0.0
     # telemetry for the last update() call
     self.gain_now = float(np.interp(0.0, GAIN_BINS_MS, self.gains))   # effective gain at (v, |desired lat accel|)
@@ -469,12 +453,12 @@ class HondaLateralModel:
     self.learning = False           # any table updated this tick
     self.learning_gain = False
     self.learning_shape = False
-    self.learning_ceiling = False
+    self.learning_wire = False
     self.output = 0.0
     self.jerk_limited = False       # limit() clipped the wire on the lateral jerk bound this tick
     self.accel_limited = False      # limit() clipped the wire on the lateral accel bound this tick
     self.rate_limited = False       # limit() clipped the wire on the torque-rate backstop this tick
-    self.ceiling_limited = False    # limit() clipped the wire at the EPS ceiling (plus probe) this tick
+    self.ceiling_limited = False    # limit() clipped the wire at the dead band (plus probe) this tick
 
   def gain(self, v_ego):
     return float(np.interp(v_ego, GAIN_BINS_MS, self.gains))
@@ -488,13 +472,66 @@ class HondaLateralModel:
     return self.gain(v_ego) * self.shape(lat_accel)
 
   @property
+  def ceiling(self):
+    """Normalized wire torque at which the EPS stops answering: the start of the first dead band, 1.0 if none."""
+    return self.wire_dead_start
+
+  @property
   def wire_limit(self):
-    """Normalized torque bound limit() holds the wire to: the ceiling plus the probe band."""
-    return _clip(self.ceiling + CEILING_PROBE, CEILING_MIN, CEILING_MAX)
+    """Normalized torque bound limit() holds the wire to: the dead band's start plus the probe band."""
+    return self.wire_bound
+
+  @property
+  def wire_linear(self):
+    return self._linear
+
+  def _forward(self, torque, gains):
+    a = abs(torque)
+    if self._linear or a <= WIRE_CUTS[0]:
+      return float(torque)
+    eff = WIRE_CUTS[0]
+    for k in range(1, WIRE_BANDS):
+      lo = WIRE_BAND_LO[k]
+      if a <= lo:
+        break
+      eff += gains[k] * min(a - lo, WIRE_BAND_WIDTH[k])
+    return copysign(eff, torque)
 
   def effective_wire(self, torque):
-    """The part of a wire torque the EPS acts on."""
-    return _clip(torque, -self.ceiling, self.ceiling)
+    """The part of a wire torque the EPS acts on, in units of the first band's response."""
+    return self._forward(torque, self.wire_gains)
+
+  def commanded_wire(self, torque):
+    """The effective torque a wire stands for through the inverse shape's own (floored) slopes: the exact inverse
+    of wire_from_effective, i.e. what limit() takes the last wire to have asked for. It is at least effective_wire;
+    the difference is the shortfall the inversion floor leaves to the reporting."""
+    return self._forward(torque, self.wire_gains_floored)
+
+  def wire_from_effective(self, effective):
+    """The wire torque that delivers this effective torque, through the inverse shape at no more than
+    1 / WIRE_INVERT_MIN_GAIN of wire per unit, bounded at the dead band plus the probe."""
+    return self._invert(effective)[0]
+
+  def _invert(self, effective):
+    a = abs(effective)
+    if self._linear or a <= WIRE_CUTS[0]:
+      wire = a
+    else:
+      wire = WIRE_CUTS[0]
+      rem = a - WIRE_CUTS[0]
+      for k in range(1, WIRE_BANDS):
+        g = self.wire_gains_floored[k]
+        span = g * WIRE_BAND_WIDTH[k]
+        if rem <= span:
+          wire += rem / g
+          rem = 0.0
+          break
+        wire += WIRE_BAND_WIDTH[k]
+        rem -= span
+      if rem > 0.0:
+        wire = 1.0
+    bounded = self.wire_bound < CEILING_MAX and wire > self.wire_bound
+    return copysign(min(wire, self.wire_bound), effective), bounded
 
   def feedforward_correction(self, desired_curvature, v_ego):
     """Torque to add to the controller's request so the feedforward follows gain(v) * shape(|lat_accel|)
@@ -509,7 +546,7 @@ class HondaLateralModel:
     """request_torque: controller output this tick; wire_torque: what went to the EPS last tick (after
     rate limiter and clips). steering_angle_deg / steering_rate_deg: the car's steering sensor, in the
     same sign convention as the wire (a positive wire turns the angle positive). Returns the corrected
-    request, to be rate limited by the caller."""
+    request (effective torque), to be bounded and mapped to the wire by limit()."""
     self._identify(wire_torque, current_curvature, v_ego, lat_active and steer_control_active, steering_pressed,
                    steering_angle_deg, steering_rate_deg)
 
@@ -536,17 +573,21 @@ class HondaLateralModel:
     return self.output
 
   def lat_accel_from_torque(self, torque, v_ego):
-    """Quasi-static lateral accel the wire commands at this speed, speed table only (see module docstring)."""
+    """Quasi-static lateral accel an effective torque commands at this speed, speed table only (see module docstring)."""
     return self.gain(v_ego) * float(torque)
 
   def torque_from_lat_accel(self, lat_accel, v_ego):
     return float(lat_accel) / self.gain(v_ego)
 
   def limit(self, torque, last_torque, v_ego):
-    """Bound the wire to ISO 11270 lateral jerk and lateral accel, computed in lateral-accel space with the
-    identified speed gain, then to the torque-rate backstop and unit torque. torque: corrected request this
-    tick; last_torque: what went to the EPS last tick. Returns the torque to send (normalized)."""
-    la_last = self.lat_accel_from_torque(last_torque, v_ego)
+    """Bound the request to ISO 11270 lateral jerk and lateral accel, computed in lateral-accel space with the
+    identified speed gain, map it to the wire through the inverse response shape, then apply the torque-rate
+    backstop. torque: corrected request this tick (effective torque); last_torque: the wire that went to the EPS
+    last tick. Returns the wire torque to send (normalized)."""
+    # the last wire stands for the effective torque the inverse mapped to it (its floored slopes, so a weak band is
+    # walked through at the floor's rate rather than stalled in: what the EPS delivered short of that is the
+    # reporting's business, not the limiter's)
+    la_last = self.lat_accel_from_torque(self.commanded_wire(last_torque), v_ego)
     la_req = self.lat_accel_from_torque(torque, v_ego)
     up = MAX_LAT_JERK_UP * DT_CTRL
     down = MAX_LAT_JERK_DOWN * DT_CTRL
@@ -561,13 +602,12 @@ class HondaLateralModel:
     self.jerk_limited = la_jerk != la_req
     self.accel_limited = la_out != la_jerk
     # untouched requests pass through bit-exact; only a bound that bit is mapped back through the gain
-    out = float(torque) if la_out == la_req else self.torque_from_lat_accel(la_out, v_ego)
+    eff_out = float(torque) if la_out == la_req else self.torque_from_lat_accel(la_out, v_ego)
+    # the wire that delivers it, through the inverse shape; the dead band plus the probe is the bound
+    out, self.ceiling_limited = self._invert(eff_out)
     backstop = _clip(out, last_torque - WIRE_RATE_MAX * DT_CTRL, last_torque + WIRE_RATE_MAX * DT_CTRL)
     self.rate_limited = backstop != out
-    # the EPS ceiling plus the probe band (see the module docstring): torque above it is never delivered
-    bound = self.wire_limit
-    self.ceiling_limited = bound < 1.0 and abs(backstop) > bound
-    return _clip(backstop, -bound, bound)
+    return backstop
 
   def _identify(self, wire_torque, current_curvature, v_ego, active, steering_pressed, steering_angle_deg=0.0,
                 steering_rate_deg=0.0):
@@ -575,7 +615,7 @@ class HondaLateralModel:
     self.wire_hist.append(float(wire_torque))
     rate_delayed_wire = self.rate_hist[0]
     self.rate_hist.append(float(wire_torque))
-    # the tables regress on what the EPS acted on; the bank below sees the raw wire
+    # the tables regress on what the EPS acted on; the shape learner below sees the raw wire
     delayed_wire = self.effective_wire(raw_delayed_wire)
     self.wire_lag += PLANT_ALPHA * (delayed_wire - self.wire_lag)
     self.clip_lag += PLANT_ALPHA * ((raw_delayed_wire - delayed_wire) - self.clip_lag)
@@ -592,18 +632,11 @@ class HondaLateralModel:
     dyf = SHAPE_FILTER_ALPHA * (measured - self.lat_accel_fast)
     self.wire_fast += dxf
     self.lat_accel_fast += dyf
-    clipped = np.clip(raw_delayed_wire, -self.ceiling_candidates, self.ceiling_candidates)
-    self.ceiling_lag += PLANT_ALPHA * (clipped - self.ceiling_lag)
-    dxc = SHAPE_FILTER_ALPHA * (self.ceiling_lag - self.ceiling_fast)
-    self.ceiling_fast += dxc
-    self.wire_dwell_mean += CEILING_DWELL_ALPHA * (raw_delayed_wire - self.wire_dwell_mean)
-    self.wire_dwell_sq += CEILING_DWELL_ALPHA * (raw_delayed_wire * raw_delayed_wire - self.wire_dwell_sq)
 
     self.press_holdoff = PRESS_HOLDOFF if steering_pressed else max(self.press_holdoff - DT_CTRL, 0.0)
     self.learning_gain = False
     self.learning_shape = False
-    self.learning_ceiling = False
-    self.ceiling_scored = False
+    self.learning_wire = False
     self.rate_counted = False
     self.learning = False
     if not (active and self.press_holdoff <= 0.0 and v_ego > MIN_LEARN_SPEED):
@@ -612,7 +645,7 @@ class HondaLateralModel:
     # plant: y = gain(v) * shape(|y|) * x, with shape == 1.0 through the anchor band. Gentle curves train
     # the speed table and only the speed table; harder turns train the shape, seeing the gain as known.
     # Both regress on what the EPS actually got, so a pinned wire is a valid sample for the shape; the speed
-    # table skips the samples the ceiling clip shaped (see GAIN_MAX_CLIP)
+    # table skips the samples the response shape bent (see GAIN_MAX_CLIP)
     x = self.wire_filt
     y = self.lat_accel_filt
     steady = (abs(dx) * FILTER_TAU / DT_CTRL <= MAX_LEARN_CHANGE * abs(x)
@@ -655,132 +688,79 @@ class HondaLateralModel:
                                      SHAPE_MIN, SHAPE_MAX)
       self._project_shapes()
 
-    self._identify_ceiling(v_ego, self.lat_accel_fast, dyf, dxc)
-    self._identify_ceiling_rate(rate_delayed_wire, measured, v_ego, steering_angle_deg, steering_rate_deg)
-    self._move_ceiling()
-    self.learning = self.learning_gain or self.learning_shape or self.learning_ceiling
+    self._identify_wire(rate_delayed_wire, measured, v_ego, steering_angle_deg, steering_rate_deg)
+    self.learning = self.learning_gain or self.learning_shape or self.learning_wire
 
-  def _move_ceiling(self):
-    # whichever bank has evidence against the current ceiling moves it toward its knee, by its own step on the
-    # ticks it took a sample; when both do, toward the higher knee: the cost of erring low is authority the car had
-    targets = []
-    if self.ceiling_moving and self.ceiling_scored:
-      targets.append((self.ceiling_knee, CEILING_LEARN_RATE))
-    if self.rate_moving and self.rate_counted:
-      targets.append((self.rate_knee, RATE_LEARN_RATE))
-    if targets:
-      knee, rate = max(targets)
-      self.ceiling = _clip(self.ceiling + rate * (knee - self.ceiling), CEILING_MIN, CEILING_MAX)
+  @staticmethod
+  def _wire_bands(wire):
+    # band regressors: the part of |wire| inside each band, signed like the wire (sum over bands == wire)
+    a = abs(wire)
+    s = 1.0 if wire >= 0.0 else -1.0
+    return [s * min(max(a - lo, 0.0), width) for lo, width in zip(WIRE_BAND_LO, WIRE_BAND_WIDTH, strict=True)]
 
-  def _identify_ceiling(self, v_ego, yf, dyf, dxc):
-    # the bank only learns from samples the candidates disagree on: the lagged raw wire (the top candidate,
-    # 1.0, never clips) above the lowest candidate, in a real curve the same way, while the wire holds a
-    # level (see CEILING_DWELL_TOL). The wire itself must be up there, not only the filters' memory of it:
-    # the decay after a hard turn's exit separates the candidates too, but through the lag model where it is
-    # least exact, and route 00000129 read 7 s of such samples against 2 s of real ones
-    xc = self.ceiling_fast
-    spread = abs(xc[-1]) - abs(xc[0])
-    trending = (abs(dyf) / DT_CTRL > CEILING_MAX_LEARN_JERK or abs(dxc[-1]) / DT_CTRL > CEILING_MAX_LEARN_TORQUE_RATE)
-    dwelling = self.wire_dwell_sq - self.wire_dwell_mean * self.wire_dwell_mean <= CEILING_DWELL_TOL * CEILING_DWELL_TOL
-    if (trending or not dwelling or spread < CEILING_MIN_SPREAD or abs(xc[-1]) < CEILING_MIN + CEILING_MIN_SPREAD
-        or abs(yf) < MIN_LEARN_LAT_ACCEL or np.sign(xc[-1]) != np.sign(yf)):
-      return
-    # plant under each candidate: |y| = slope_k * gain(v) * |x_k| + offset, both free. The score is the
-    # fraction of the variance of |y| that line leaves unexplained, 0..1: the candidate at the car's ceiling
-    # sees a wire that moves when the car does and stands still when it does not; one below it a wire that
-    # stands still while the car still moves; one above it a wire that moves while the car does not. Only
-    # co-variation counts (a candidate that merely knew left from right, or a constant, explains nothing), so
-    # the score does not depend on the gain table's scale: the gain only puts samples from different speeds
-    # on one line, and an inflated table cannot pull the knee down the way a bound on the slope would
-    xg = float(np.interp(v_ego, GAIN_BINS_MS, self.ceiling_gains)) * np.abs(xc)
-    y = abs(yf)
-    alpha = CEILING_RESID_ALPHA
-    self.ceiling_mx += alpha * (xg - self.ceiling_mx)
-    self.ceiling_mxx += alpha * (xg * xg - self.ceiling_mxx)
-    self.ceiling_mxy += alpha * (xg * y - self.ceiling_mxy)
-    self.ceiling_my += alpha * (y - self.ceiling_my)
-    self.ceiling_myy += alpha * (y * y - self.ceiling_myy)
-    self.ceiling_weight += alpha * (1.0 - self.ceiling_weight)
-    self.ceiling_samples += 1
-    if self.ceiling_samples < CEILING_MIN_SAMPLES:
-      return
-    w = self.ceiling_weight
-    mx = self.ceiling_mx / w
-    my = self.ceiling_my / w
-    var_x = np.maximum(self.ceiling_mxx / w - mx * mx, 1e-9)
-    cov = self.ceiling_mxy / w - mx * my
-    var_y = self.ceiling_myy / w - my * my
-    # without a spread of lateral accel across the dwells there is nothing to explain and the scores are
-    # noise (a clamp at 10 m/s leaves 0.04 m/s^2 between a wire of 0.45 and a pinned one)
-    if var_y < CEILING_MIN_LAT_ACCEL_SPREAD * CEILING_MIN_LAT_ACCEL_SPREAD:
-      return
-    self.ceiling_slope = cov / var_x
-    self.ceiling_resid = np.clip(1.0 - np.maximum(cov, 0.0) * self.ceiling_slope / var_y, 0.0, 1.0)
-    self.learning_ceiling = True
-    self.ceiling_scored = True
-    best = float(np.min(self.ceiling_resid))
-    # the score falls up to the car's ceiling and rises again above it (on a linear plant it falls all the
-    # way to 1.0). The knee is the highest candidate within tolerance of the best: the ones below tie with
-    # it whenever the wire rarely visits the band between
-    within = np.flatnonzero(self.ceiling_resid <= best + CEILING_TOL)
-    self.ceiling_knee = float(self.ceiling_candidates[within[-1]])
-    # the ceiling moves only on evidence against where it is: the candidate at the current ceiling must
-    # explain the car worse than the best by CEILING_EVIDENCE, and then keeps moving toward the knee until
-    # that margin is down to CEILING_EVIDENCE_SETTLED. Below the car's ceiling the evidence is torque in the
-    # probe band the car answered to (the way back up from a persisted value that is too low); above it,
-    # torque that moved while the car did not. A wire that only ever sits at one level, or a drive with a
-    # few seconds of samples that disagree with each other, is not evidence, and the ceiling stays put
-    at_ceiling = float(np.interp(self.ceiling, self.ceiling_candidates, self.ceiling_resid))
-    self.ceiling_moving = at_ceiling - best > (CEILING_EVIDENCE_SETTLED if self.ceiling_moving else CEILING_EVIDENCE)
-
-  def _identify_ceiling_rate(self, delayed_wire, lat_accel, v_ego, angle_deg, rate_deg):
-    # a tick counts while the delayed wire is up where the line has something to fit: the candidates agree below
-    # the lowest one, and the band between RATE_MIN_WIRE and it anchors the slope the clipped band is compared to
+  def _identify_wire(self, delayed_wire, lat_accel, v_ego, angle_deg, rate_deg):
+    # a tick counts while the delayed wire is up where the fit has something to compare the bands against: the band
+    # between RATE_MIN_WIRE and the first cut anchors the response the ones above are measured relative to
     self.rate_counted = abs(delayed_wire) > RATE_MIN_WIRE and v_ego > RATE_MIN_SPEED
     if not self.rate_counted:
       return
-    xc = np.clip(delayed_wire, -self.ceiling_candidates, self.ceiling_candidates)
-    n = len(xc)
-    X = np.column_stack([xc, np.full(n, float(angle_deg)), np.full(n, float(lat_accel)), np.ones(n)])
+    x = np.array(self._wire_bands(delayed_wire) + [float(angle_deg), float(lat_accel), 1.0]) / RATE_SCALE
     y = float(rate_deg)
     alpha = RATE_ALPHA
-    self.rate_xtx += alpha * (X[:, :, None] * X[:, None, :] - self.rate_xtx)
-    self.rate_xty += alpha * (X * y - self.rate_xty)
+    self.rate_xtx += alpha * (np.outer(x, x) - self.rate_xtx)
+    self.rate_xty += alpha * (x * y - self.rate_xty)
     self.rate_sy += alpha * (y - self.rate_sy)
     self.rate_syy += alpha * (y * y - self.rate_syy)
     self.rate_weight += alpha * (1.0 - self.rate_weight)
     self.rate_samples += 1
-    if self.rate_samples < RATE_MIN_SAMPLES or self.rate_samples % RATE_SCORE_INTERVAL:
-      return
-    # a scoring tick: the verdict below replaces the last one, so a bank that stops qualifying stops moving
-    self.rate_moving = self._score_rate()
+    if self.rate_samples >= RATE_MIN_SAMPLES and self.rate_samples % RATE_SCORE_INTERVAL == 0:
+      # a fitting tick: the verdict replaces the last one, so a fit that stops qualifying stops moving the shape
+      self.wire_evidence = self._fit_wire()
+    if self.wire_evidence.any():
+      self.learning_wire = True
+      for k in range(1, WIRE_BANDS):
+        if self.wire_evidence[k]:
+          self.wire_gains[k] += WIRE_LEARN_RATE * (float(self.wire_fit[k]) - self.wire_gains[k])
+      self._project_wire_gains()
 
-  def _score_rate(self):
+  def _fit_wire(self):
+    none = np.zeros(WIRE_BANDS, dtype=bool)
     w = self.rate_weight
     var_y = self.rate_syy / w - (self.rate_sy / w) ** 2
     # no steering going on over the samples: nothing to explain
     if var_y < RATE_MIN_RATE_STD * RATE_MIN_RATE_STD:
-      return False
-    try:
-      beta = np.linalg.solve(self.rate_xtx / w + RATE_RIDGE * np.eye(4), (self.rate_xty / w)[:, :, None])[:, :, 0]
-    except np.linalg.LinAlgError:
-      return False
-    sse = self.rate_syy / w - np.einsum('ij,ij->i', beta, self.rate_xty / w)
-    self.rate_slope = beta[:, 0]
-    self.rate_resid = np.clip(sse / var_y, 0.0, 1.0)
-    best_idx = int(np.argmin(self.rate_resid))
-    best = float(self.rate_resid[best_idx])
-    # the wire must move the wheel its own way at the best candidate, and the line must explain a fair share of
-    # the steering, or the samples are something else (the driver below the press threshold, a sign convention
-    # error, a drive the delay model does not fit)
-    if self.rate_slope[best_idx] <= 0.0 or best <= 0.0 or best > 1.0 - RATE_MIN_R2:
-      return False
-    self.learning_ceiling = True
-    within = np.flatnonzero(self.rate_resid <= best * (1.0 + RATE_TOL))
-    self.rate_knee = float(self.ceiling_candidates[within[-1]])
-    at_ceiling = float(np.interp(self.ceiling, self.ceiling_candidates, self.rate_resid))
-    margin = at_ceiling / best - 1.0
-    return margin > (RATE_EVIDENCE_SETTLED if self.rate_moving else RATE_EVIDENCE)
+      return none
+    A = self.rate_xtx / w + RATE_RIDGE * np.eye(len(RATE_SCALE))
+    b = self.rate_xty / w
+    # least squares under beta_0 >= beta_1 >= ... >= beta_{n-1} >= 0 on the band coefficients (all in the same units:
+    # deg/s per band width), by projected gradient from the last solution (the first one from the unconstrained
+    # solution, projected)
+    step = 1.0 / float(np.linalg.eigvalsh(A)[-1])
+    beta = self.rate_beta.copy()
+    if not beta.any():
+      try:
+        beta = np.linalg.solve(A, b)
+      except np.linalg.LinAlgError:
+        return none
+      beta[:WIRE_BANDS] = _pava_nonincreasing(beta[:WIRE_BANDS])
+    for _ in range(WIRE_FIT_ITERS):
+      beta -= step * (A @ beta - b)
+      beta[:WIRE_BANDS] = _pava_nonincreasing(beta[:WIRE_BANDS])
+    self.rate_beta = beta
+    sse = self.rate_syy / w - 2.0 * float(b @ beta) + float(beta @ A @ beta)
+    self.rate_r2 = 1.0 - sse / var_y
+    k0 = float(beta[0])
+    self.rate_slope = k0 / RATE_SCALE[0]
+    # the wire must move the wheel its own way, and the fit must explain a fair share of the steering, or the samples
+    # are something else (the driver below the press threshold, a sign convention error, a drive the delay model does
+    # not fit); a band is informed only if the window holds samples with the wire in or above it
+    if k0 <= 0.0 or self.rate_r2 < RATE_MIN_R2:
+      return none
+    self.wire_fit = np.clip(beta[:WIRE_BANDS] / k0, WIRE_GAIN_MIN, WIRE_GAIN_MAX)
+    activity = np.diag(A)[:WIRE_BANDS]
+    evidence = (activity >= WIRE_MIN_BAND_ACTIVITY) & (np.abs(self.wire_fit - np.array(self.wire_gains)) > WIRE_TOL)
+    evidence[0] = False
+    return evidence
 
   def _project_shapes(self):
     # non-increasing in lateral accel, from the anchor's 1.0 down: a bin with no data of its own inherits
@@ -790,10 +770,29 @@ class HondaLateralModel:
       ceiling = min(ceiling, s)
       self.shapes[i] = ceiling
 
+  def _project_wire_gains(self):
+    # non-increasing in wire level from the first band's 1.0 down, same rule as the centering shape; then the
+    # derived quantities: the dead band's start (the ceiling), the wire bound, and whether the shape is linear
+    ceiling = WIRE_GAIN_MAX
+    self.wire_gains[0] = WIRE_GAIN_MAX
+    for k in range(1, WIRE_BANDS):
+      ceiling = min(ceiling, _clip(self.wire_gains[k], WIRE_GAIN_MIN, WIRE_GAIN_MAX))
+      self.wire_gains[k] = ceiling
+    self.wire_dead_start = CEILING_MAX
+    for k in range(1, WIRE_BANDS):
+      if self.wire_gains[k] < WIRE_DEAD_GAIN:
+        self.wire_dead_start = WIRE_BAND_LO[k]
+        break
+    self.wire_bound = _clip(self.wire_dead_start + WIRE_PROBE, CEILING_MIN, CEILING_MAX)
+    self.wire_gains_floored = [max(g, WIRE_INVERT_MIN_GAIN) for g in self.wire_gains]
+    self._linear = self.wire_gains[-1] >= WIRE_GAIN_MAX
+
   def learned_values(self):
     values = {GAIN_KEY_FMT.format(slot=mph): float(g) for mph, g in zip(GAIN_BINS_MPH, self.gains, strict=True)}
     values.update({SHAPE_KEY_FMT.format(slot=_shape_slot(la)): float(s)
                    for la, s in zip(SHAPE_BINS_LAT_ACCEL, self.shapes, strict=True)})
+    values.update({WIRE_KEY_FMT.format(slot=_wire_slot(cut)): float(g)
+                   for cut, g in zip(WIRE_CUTS[1:], self.wire_gains[1:], strict=True)})
     values[CEILING_KEY] = float(self.ceiling)
     return values
 
@@ -801,4 +800,5 @@ class HondaLateralModel:
   def param_keys():
     return ([GAIN_KEY_FMT.format(slot=mph) for mph in GAIN_BINS_MPH] +
             [SHAPE_KEY_FMT.format(slot=_shape_slot(la)) for la in SHAPE_BINS_LAT_ACCEL] +
+            [WIRE_KEY_FMT.format(slot=_wire_slot(cut)) for cut in WIRE_CUTS[1:]] +
             [CEILING_KEY])
