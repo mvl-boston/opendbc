@@ -99,7 +99,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
     acc_control_values.update({
       "CONTROL_ON": enabled,
       # required whenever braking for Integra, Hybrid and Bosch Alt Brake vehicles, allow idle stop after 4 seconds (50 Hz) for other vehicles
-      "COMPUTER_BRAKE_ASSIST": braking if CP.flags & (HondaFlags.HYBRID | HondaFlags.BOSCH_ALT_BRAKE) or CP.carFingerprint == CAR.ACURA_INTEGRA \
+      "COMPUTER_BRAKE_ASSIST": braking if CP.flags & (HondaFlags.HYBRID | HondaFlags.BOSCH_ALT_BRAKE) or CP.carFingerprint == CAR.ACURA_INTEGRA
       else stopping_counter > 200,
     })
   else:
