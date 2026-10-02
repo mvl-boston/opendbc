@@ -496,6 +496,14 @@ HONDA_BOSCH_CANFD = frozenset(c for c in CAR if c.config.flags & HondaFlags.BOSC
 
 STEER_THRESHOLD = {
   # default is 1200, overrides go here
+  # Integra (routes 3792d010590cb83a|00000135, |00000139): the hands-off sensor content is the torsion bar
+  # reacting to the EPS moving the wheel, ~-6 counts per deg/s of steer rate and ~-160 per unit wire, noise
+  # p99 ~420 and up to ~700 on fast turn entries, with the wheel moving AGAINST the sensor sign. Readings of
+  # 1200+ move the wheel WITH the sensor sign (the driver). 700-1200 is ambiguous (~0.2% of ticks) and a press
+  # ramps 600 -> 1200 in 0.2 s, so a lower threshold would buy ~0.1 s and flag EPS-driven turn entries as
+  # presses (600, as on the CR-V / Pilot 4G, would). The sensor does not oscillate with the wire the way the
+  # MDX 3G's does (1% of engaged ticks pressed, vs 29-38% in the MDX's hard turns), so 1200 is the fair value.
+  CAR.ACURA_INTEGRA: 1200,
   CAR.ACURA_RDX: 400,
   CAR.HONDA_CRV_EU: 400,
   CAR.HONDA_ACCORD_11G: 600,
