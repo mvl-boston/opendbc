@@ -149,6 +149,16 @@ NIDEC_SPEED_BANDS = (
 MDX_BRAKE_STEER_LIMIT = 233
 MDX_BRAKE_STEER_LIMIT_HOLD = int(1.0 / DT_CTRL)
 
+# EPS torque ceiling seeds (normalized wire torque) for the cars it has been measured on; every other car
+# starts at CEILING_PRIOR (no ceiling) and learns it. Integra: route 3792d010590cb83a|00000139, STEER_MAX
+# 5120: the steer rate a wire increment buys is linear to ~2500-3000 counts and flat from there to 5120 at
+# every steering angle (an input clamp, not centering); clamp fits of steer rate peak at 2500-3500 counts in
+# every 10-20 m/s band and the online steer-rate bank picks 0.55 (knee 0.60) from the 1.0 prior. 0.55 is
+# 2816 counts; the probe band puts the wire bound at 0.65 (3328), above the flat region's start.
+CEILING_SEEDS = {
+  CAR.ACURA_INTEGRA: 0.55,
+}
+
 # the low/high nodes keep the param keys the two-band scheme persisted, so learned state survives
 NIDEC_GAS_FACTOR_KEYS: dict[str, str] = {band: f"HondaGasFactor{band}Params" for band, _ in NIDEC_GAS_BANDS}
 NIDEC_GAS_FACTOR_KEYS["low"] = "HondaGasFactorLowParams"
@@ -468,8 +478,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # speed-dependent lateral plant model (see lateral_model.py): identifies m/s^2 per unit wire torque
     # online and adds a feedforward correction to the torque controller's request. The EPS torque ceiling
     # is learned per car; the MDX 3G is seeded at the value its routes measured (the same 233 counts the
-    # EPS faults above while braking), every other car starts with no ceiling until it shows one.
-    ceiling_prior = MDX_BRAKE_STEER_LIMIT / self.params.STEER_MAX if CP.carFingerprint == CAR.ACURA_MDX_3G else CEILING_PRIOR
+    # EPS faults above while braking), the Integra at its measured value (CEILING_SEEDS), every other car
+    # starts with no ceiling until it shows one.
+    if CP.carFingerprint == CAR.ACURA_MDX_3G:
+      ceiling_prior = MDX_BRAKE_STEER_LIMIT / self.params.STEER_MAX
+    else:
+      ceiling_prior = CEILING_SEEDS.get(CP.carFingerprint, CEILING_PRIOR)
     self.lat_model = HondaLateralModel(CP.lateralTuning.torque.latAccelFactor if CP.lateralTuning.which() == 'torque' else 0.0,
                                        Params().get, ceiling_prior=ceiling_prior)
 
@@ -592,8 +606,11 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # *** add the plant model's feedforward correction, then bound the wire ***
     # self.last_torque is what actually went to the EPS last tick (wire limits + MDX brake clip
     # applied); the model regresses measured lateral accel on it to identify the car's gain.
+    # steeringAngleDeg / steeringRateDeg share the wire's sign (a positive actuators.torque turns the angle
+    # positive); the steer-rate ceiling bank regresses on them
     steer_torque = self.lat_model.update(actuators.torque, self.last_torque, CC.latActive, CS.steer_control_active,
-                                         CS.out.steeringPressed, CS.out.vEgo, actuators.curvature, CC.currentCurvature)
+                                         CS.out.steeringPressed, CS.out.vEgo, actuators.curvature, CC.currentCurvature,
+                                         CS.out.steeringAngleDeg, CS.out.steeringRateDeg)
     # ISO 11270 lateral jerk / lateral accel, applied in lateral-accel space through the identified speed
     # gain (see lateral_model.limit). This replaces the fixed STEER_DELTA torque rate, which was the same
     # jerk target evaluated with one linear gain for every speed: at town speeds it held the wheel's
@@ -1272,13 +1289,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       reduced_steering = CS.out.steeringPressed
-      if self.CP.flags & HondaFlags.BOSCH:
-        steer_maxed = abs(apply_torque) >= self.params.STEER_MAX
-      else:
-        # against the bound actually in force, so the lane lines go grey when the MDX brake limit is
-        # what is holding the wire, not only at STEER_MAX. int() mirrors apply_torque's truncation
-        # (233/433 * 433 lands at 232 on one sign).
-        steer_maxed = (abs(apply_torque) >= int(self.steer_limit * self.params.STEER_MAX)) or not (CS.steer_control_active)
+      # against the bound actually in force, so the lane lines go grey when the EPS ceiling (or the MDX brake
+      # limit) is what is holding the wire, not only at STEER_MAX. int() mirrors apply_torque's truncation
+      # (233/433 * 433 lands at 232 on one sign).
+      steer_maxed = abs(apply_torque) >= int(self.steer_limit * self.params.STEER_MAX)
+      if not (self.CP.flags & HondaFlags.BOSCH):
+        steer_maxed = steer_maxed or not CS.steer_control_active
 
       lkas_state_change = None
       if self.CP.flags & HondaFlags.BOSCH_CANFD:
