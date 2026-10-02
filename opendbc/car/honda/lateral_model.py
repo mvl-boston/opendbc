@@ -187,6 +187,41 @@ the bank to decide anything (``CEILING_MIN_LAT_ACCEL_SPREAD``). The speed depend
 below 10 m/s is not established (the rate fit is flat there in one route and not in another); a single
 number is learned.
 
+Steer-rate evidence for the ceiling
+-----------------------------------
+The dwell bank above needs the wire to hold a level for a few seconds. The torque controller does not
+drive that way: in a hard turn it runs the wire from 0.3 to 1.0 and back inside a second, and on the
+Acura Integra (route 00000139, STEER_MAX 5120, no seed) the dwell bank counted zero informative
+samples in a 14-minute drive (every tick above the lowest candidate failed the dwell gate, 95% the
+trend gate too) while the wire sat pinned at 5120 for 1.7 s at a time and the car settled at 0.87
+m/s^2 against a planner asking 2.0. The same drive, regressed in steer rate, shows the clamp plainly:
+the steer rate a wire increment buys is linear up to ~2500-3000 counts and flat from there to 5120, in
+every steering-angle band including 0-4 deg where the self-aligning torque is negligible, so it is a
+function of the command level and not of the angle; a clamp model beats a linear wire with a free
+centering curve (R^2 0.45 vs 0.40), and the knee is the same fraction of STEER_MAX the MDX 3G has
+(0.50-0.55 of 433).
+
+``_identify_ceiling_rate`` is a second bank on the same candidates that scores them on the steer rate
+instead of the settled lateral accel. Per candidate it keeps exponentially weighted normal equations of
+``steer_rate = K * clip(wire, +-c) + a * angle + b * lat_accel + d`` over the ticks with the delayed
+wire above ``RATE_MIN_WIRE`` (``RATE_DELAY`` is the wire-to-rate delay, much shorter than the
+lateral-accel lag the dwell bank works through), and the score is the fraction of the steer-rate
+variance the line leaves unexplained. The angle and lateral-accel terms carry the centering, so a
+plant that saturates with lateral accel rather than torque is explained by them and not by the clip;
+the clipped wire is the only term that differs between candidates. Transients are what this bank
+learns from: a turn entry that ramps the wire through the clamp is a rising rate that stops rising at
+the clamp while the wire keeps going, which separates the candidates at once, where the dwell bank saw
+only affine copies of one exponential through the 1 s plant lag. The knee rule and the evidence gate
+are the dwell bank's, in relative terms (``RATE_TOL``, ``RATE_EVIDENCE``): the residual variances differ
+by a few percent between neighboring candidates on a noisy per-tick regression, so the knee is the
+highest candidate within ``RATE_TOL`` of the best residual, and the ceiling moves only while the
+candidate at it is worse than the best by ``RATE_EVIDENCE``. Replays from the 1.0 prior: Integra route
+00000139 -> best 0.55, knee 0.60, candidate 1.0 worse by 14%; MDX route 00000127 -> best 0.55, knee
+0.60 (the offline rate fits give 0.50-0.58, the seed is 0.538), 1.0 worse by 30%; the Integra's earlier
+angle-PID drive 00000135 (STEER_MAX 4096, R^2 0.12) -> no clamp, ceiling holds. Whichever bank has
+evidence moves the ceiling; when both do, toward the higher knee (the cost of erring low is authority
+the car had).
+
 Persisting the tables needs the ``HondaLatGainNNParams``, ``HondaLatShapeNNParams`` and
 ``HondaLatCeilingParams`` keys registered in openpilot's ``common/params_keys.h`` (``param_keys()``
 lists them); unregistered keys are silently dropped by the param writer and that table simply restarts
@@ -318,6 +353,30 @@ GAIN_MAX_CLIP = 0.02
 CEILING_MAX_LEARN_JERK = 0.03                     # m/s^3
 CEILING_MAX_LEARN_TORQUE_RATE = 0.03              # normalized torque per second
 
+# EPS torque ceiling, steer-rate evidence (see the module docstring): the same candidates scored on how the
+# steer rate follows the clipped wire, over transients rather than dwells
+RATE_DELAY = 0.15                                 # s, wire to steer rate (route 00000139: the fit is best at 0.10-0.15 s)
+RATE_DELAY_TICKS = max(int(round(RATE_DELAY / DT_CTRL)), 1)
+RATE_TAU = 60.0                                   # s of samples; a per-tick regression at R^2 ~0.4 needs the memory
+RATE_ALPHA = DT_CTRL / (RATE_TAU + DT_CTRL)
+RATE_MIN_WIRE = 0.25                              # normalized, |delayed wire| for a tick to count: the line needs its linear part
+# below ~10 m/s the fit degrades (large angles, the centering terms least exact) and in the Integra's angle-PID
+# drive 00000135 the 5-10 m/s rows alone read "linear" against knees the 10-20 m/s rows show
+RATE_MIN_SPEED = 10.0                             # m/s
+RATE_MIN_SAMPLES = int(round(10.0 / DT_CTRL))     # counted ticks before the bank first scores (MDX town route 00000127: 14 s above 10 m/s)
+RATE_SCORE_INTERVAL = 5                           # ticks between scorings (13 small solves)
+RATE_MIN_RATE_STD = 2.0                           # deg/s, steer-rate spread over the samples before they are scored
+# the line has to explain a fair share of the steering before where it bends is evidence: routes 00000139 and
+# 00000127 fit at 0.46 / 0.76, the angle-PID drive 00000135 at 0.12-0.25 with a knee within 20% of its STEER_MAX
+RATE_MIN_R2 = 0.30
+RATE_TOL = 0.02                                   # relative: knee = highest candidate within 2% of the best residual variance
+RATE_EVIDENCE = 0.05                              # relative: the candidate at the ceiling must be this much worse to move it
+RATE_EVIDENCE_SETTLED = 0.01
+# per counted tick, toward the knee: this bank counts ~100 s of ticks in a town drive (the dwell bank a few seconds),
+# so a drive with a clear knee gets most of the way there and the next one settles it
+RATE_LEARN_RATE = 0.0002
+RATE_RIDGE = 1e-9
+
 
 def _clip(value, lo, hi):
   return float(min(max(value, lo), hi))
@@ -386,7 +445,21 @@ class HondaLateralModel:
     self.ceiling_weight = 0.0       # EW weight accumulated, normalizes the moments while the average is young
     self.ceiling_samples = 0
     self.ceiling_moving = False     # the bank has evidence against the current ceiling and is moving it
+    self.ceiling_scored = False     # the bank scored a sample this tick
     self.ceiling_knee = self.ceiling  # the bank's current pick, telemetry
+    # steer-rate bank: per candidate, EW normal equations of steer_rate on [clipped wire, angle, lat accel, 1]
+    self.rate_hist = deque([0.0] * RATE_DELAY_TICKS, maxlen=RATE_DELAY_TICKS)
+    self.rate_xtx = np.zeros((n_cand, 4, 4))
+    self.rate_xty = np.zeros((n_cand, 4))
+    self.rate_sy = 0.0
+    self.rate_syy = 0.0
+    self.rate_weight = 0.0
+    self.rate_samples = 0
+    self.rate_resid = np.ones(n_cand)         # telemetry: fraction of the steer-rate variance each candidate leaves unexplained
+    self.rate_slope = np.zeros(n_cand)        # telemetry: fitted deg/s per unit of clipped wire
+    self.rate_moving = False
+    self.rate_counted = False       # the bank took a sample this tick
+    self.rate_knee = self.ceiling
     self.press_holdoff = 0.0
     # telemetry for the last update() call
     self.gain_now = float(np.interp(0.0, GAIN_BINS_MS, self.gains))   # effective gain at (v, |desired lat accel|)
@@ -432,10 +505,13 @@ class HondaLateralModel:
     return _clip(ff_model - ff_controller, -FF_CORRECTION_MAX, FF_CORRECTION_MAX)
 
   def update(self, request_torque, wire_torque, lat_active, steer_control_active, steering_pressed, v_ego,
-             desired_curvature, current_curvature):
+             desired_curvature, current_curvature, steering_angle_deg=0.0, steering_rate_deg=0.0):
     """request_torque: controller output this tick; wire_torque: what went to the EPS last tick (after
-    rate limiter and clips). Returns the corrected request, to be rate limited by the caller."""
-    self._identify(wire_torque, current_curvature, v_ego, lat_active and steer_control_active, steering_pressed)
+    rate limiter and clips). steering_angle_deg / steering_rate_deg: the car's steering sensor, in the
+    same sign convention as the wire (a positive wire turns the angle positive). Returns the corrected
+    request, to be rate limited by the caller."""
+    self._identify(wire_torque, current_curvature, v_ego, lat_active and steer_control_active, steering_pressed,
+                   steering_angle_deg, steering_rate_deg)
 
     desired_lat_accel = desired_curvature * v_ego * v_ego
     self.shape_now = self.shape(desired_lat_accel)
@@ -493,9 +569,12 @@ class HondaLateralModel:
     self.ceiling_limited = bound < 1.0 and abs(backstop) > bound
     return _clip(backstop, -bound, bound)
 
-  def _identify(self, wire_torque, current_curvature, v_ego, active, steering_pressed):
+  def _identify(self, wire_torque, current_curvature, v_ego, active, steering_pressed, steering_angle_deg=0.0,
+                steering_rate_deg=0.0):
     raw_delayed_wire = self.wire_hist[0]
     self.wire_hist.append(float(wire_torque))
+    rate_delayed_wire = self.rate_hist[0]
+    self.rate_hist.append(float(wire_torque))
     # the tables regress on what the EPS acted on; the bank below sees the raw wire
     delayed_wire = self.effective_wire(raw_delayed_wire)
     self.wire_lag += PLANT_ALPHA * (delayed_wire - self.wire_lag)
@@ -524,6 +603,8 @@ class HondaLateralModel:
     self.learning_gain = False
     self.learning_shape = False
     self.learning_ceiling = False
+    self.ceiling_scored = False
+    self.rate_counted = False
     self.learning = False
     if not (active and self.press_holdoff <= 0.0 and v_ego > MIN_LEARN_SPEED):
       return
@@ -575,7 +656,21 @@ class HondaLateralModel:
       self._project_shapes()
 
     self._identify_ceiling(v_ego, self.lat_accel_fast, dyf, dxc)
+    self._identify_ceiling_rate(rate_delayed_wire, measured, v_ego, steering_angle_deg, steering_rate_deg)
+    self._move_ceiling()
     self.learning = self.learning_gain or self.learning_shape or self.learning_ceiling
+
+  def _move_ceiling(self):
+    # whichever bank has evidence against the current ceiling moves it toward its knee, by its own step on the
+    # ticks it took a sample; when both do, toward the higher knee: the cost of erring low is authority the car had
+    targets = []
+    if self.ceiling_moving and self.ceiling_scored:
+      targets.append((self.ceiling_knee, CEILING_LEARN_RATE))
+    if self.rate_moving and self.rate_counted:
+      targets.append((self.rate_knee, RATE_LEARN_RATE))
+    if targets:
+      knee, rate = max(targets)
+      self.ceiling = _clip(self.ceiling + rate * (knee - self.ceiling), CEILING_MIN, CEILING_MAX)
 
   def _identify_ceiling(self, v_ego, yf, dyf, dxc):
     # the bank only learns from samples the candidates disagree on: the lagged raw wire (the top candidate,
@@ -622,6 +717,7 @@ class HondaLateralModel:
     self.ceiling_slope = cov / var_x
     self.ceiling_resid = np.clip(1.0 - np.maximum(cov, 0.0) * self.ceiling_slope / var_y, 0.0, 1.0)
     self.learning_ceiling = True
+    self.ceiling_scored = True
     best = float(np.min(self.ceiling_resid))
     # the score falls up to the car's ceiling and rises again above it (on a linear plant it falls all the
     # way to 1.0). The knee is the highest candidate within tolerance of the best: the ones below tie with
@@ -636,8 +732,55 @@ class HondaLateralModel:
     # few seconds of samples that disagree with each other, is not evidence, and the ceiling stays put
     at_ceiling = float(np.interp(self.ceiling, self.ceiling_candidates, self.ceiling_resid))
     self.ceiling_moving = at_ceiling - best > (CEILING_EVIDENCE_SETTLED if self.ceiling_moving else CEILING_EVIDENCE)
-    if self.ceiling_moving:
-      self.ceiling = _clip(self.ceiling + CEILING_LEARN_RATE * (self.ceiling_knee - self.ceiling), CEILING_MIN, CEILING_MAX)
+
+  def _identify_ceiling_rate(self, delayed_wire, lat_accel, v_ego, angle_deg, rate_deg):
+    # a tick counts while the delayed wire is up where the line has something to fit: the candidates agree below
+    # the lowest one, and the band between RATE_MIN_WIRE and it anchors the slope the clipped band is compared to
+    self.rate_counted = abs(delayed_wire) > RATE_MIN_WIRE and v_ego > RATE_MIN_SPEED
+    if not self.rate_counted:
+      return
+    xc = np.clip(delayed_wire, -self.ceiling_candidates, self.ceiling_candidates)
+    n = len(xc)
+    X = np.column_stack([xc, np.full(n, float(angle_deg)), np.full(n, float(lat_accel)), np.ones(n)])
+    y = float(rate_deg)
+    alpha = RATE_ALPHA
+    self.rate_xtx += alpha * (X[:, :, None] * X[:, None, :] - self.rate_xtx)
+    self.rate_xty += alpha * (X * y - self.rate_xty)
+    self.rate_sy += alpha * (y - self.rate_sy)
+    self.rate_syy += alpha * (y * y - self.rate_syy)
+    self.rate_weight += alpha * (1.0 - self.rate_weight)
+    self.rate_samples += 1
+    if self.rate_samples < RATE_MIN_SAMPLES or self.rate_samples % RATE_SCORE_INTERVAL:
+      return
+    # a scoring tick: the verdict below replaces the last one, so a bank that stops qualifying stops moving
+    self.rate_moving = self._score_rate()
+
+  def _score_rate(self):
+    w = self.rate_weight
+    var_y = self.rate_syy / w - (self.rate_sy / w) ** 2
+    # no steering going on over the samples: nothing to explain
+    if var_y < RATE_MIN_RATE_STD * RATE_MIN_RATE_STD:
+      return False
+    try:
+      beta = np.linalg.solve(self.rate_xtx / w + RATE_RIDGE * np.eye(4), (self.rate_xty / w)[:, :, None])[:, :, 0]
+    except np.linalg.LinAlgError:
+      return False
+    sse = self.rate_syy / w - np.einsum('ij,ij->i', beta, self.rate_xty / w)
+    self.rate_slope = beta[:, 0]
+    self.rate_resid = np.clip(sse / var_y, 0.0, 1.0)
+    best_idx = int(np.argmin(self.rate_resid))
+    best = float(self.rate_resid[best_idx])
+    # the wire must move the wheel its own way at the best candidate, and the line must explain a fair share of
+    # the steering, or the samples are something else (the driver below the press threshold, a sign convention
+    # error, a drive the delay model does not fit)
+    if self.rate_slope[best_idx] <= 0.0 or best <= 0.0 or best > 1.0 - RATE_MIN_R2:
+      return False
+    self.learning_ceiling = True
+    within = np.flatnonzero(self.rate_resid <= best * (1.0 + RATE_TOL))
+    self.rate_knee = float(self.ceiling_candidates[within[-1]])
+    at_ceiling = float(np.interp(self.ceiling, self.ceiling_candidates, self.rate_resid))
+    margin = at_ceiling / best - 1.0
+    return margin > (RATE_EVIDENCE_SETTLED if self.rate_moving else RATE_EVIDENCE)
 
   def _project_shapes(self):
     # non-increasing in lateral accel, from the anchor's 1.0 down: a bin with no data of its own inherits
