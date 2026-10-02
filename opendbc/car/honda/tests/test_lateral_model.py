@@ -17,9 +17,11 @@ def make_model(params=None):
   return HondaLateralModel(DEFAULT_LAT_ACCEL_FACTOR, store.get)
 
 
-def step(model, request, wire, v_ego, desired_la, actual_la, lat_active=True, steer_control_active=True, pressed=False):
+def step(model, request, wire, v_ego, desired_la, actual_la, lat_active=True, steer_control_active=True, pressed=False,
+         angle=0.0, rate=0.0):
   v_sq = v_ego * v_ego
-  return model.update(request, wire, lat_active, steer_control_active, pressed, v_ego, desired_la / v_sq, actual_la / v_sq)
+  return model.update(request, wire, lat_active, steer_control_active, pressed, v_ego, desired_la / v_sq, actual_la / v_sq,
+                      angle, rate)
 
 
 PLANT_LAG_SIM = 0.8   # s; the routes fit 1.0-1.3 s, deliberately not the model's PLANT_TAU so the tests see a mismatch
@@ -558,7 +560,8 @@ class TestHondaLateralEpsCeiling(unittest.TestCase):
 
   def test_ceiling_holds_without_settled_dwells(self):
     # a wire that never holds a level above the lowest candidate (a town drive: routes 00000127 and 00000129
-    # had no settled, unpressed dwell above 0.42) is no evidence either way, whatever the plant
+    # had no settled, unpressed dwell above 0.42) is no evidence either way for the dwell bank, whatever the
+    # plant; without the steering sensor (not fed here) the steer-rate bank has nothing to say either
     v = 15.0
     sweep = lambda t: 0.75 * np.sin(2 * np.pi * t / 6.0) + 0.25 * np.sin(2 * np.pi * t / 2.3)  # noqa: E731
     for prior, plant in ((0.538, clamp_plant(0.55)), (0.538, linear_plant), (1.0, clamp_plant(0.55))):
@@ -580,6 +583,127 @@ class TestHondaLateralEpsCeiling(unittest.TestCase):
       step(model, wire, wire, v, -la, -la, pressed=True)
     self.assertEqual(model.ceiling, CEILING_MAX)
     self.assertEqual(model.ceiling_samples, 0)
+
+
+STEER_RATIO_SIM = 15.5
+WHEELBASE_SIM = 2.7
+RATE_GAIN_SIM = 18.0        # deg/s per unit wire the EPS acts on (route 00000139 fits 17-19 at the knee)
+CENTERING_SIM = 1.0         # 1/s, self-aligning return: 0.55 of wire holds ~10 deg
+RATE_DELAY_SIM = 0.12       # s, deliberately not the model's RATE_DELAY
+
+
+def steer_plant(clamp=None):
+  """Steer-rate plant: rate = RATE_GAIN_SIM * clip(wire, +-clamp) - CENTERING_SIM * angle (deg/s). clamp None is linear."""
+  def plant(wire, angle):
+    w = wire if clamp is None else float(np.clip(wire, -clamp, clamp))
+    return RATE_GAIN_SIM * w - CENTERING_SIM * angle
+  return plant
+
+
+def sweep_wire(t):
+  """A town drive's wire: never holds a level, runs to full scale on both sides (the dwell bank gets nothing from it)."""
+  return 0.75 * np.sin(2 * np.pi * t / 6.0) + 0.25 * np.sin(2 * np.pi * t / 2.3)
+
+
+def drive_steer(model, v_ego, seconds, wire_fn, plant, pressed=False, noise=0.0, seed=0):
+  """Drive the steer-rate plant with the request through limit() the way the car controller sends it, feeding the
+  model the steering sensor (angle, rate) and the lateral accel the angle implies. Returns the angle trace."""
+  rng = np.random.default_rng(seed)
+  angle = 0.0
+  last = 0.0
+  from collections import deque
+  delay_line = deque([0.0] * int(round(RATE_DELAY_SIM / DT_CTRL)), maxlen=int(round(RATE_DELAY_SIM / DT_CTRL)))
+  angles = []
+  for k in range(int(seconds / DT_CTRL)):
+    last = model.limit(wire_fn(k * DT_CTRL), last, v_ego)
+    delayed = delay_line[0]
+    delay_line.append(last)
+    rate = plant(delayed, angle)
+    angle += rate * DT_CTRL
+    la = np.radians(angle) * v_ego * v_ego / (STEER_RATIO_SIM * WHEELBASE_SIM)
+    step(model, last, last, v_ego, -la, -la, pressed=pressed, angle=angle, rate=rate + noise * rng.standard_normal())
+    angles.append(angle)
+  return np.array(angles)
+
+
+class TestHondaLateralEpsCeilingSteerRate(unittest.TestCase):
+  def test_learns_a_clamp_from_a_wire_that_never_dwells(self):
+    # the Integra case: the dwell bank counts nothing on this wire, the steer-rate bank finds the clamp
+    v = 15.0
+    model = make_model()
+    drive_steer(model, v, 300.0, sweep_wire, steer_plant(0.55))
+    self.assertEqual(model.ceiling_samples, 0)
+    self.assertGreater(model.rate_samples, 0)
+    self.assertLess(min(model.rate_resid), 1.0)   # the bank scored
+    self.assertAlmostEqual(model.rate_knee, 0.55, delta=0.06)
+    self.assertLess(model.ceiling, 0.75)
+    # a longer stretch settles it
+    drive_steer(model, v, 600.0, sweep_wire, steer_plant(0.55))
+    self.assertAlmostEqual(model.ceiling, 0.55, delta=0.06)
+    self.assertAlmostEqual(model.learned_values()[CEILING_KEY], model.ceiling)
+    # a higher clamp is found where it is
+    model = make_model()
+    drive_steer(model, v, 900.0, sweep_wire, steer_plant(0.75))
+    self.assertAlmostEqual(model.ceiling, 0.75, delta=0.06)
+
+  def test_holds_the_seed_on_the_car_it_was_measured_on(self):
+    v = 15.0
+    model = make_model({CEILING_KEY: 0.55})
+    drive_steer(model, v, 300.0, sweep_wire, steer_plant(0.55), noise=3.0)
+    self.assertAlmostEqual(model.ceiling, 0.55, delta=0.03)
+
+  def test_no_clamp_is_learned_on_a_linear_plant(self):
+    v = 15.0
+    for noise in (0.0, 3.0):
+      model = make_model()
+      drive_steer(model, v, 300.0, sweep_wire, steer_plant(None), noise=noise)
+      self.assertGreater(model.rate_samples, 0)
+      self.assertAlmostEqual(model.ceiling, CEILING_MAX, places=2, msg=f"noise={noise}")
+
+  def test_recovers_from_a_persisted_ceiling_that_is_too_low(self):
+    # the probe band shows the bank torque above the ceiling; a car that answers to it has no clamp there
+    v = 15.0
+    model = make_model({CEILING_KEY: 0.45})
+    drive_steer(model, v, 600.0, sweep_wire, steer_plant(None))
+    self.assertGreaterEqual(model.ceiling, 0.85)
+    model = make_model({CEILING_KEY: 0.416})
+    drive_steer(model, v, 900.0, sweep_wire, steer_plant(0.55))
+    self.assertAlmostEqual(model.ceiling, 0.55, delta=0.06)
+
+  def test_centering_is_not_mistaken_for_a_clamp(self):
+    # a car with a strong self-aligning torque and a linear EPS: the angle it reaches saturates, the rate it
+    # buys per unit wire does not. The centering terms carry that, the clip must not
+    v = 15.0
+    model = make_model()
+    strong = lambda wire, angle: RATE_GAIN_SIM * wire - 3.0 * CENTERING_SIM * angle  # noqa: E731
+    drive_steer(model, v, 300.0, sweep_wire, strong)
+    self.assertGreater(model.rate_samples, 0)
+    self.assertAlmostEqual(model.ceiling, CEILING_MAX, places=2)
+
+  def test_needs_speed_wire_and_an_unpressed_wheel(self):
+    model = make_model()
+    drive_steer(model, 8.0, 60.0, sweep_wire, steer_plant(0.55))            # below RATE_MIN_SPEED
+    self.assertEqual(model.rate_samples, 0)
+    drive_steer(model, 15.0, 60.0, lambda t: 0.2 * np.sin(t), steer_plant(0.55))   # never above RATE_MIN_WIRE
+    self.assertEqual(model.rate_samples, 0)
+    drive_steer(model, 15.0, 120.0, sweep_wire, steer_plant(0.55), pressed=True)
+    self.assertEqual(model.rate_samples, 0)
+    self.assertEqual(model.ceiling, CEILING_MAX)
+
+  def test_a_poor_fit_is_not_evidence(self):
+    # a steer rate the wire does not explain (noise dominates): the bank counts samples but moves nothing
+    v = 15.0
+    model = make_model({CEILING_KEY: 0.55})
+    drive_steer(model, v, 300.0, sweep_wire, steer_plant(None), noise=60.0)
+    self.assertGreater(model.rate_samples, 0)
+    self.assertAlmostEqual(model.ceiling, 0.55, places=3)
+
+  def test_grey_lines_bound_follows_the_learned_ceiling(self):
+    v = 15.0
+    model = make_model()
+    drive_steer(model, v, 900.0, sweep_wire, steer_plant(0.55))
+    self.assertAlmostEqual(model.wire_limit, model.ceiling + CEILING_PROBE)
+    self.assertLess(model.wire_limit, 0.75)
 
 
 def run_limit(model, v_ego, request_fn, ticks, last=0.0):
