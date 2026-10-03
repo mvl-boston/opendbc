@@ -425,6 +425,57 @@ class TestHondaBoschAltBrakeSafety(HondaPcmEnableBase, TestHondaBoschAltBrakeSaf
   """
 
 
+class TestHondaBoschLeadSpoofSafety(HondaPcmEnableBase, TestHondaBoschSafetyBase):
+  """
+    Covers the experimental Honda Bosch lead-spoof mode. openpilot injects a phantom camera
+    forward-object toward the radar (slot 0: 0x280-0x283 + aux 0x2C8 on the radar-side bus) so the
+    low-speed steering relay stays engaged when the camera reports no lead. The forward hook
+    suppresses the camera's real slot-0 frames only while injection is active.
+  """
+  SAFETY_PARAM = HondaSafetyFlags.LEAD_SPOOF
+
+  LEAD_SPOOF_ADDRS = (0x280, 0x281, 0x282, 0x283, 0x2C8)
+  LEAD_SPOOF_TIMEOUT = 15
+
+  TX_MSGS = [[0xE4, 0], [0xE5, 0], [0x296, 1], [0x33D, 0], [0x33DA, 0], [0x33DB, 0],
+             [0x280, 0], [0x281, 0], [0x282, 0], [0x283, 0], [0x2C8, 0]]
+
+  def test_lead_spoof_tx_allowed(self):
+    # the phantom object bank is transmittable on the radar-side bus
+    for addr in self.LEAD_SPOOF_ADDRS:
+      self.assertTrue(self._tx(common.make_msg(0, addr, 8)), f"{addr=:#x} tx blocked")
+
+  def test_lead_spoof_fwd_suppression(self):
+    # no injection yet: the camera's real slot-0 frames forward normally to the radar
+    for addr in self.LEAD_SPOOF_ADDRS:
+      self.assertEqual(0, self.safety.safety_fwd_hook(2, addr), f"{addr=:#x} suppressed before injection")
+
+    # openpilot injects the phantom (tx 0x280) -> real camera slot-0 frames are suppressed
+    self._tx(common.make_msg(0, 0x280, 8))
+    for addr in self.LEAD_SPOOF_ADDRS:
+      self.assertEqual(-1, self.safety.safety_fwd_hook(2, addr), f"{addr=:#x} not suppressed while injecting")
+
+    # the window stays open until it decays on the high-rate powertrain message
+    for _ in range(self.LEAD_SPOOF_TIMEOUT - 1):
+      self._rx(self._powertrain_data_msg())
+    self.assertEqual(-1, self.safety.safety_fwd_hook(2, 0x280))
+
+    # one more powertrain frame closes the window: real camera frames forward again
+    self._rx(self._powertrain_data_msg())
+    for addr in self.LEAD_SPOOF_ADDRS:
+      self.assertEqual(0, self.safety.safety_fwd_hook(2, addr), f"{addr=:#x} still suppressed after decay")
+
+  def test_lead_spoof_reinjection(self):
+    self._tx(common.make_msg(0, 0x280, 8))
+    self.assertEqual(-1, self.safety.safety_fwd_hook(2, 0x280))
+    for _ in range(self.LEAD_SPOOF_TIMEOUT):
+      self._rx(self._powertrain_data_msg())
+    self.assertEqual(0, self.safety.safety_fwd_hook(2, 0x280))
+    # re-injecting re-opens the window
+    self._tx(common.make_msg(0, 0x280, 8))
+    self.assertEqual(-1, self.safety.safety_fwd_hook(2, 0x280))
+
+
 class TestHondaBoschLongSafety(HondaButtonEnableBase, TestHondaBoschSafetyBase):
   """
     Covers the Honda Bosch safety mode with longitudinal control

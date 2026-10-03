@@ -95,6 +95,11 @@ class CarController(CarControllerBase):
     self.CAN = hondacan.CanBus(CP)
     self.tja_control = bool(CP.flags & HondaFlags.BOSCH_TJA_CONTROL)
 
+    # Experimental lead spoof: keep the low-speed TJA steering relay engaged when the camera has no lead
+    self.lead_spoof = bool(CP.flags & HondaFlags.BOSCH_LEAD_SPOOF) and not CP.openpilotLongitudinalControl
+    self.spoof_frame_idx = 0
+    self.spoof_lifecycle = 0
+
     self.braking = False
     self.brake_steady = 0.
     self.brake_last = 0.
@@ -150,6 +155,15 @@ class CarController(CarControllerBase):
 
     # Send steering command.
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
+
+    # Experimental lead spoof: while openpilot wants to steer at low speed and the camera reports no
+    # lead, inject a phantom forward object toward the radar (~15 Hz) so the TJA steering relay stays
+    # engaged. When the camera has a real lead, that lead is forwarded normally and we inject nothing.
+    if self.lead_spoof and CC.latActive and not CS.camera_lead_present and CS.out.vEgo < hondacan.LEAD_SPOOF_MAX_SPEED:
+      if self.frame % 7 == 0:
+        self.spoof_frame_idx = (self.spoof_frame_idx + 1) & 0xF
+        self.spoof_lifecycle = (self.spoof_lifecycle + 2) & 0xFFF
+        can_sends.extend(hondacan.create_lead_spoof(self.CAN, self.spoof_frame_idx, self.spoof_lifecycle))
 
     # wind brake from air resistance decel at high speed
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15])
