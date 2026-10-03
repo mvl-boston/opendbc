@@ -9,6 +9,7 @@ from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HON
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_TJA_CONTROL, \
                                                  HondaFlags, CruiseButtons, CruiseSettings, GearShifter, CarControllerParams
 from opendbc.car.interfaces import CarStateBase
+from opendbc.car.honda.hud_objects import HudObjectTracker
 
 TransmissionType = structs.CarParams.TransmissionType
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -55,12 +56,18 @@ class CarState(CarStateBase):
 
     self.initial_accFault_cleared = False
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
+    self.radar_ref_counter = 0
+    self.supp_tick = False
+
+    self.hud_object_tracker = HudObjectTracker() if CP.carFingerprint in HONDA_BOSCH_RADARLESS else None
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
     if self.CP.enableBsm:
       cp_body = can_parsers[Bus.body]
+    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      cp_radar = can_parsers[Bus.radar]
 
     ret = structs.CarState()
 
@@ -137,7 +144,7 @@ class CarState(CarStateBase):
     if self.CP.carFingerprint not in HONDA_BOSCH:
       ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
 
-    elif self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    elif self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD):
       ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
     else:
       if self.CP.openpilotLongitudinalControl:
@@ -250,8 +257,15 @@ class CarState(CarStateBase):
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
-    if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+    if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
+    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      self.radar_ref_counter = cp.vl["RADAR_REFERENCE"]["COUNTER"]
+      # Pulse true only on update cycles where a new 0x710 frame was received.
+      supp_tick_vals = cp_radar.vl_all.get("RADAR_SUPP_TICK_REFERENCE", {}).get("IGNORE", [])
+      self.supp_tick = len(supp_tick_vals) > 0
+    else:
+      self.supp_tick = False
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
@@ -264,6 +278,9 @@ class CarState(CarStateBase):
       *create_button_events(self.cruise_setting, prev_cruise_setting, SETTINGS_BUTTONS_DICT),
     ]
 
+    if self.hud_object_tracker is not None:
+      self.hud_object_tracker.update(cp_cam)
+
     return ret
 
   def get_can_parsers(self, CP):
@@ -273,5 +290,9 @@ class CarState(CarStateBase):
     }
     if CP.enableBsm:
       parsers[Bus.body] = CANParser(DBC[CP.carFingerprint][Bus.body], [], CanBus(CP).radar)
+    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      # RADAR_SUPP_TICK_REFERENCE (0x710) must be explicitly subscribed: it is only read via vl_all,
+      # which (unlike vl) does not auto-subscribe messages, so without this it is never parsed.
+      parsers[Bus.radar] = CANParser(DBC[CP.carFingerprint][Bus.radar], [("RADAR_SUPP_TICK_REFERENCE", 0)], CanBus(CP).radar)
 
     return parsers
