@@ -10,8 +10,9 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
+from opendbc.car.honda import vision_ctrl
 from opendbc.car.honda.values import CAR, CruiseButtons, CruiseSettings, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_RADARLESS, \
-                                     HONDA_BOSCH_TJA_CONTROL, CarControllerParams
+                                     HONDA_BOSCH_TJA_CONTROL, HONDA_BOSCH_VISION_CTRL, CarControllerParams
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
@@ -173,6 +174,9 @@ NIDEC_SERVO_LAG_FRAMES = 90
 # of the planner's max is a 1.6-sigma margin). One-pole filter, ~0.2 s.
 NIDEC_AEGO_FILTER_ALPHA = 0.05
 
+# EU CR-V vision controller: controls frames to wait before the first UDS silence handshake (see update())
+VISION_CTRL_START_FRAME = 200
+
 
 def band_weights(bands, v_ego):
   # hat-function weights of piecewise-linear interpolation across the band nodes: exactly the
@@ -249,6 +253,8 @@ class CarController(CarControllerBase):
     self.lkas_button_send_remaining = 0
     self.last_lkas_button_frame = 0
     self.radar_disable_counter = 0
+    # EU CR-V: created on first use, after CarInterface.init() has scanned the bus for the controller
+    self.vision_ctrl_silencer: vision_ctrl.VisionControllerSilencer | None = None
 
     self.gasalpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
@@ -552,7 +558,17 @@ class CarController(CarControllerBase):
     can_sends = []
 
     if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
-      if self.CP.carFingerprint in HONDA_BOSCH_CANFD and CS.stock_acc_alive:
+      if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+        # EU CR-V: the ECU authoring STEERING_CONTROL is on the car side of the harness, so it is searched
+        # for and silenced over UDS (see vision_ctrl.py). The relay opens with the safety-mode switch that
+        # follows CarInterface.init(); its STEERING_CONTROL never disappears from the PT bus on this car,
+        # so instead of CS.canfd_relay_open wait a fixed 2 s of controls before the first handshake, so the
+        # replacement STEERING_CONTROL stream is never blocked by a safety mode that is still switching.
+        if self.frame >= VISION_CTRL_START_FRAME:
+          if self.vision_ctrl_silencer is None:
+            self.vision_ctrl_silencer = vision_ctrl.VisionControllerSilencer()
+          can_sends.extend(self.vision_ctrl_silencer.update(CS.stock_acc_alive, self.CAN.pt))
+      elif self.CP.carFingerprint in HONDA_BOSCH_CANFD and CS.stock_acc_alive:
         # CAN FD: the radar is still transmitting. It is silenced from here rather than from
         # CarInterface.init(), and only once the comma relay is confirmed open: init() ran while the
         # panda was still in the ELM327 safety mode, so the replacement ACC_CONTROL stream was blocked
@@ -628,8 +644,12 @@ class CarController(CarControllerBase):
         can_sends.append((addr, dat, self.CAN.pt))
         can_sends.append((addr, dat, self.CAN.camera))
 
-    # Send steering command.
-    can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
+    # Send steering command. EU CR-V: never alongside the stock controller's own STEERING_CONTROL (it is
+    # not behind the relay, so panda safety cannot latch a relay malfunction on it in this mode and this
+    # gate is the only thing keeping the two streams apart); ours starts once vision_ctrl has silenced it.
+    stock_steer_alive = self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and CS.stock_acc_alive
+    if not stock_steer_alive:
+      can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
 
     wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
 
@@ -1174,9 +1194,10 @@ class CarController(CarControllerBase):
         lkas_state_change = self.lkas_state_change_frames > 0
         self.lkas_state_change_frames = max(0, self.lkas_state_change_frames - 1)
 
-      can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
-                                                steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed, CS,
-                                                lkas_state_change=lkas_state_change))
+      if not stock_steer_alive:
+        can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
+                                                  steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed, CS,
+                                                  lkas_state_change=lkas_state_change))
 
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
