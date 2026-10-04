@@ -46,14 +46,7 @@ static bool honda_vision_ctrl = false;
 // The vision controller's diagnostic address is searched for among exactly these candidates (see
 // opendbc/car/honda/values.py VISION_CTRL_CANDIDATE_ADDRS); no other ECU can be addressed by OP
 static bool honda_vision_ctrl_candidate(unsigned int addr) {
-  static const unsigned int HONDA_VISION_CTRL_CANDIDATES[] = {0x18DAB5F1U, 0x18DAB0F1U, 0x18DAB3F1U, 0x18DA07F1U};
-  bool candidate = false;
-  for (unsigned int i = 0U; i < (sizeof(HONDA_VISION_CTRL_CANDIDATES) / sizeof(HONDA_VISION_CTRL_CANDIDATES[0])); i++) {
-    if (addr == HONDA_VISION_CTRL_CANDIDATES[i]) {
-      candidate = true;
-    }
-  }
-  return candidate;
+  return (addr == 0x18DAB5F1U) || (addr == 0x18DAB0F1U) || (addr == 0x18DAB3F1U) || (addr == 0x18DA07F1U);
 }
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
 static HondaHw honda_hw = HONDA_NIDEC;
