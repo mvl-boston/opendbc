@@ -1347,7 +1347,7 @@
     ],
     "package": "Honda Sensing"
   },
-  "Honda CR-V Hybrid 2023-26": {
+  "Honda CR-V Hybrid 2023-27": {
     "platform": "HONDA_CRV_6G",
     "make": "Honda",
     "brand": "honda",
@@ -1356,7 +1356,8 @@
       "2023",
       "2024",
       "2025",
-      "2026"
+      "2026",
+      "2027"
     ],
     "package": "All"
   },
