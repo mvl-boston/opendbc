@@ -37,6 +37,24 @@ static bool honda_bosch_canfd = false;
 // counts down on each stock SCM_BUTTONS rx, topped up on each OP SCM_BUTTONS tx to the camera:
 // the stock buttons are only blocked from forwarding while OP's replacement stream is actually flowing
 static int honda_op_buttons_fresh = 0;
+// EU CR-V (vision controller): the ECU authoring STEERING_CONTROL is not behind the relay, so OP silences it
+// over UDS from the CarController once the relay is open. Until then the stock STEERING_CONTROL is expected
+// on the PT bus, so it cannot carry the (latching) relay-malfunction check in this mode; the CarController
+// only authors STEERING_CONTROL once the stock stream has actually stopped.
+static bool honda_vision_ctrl = false;
+
+// The vision controller's diagnostic address is searched for among exactly these candidates (see
+// opendbc/car/honda/values.py VISION_CTRL_CANDIDATE_ADDRS); no other ECU can be addressed by OP
+static bool honda_vision_ctrl_candidate(unsigned int addr) {
+  static const unsigned int HONDA_VISION_CTRL_CANDIDATES[] = {0x18DAB5F1U, 0x18DAB0F1U, 0x18DAB3F1U, 0x18DA07F1U};
+  bool candidate = false;
+  for (unsigned int i = 0U; i < (sizeof(HONDA_VISION_CTRL_CANDIDATES) / sizeof(HONDA_VISION_CTRL_CANDIDATES[0])); i++) {
+    if (addr == HONDA_VISION_CTRL_CANDIDATES[i]) {
+      candidate = true;
+    }
+  }
+  return candidate;
+}
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
 static HondaHw honda_hw = HONDA_NIDEC;
 
@@ -305,12 +323,20 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   // the extended-diagnostic-session request and the suppressed-response CommunicationControl
   // disableRxAndTx request. The corresponding enable stays blocked: re-enabling the radar into OP's
   // ACC_CONTROL stream would double up control messages while driving.
-  if (msg->addr == 0x18DAB0F1U) {
+  // Vision controller (EU CR-V): the same handshake is allowed towards each candidate address, plus the
+  // matching CommunicationControl enable so a candidate that turned out not to be the controller can be
+  // restored during the search (the CarController stops authoring STEERING_CONTROL whenever the stock one
+  // reappears, so the two streams do not overlap).
+  const bool vision_ctrl_diag = honda_vision_ctrl && honda_vision_ctrl_candidate(msg->addr);
+  if ((msg->addr == 0x18DAB0F1U) || vision_ctrl_diag) {
     const uint32_t first_bytes = GET_BYTES(msg, 0, 4);
     bool allowed = (first_bytes == 0x00803E02U);
     if (honda_bosch_canfd) {
       allowed = allowed || (first_bytes == 0x00031002U);  // 02 10 03: extended diagnostic session
       allowed = allowed || (first_bytes == 0x03832803U);  // 03 28 83 03: CommunicationControl disable rx/tx
+    }
+    if (vision_ctrl_diag) {
+      allowed = allowed || (first_bytes == 0x03802803U);  // 03 28 80 03: CommunicationControl enable rx/tx
     }
     if (!allowed || (GET_BYTES(msg, 4, 4) != 0x0U)) {
       tx = false;
@@ -345,6 +371,7 @@ static safety_config honda_nidec_init(uint16_t param) {
   honda_bosch_long = false;
   honda_bosch_radarless = false;
   honda_bosch_canfd = false;
+  honda_vision_ctrl = false;
   honda_op_buttons_fresh = 0;
 
   safety_config ret;
@@ -422,9 +449,23 @@ static safety_config honda_bosch_init(uint16_t param) {
                                               {0x310, 2, 8, .check_relay = false}, {0x6CD5558, 2, 8, .check_relay = true}, {0x6CD5559, 2, 8, .check_relay = false},
                                               {0xF31AA52, 2, 8, .check_relay = false}, {0xF31AA5C, 2, 8, .check_relay = true}, {0x1A45AA4E, 2, 8, .check_relay = false}};
 
+  // EU CR-V (vision controller) w/ gas and brakes: as CAN FD long, but the stock STEERING_CONTROL and LKAS_HUD
+  // are expected on the PT bus until OP has silenced their author over UDS (so no relay-malfunction check on
+  // them; honda_bosch_fwd_hook still blocks the camera-side copies from forwarding), plus the diagnostic
+  // addresses of the controller candidates.
+  static CanMsg HONDA_CANFD_VISION_CTRL_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = false}, {0x1DF, 0, 8, .check_relay = true}, {0x1EF, 0, 8, .check_relay = false},
+                                                          {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = false}, {0x296, 2, 4, .check_relay = false},
+                                                          {0x18DAB5F1, 0, 8, .check_relay = false}, {0x18DAB0F1, 0, 8, .check_relay = false},
+                                                          {0x18DAB3F1, 0, 8, .check_relay = false}, {0x18DA07F1, 0, 8, .check_relay = false},
+                                                          {0x310, 0, 8, .check_relay = false}, {0x6CD5558, 0, 8, .check_relay = true}, {0x6CD5559, 0, 8, .check_relay = false},
+                                                          {0xF31AA52, 0, 8, .check_relay = false}, {0xF31AA5C, 0, 8, .check_relay = true}, {0x1A45AA4E, 0, 8, .check_relay = false},
+                                                          {0x310, 2, 8, .check_relay = false}, {0x6CD5558, 2, 8, .check_relay = true}, {0x6CD5559, 2, 8, .check_relay = false},
+                                                          {0xF31AA52, 2, 8, .check_relay = false}, {0xF31AA5C, 2, 8, .check_relay = true}, {0x1A45AA4E, 2, 8, .check_relay = false}};
+
   const uint16_t HONDA_PARAM_ALT_BRAKE = 1;
   const uint16_t HONDA_PARAM_RADARLESS = 8;
   const uint16_t HONDA_PARAM_BOSCH_CANFD = 16;
+  const uint16_t HONDA_PARAM_VISION_CTRL = 128;
 
   // Bosch radarless has the powertrain bus on bus 0
   static RxCheck honda_bosch_pt0_rx_checks[] = {
@@ -451,6 +492,9 @@ static safety_config honda_bosch_init(uint16_t param) {
   honda_op_buttons_fresh = 0;
   honda_bosch_radarless = GET_FLAG(param, HONDA_PARAM_RADARLESS);
   honda_bosch_canfd = GET_FLAG(param, HONDA_PARAM_BOSCH_CANFD);
+  // the vision controller handshake is only meaningful on CAN FD with OP longitudinal (the silenced
+  // controller takes the stock ACC with it); the flag is ignored otherwise
+  honda_vision_ctrl = GET_FLAG(param, HONDA_PARAM_VISION_CTRL) && honda_bosch_canfd;
   // Checking for alternate brake override from safety parameter
   honda_alt_brake_msg = GET_FLAG(param, HONDA_PARAM_ALT_BRAKE);
 
@@ -482,7 +526,9 @@ static safety_config honda_bosch_init(uint16_t param) {
       SET_TX_MSGS(HONDA_RADARLESS_TX_MSGS, ret);
     }
   } else if (honda_bosch_canfd) {
-    if (honda_bosch_long) {
+    if (honda_bosch_long && honda_vision_ctrl) {
+      SET_TX_MSGS(HONDA_CANFD_VISION_CTRL_LONG_TX_MSGS, ret);
+    } else if (honda_bosch_long) {
       SET_TX_MSGS(HONDA_CANFD_LONG_TX_MSGS, ret);
     } else {
       SET_TX_MSGS(HONDA_CANFD_TX_MSGS, ret);
@@ -536,6 +582,12 @@ static bool honda_bosch_fwd_hook(int bus_num, int addr) {
   // CAN FD: the radar disable handshake happens after the relay is open, so block the radar's UDS
   // responses from forwarding to the camera (the camera doesn't need them)
   if (honda_bosch_canfd && (bus_num == 0) && (addr == 0x18DAF1B0)) {
+    block_msg = true;
+  }
+
+  // vision controller: STEERING_CONTROL and LKAS_HUD carry no relay-malfunction check in this mode (the
+  // stock author is on the PT bus until silenced), so block the camera-side copies from forwarding here
+  if (honda_vision_ctrl && (bus_num == 2) && ((addr == 0xE4) || (addr == 0x33D))) {
     block_msg = true;
   }
 
