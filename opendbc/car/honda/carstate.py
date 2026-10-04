@@ -8,7 +8,8 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_TJA_CONTROL, \
-                                                 HondaFlags, CruiseButtons, CruiseSettings, GearShifter, CarControllerParams
+                                                 HONDA_BOSCH_VISION_CTRL, HondaFlags, CruiseButtons, CruiseSettings, GearShifter, \
+                                                 CarControllerParams
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.honda.hud_objects import HudObjectTracker
 
@@ -372,6 +373,13 @@ class CarState(CarStateBase):
       else:
         self.camera_steer_counter += 1
       self.canfd_relay_open = (self.camera_steer_seen and self.camera_steer_counter >= 5) or self.canfd_frames >= 500
+
+      if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+        # There is no radar ACC_CONTROL (0x1DF) on this car, and the ECU that authors STEERING_CONTROL is
+        # not isolated by the harness, so "stock alive" is the controller's own 100 Hz STEERING_CONTROL
+        # still being received: it gates openpilot's STEERING_CONTROL, ACC and HUD streams exactly like
+        # the radar's ACC_CONTROL does on the other CAN FD cars, until vision_ctrl has silenced it.
+        self.stock_acc_alive = self.camera_steer_counter < 5
     else:
       self.supp_tick = False
       self.hud_tick = False

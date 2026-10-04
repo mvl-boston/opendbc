@@ -3,8 +3,9 @@ import numpy as np
 from opendbc.car import get_safety_config, structs, uds
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.disable_ecu import disable_ecu, clear_all_dtcs, clear_ecu_dtcs
+from opendbc.car.honda import vision_ctrl
 from opendbc.car.honda.hondacan import CanBus
-from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
+from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_VISION_CTRL, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HondaSafetyFlags
 from opendbc.car.honda.carcontroller import CarController
 from opendbc.car.honda.carstate import CarState
@@ -158,7 +159,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
       ret.wheelSpeedFactor = 1.025
 
-    elif candidate in (CAR.HONDA_CRV_6G):
+    elif candidate in (CAR.HONDA_CRV_6G, CAR.HONDA_CRV_6G_EU):
       ret.steerActuatorDelay = 0.15
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5100], [0, 5100]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
@@ -323,6 +324,12 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_HYBRID.value
     if candidate == CAR.ACURA_RLX_HYBRID:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RLX_STEER_BRIDGE.value
+    if candidate in HONDA_BOSCH_VISION_CTRL:
+      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.VISION_CTRL.value
+      # Steering is only possible once the stock controller is silenced over UDS, which also takes its ACC
+      # down: without openpilot longitudinal there is nothing openpilot can control on this car.
+      if not ret.openpilotLongitudinalControl:
+        ret.dashcamOnly = True
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
     # to a negative value, so it won't matter. Otherwise, add 0.5 mph margin to not
@@ -350,7 +357,23 @@ class CarInterface(CarInterfaceBase):
 
   @staticmethod
   def init(CP, can_recv, can_send, communication_control=None):
-    if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and CP.openpilotLongitudinalControl:
+    if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and CP.openpilotLongitudinalControl:
+      if communication_control is None:
+        # Same DTC hygiene as the CAN FD radar disable below: the ECUs that lose the controller's messages
+        # (VSA, EPS) latch lost-communication DTCs that mature over trips.
+        clear_all_dtcs(can_send, [CanBus(CP).pt, CanBus(CP).camera])
+        # Find the controller: init() runs under the ELM327 safety mode, the only time every diagnostic
+        # address may be queried. The silencing itself is deferred to CarController (after the relay is
+        # open and the car safety mode is live, so the replacement STEERING_CONTROL can start right away).
+        known_ecus = {fw.address for fw in CP.carFw if not fw.logging}
+        responders = vision_ctrl.scan_ecus(can_recv, can_send, bus=CanBus(CP).pt)
+        vision_ctrl.set_candidates(vision_ctrl.order_candidates(responders, known_ecus))
+      else:
+        # deinit: restore the controller openpilot silenced this drive
+        addr = vision_ctrl.get_silenced_addr()
+        if addr is not None:
+          disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=addr, com_cont_req=communication_control)
+    elif CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and CP.openpilotLongitudinalControl:
       if communication_control is None and CP.carFingerprint in HONDA_BOSCH_CANFD:
         # CAN FD: only clear DTCs here; the radar silencing itself is deferred to CarController until
         # the comma relay is confirmed open. init() runs while the panda is still in the ELM327 safety
