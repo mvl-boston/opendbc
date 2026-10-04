@@ -1252,6 +1252,27 @@ FW_VERSIONS = {
       b'8S102-3D4-A110\x00\x00',
     ],
   },
+  # European CR-V e:HEV (from the crveubackup branch). No fwdRadar ECU responds on this car.
+  CAR.HONDA_CRV_6G_EU: {
+    (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'8S102-3E8-GA20\x00\x00',
+    ],
+    (Ecu.gateway, 0x18daeff1, None): [
+      b'38897-3E9-G120\x00\x00',
+    ],
+    (Ecu.vsa, 0x18da28f1, None): [
+      b'57114-3E8-H020\x00\x00',
+    ],
+    (Ecu.srs, 0x18da53f1, None): [
+      b'77959-3E8-G720\x00\x00',
+    ],
+    (Ecu.shiftByWire, 0x18da0bf1, None): [
+      b'54008-3E7-H520\x00\x00',
+    ],
+    (Ecu.eps, 0x18da30f1, None): [
+      b'39990-3E7-H060\x00\x00',
+    ],
+  },
   CAR.HONDA_CITY_7G: {
     (Ecu.eps, 0x18da30f1, None): [
       b'39990-T14-B030\x00\x00',

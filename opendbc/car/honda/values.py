@@ -59,6 +59,8 @@ class HondaSafetyFlags(IntFlag):
   NIDEC_HYBRID = 32
   # RLX: a bridge panda relays the stock camera's LKAS_HUD from the steer bus onto the powertrain bus
   RLX_STEER_BRIDGE = 64
+  # EU CR-V 6G: the ECU authoring STEERING_CONTROL is on the car side of the harness and is silenced over UDS
+  VISION_CTRL = 128
 
 
 class HondaFlags(IntFlag):
@@ -79,7 +81,9 @@ class HondaFlags(IntFlag):
 
   HAS_ALL_DOOR_STATES = 256  # Some Hondas have all door states, others only driver door
   BOSCH_ALT_RADAR = 512
-  # 1024 is available
+  # The ECU that authors STEERING_CONTROL (and the ACC messages) is not isolated by the comma harness, so
+  # opening the relay does not take it off the bus. It is silenced over UDS instead (see vision_ctrl.py)
+  VISION_CTRL = 1024
   HYBRID = 2048
   BOSCH_TJA_CONTROL = 4096
   LKAS_MINSPEED_CUTOFF = 8192
@@ -228,6 +232,16 @@ class CAR(Platforms):
       HondaCarDocs("Honda CR-V Hybrid 2023-26", "All"),
     ],
     CarSpecs(mass=1703, wheelbase=2.7, steerRatio=16.2, centerToFrontRatio=0.42),
+  )
+  HONDA_CRV_6G_EU = HondaBoschCANFDPlatformConfig(
+    # European CR-V e:HEV (3E7/3E8/3E9 part codes). CAN FD body like the US CR-V 6G, but there is no separate
+    # radar (no 0x18DAB0F1 ECU, no ACC_CONTROL 0x1DF, empty radar bus): a single radar/vision controller
+    # authors STEERING_CONTROL and the radarless-style ACC messages (0x1C8/0x1EF), and the comma harness at the
+    # camera does not isolate it, so openpilot has to silence it over UDS before it can steer (vision_ctrl.py).
+    # Don't show in docs until lateral control is proven on-car.
+    [],
+    HONDA_CRV_6G.specs,
+    flags=HondaFlags.VISION_CTRL,
   )
   HONDA_CRV_HYBRID = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda CR-V Hybrid 2017-22", min_steer_speed=12. * CV.MPH_TO_MS)],
@@ -474,6 +488,24 @@ HONDA_BOSCH_CANFD = CAR.with_flags(HondaFlags.BOSCH_CANFD)
 HONDA_BOSCH_ALT_RADAR = CAR.with_flags(HondaFlags.BOSCH_ALT_RADAR)
 HONDA_BOSCH_TJA_CONTROL = CAR.with_flags(HondaFlags.BOSCH_TJA_CONTROL)
 HONDA_LKAS_MINSPEED_CUTOFF = CAR.with_flags(HondaFlags.LKAS_MINSPEED_CUTOFF)
+HONDA_BOSCH_VISION_CTRL = CAR.with_flags(HondaFlags.VISION_CTRL)
+
+
+# Honda 29-bit physical diagnostic addressing: tester 0xF1 -> ECU 0xXX is 0x18DAXXF1, the ECU replies on 0x18DAF1XX
+HONDA_DIAG_TX_BASE = 0x18DA00F1
+HONDA_DIAG_RX_BASE = 0x18DAF100
+
+# Candidate diagnostic addresses of the EU CR-V's radar/vision controller, in order of preference. Panda safety
+# allowlists exactly these (payload-gated to the silence/restore handshake), so the controller search in
+# CarController can only ever touch them. Known powertrain/chassis ECUs (EPS, VSA, SRS, PGM-FI, gateway, ...) are
+# deliberately not candidates. CarInterface.init() scans the bus and moves the responding candidates to the front;
+# CarController then verifies each one empirically (the stock STEERING_CONTROL must stop) before settling on it.
+VISION_CTRL_CANDIDATE_ADDRS = [
+  0x18DAB5F1,  # fwdCamera: the only ADAS ECU answering the FW query on the EU car (8S102-3E8-GA20)
+  0x18DAB0F1,  # fwdRadar address on every other Bosch Honda
+  0x18DAB3F1,  # secondary camera address seen on Bosch radarless cameras
+  0x18DA07F1,  # ECU 0x07, probed in the crveubackup experiments
+]
 
 
 DBC = CAR.create_dbc_map()
@@ -490,6 +522,7 @@ STEER_THRESHOLD = {
   CAR.ACURA_MDX_4G_MMR: 600,
   CAR.HONDA_CRV: 600,
   CAR.HONDA_CRV_6G: 600,
+  CAR.HONDA_CRV_6G_EU: 600,
   CAR.HONDA_CITY_7G: 600,
   CAR.HONDA_NBOX_2G: 600,
   CAR.HONDA_PASSPORT_4G: 600,
