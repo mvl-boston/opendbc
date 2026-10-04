@@ -430,10 +430,12 @@ class CarState(CarStateBase):
       # auto-subscribe messages, so they must be listed explicitly or they are never parsed.
       #   0x710 RADAR_SUPP_TICK_REFERENCE (1 Hz), 0x730 RADAR_HUD_TICK_REFERENCE (10 Hz),
       #   0x750 RADAR_50HZ_TICK_REFERENCE (50 Hz)
+      # The EU CR-V has no radar and its radar bus is empty, so there these must not count against canValid.
+      tick_freq = float('nan') if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL else 0
       parsers[Bus.radar] = CANParser(DBC[CP.carFingerprint][Bus.radar], [
-        ("RADAR_SUPP_TICK_REFERENCE", 0),
-        ("RADAR_HUD_TICK_REFERENCE", 0),
-        ("RADAR_50HZ_TICK_REFERENCE", 0),
+        ("RADAR_SUPP_TICK_REFERENCE", tick_freq),
+        ("RADAR_HUD_TICK_REFERENCE", tick_freq),
+        ("RADAR_50HZ_TICK_REFERENCE", tick_freq),
       ], CanBus(CP).radar)
 
     return parsers
