@@ -2,11 +2,11 @@
 import unittest
 import numpy as np
 
-from opendbc.car.honda.values import HondaSafetyFlags
+from opendbc.car.honda.values import HondaSafetyFlags, VISION_CTRL_CANDIDATE_ADDRS
 from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
 from opendbc.car.structs import CarParams
-from opendbc.safety.tests.common import CANPackerSafety, MAX_WRONG_COUNTERS
+from opendbc.safety.tests.common import CANPackerSafety, MAX_WRONG_COUNTERS, make_msg
 
 HONDA_N_COMMON_TX_MSGS = [[0xE4, 0], [0x194, 0], [0x1FA, 0], [0x30C, 0], [0x33D, 0]]
 
@@ -807,6 +807,61 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
     self.assertFalse(self._tx(not_tester_present))
     trailing_bytes = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x10\x03\x00\x00\x00\x00\x01")
     self.assertFalse(self._tx(trailing_bytes))
+
+
+class TestHondaBoschCANFDVisionCtrlLongSafety(TestHondaBoschCANFDLongSafety):
+  """
+    Covers the Honda Bosch CANFD safety mode with longitudinal control on the EU CR-V, whose stock
+    STEERING_CONTROL author is not behind the comma relay and gets silenced over UDS instead
+  """
+
+  TX_MSGS = [[0xE4, 0], [0x1DF, 0], [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x296, 2], [0x310, 0], [0x310, 2],
+             *[[addr, 0] for addr in VISION_CTRL_CANDIDATE_ADDRS]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x1DF, 0x33D]}
+  # STEERING_CONTROL and LKAS_HUD stay on the PT bus until the controller is silenced: no relay malfunction on them
+  RELAY_MALFUNCTION_ADDRS = {0: (0x1DF,)}
+
+  def setUp(self):
+    TestHondaBoschCANFDSafetyBase.setUp(self)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch,
+                                 HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG | HondaSafetyFlags.VISION_CTRL)
+    self.safety.init_tests()
+
+  def test_diagnostics(self):
+    # the full handshake (TesterPresent, extended session, CommunicationControl disable) plus the matching
+    # CommunicationControl enable (to restore a candidate that was not the controller) is allowed towards
+    # exactly the candidate addresses, with all-zero padding
+    for addr in VISION_CTRL_CANDIDATE_ADDRS:
+      for dat in (b"\x02\x3E\x80\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x00",
+                  b"\x03\x28\x83\x03\x00\x00\x00\x00", b"\x03\x28\x80\x03\x00\x00\x00\x00"):
+        self.assertTrue(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
+      for dat in (b"\x03\xAA\xAA\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x01", b"\x03\x28\x80\x03\x00\x00\x00\x01",
+                  b"\x02\x10\x01\x00\x00\x00\x00\x00", b"\x02\x11\x01\x00\x00\x00\x00\x00", b"\x03\x28\x81\x03\x00\x00\x00\x00"):
+        self.assertFalse(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
+      # never on the camera bus
+      self.assertFalse(self._tx(libsafety_py.make_CANPacket(addr, 2, b"\x02\x3E\x80\x00\x00\x00\x00\x00")))
+
+    # every other ECU stays unreachable, the EPS, VSA and gateway in particular
+    for addr in (0x18DA30F1, 0x18DA28F1, 0x18DAEFF1, 0x18DA10F1, 0x18DB33F1):
+      for dat in (b"\x02\x3E\x80\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x00", b"\x03\x28\x83\x03\x00\x00\x00\x00"):
+        self.assertFalse(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
+
+  def test_candidate_list_matches_safety(self):
+    # the Python candidate list (what the CarController probes) and the panda allowlist must agree
+    for addr in range(0x18DA00F1, 0x18DB00F1, 0x100):
+      tester_present = libsafety_py.make_CANPacket(addr, self.PT_BUS, b"\x02\x3E\x80\x00\x00\x00\x00\x00")
+      self.assertEqual(addr in VISION_CTRL_CANDIDATE_ADDRS, self._tx(tester_present), hex(addr))
+
+  def test_stock_steering_control_fwd(self):
+    # the controller's STEERING_CONTROL on the PT bus (bus 0) is the stock stream OP is waiting on: it must
+    # neither latch a relay malfunction nor be forwarded; a camera-side copy is blocked from forwarding too
+    self.safety.set_controls_allowed(True)
+    self._rx(make_msg(0, 0xE4, 5))
+    self.assertFalse(self.safety.get_relay_malfunction())
+    self.assertTrue(self.safety.get_controls_allowed())
+    self.assertEqual(-1, self.safety.safety_fwd_hook(2, 0xE4))
+    self.assertEqual(-1, self.safety.safety_fwd_hook(2, 0x33D))
+    self.assertEqual(2, self.safety.safety_fwd_hook(0, 0xE4))
 
 
 if __name__ == "__main__":
