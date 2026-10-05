@@ -16,6 +16,7 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
+from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps
 
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
 from opendbc.sunnypilot.car.honda.gas_interceptor import GasInterceptorCarController
@@ -812,7 +813,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           # and the post-motion lead alone was not enough to break away engine-off.
           speed_lead = self.dv_launch if CS.out.vEgo > 0.1 else self.dv_break
         else:
-          speed_lead = float(sf_eff * self.accel + alpha_eff)
+          speed_lead = nidec_speed_lead_mps(sf_eff, float(self.accel), alpha_eff)
         pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
         gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
         gf_eff = sum(w * self.gas_factors[band] for band, w in gas_w.items())
@@ -1019,7 +1020,13 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                      NIDEC_SPEED_FACTOR_MIN, NIDEC_SPEED_FACTOR_MAX))
             # alpha's cap used to be dv_sat itself, which is self-referential (alpha was inside
             # dv_sat) and pinned alpha at 0.1 on the Pilot once the knee had collapsed
-            self.speed_alphas[band] = float(np.clip(self.speed_alphas[band] + w * 0.001 * speedfactor_error,
+            alpha_delta = w * 0.001 * speedfactor_error
+            # Do not drag alpha down while the current plan is already asking for acceleration:
+            # after lead/brake the lagged error is still negative for ~1 s and was poisoning alpha
+            # into the absorbing hold-speed state described above.
+            if self.accel > 0.05 and alpha_delta < 0.0:
+              alpha_delta = 0.0
+            self.speed_alphas[band] = float(np.clip(self.speed_alphas[band] + alpha_delta,
                                                     -NIDEC_SPEED_ALPHA_MAX, NIDEC_SPEED_ALPHA_MAX))
         if max_speedcontrol or in_sat: # only allow learning reductions
           # speed-channel saturation is a speed-channel condition. gasfactor/gas_alpha used to
