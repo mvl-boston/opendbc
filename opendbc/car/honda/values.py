@@ -59,6 +59,7 @@ class HondaSafetyFlags(IntFlag):
   NIDEC_HYBRID = 32
   # RLX: a bridge panda relays the stock camera's LKAS_HUD from the steer bus onto the powertrain bus
   RLX_STEER_BRIDGE = 64
+  NO_ENGINE_DATA_MSG = 128
 
 
 class HondaFlags(IntFlag):
