@@ -587,6 +587,7 @@ class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLo
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch,
                                  HondaSafetyFlags.RADARLESS | HondaSafetyFlags.BOSCH_LONG | HondaSafetyFlags.NO_ENGINE_DATA_MSG)
     self.safety.init_tests()
+    self._abs_tick = 0
 
   # ABS_SENSOR values increase with movement. Change in sum of units per message approximates units of XMISSION_SPEED.
   def _speed_msg(self, speed):
