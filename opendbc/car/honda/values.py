@@ -59,6 +59,8 @@ class HondaSafetyFlags(IntFlag):
   RADARLESS = 8
   BOSCH_CANFD = 16
 
+  NO_ENGINE_DATA_MSG = 128
+
 
 class HondaFlags(IntFlag):
   # Detected flags
