@@ -519,12 +519,17 @@ class CarController(CarControllerBase):
 
     radar_bosch = self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS)
     if radar_bosch and self.radar_reenable_pending > 0:
-      if self.radar_reenable_pending % 50 == 0:
-        can_sends.append((0x18DAB0F1, b'\x02\x10\x03\x00\x00\x00\x00\x00', self.CAN.pt))
-      elif self.radar_reenable_pending % 50 == 5:
-        # CommunicationControl enableRxAndTx (0x80 suppresses the response)
-        can_sends.append((0x18DAB0F1, b'\x03\x28\x80\x03\x00\x00\x00\x00', self.CAN.pt))
-      self.radar_reenable_pending -= 1
+      # Fallback for CarInterface.deinit, which already did the paced handback: only keep poking
+      # the radar while it is still silent, a live one must not be bounced through diag sessions.
+      if CS.stock_acc_alive:
+        self.radar_reenable_pending = 0
+      else:
+        if self.radar_reenable_pending % 50 == 0:
+          can_sends.append((0x18DAB0F1, b'\x02\x10\x03\x00\x00\x00\x00\x00', self.CAN.pt))
+        elif self.radar_reenable_pending % 50 == 5:
+          # CommunicationControl enableRxAndTx (0x80 suppresses the response)
+          can_sends.append((0x18DAB0F1, b'\x03\x28\x80\x03\x00\x00\x00\x00', self.CAN.pt))
+        self.radar_reenable_pending -= 1
 
     if radar_bosch and op_long:
       # Radar silencing is deferred from CarInterface.init() until the stock ACC stream can be
