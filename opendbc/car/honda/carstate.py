@@ -56,10 +56,10 @@ class CarState(CarStateBase):
     self.initial_accFault_cleared = False
     self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
 
-
     self.abs_prior_FL = self.abs_prior_FR = self.abs_prior_RL = self.abs_prior_RR = 0
     self.abs_counter_prev = self.abs_checksum_prev = None
     self.lowspeed_source = 0.0
+
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
