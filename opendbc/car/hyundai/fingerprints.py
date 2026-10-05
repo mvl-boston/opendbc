@@ -2,6 +2,9 @@
 from opendbc.car.structs import CarParams
 from opendbc.car.hyundai.values import CAR
 
+from opendbc.sunnypilot.car.fingerprints_ext import merge_fw_versions
+from opendbc.sunnypilot.car.hyundai.fingerprints_ext import FW_VERSIONS_EXT
+
 Ecu = CarParams.Ecu
 
 # The existence of SCC or RDR in the fwdRadar FW usually determines the radar's function,
@@ -374,7 +377,6 @@ FW_VERSIONS = {
       b'\xf1\x00CK__ SCC F_CUP      1.00 1.03 96400-J5100         ',
     ],
     (Ecu.eps, 0x7d4, None): [
-      b'\xf1\x00CK  MDPS R 1.00 1.02 56310-XX000 4C2VR102',
       b'\xf1\x00CK  MDPS R 1.00 1.04 57700-J5200 4C2CL104',
       b'\xf1\x00CK  MDPS R 1.00 1.04 57700-J5220 4C2VL104',
       b'\xf1\x00CK  MDPS R 1.00 1.04 57700-J5420 4C4VL104',
@@ -384,7 +386,6 @@ FW_VERSIONS = {
     ],
     (Ecu.fwdCamera, 0x7c4, None): [
       b'\xf1\x00CK  MFC  AT EUR LHD 1.00 1.03 95740-J5000 170822',
-      b'\xf1\x00CK  MFC  AT EUR RHD 1.00 1.02 95740-J5000 170607',
       b'\xf1\x00CK  MFC  AT KOR LHD 1.00 1.04 95740-J5000 180504',
       b'\xf1\x00CK  MFC  AT USA LHD 1.00 1.03 95740-J5000 170822',
       b'\xf1\x00CK  MFC  AT USA LHD 1.00 1.04 95740-J5000 180504',
@@ -544,7 +545,6 @@ FW_VERSIONS = {
     ],
     (Ecu.fwdCamera, 0x7c4, None): [
       b'\xf1\x00RG3 MFC  AT USA LHD 1.00 1.01 99211-T1200 230607',
-      b'\xf1\x00RG3 MFC  AT USA LHD 1.00 1.01 99211-T1210 230607',
     ],
   },
   CAR.GENESIS_G90: {
@@ -586,18 +586,6 @@ FW_VERSIONS = {
     (Ecu.abs, 0x7d1, None): [
       b'\xf1\x00CD ESC \x03 102\x18\x08\x05 58920-J7350',
       b'\xf1\x00CD ESC \x0b 101 \x10\x03 58910-J7AC0',
-    ],
-  },
-  CAR.KIA_CEED_PHEV: {
-    (Ecu.fwdRadar, 0x7d0, None): [
-      b'\xf1\x00CDph SCC F-CUP      1.00 1.01 99110-CR100         ',
-    ],
-    (Ecu.eps, 0x7d4, None): [
-      b'\xf1\x00CDe MDPS C 1.00 1.01 56310-XX000 4CDHC101',
-    ],
-    (Ecu.fwdCamera, 0x7c4, None): [
-      b'\xf1\x00CD2 LKAS AT EUR LHD 1.00 1.01 99211-CR010 621',
-      b'\xf1\x00CDP LKAS AT EUR LHD 1.00 1.01 99211-CR000 q31',
     ],
   },
   CAR.KIA_FORTE: {
@@ -938,7 +926,6 @@ FW_VERSIONS = {
       b'\xf1\x00CN7 MDPS C 1.00 1.06 56310/AA070 4CNDC106',
       b'\xf1\x00CN7 MDPS C 1.00 1.06 56310AA050\x00 4CNDC106',
       b'\xf1\x00CN7 MDPS C 1.00 1.07 56310AA050\x00 4CNDC107',
-      b'\xf1\x00CN7 MDPS C 1.00 1.07 56310AA040\x00 4CNDC107',
     ],
     (Ecu.fwdCamera, 0x7c4, None): [
       b'\xf1\x00CN7 MFC  AT USA LHD 1.00 1.00 99210-AB000 200819',
@@ -950,7 +937,6 @@ FW_VERSIONS = {
       b'\xf1\x00CN7 MFC  AT USA LHD 1.00 1.07 99210-AA000 220426',
       b'\xf1\x00CN7 MFC  AT USA LHD 1.00 1.08 99210-AA000 220728',
       b'\xf1\x00CN7 MFC  AT USA LHD 1.00 1.09 99210-AA000 221108',
-      b'\xf1\x00CN7 MFC  AT EUR LHD 1.00 1.09 99210-AA000 221108',
     ],
     (Ecu.abs, 0x7d1, None): [
       b'\xf1\x00CN ESC \t 101 \x10\x03 58910-AB800',
@@ -1135,9 +1121,7 @@ FW_VERSIONS = {
   CAR.KIA_SPORTAGE_5TH_GEN: {
     (Ecu.fwdCamera, 0x7c4, None): [
       b'\xf1\x00NQ5 FR_CMR AT AUS RHD 1.00 1.00 99211-P1040 663',
-      b'\xf1\x00NQ5 FR_CMR AT AUS RHD 1.00 1.00 99211-P1070 690',
       b'\xf1\x00NQ5 FR_CMR AT EUR LHD 1.00 1.00 99211-P1040 663',
-      b'\xf1\x00NQ5 FR_CMR AT EUR LHD 1.00 1.00 99211-P1070 690',
       b'\xf1\x00NQ5 FR_CMR AT GEN LHD 1.00 1.00 99211-P1040 663',
       b'\xf1\x00NQ5 FR_CMR AT GEN LHD 1.00 1.00 99211-P1060 665',
       b'\xf1\x00NQ5 FR_CMR AT USA LHD 1.00 1.00 99211-P1030 662',
@@ -1317,3 +1301,5 @@ FW_VERSIONS = {
     ],
   },
 }
+
+FW_VERSIONS = merge_fw_versions(FW_VERSIONS, FW_VERSIONS_EXT)
