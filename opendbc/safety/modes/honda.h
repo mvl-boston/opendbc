@@ -11,7 +11,8 @@
 // All common address checks except SCM_BUTTONS which isn't on one Nidec safety configuration
 #define HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(pt_bus)                                                                                    \
   HONDA_BASE_RX_CHECKS(pt_bus)                                                                                                            \
-  {.msg = {{0x158, (pt_bus), 8, 100U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* ENGINE_DATA */      \
+  {.msg = {{0x158, (pt_bus), 8, 100U, .max_counter = 3U, .ignore_quality_flag = true},                  /* ENGINE_DATA */     \
+           {0x309, (pt_bus), 8, 10U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }}},             /* CAR_SPEED */     \
 
 #define HONDA_COMMON_RX_CHECKS(pt_bus)                                                                                                    \
   HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(pt_bus)                                                                                          \
@@ -98,7 +99,7 @@ static void honda_rx_hook(const CANPacket_t *msg) {
     honda_abs_prev_rl = msg->data[2];
     honda_abs_prev_rr = msg->data[3];
     honda_abs_prev_counter_checksum = msg->data[7];
-  } else if (msg->addr == 0x158U) {
+  } else if ((msg->addr == 0x158U) || (msg->addr == 0x309U)) {
     vehicle_moving = msg->data[0] | msg->data[1];
   } else {
     // no change to vehicle_moving
