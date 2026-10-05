@@ -57,7 +57,6 @@ class HondaSafetyFlags(IntFlag):
   RADARLESS = 8
   BOSCH_CANFD = 16
   NIDEC_HYBRID = 32
-
   NO_ENGINE_DATA_MSG = 128
 
 
