@@ -44,22 +44,13 @@ static bool honda_bosch_long = false;
 static bool honda_bosch_radarless = false;
 static bool honda_bosch_canfd = false;
 static bool honda_no_engine_data_msg = false;
-typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
-static HondaHw honda_hw = HONDA_NIDEC;
-
 static unsigned int honda_abs_prev_fl = 0U;
 static unsigned int honda_abs_prev_fr = 0U;
 static unsigned int honda_abs_prev_rl = 0U;
 static unsigned int honda_abs_prev_rr = 0U;
 static unsigned int honda_abs_prev_counter_checksum = 0xFFU;
-
-static void honda_reset_abs_sensor_state(void) {
-  honda_abs_prev_fl = 0U;
-  honda_abs_prev_fr = 0U;
-  honda_abs_prev_rl = 0U;
-  honda_abs_prev_rr = 0U;
-  honda_abs_prev_counter_checksum = 0xFFU;
-}
+typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
+static HondaHw honda_hw = HONDA_NIDEC;
 
 static unsigned int honda_get_pt_bus(void) {
   return ((honda_hw == HONDA_BOSCH) && !honda_bosch_radarless && !honda_bosch_canfd) ? 1U : 0U;
@@ -338,7 +329,6 @@ static safety_config honda_nidec_init(uint16_t param) {
   honda_bosch_radarless = false;
   honda_bosch_canfd = false;
   honda_no_engine_data_msg = false;
-  honda_reset_abs_sensor_state();
 
   safety_config ret;
 
@@ -422,7 +412,11 @@ static safety_config honda_bosch_init(uint16_t param) {
   honda_bosch_radarless = GET_FLAG(param, HONDA_PARAM_RADARLESS);
   honda_bosch_canfd = GET_FLAG(param, HONDA_PARAM_BOSCH_CANFD);
   honda_no_engine_data_msg = GET_FLAG(param, HONDA_PARAM_NO_ENGINE_DATA_MSG);
-  honda_reset_abs_sensor_state();
+  honda_abs_prev_fl = 0U;
+  honda_abs_prev_fr = 0U;
+  honda_abs_prev_rl = 0U;
+  honda_abs_prev_rr = 0U;
+  honda_abs_prev_counter_checksum = 0xFFU;
   // Checking for alternate brake override from safety parameter
   honda_alt_brake_msg = GET_FLAG(param, HONDA_PARAM_ALT_BRAKE);
 
