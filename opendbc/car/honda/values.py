@@ -59,6 +59,7 @@ class HondaSafetyFlags(IntFlag):
   NIDEC_HYBRID = 32
   # RLX: a bridge panda relays the stock camera's LKAS_HUD from the steer bus onto the powertrain bus
   RLX_STEER_BRIDGE = 64
+  NO_ENGINE_DATA_MSG = 128
 
 
 class HondaFlags(IntFlag):
@@ -332,7 +333,7 @@ class CAR(Platforms):
     flags=HondaFlags.BOSCH_RADARLESS | HondaFlags.LKAS_MINSPEED_CUTOFF
   )
   ACURA_INTEGRA = HondaBoschPlatformConfig(
-    [HondaCarDocs("Acura Integra 2023-25", "All")],
+    [HondaCarDocs("Acura Integra 2023-26", "All")],
     CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=15.5,),
     {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS,
