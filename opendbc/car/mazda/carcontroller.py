@@ -5,20 +5,17 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.mazda import mazdacan
 from opendbc.car.mazda.values import CarControllerParams, Buttons
 
-from opendbc.sunnypilot.car.mazda.icbm import IntelligentCruiseButtonManagementInterface
-
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 
 
-class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterface):
-  def __init__(self, dbc_names, CP, CP_SP):
-    CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
-    IntelligentCruiseButtonManagementInterface.__init__(self, CP, CP_SP)
+class CarController(CarControllerBase):
+  def __init__(self, dbc_names, CP):
+    super().__init__(dbc_names, CP)
     self.apply_torque_last = 0
     self.packer = CANPacker(dbc_names[Bus.pt])
     self.brake_counter = 0
 
-  def update(self, CC, CC_SP, CS, now_nanos):
+  def update(self, CC, CS, now_nanos):
     can_sends = []
 
     apply_torque = 0
@@ -59,9 +56,6 @@ class CarController(CarControllerBase, IntelligentCruiseButtonManagementInterfac
     # send steering command
     can_sends.append(mazdacan.create_steering_control(self.packer, self.CP,
                                                       self.frame, apply_torque, CS.cam_lkas))
-
-    # Intelligent Cruise Button Management
-    can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CC_SP, CS, self.packer, self.frame, self.last_button_frame))
 
     new_actuators = CC.actuators.as_builder()
     new_actuators.torque = apply_torque / CarControllerParams.STEER_MAX
