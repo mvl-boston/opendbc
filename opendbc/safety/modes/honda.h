@@ -57,6 +57,11 @@ static bool honda_bosch_canfd = false;
 static bool honda_nidec_hybrid = false;
 static bool honda_stock_longitudinal = false;
 static bool honda_no_engine_data_msg = false;
+static unsigned int honda_abs_prev_fl = 0U;
+static unsigned int honda_abs_prev_fr = 0U;
+static unsigned int honda_abs_prev_rl = 0U;
+static unsigned int honda_abs_prev_rr = 0U;
+static unsigned int honda_abs_prev_counter_checksum = 0xFFU;
 // counts down on each stock SCM_BUTTONS rx, topped up on each OP SCM_BUTTONS tx to the camera:
 // the stock buttons are only blocked from forwarding while OP's replacement stream is actually flowing
 static int honda_op_buttons_fresh = 0;
@@ -116,19 +121,14 @@ static void honda_rx_hook(const CANPacket_t *msg) {
 
   // sample speed - 0x158 used for all supported Hondas except Integra (use 0x20E abs_sensor message)
   if (honda_no_engine_data_msg && (msg->addr == 0x20EU)) {
-    static unsigned int abs_prev_fl = 0;
-    static unsigned int abs_prev_fr = 0;
-    static unsigned int abs_prev_rl = 0;
-    static unsigned int abs_prev_rr = 0;
-    static unsigned int abs_prev_counter_checksum = 0;
-    if (msg->data[7] != abs_prev_counter_checksum) {  // occasionally car sends repeated abs_sensor messages, need to ignore
-      vehicle_moving = ((msg->data[0] != abs_prev_fl) || (msg->data[1] != abs_prev_fr) || (msg->data[2] != abs_prev_rl) || (msg->data[3] != abs_prev_rr));
+    if (msg->data[7] != honda_abs_prev_counter_checksum) {  // occasionally car sends repeated abs_sensor messages, need to ignore
+      vehicle_moving = ((msg->data[0] != honda_abs_prev_fl) || (msg->data[1] != honda_abs_prev_fr) || (msg->data[2] != honda_abs_prev_rl) || (msg->data[3] != honda_abs_prev_rr));
     }
-    abs_prev_fl = msg->data[0];
-    abs_prev_fr = msg->data[1];
-    abs_prev_rl = msg->data[2];
-    abs_prev_rr = msg->data[3];
-    abs_prev_counter_checksum = msg->data[7];
+    honda_abs_prev_fl = msg->data[0];
+    honda_abs_prev_fr = msg->data[1];
+    honda_abs_prev_rl = msg->data[2];
+    honda_abs_prev_rr = msg->data[3];
+    honda_abs_prev_counter_checksum = msg->data[7];
   } else if (msg->addr == 0x158U) {
     vehicle_moving = msg->data[0] | msg->data[1];
   } else {
@@ -586,6 +586,11 @@ static safety_config honda_bosch_init(uint16_t param) {
   honda_bosch_radarless = GET_FLAG(param, HONDA_PARAM_RADARLESS);
   honda_bosch_canfd = GET_FLAG(param, HONDA_PARAM_BOSCH_CANFD);
   honda_no_engine_data_msg = GET_FLAG(param, HONDA_PARAM_NO_ENGINE_DATA_MSG);
+  honda_abs_prev_fl = 0U;
+  honda_abs_prev_fr = 0U;
+  honda_abs_prev_rl = 0U;
+  honda_abs_prev_rr = 0U;
+  honda_abs_prev_counter_checksum = 0xFFU;
   // Checking for alternate brake override from safety parameter
   honda_alt_brake_msg = GET_FLAG(param, HONDA_PARAM_ALT_BRAKE);
   honda_stock_longitudinal = false;
