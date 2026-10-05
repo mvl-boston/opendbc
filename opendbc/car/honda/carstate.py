@@ -81,10 +81,10 @@ class CarState(CarStateBase):
     # On CAN FD cars the radar owned HUD_OBJECTS and it is disabled, so there is nothing to track.
     self.hud_object_tracker = HudObjectTracker() if CP.carFingerprint in HONDA_BOSCH_RADARLESS else None
 
-
     self.abs_prior_FL = self.abs_prior_FR = self.abs_prior_RL = self.abs_prior_RR = 0
     self.abs_counter_prev = self.abs_checksum_prev = None
     self.lowspeed_source = 0.0
+
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
