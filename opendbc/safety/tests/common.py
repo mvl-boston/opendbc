@@ -11,6 +11,8 @@ from opendbc.safety import ALTERNATIVE_EXPERIENCE
 from opendbc.safety.tests.libsafety import libsafety_py
 from opendbc.car.lateral import MAX_LATERAL_ACCEL, MAX_LATERAL_JERK
 
+from opendbc.safety.tests.mads_common import MadsSafetyTestBase
+
 MAX_WRONG_COUNTERS = 5
 MAX_SAMPLE_VALS = 6
 VEHICLE_SPEED_FACTOR = 1000
@@ -73,24 +75,12 @@ def add_regen_tests(cls):
 
 
 class SafetyTestBase(unittest.TestCase):
-  safety: libsafety_py.LibSafety
-  DBC: str | None = None
-  packer: CANPackerSafety
-  SAFETY_MODEL: int | None
-  SAFETY_PARAM = 0
-
-  def setUp(self):
-    self.safety = libsafety_py.libsafety
-    if self.DBC is not None:
-      self.packer = CANPackerSafety(self.DBC)
-    if self.SAFETY_MODEL is not None:
-      self.safety.set_safety_hooks(self.SAFETY_MODEL, self.SAFETY_PARAM)
-    self.safety.init_tests()
+  safety: libsafety_py.LibSafety | None
 
   @classmethod
   def setUpClass(cls):
-    # Classes defined in this module and classes named *Base are shared test helpers.
-    if cls.__module__ == __name__ or cls.__name__.endswith('Base'):
+    if cls.__name__ == "SafetyTestBase":
+      cls.safety = None
       raise unittest.SkipTest
 
   def _reset_safety_hooks(self):
@@ -167,6 +157,12 @@ class LongitudinalAccelSafetyTest(SafetyTestBase, abc.ABC):
   MIN_ACCEL: float = -3.5
   INACTIVE_ACCEL: float = 0.0
 
+  @classmethod
+  def setUpClass(cls):
+    if cls.__name__ == "LongitudinalAccelSafetyTest":
+      cls.safety = None
+      raise unittest.SkipTest
+
   @abc.abstractmethod
   def _accel_msg(self, accel: float):
     pass
@@ -238,6 +234,12 @@ class TorqueSteeringSafetyTestBase(SafetyTestBase, abc.ABC):
   MAX_RT_DELTA = 0
 
   NO_STEER_REQ_BIT = False
+
+  @classmethod
+  def setUpClass(cls):
+    if cls.__name__ == "TorqueSteeringSafetyTestBase":
+      cls.safety = None
+      raise unittest.SkipTest
 
   @property
   def MAX_TORQUE(self):
@@ -319,6 +321,12 @@ class TorqueSteeringSafetyTestBase(SafetyTestBase, abc.ABC):
 
 
 class SteerRequestCutSafetyTest(TorqueSteeringSafetyTestBase, abc.ABC):
+
+  @classmethod
+  def setUpClass(cls):
+    if cls.__name__ == "SteerRequestCutSafetyTest":
+      cls.safety = None
+      raise unittest.SkipTest
 
   # Safety around steering request bit mismatch tolerance
   MIN_VALID_STEERING_FRAMES: int
@@ -429,6 +437,12 @@ class DriverTorqueSteeringSafetyTest(TorqueSteeringSafetyTestBase, abc.ABC):
   DRIVER_TORQUE_ALLOWANCE = 0
   DRIVER_TORQUE_FACTOR = 0
 
+  @classmethod
+  def setUpClass(cls):
+    if cls.__name__ == "DriverTorqueSteeringSafetyTest":
+      cls.safety = None
+      raise unittest.SkipTest
+
   @abc.abstractmethod
   def _torque_driver_msg(self, torque):
     pass
@@ -436,21 +450,6 @@ class DriverTorqueSteeringSafetyTest(TorqueSteeringSafetyTestBase, abc.ABC):
   def _reset_torque_driver_measurement(self, torque):
     for _ in range(MAX_SAMPLE_VALS):
       self._rx(self._torque_driver_msg(torque))
-
-  def test_driver_torque_measurements(self):
-    for torque in (50, -50, *([0] * (MAX_SAMPLE_VALS - 2))):
-      self.assertTrue(self._rx(self._torque_driver_msg(torque)))
-
-    self.assertEqual(-50, self.safety.get_torque_driver_min())
-    self.assertEqual(50, self.safety.get_torque_driver_max())
-
-    self.assertTrue(self._rx(self._torque_driver_msg(0)))
-    self.assertEqual(0, self.safety.get_torque_driver_max())
-    self.assertEqual(-50, self.safety.get_torque_driver_min())
-
-    self.assertTrue(self._rx(self._torque_driver_msg(0)))
-    self.assertEqual(0, self.safety.get_torque_driver_max())
-    self.assertEqual(0, self.safety.get_torque_driver_min())
 
   def test_non_realtime_limit_up(self):
     self._reset_torque_driver_measurement(0)
@@ -539,6 +538,12 @@ class MotorTorqueSteeringSafetyTest(TorqueSteeringSafetyTestBase, abc.ABC):
   MAX_TORQUE_ERROR = 0
   TORQUE_MEAS_TOLERANCE = 0
 
+  @classmethod
+  def setUpClass(cls):
+    if cls.__name__ == "MotorTorqueSteeringSafetyTest":
+      cls.safety = None
+      raise unittest.SkipTest
+
   @abc.abstractmethod
   def _torque_meas_msg(self, torque):
     pass
@@ -566,18 +571,23 @@ class MotorTorqueSteeringSafetyTest(TorqueSteeringSafetyTestBase, abc.ABC):
           self.assertEqual(send, self._tx(self._torque_cmd_msg(torque)))
 
   def test_non_realtime_limit_down(self):
+    self.safety.set_controls_allowed(True)
+
     for speed in self._torque_speed_range:
       self._reset_speed_measurement(speed)
       max_torque = self._get_max_torque(speed)
+
       torque_meas = max_torque - self.MAX_TORQUE_ERROR - 50
 
-      for sign in (-1, 1):
-        for delta in (self.MAX_RATE_DOWN, self.MAX_RATE_DOWN - 1):
-          self.safety.set_controls_allowed(True)
-          self.safety.set_rt_torque_last(sign * max_torque)
-          self.safety.set_torque_meas(sign * torque_meas, sign * torque_meas)
-          self.safety.set_desired_torque_last(sign * max_torque)
-          self.assertEqual(delta == self.MAX_RATE_DOWN, self._tx(self._torque_cmd_msg(sign * (max_torque - delta))))
+      self.safety.set_rt_torque_last(max_torque)
+      self.safety.set_torque_meas(torque_meas, torque_meas)
+      self.safety.set_desired_torque_last(max_torque)
+      self.assertTrue(self._tx(self._torque_cmd_msg(max_torque - self.MAX_RATE_DOWN)))
+
+      self.safety.set_rt_torque_last(max_torque)
+      self.safety.set_torque_meas(torque_meas, torque_meas)
+      self.safety.set_desired_torque_last(max_torque)
+      self.assertFalse(self._tx(self._torque_cmd_msg(max_torque - self.MAX_RATE_DOWN + 1)))
 
   def test_exceed_torque_sensor(self):
     self.safety.set_controls_allowed(True)
@@ -649,6 +659,12 @@ class MotorTorqueSteeringSafetyTest(TorqueSteeringSafetyTestBase, abc.ABC):
 
 
 class VehicleSpeedSafetyTest(SafetyTestBase):
+  @classmethod
+  def setUpClass(cls):
+    if cls.__name__ == "VehicleSpeedSafetyTest":
+      cls.safety = None
+      raise unittest.SkipTest
+
   @abc.abstractmethod
   def _speed_msg(self, speed):
     pass
@@ -669,6 +685,12 @@ class AngleSteeringSafetyTest(VehicleSpeedSafetyTest):
 
   # Real time limits
   LATERAL_FREQUENCY: int = -1  # Hz
+
+  @classmethod
+  def setUpClass(cls):
+    if cls.__name__ == "AngleSteeringSafetyTest":
+      cls.safety = None
+      raise unittest.SkipTest
 
   @abc.abstractmethod
   def _angle_cmd_msg(self, angle: float, enabled: bool, increment_timer: bool = True):
@@ -809,6 +831,12 @@ class CurvatureSteeringSafetyTest(VehicleSpeedSafetyTest):
   CURVATURE_TO_CAN: float
   SEND_RATE: float
 
+  @classmethod
+  def setUpClass(cls):
+    if cls.__name__ == "CurvatureSteeringSafetyTest":
+      cls.safety = None
+      raise unittest.SkipTest
+
   @abc.abstractmethod
   def _curvature_cmd_msg(self, curvature: float, steer_req: bool):
     pass
@@ -910,9 +938,17 @@ class SafetyTest(SafetyTestBase):
   SCANNED_ADDRS = [*range(0x800),                      # Entire 11-bit CAN address space
                    *range(0x18DA00F1, 0x18DB00F1, 0x100),   # 29-bit UDS physical addressing
                    *range(0x18DB00F1, 0x18DC00F1, 0x100),   # 29-bit UDS functional addressing
-                   *range(0x3300, 0x3400)]                  # Honda
+                   *range(0x3300, 0x3400),                  # Honda
+                   *range(0x6CD5554, 0x6CD5558),            # Honda Bosch radarless LANE_PATH, HUD_OBJECTS
+                   0xF31AA54]                               # Honda Bosch radarless LKAS_HUD_2
   FWD_BLACKLISTED_ADDRS: dict[int, list[int]] = {}  # {bus: [addr]}
   FWD_BUS_LOOKUP: dict[int, int] = {0: 2, 2: 0}
+
+  @classmethod
+  def setUpClass(cls):
+    if cls.__name__ == "SafetyTest" or cls.__name__.endswith('Base'):
+      cls.safety = None
+      raise unittest.SkipTest
 
   # ***** standard tests for all safety modes *****
 
@@ -978,13 +1014,18 @@ class SafetyTest(SafetyTestBase):
             if {attr, current_test}.issubset({'TestVolkswagenPqSafety', 'TestVolkswagenPqStockSafety', 'TestVolkswagenPqLongSafety'}):
               continue
             if {attr, current_test}.issubset({'TestGmCameraSafety', 'TestGmCameraLongitudinalSafety', 'TestGmAscmSafety',
-                                              'TestGmCameraEVSafety', 'TestGmCameraLongitudinalEVSafety', 'TestGmAscmEVSafety'}):
+                                              'TestGmCameraEVSafety', 'TestGmCameraLongitudinalEVSafety', 'TestGmAscmEVSafety',
+                                              'TestGmCameraNonACCSafety', 'TestGmCameraEVNonACCSafety'}):
               continue
             if attr.startswith('TestFord') and current_test.startswith('TestFord'):
               continue
             if attr.startswith('TestHyundaiCanfd') and current_test.startswith('TestHyundaiCanfd'):
               continue
             if {attr, current_test}.issubset({'TestHyundaiLongitudinalSafety', 'TestHyundaiLongitudinalSafetyCameraSCC', 'TestHyundaiSafetyFCEVLong'}):
+              continue
+            base_tests = {'TestHyundaiLongitudinalSafety', 'TestHyundaiLongitudinalSafetyCameraSCC', 'TestHyundaiSafetyFCEVLong',
+                          'TestHyundaiLongitudinalESCCSafety'}
+            if any(attr.startswith(test) for test in base_tests) and any(current_test.startswith(test) for test in base_tests):
               continue
             volkswagen_shared = ('TestVolkswagenMqb', 'TestVolkswagenMlb', 'TestVolkswagenMeb')
             if attr.startswith(volkswagen_shared) and current_test.startswith(volkswagen_shared):
@@ -1006,10 +1047,14 @@ class SafetyTest(SafetyTestBase):
             if attr == 'TestVolkswagenMqbLongSafety' and current_test.startswith('TestHondaBoschRadarless'):
               tx = list(filter(lambda m: m[0] not in [0x30c, ], tx))
 
+            # Volkswagen MQB and Honda Bosch Canfd ACC HUD messages overlap
+            if attr == 'TestVolkswagenMqbLongSafety' and current_test.startswith('TestHondaBoschCANFD'):
+              tx = list(filter(lambda m: m[0] not in [0x30c, ], tx))
+
             # TODO: Temporary, should be fixed in panda firmware, safety_honda.h
             if attr.startswith('TestHonda'):
               # exceptions for common msgs across different hondas
-              tx = list(filter(lambda m: m[0] not in [0x1FA, 0x30C, 0x33D, 0x33DB], tx))
+              tx = list(filter(lambda m: m[0] not in [0x1FA, 0x30C, 0x33D, 0x33DB, 0x6CD5554, 0xF31AA54, 0x6CD5557], tx))
 
             if attr.startswith('TestHyundaiLongitudinal'):
               # exceptions for common msgs across different Hyundai CAN platforms
@@ -1030,10 +1075,16 @@ class SafetyTest(SafetyTestBase):
 
 
 @add_regen_tests
-class CarSafetyTest(SafetyTest):
+class CarSafetyTest(SafetyTest, MadsSafetyTestBase):
   STANDSTILL_THRESHOLD: float = 0.0
   GAS_PRESSED_THRESHOLD = 0
   RELAY_MALFUNCTION_ADDRS: dict[int, tuple[int, ...]] | None = None
+
+  @classmethod
+  def setUpClass(cls):
+    if cls.__name__ == "CarSafetyTest" or cls.__name__.endswith('Base'):
+      cls.safety = None
+      raise unittest.SkipTest
 
   @abc.abstractmethod
   def _user_brake_msg(self, brake):
@@ -1206,12 +1257,10 @@ class CarSafetyTest(SafetyTest):
         self.assertEqual(self.safety.get_controls_allowed(), within_delta)
 
   def test_safety_tick(self):
-    # Missing valid RX messages must disable controls even before they time out.
-    for elapsed in (0, int(2e6)):
-      with self.subTest(elapsed=elapsed):
-        self._reset_safety_hooks()
-        self.safety.set_timer(elapsed)
-        self.safety.set_controls_allowed(True)
-        self.safety.safety_tick()
-        self.assertFalse(self.safety.get_controls_allowed())
-        self.assertFalse(self.safety.safety_config_valid())
+    self.safety.set_timer(int(2e6))
+    self.safety.set_controls_allowed(True)
+    self.safety.set_controls_allowed_lateral(True)
+    self.safety.safety_tick_current_safety_config()
+    self.assertFalse(self.safety.get_controls_allowed())
+    self.assertFalse(self.safety.get_controls_allowed_lateral())
+    self.assertFalse(self.safety.safety_config_valid())

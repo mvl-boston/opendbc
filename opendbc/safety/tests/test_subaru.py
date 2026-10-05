@@ -4,7 +4,9 @@ import unittest
 
 from opendbc.car.subaru.values import SubaruSafetyFlags
 from opendbc.car.structs import CarParams
+from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
+from opendbc.safety.tests.common import CANPackerSafety
 from functools import partial
 
 
@@ -40,9 +42,7 @@ def fwd_blacklisted_addr(lkas_msg=SubaruMsg.ES_LKAS):
 
 
 class TestSubaruSafetyBase(common.CarSafetyTest):
-  DBC = "subaru_global_2017_generated"
-  SAFETY_MODEL = CarParams.SafetyModel.subaru
-
+  FLAGS = 0
   RELAY_MALFUNCTION_ADDRS = {SUBARU_MAIN_BUS: (SubaruMsg.ES_LKAS, SubaruMsg.ES_DashStatus, SubaruMsg.ES_LKAS_State,
                                                SubaruMsg.ES_Infotainment)}
   FWD_BLACKLISTED_ADDRS = fwd_blacklisted_addr()
@@ -58,6 +58,12 @@ class TestSubaruSafetyBase(common.CarSafetyTest):
   DEG_TO_CAN = 100
 
   INACTIVE_GAS = 1818
+
+  def setUp(self):
+    self.packer = CANPackerSafety("subaru_global_2017_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.subaru, self.FLAGS)
+    self.safety.init_tests()
 
   def _set_prev_torque(self, t):
     self.safety.set_desired_torque_last(t)
@@ -82,6 +88,21 @@ class TestSubaruSafetyBase(common.CarSafetyTest):
   def _pcm_status_msg(self, enable):
     values = {"Cruise_Activated": enable}
     return self.packer.make_can_msg_safety("CruiseControl", self.ALT_MAIN_BUS, values)
+
+  def _lkas_button_msg(self, lkas_pressed=False, lkas_hud=0):
+    values = {"LKAS_Dash_State": 2 if lkas_pressed else lkas_hud}
+    return self.packer.make_can_msg_safety("ES_LKAS_State", SUBARU_CAM_BUS, values)
+
+  def test_enable_control_allowed_with_mads_button(self):
+    for enable_mads in (True, False):
+      with self.subTest("enable_mads", mads_enabled=enable_mads):
+        for mads_button_press in range(4):
+          with self.subTest("mads_button_press", button_state=mads_button_press):
+            self.safety.set_mads_params(enable_mads, False, False)
+
+            self._rx(self._lkas_button_msg(False, mads_button_press))
+            self.assertEqual(enable_mads and mads_button_press in range(1, 4),
+                             self.safety.get_controls_allowed_lateral())
 
 
 class TestSubaruStockLongitudinalSafetyBase(TestSubaruSafetyBase):
@@ -111,6 +132,7 @@ class TestSubaruTorqueSafetyBase(TestSubaruSafetyBase, common.DriverTorqueSteeri
 
 
 class TestSubaruGen1TorqueStockLongitudinalSafety(TestSubaruStockLongitudinalSafetyBase, TestSubaruTorqueSafetyBase):
+  FLAGS = 0
   TX_MSGS = lkas_tx_msgs(SUBARU_MAIN_BUS)
 
 
@@ -118,14 +140,13 @@ class TestSubaruGen2TorqueSafetyBase(TestSubaruTorqueSafetyBase):
   ALT_MAIN_BUS = SUBARU_ALT_BUS
   ALT_CAM_BUS = SUBARU_ALT_BUS
 
-  MAX_RATE_UP = 40
-  MAX_RATE_DOWN = 40
-  MAX_TORQUE_LOOKUP = [0], [1000]
+  MAX_RATE_UP = 35
+  MAX_RATE_DOWN = 50
+  MAX_TORQUE_LOOKUP = [0], [1500]
 
 
 class TestSubaruGen2TorqueStockLongitudinalSafety(TestSubaruStockLongitudinalSafetyBase, TestSubaruGen2TorqueSafetyBase):
-  SAFETY_PARAM = SubaruSafetyFlags.GEN2
-
+  FLAGS = SubaruSafetyFlags.GEN2
   TX_MSGS = lkas_tx_msgs(SUBARU_ALT_BUS)
 
 

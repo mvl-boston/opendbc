@@ -3,12 +3,13 @@ import unittest
 
 from opendbc.car.structs import CarParams
 from opendbc.car.subaru.values import SubaruSafetyFlags
+from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
+from opendbc.safety.tests.common import CANPackerSafety
 
 
 class TestSubaruPreglobalSafety(common.CarSafetyTest, common.DriverTorqueSteeringSafetyTest):
-  SAFETY_MODEL = CarParams.SafetyModel.subaruPreglobal
-
+  FLAGS = 0
   DBC = "subaru_outback_2015_generated"
   TX_MSGS = [[0x161, 0], [0x164, 0]]
   RELAY_MALFUNCTION_ADDRS = {0: (0x164, 0x161)}
@@ -22,6 +23,12 @@ class TestSubaruPreglobalSafety(common.CarSafetyTest, common.DriverTorqueSteerin
 
   DRIVER_TORQUE_ALLOWANCE = 75
   DRIVER_TORQUE_FACTOR = 10
+
+  def setUp(self):
+    self.packer = CANPackerSafety(self.DBC)
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.subaruPreglobal, self.FLAGS)
+    self.safety.init_tests()
 
   def _set_prev_torque(self, t):
     self.safety.set_desired_torque_last(t)
@@ -54,8 +61,7 @@ class TestSubaruPreglobalSafety(common.CarSafetyTest, common.DriverTorqueSteerin
 
 
 class TestSubaruPreglobalReversedDriverTorqueSafety(TestSubaruPreglobalSafety):
-  SAFETY_PARAM = SubaruSafetyFlags.PREGLOBAL_REVERSED_DRIVER_TORQUE
-
+  FLAGS = SubaruSafetyFlags.PREGLOBAL_REVERSED_DRIVER_TORQUE
   DBC = "subaru_outback_2019_generated"
 
 
