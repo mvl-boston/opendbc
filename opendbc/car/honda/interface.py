@@ -303,6 +303,8 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_LONG.value
     if candidate in HONDA_BOSCH_RADARLESS:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
+    if candidate == CAR.ACURA_INTEGRA:
+      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NO_ENGINE_DATA_MSG.value
     if candidate in HONDA_BOSCH_CANFD:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_CANFD.value
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID):
