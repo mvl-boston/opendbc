@@ -80,10 +80,29 @@ def get_torque_params():
 # generic car and radar interfaces
 
 
+class CarStateUpdate(tuple):
+  """Return type of CarInterfaceBase.update.
+
+  A (CarState, CarStateSP) tuple that also proxies attribute access to CarState,
+  so both sunnypilot-style consumers (``ret, ret_sp = CI.update(...)``) and
+  upstream-style consumers (``CS = CI.update(...); CS.canValid``) work.
+  """
+  __slots__ = ()
+
+  def __new__(cls, cs: structs.CarState, cs_sp: 'structs.CarStateSP'):
+    return super().__new__(cls, (cs, cs_sp))
+
+  def __getnewargs__(self):
+    return tuple(self)
+
+  def __getattr__(self, name):
+    return getattr(self[0], name)
+
+
 class RadarInterfaceBase(ABC):
-  def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
+  def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP | None = None):
     self.CP = CP
-    self.CP_SP = CP_SP
+    self.CP_SP = CP_SP if CP_SP is not None else structs.CarParamsSP()
     self.rcp = None
     self.pts: dict[int, structs.RadarData.RadarPoint] = {}
     self.frame = 0
@@ -102,7 +121,11 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
 
   DRIVABLE_GEARS: tuple[structs.CarState.GearShifter, ...] = ()
 
-  def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
+  def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP | None = None):
+    if CP_SP is None:
+      # support upstream-style construction (CarInterface(CP)) by generating default sunnypilot params
+      CP_SP = self.get_non_essential_params_sp(CP, CP.carFingerprint)
+
     self.CP = CP
     self.CP_SP = CP_SP
 
@@ -115,7 +138,14 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
     dbc_names = {bus: cp.dbc_name for bus, cp in self.can_parsers.items()}
     self.CC: CarControllerBase = self.CarController(dbc_names, CP, CP_SP)
 
-  def apply(self, c: structs.CarControl, c_sp: structs.CarControlSP, now_nanos: int | None = None) -> tuple[structs.CarControl.Actuators, list[CanData]]:
+  def apply(self, c: structs.CarControl, c_sp: structs.CarControlSP | int | None = None,
+            now_nanos: int | None = None) -> tuple[structs.CarControl.Actuators, list[CanData]]:
+    if isinstance(c_sp, (int, float)):
+      # support upstream-style call (CI.apply(CC, now_nanos))
+      now_nanos = int(c_sp)
+      c_sp = None
+    if c_sp is None:
+      c_sp = structs.CarControlSP()
     if now_nanos is None:
       now_nanos = int(time.monotonic() * 1e9)
     return self.CC.update(c, c_sp, self.CS, now_nanos)
@@ -267,7 +297,7 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
     tune.torque.latAccelOffset = 0.0
     tune.torque.steeringAngleDeadzoneDeg = steering_angle_deadzone_deg
 
-  def update(self, can_packets: list[tuple[int, list[CanData]]]) -> tuple[structs.CarState, structs.CarStateSP]:
+  def update(self, can_packets: list[tuple[int, list[CanData]]]) -> 'CarStateUpdate':
     # parse can
     for cp in self.can_parsers.values():
       if cp is not None:
@@ -298,7 +328,7 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
     self.CS.out = ret
     self.CS.out_sp = ret_sp
 
-    return ret, ret_sp
+    return CarStateUpdate(ret, ret_sp)
 
 
 class CarStateBase(ABC):
