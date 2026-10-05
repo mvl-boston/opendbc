@@ -50,6 +50,9 @@ static unsigned int honda_abs_prev_fr = 0U;
 static unsigned int honda_abs_prev_rl = 0U;
 static unsigned int honda_abs_prev_rr = 0U;
 static unsigned int honda_abs_prev_counter_checksum = 0xFFU;
+// counts down on each stock SCM_BUTTONS rx, topped up on each OP SCM_BUTTONS tx to the camera:
+// the stock buttons are only blocked from forwarding while OP's replacement stream is actually flowing
+static int honda_op_buttons_fresh = 0;
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
 static HondaHw honda_hw = HONDA_NIDEC;
 
@@ -133,6 +136,11 @@ static void honda_rx_hook(const CANPacket_t *msg) {
   // state machine to enter and exit controls for button enabling
   // 0x1A6 for the ILX, 0x296 for the Civic Touring
   if (((msg->addr == 0x1A6U) || (msg->addr == 0x296U)) && (msg->bus == pt_bus)) {
+    // stock buttons act as the clock for the OP button takeover freshness (see honda_bosch_fwd_hook)
+    if (honda_op_buttons_fresh > 0) {
+      honda_op_buttons_fresh--;
+    }
+
     int button = (msg->data[0] & 0xE0U) >> 5;
 
     // enter controls on the falling edge of set or resume
@@ -296,10 +304,21 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   // FORCE CANCEL: safety check only relevant when spamming the cancel button in Bosch HW
   // ensuring that only the cancel button press is sent (VAL 2) when controls are off.
   // This avoids unintended engagements while still allowing resume spam
-  if ((msg->addr == 0x296U) && !controls_allowed && (msg->bus == bus_buttons)) {
+  // On CAN FD, buttons are also sent to the camera (bus 2) to take over SCM_BUTTONS while engaged,
+  // so the same check applies there.
+  const bool is_buttons_bus = (msg->bus == bus_buttons) || (honda_bosch_canfd && (msg->bus == 2U));
+  if ((msg->addr == 0x296U) && !controls_allowed && is_buttons_bus) {
     if (((msg->data[0] >> 5) & 0x7U) != 2U) {
       tx = false;
     }
+  }
+
+  // OP is streaming SCM_BUTTONS to the camera: block the stock buttons from forwarding while this
+  // stream stays fresh (see honda_bosch_fwd_hook). Topped up here so the block fails safe: if OP
+  // stops sending (e.g. it refuses to engage while the panda's button state machine allowed controls),
+  // the stock buttons resume forwarding within ~10 button frames (~0.4 s).
+  if (tx && (msg->addr == 0x296U) && (msg->bus == 2U)) {
+    honda_op_buttons_fresh = 10;
   }
 
   // Only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
@@ -331,6 +350,7 @@ static safety_config honda_nidec_init(uint16_t param) {
   honda_bosch_radarless = false;
   honda_bosch_canfd = false;
   honda_no_engine_data_msg = false;
+  honda_op_buttons_fresh = 0;
 
   safety_config ret;
 
@@ -411,6 +431,7 @@ static safety_config honda_bosch_init(uint16_t param) {
 
   honda_hw = HONDA_BOSCH;
   honda_brake_switch_prev = false;
+  honda_op_buttons_fresh = 0;
   honda_bosch_radarless = GET_FLAG(param, HONDA_PARAM_RADARLESS);
   honda_bosch_canfd = GET_FLAG(param, HONDA_PARAM_BOSCH_CANFD);
   honda_no_engine_data_msg = GET_FLAG(param, HONDA_PARAM_NO_ENGINE_DATA_MSG);
@@ -479,6 +500,29 @@ static bool honda_nidec_fwd_hook(int bus_num, int addr) {
   return block_msg;
 }
 
+static bool honda_bosch_fwd_hook(int bus_num, int addr) {
+  bool block_msg = false;
+
+  // On radarless and CAN FD, OP takes over SCM_BUTTONS (0x296) towards the camera when engaged, to
+  // auto-disable stock LKAS and block the driver's LKAS button (the touch-steering-wheel timer would
+  // otherwise force a disengagement). Only block the stock buttons while OP's replacement stream is
+  // actually flowing (honda_op_buttons_fresh): the camera needs SCM_BUTTONS content beyond the buttons
+  // (it raises an adaptive high beam error when the message goes missing), so a bare controls_allowed
+  // gate would starve it whenever the panda allows controls but OP refuses to engage.
+  if ((honda_bosch_radarless || honda_bosch_canfd) && controls_allowed && (honda_op_buttons_fresh > 0) &&
+      (bus_num == 0) && (addr == 0x296)) {
+    block_msg = true;
+  }
+
+  // CAN FD: the radar disable handshake happens after the relay is open, so block the radar's UDS
+  // responses from forwarding to the camera (the camera doesn't need them)
+  if (honda_bosch_canfd && (bus_num == 0) && (addr == 0x18DAF1B0)) {
+    block_msg = true;
+  }
+
+  return block_msg;
+}
+
 const safety_hooks honda_nidec_hooks = {
   .init = honda_nidec_init,
   .rx = honda_rx_hook,
@@ -493,6 +537,7 @@ const safety_hooks honda_bosch_hooks = {
   .init = honda_bosch_init,
   .rx = honda_rx_hook,
   .tx = honda_tx_hook,
+  .fwd = honda_bosch_fwd_hook,
   .get_counter = honda_get_counter,
   .get_checksum = honda_get_checksum,
   .compute_checksum = honda_compute_checksum,
