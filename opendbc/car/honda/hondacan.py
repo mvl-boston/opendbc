@@ -1,7 +1,7 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS,
-                                      HONDA_BOSCH_CANFD, CarControllerParams)
+                                      HONDA_BOSCH_CANFD, CAR, CarControllerParams)
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -99,8 +99,9 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
     acc_control_values.update({
       "CONTROL_ON": enabled,
-      # required whenever braking for Hybrid and Bosch Alt Brake vehicles, allow idle stop after 4 seconds (50 Hz) for other vehicles
-      "COMPUTER_BRAKE_ASSIST": braking if CP.flags & (HondaFlags.HYBRID | HondaFlags.BOSCH_ALT_BRAKE) else stopping_counter > 200,
+      # required whenever braking for Integra, Hybrid and Bosch Alt Brake vehicles, allow idle stop after 4 seconds (50 Hz) for other vehicles
+      "COMPUTER_BRAKE_ASSIST": braking if CP.flags & (HondaFlags.HYBRID | HondaFlags.BOSCH_ALT_BRAKE) or CP.carFingerprint == CAR.ACURA_INTEGRA
+      else stopping_counter > 200,
     })
   else:
     acc_control_values.update({

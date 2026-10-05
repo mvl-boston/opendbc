@@ -405,11 +405,8 @@ class CarController(CarControllerBase):
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
-          # CAN FD: never overlap the stock radar's own ACC_CONTROL stream; ours starts within a few
-          # frames of the radar going silent (see the deferred radar disable above)
-          if not (self.CP.carFingerprint in HONDA_BOSCH_CANFD and CS.stock_acc_alive):
-            can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                          self.stopping_counter, self.CP, gas_pedal_force))
+          can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
+                                                        self.stopping_counter, self.CP, gas_pedal_force))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           apply_brake = int(np.clip(apply_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
