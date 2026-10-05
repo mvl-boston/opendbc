@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 import numpy as np
-from opendbc.car import get_safety_config, structs, uds
+from opendbc.can import CANPacker
+from opendbc.car import Bus, get_safety_config, structs, uds
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.can_definitions import CanData
 from opendbc.car.carlog import carlog
 from opendbc.car.disable_ecu import disable_ecu, clear_all_dtcs, clear_ecu_dtcs
+from opendbc.car.honda import hondacan
 from opendbc.car.honda.hondacan import CanBus
-from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
+from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, DBC, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HondaSafetyFlags
 from opendbc.car.honda.carcontroller import CarController
 from opendbc.car.honda.carstate import CarState
@@ -14,6 +16,17 @@ from opendbc.car.honda.radar_interface import RadarInterface
 from opendbc.car.interfaces import CarInterfaceBase
 
 TransmissionType = structs.CarParams.TransmissionType
+
+# Bosch radar handback (see CarInterface._reenable_bosch_radar), all counts in 100 Hz CAN frames
+BOSCH_RADAR_DIAG_ADDR = 0x18DAB0F1
+BOSCH_RADAR_DIAG_RESP_ADDR = 0x18DAF1B0
+BOSCH_RADAR_ACC_CONTROL_ADDR = 0x1DF
+BOSCH_RADAR_SILENT_FRAMES = 3           # ACC_CONTROL is 50 Hz: 3 frames without it means the radar is silenced
+BOSCH_RADAR_RESPONSE_FRAMES = 10        # max wait for the extended session positive response
+BOSCH_RADAR_RESUME_FRAMES = 30          # max wait for ACC_CONTROL to resume after CommunicationControl enable
+BOSCH_RADAR_REENABLE_ATTEMPTS = 5
+BOSCH_RADAR_REENABLE_MAX_FRAMES = 300   # overall cap, well under the 5 s S3 fallback this replaces
+BOSCH_RADAR_REENABLE_IDLE_FRAMES = 25   # consecutive empty CAN reads before assuming pandad is gone
 
 
 class CarInterface(CarInterfaceBase):
@@ -368,21 +381,93 @@ class CarInterface(CarInterfaceBase):
       # Bosch non-CAN FD: radar disable is also deferred in CarController (same stock-ACC handoff).
 
   @staticmethod
-  def _reenable_bosch_radar(CP, can_send) -> None:
-    # ISO-TP single frames on the radar functional address. These match carcontroller's
-    # radar_reenable bursts and are allowlisted in hondaBosch safety (full IsoTpParallelQuery
-    # deinit uses flow-control frames that safety blocks while onroad).
-    bus = CanBus(CP).pt
-    addr = 0x18DAB0F1
-    for _ in range(5):
-      can_send([CanData(addr, b'\x02\x10\x03\x00\x00\x00\x00\x00', bus)])
-      can_send([CanData(addr, b'\x03\x28\x80\x03\x00\x00\x00\x00', bus)])
+  def _reenable_bosch_radar(CP, can_recv, can_send) -> bool:
+    """Hand longitudinal control back to the stock radar after it was silenced for alpha long.
+
+    Raw ISO-TP single frames are used instead of IsoTpParallelQuery, whose flow-control frames
+    hondaBosch safety blocks while onroad. Two things must hold for the handoff to be fault-free:
+
+    * one UDS request at a time. The radar only answers one request of a back-to-back burst, so a
+      blind burst of session/CommunicationControl frames left it silenced until its diagnostic
+      session timed out (S3, ~5 s) and reset CommunicationControl on its own.
+    * no ACC_CONTROL gap. CarController stops its own ACC_CONTROL stream the moment alpha long is
+      off; if the radar is not transmitting yet the VSA latches BRAKE_ERROR and the radar
+      ACC_PROBLEM/FCM_PROBLEM for the rest of the drive (stock ACC then refuses to engage). The
+      disengaged ACC_CONTROL stream is bridged at 50 Hz here until the radar's own one is back.
+
+    Returns True when the stock radar was seen transmitting ACC_CONTROL on the powertrain bus.
+    """
+    CAN = CanBus(CP)
+    bus = CAN.pt
+    packer = CANPacker(DBC[CP.carFingerprint][Bus.pt])
+    ext_session = CanData(BOSCH_RADAR_DIAG_ADDR, b'\x02\x10\x03\x00\x00\x00\x00\x00', bus)
+    comm_enable = CanData(BOSCH_RADAR_DIAG_ADDR, b'\x03\x28\x80\x03\x00\x00\x00\x00', bus)
+
+    radar_alive = False
+    session_ok = False
+    attempts = 0
+    request_frame: int | None = None
+    enable_frame: int | None = None
+    idle_frames = 0
+
+    for frame in range(BOSCH_RADAR_REENABLE_MAX_FRAMES):
+      # pandad publishes CAN at 100 Hz, so each iteration is one ~10 ms frame
+      can_packets = can_recv(wait_for_one=True)
+      if len(can_packets) == 0:
+        idle_frames += 1
+        if idle_frames >= BOSCH_RADAR_REENABLE_IDLE_FRAMES:
+          carlog.warning("Bosch radar re-enable: no CAN traffic, giving up")
+          break
+        continue
+      idle_frames = 0
+
+      for packet in can_packets:
+        for msg in packet:
+          # our own transmissions are echoed back with src = bus + 128
+          if msg.src != bus:
+            continue
+          if msg.address == BOSCH_RADAR_ACC_CONTROL_ADDR:
+            radar_alive = True
+          elif msg.address == BOSCH_RADAR_DIAG_RESP_ADDR:
+            if msg.dat[:3] == b'\x02\x50\x03':
+              session_ok = True
+            elif msg.dat[:2] == b'\x03\x7F':
+              carlog.warning(f"Bosch radar re-enable: negative response {msg.dat.hex()}")
+      if radar_alive:
+        break
+
+      # The radar transmits ACC_CONTROL every 20 ms: only once it has been silent for a few frames is
+      # it known to be disabled. Until then neither bridge (would double up a live stream) nor poke it.
+      if frame < BOSCH_RADAR_SILENT_FRAMES:
+        continue
+
+      if frame % 2 == 0:
+        can_send([CanData(*m) for m in hondacan.create_acc_commands(packer, CAN, False, False, 0.0, 0.0, 0, CP, 0.0)])
+
+      if request_frame is None:
+        if attempts >= BOSCH_RADAR_REENABLE_ATTEMPTS:
+          break
+        attempts += 1
+        session_ok = False
+        can_send([ext_session])
+        request_frame, enable_frame = frame, None
+      elif enable_frame is None:
+        # the radar answers the session request within ~20 ms; don't queue the next request behind it
+        if session_ok or frame - request_frame >= BOSCH_RADAR_RESPONSE_FRAMES:
+          can_send([comm_enable])
+          enable_frame = frame
+      elif frame - enable_frame >= BOSCH_RADAR_RESUME_FRAMES:
+        request_frame = None
+
+    if not radar_alive:
+      carlog.error(f"Bosch radar re-enable: stock ACC_CONTROL not seen after {attempts} attempts")
+    return radar_alive
 
   @staticmethod
   def deinit(CP, can_recv, can_send):
     if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS):
       carlog.warning("re-enable Bosch radar (raw UDS)")
-      CarInterface._reenable_bosch_radar(CP, can_send)
+      CarInterface._reenable_bosch_radar(CP, can_recv, can_send)
       return
     communication_control = bytes([uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.ENABLE_RX_ENABLE_TX,
                                    uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT])
