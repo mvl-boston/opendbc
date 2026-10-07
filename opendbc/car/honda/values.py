@@ -515,6 +515,7 @@ HONDA_DIAG_RX_BASE = 0x18DAF100
 # CarController then verifies each one empirically (the stock STEERING_CONTROL must stop) before settling on it.
 VISION_CTRL_CANDIDATE_ADDRS = [
   0x18DAB5F1,  # fwdCamera: the only ADAS ECU answering the FW query on the EU car (8S102-3E8-GA20)
+  0x18DAB8F1,  # unknown ADAS ECU polled by the Honda tester on the EU CR-V ACC-CAN; best guess for the MDX Radar Vision Unit
   0x18DAB0F1,  # fwdRadar address on every other Bosch Honda
   0x18DAB3F1,  # secondary camera address seen on Bosch radarless cameras
   0x18DA07F1,  # ECU 0x07, probed in the crveubackup experiments
