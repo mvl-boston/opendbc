@@ -316,7 +316,17 @@ class CAR(Platforms):
   # mid-model refresh
   ACURA_MDX_4G_MMR = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Acura MDX 2025-26", "All except Type S")],
+    CarSpecs(mass=4776 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.7),
+  )
+  ACURA_MDX_4G_TYPE_S = HondaBoschCANFDPlatformConfig(
+    # US MMR TYPE S. CAN FD body like the 4G_MMR, but there is no separate
+    # radar (no 0x18DAB0F1 ECU, no ACC_CONTROL 0x1DF, empty radar bus): a single radar/vision controller
+    # authors STEERING_CONTROL and the radarless-style ACC messages (0x1C8/0x1EF), and the comma harness at the
+    # camera does not isolate it, so openpilot has to silence it over UDS before it can steer (vision_ctrl.py).
+    # Don't show in docs until lateral control is proven on-car.
+    [],
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.7),
+    flags=HondaFlags.VISION_CTRL,
   )
   HONDA_ODYSSEY_5G_MMR = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda Odyssey 2021-26", "All", min_steer_speed=70. * CV.KPH_TO_MS)],
