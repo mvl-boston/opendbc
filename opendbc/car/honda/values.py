@@ -324,11 +324,13 @@ class CAR(Platforms):
     # driver-assist system is a central Radar Vision Unit (RVU) on AF-CAN A: the camera and all five radars
     # (front center, two front corner, two rear corner) each hang off it on a private CAN pair. The RVU authors
     # STEERING_CONTROL and the radarless-style ACC messages (0x1C8/0x1EF) on AF-CAN A, i.e. on the car side of
-    # the camera harness, so openpilot has to silence it over UDS before it can steer (vision_ctrl.py). The
-    # harness's second pair is the camera<->RVU private link, not a radar: it carries a CAN FD stream (0xE6/0x334
-    # at 100 Hz, 64-byte 0x5xx frames on a 60 ms cycle) that answered none of the standard Honda diagnostic
-    # addresses (route ad9840558640c31d/00000001--d1808da632). The RVU's own diagnostic address is not yet known.
-    # Don't show in docs until lateral control is proven on-car.
+    # the camera harness (same architecture as the EU CR-V, where 0 stock STEERING_CONTROL frames were seen on
+    # the camera bus in 399 relay-open segments; the MDX route below was recorded with the relay closed and
+    # cannot tell the two sides apart), so openpilot has to silence it over UDS before it can steer
+    # (vision_ctrl.py). The harness's second pair is the camera<->RVU private link, not a radar: it carries a
+    # CAN FD stream (0xE6/0x334 at 100 Hz, 64-byte 0x5xx frames on a 60 ms cycle) that answered none of the
+    # standard Honda diagnostic addresses (route ad9840558640c31d/00000001--d1808da632). The RVU's own
+    # diagnostic address is not yet known. Don't show in docs until lateral control is proven on-car.
     [],
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.7),
     flags=HondaFlags.VISION_CTRL,
@@ -509,18 +511,24 @@ HONDA_BOSCH_VISION_CTRL = CAR.with_flags(HondaFlags.VISION_CTRL)
 # Honda 29-bit physical diagnostic addressing: tester 0xF1 -> ECU 0xXX is 0x18DAXXF1, the ECU replies on 0x18DAF1XX
 HONDA_DIAG_TX_BASE = 0x18DA00F1
 HONDA_DIAG_RX_BASE = 0x18DAF100
+HONDA_FWD_CAMERA_DIAG_ADDR = 0x18DAB5F1
+# CAN gateway (EU CR-V field notes): never addressed by openpilot, not even with TesterPresent
+HONDA_GATEWAY_DIAG_ADDR = 0x18DAEFF1
 
-# Candidate diagnostic addresses of the EU CR-V's radar/vision controller, in order of preference. Panda safety
-# allowlists exactly these (payload-gated to the silence/restore handshake), so the controller search in
+# Candidate diagnostic addresses of the radar/vision controller (EU CR-V, MDX Type S), in order of preference. Panda
+# safety allowlists exactly these (payload-gated to the silence/restore handshake), so the controller search in
 # CarController can only ever touch them. Known powertrain/chassis ECUs (EPS, VSA, SRS, PGM-FI, gateway, ...) are
 # deliberately not candidates. CarInterface.init() scans the bus and moves the responding candidates to the front;
 # CarController then verifies each one empirically (the stock STEERING_CONTROL must stop) before settling on it.
 VISION_CTRL_CANDIDATE_ADDRS = [
-  0x18DAB5F1,  # fwdCamera: the only ADAS ECU answering the FW query on the EU car (8S102-3E8-GA20)
-  0x18DAB8F1,  # unknown ADAS ECU polled by the Honda tester on the EU CR-V ACC-CAN; best guess for the MDX Radar Vision Unit
+  0x18DAB8F1,  # unknown ADAS ECU polled by the Honda tester on the EU CR-V ACC-CAN; best guess for the Radar Vision Unit
   0x18DAB0F1,  # fwdRadar address on every other Bosch Honda
   0x18DAB3F1,  # secondary camera address seen on Bosch radarless cameras
   0x18DA07F1,  # ECU 0x07, probed in the crveubackup experiments
+  # fwdCamera: answers the scan on every car, but it is a sensor of the Radar Vision Unit, not the STEERING_CONTROL
+  # author (EU CR-V: 0 stock STEERING_CONTROL frames on the camera bus in 399 relay-open segments). Kept as the last
+  # resort only, and never promoted by the scan: silencing it blinds the controller for the length of the probe.
+  HONDA_FWD_CAMERA_DIAG_ADDR,
 ]
 
 

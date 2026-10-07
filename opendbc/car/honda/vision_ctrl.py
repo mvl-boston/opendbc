@@ -8,9 +8,9 @@ UDS CommunicationControl disableRxAndTx, and keep it silent with TesterPresent.
 
 The controller's diagnostic address is not known for certain, so it is searched for:
   1. CarInterface.init() (ELM327 safety mode, every diagnostic address allowed) scans the whole Honda
-     29-bit physical address range with TesterPresent on the powertrain bus (and, log only, on the radar
-     bus), logs every responder, and moves the responding VISION_CTRL_CANDIDATE_ADDRS to the front of the
-     candidate list.
+     29-bit physical address range (gateway excepted) with TesterPresent on the powertrain bus (and, log
+     only, on the radar bus), logs every responder, and moves the responding VISION_CTRL_CANDIDATE_ADDRS to
+     the front of the candidate list; the camera, a sensor rather than the author, always goes last.
   2. CarController, once the relay is open, silences the candidates one at a time and checks whether the
      stock STEERING_CONTROL actually stops. A candidate that did not take the steering with it is
      restored (CommunicationControl enableRxAndTx) before the next one is tried. The one that did is
@@ -25,7 +25,12 @@ from opendbc.car import make_tester_present_msg, uds
 from opendbc.car.can_definitions import CanData
 from opendbc.car.carlog import carlog
 from opendbc.car.ecu_addrs import get_ecu_addrs
-from opendbc.car.honda.values import HONDA_DIAG_RX_BASE, HONDA_DIAG_TX_BASE, VISION_CTRL_CANDIDATE_ADDRS
+from opendbc.car.honda.values import HONDA_DIAG_RX_BASE, HONDA_DIAG_TX_BASE, HONDA_FWD_CAMERA_DIAG_ADDR, HONDA_GATEWAY_DIAG_ADDR, \
+                                     VISION_CTRL_CANDIDATE_ADDRS
+
+HONDA_TESTER_ID = 0xF1
+# Never scanned: the gateway (the EU CR-V field notes rule out any UDS towards it) and the tester's own id
+SCAN_SKIP_ECU_IDS = {(HONDA_GATEWAY_DIAG_ADDR - HONDA_DIAG_TX_BASE) >> 8, HONDA_TESTER_ID}
 
 # UDS payloads of the handshake, as ISO-TP single frames (exactly what panda safety gates on)
 EXT_DIAG_SESSION_MSG = bytes([0x02, uds.SERVICE_TYPE.DIAGNOSTIC_SESSION_CONTROL, uds.SESSION_TYPE.EXTENDED_DIAGNOSTIC]) + b'\x00' * 5
@@ -48,8 +53,9 @@ def scan_ecus(can_recv, can_send, buses: Iterable[int], timeout: float = 1.0) ->
   timeout is paid once) and return, per bus, the tx addresses of the ECUs that answered. Only usable while
   the panda is in a safety mode that allows arbitrary diagnostic addresses (ELM327 during CarInterface.init())."""
   buses = tuple(buses)
-  queries = {(HONDA_DIAG_TX_BASE + (i << 8), None, bus) for i in range(256) for bus in buses}
-  responses = {(HONDA_DIAG_RX_BASE + i, None, bus) for i in range(256) for bus in buses}
+  ecu_ids = [i for i in range(256) if i not in SCAN_SKIP_ECU_IDS]
+  queries = {(HONDA_DIAG_TX_BASE + (i << 8), None, bus) for i in ecu_ids for bus in buses}
+  responses = {(HONDA_DIAG_RX_BASE + i, None, bus) for i in ecu_ids for bus in buses}
   responders: dict[int, set[int]] = {bus: set() for bus in buses}
   for addr, _, bus in get_ecu_addrs(can_recv, can_send, queries, responses, timeout=timeout):
     responders[bus].add(HONDA_DIAG_TX_BASE + ((addr - HONDA_DIAG_RX_BASE) << 8))
@@ -58,14 +64,16 @@ def scan_ecus(can_recv, can_send, buses: Iterable[int], timeout: float = 1.0) ->
 
 def order_candidates(responders: set[int], known_ecu_addrs: set[int]) -> list[int]:
   """Order the allowlisted candidates for the CarController search: the candidates that answered the scan
-  first (in preference order), then the rest. Any other unknown responder is only logged: it cannot be
-  probed without first being added to VISION_CTRL_CANDIDATE_ADDRS (and the panda safety allowlist)."""
-  present = [a for a in VISION_CTRL_CANDIDATE_ADDRS if a in responders]
-  absent = [a for a in VISION_CTRL_CANDIDATE_ADDRS if a not in responders]
+  first (in preference order), then the rest, with the camera always last (it answers on every car but is a
+  sensor, not the author; see VISION_CTRL_CANDIDATE_ADDRS). Any other unknown responder is only logged: it
+  cannot be probed without first being added to VISION_CTRL_CANDIDATE_ADDRS (and the panda safety allowlist)."""
+  preferred = [a for a in VISION_CTRL_CANDIDATE_ADDRS if a != HONDA_FWD_CAMERA_DIAG_ADDR]
+  present = [a for a in preferred if a in responders]
+  absent = [a for a in preferred if a not in responders]
   unknown = sorted(responders - set(VISION_CTRL_CANDIDATE_ADDRS) - known_ecu_addrs)
   carlog.error(f"vision controller scan: responders {[hex(a) for a in sorted(responders)]}, candidates present "
                + f"{[hex(a) for a in present]}, unknown ECUs {[hex(a) for a in unknown]}")
-  return present + absent
+  return present + absent + [a for a in VISION_CTRL_CANDIDATE_ADDRS if a == HONDA_FWD_CAMERA_DIAG_ADDR]
 
 
 # Handoff from CarInterface.init() (which has no access to the CarController instance) to the CarController
