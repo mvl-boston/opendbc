@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
 from opendbc.car import get_safety_config, structs, uds
+from opendbc.car.carlog import carlog
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.disable_ecu import disable_ecu, clear_all_dtcs, clear_ecu_dtcs
 from opendbc.car.honda import vision_ctrl
@@ -366,9 +367,14 @@ class CarInterface(CarInterfaceBase):
         # Find the controller: init() runs under the ELM327 safety mode, the only time every diagnostic
         # address may be queried. The silencing itself is deferred to CarController (after the relay is
         # open and the car safety mode is live, so the replacement STEERING_CONTROL can start right away).
+        # The radar bus is scanned in the same pass, log only: on the MDX Type S it carries an unidentified
+        # CAN FD sensor stream that answered none of the standard addresses of the FW query, and the panda
+        # allowlist for the handshake is PT-bus only, so a responder there can be identified but never probed.
+        CAN = CanBus(CP)
         known_ecus = {fw.address for fw in CP.carFw if not fw.logging}
-        responders = vision_ctrl.scan_ecus(can_recv, can_send, bus=CanBus(CP).pt)
-        vision_ctrl.set_candidates(vision_ctrl.order_candidates(responders, known_ecus))
+        responders = vision_ctrl.scan_ecus(can_recv, can_send, buses=(CAN.pt, CAN.radar))
+        vision_ctrl.set_candidates(vision_ctrl.order_candidates(responders[CAN.pt], known_ecus))
+        carlog.error(f"vision controller scan: radar bus responders {[hex(a) for a in sorted(responders[CAN.radar])]}")
       else:
         # deinit: restore the controller openpilot silenced this drive
         addr = vision_ctrl.get_silenced_addr()

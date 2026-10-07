@@ -8,8 +8,9 @@ UDS CommunicationControl disableRxAndTx, and keep it silent with TesterPresent.
 
 The controller's diagnostic address is not known for certain, so it is searched for:
   1. CarInterface.init() (ELM327 safety mode, every diagnostic address allowed) scans the whole Honda
-     29-bit physical address range with TesterPresent, logs every responder, and moves the responding
-     VISION_CTRL_CANDIDATE_ADDRS to the front of the candidate list.
+     29-bit physical address range with TesterPresent on the powertrain bus (and, log only, on the radar
+     bus), logs every responder, and moves the responding VISION_CTRL_CANDIDATE_ADDRS to the front of the
+     candidate list.
   2. CarController, once the relay is open, silences the candidates one at a time and checks whether the
      stock STEERING_CONTROL actually stops. A candidate that did not take the steering with it is
      restored (CommunicationControl enableRxAndTx) before the next one is tried. The one that did is
@@ -18,6 +19,8 @@ The controller's diagnostic address is not known for certain, so it is searched 
 Panda safety allowlists exactly VISION_CTRL_CANDIDATE_ADDRS for this handshake, so a bug here can never
 silence any other ECU.
 """
+from collections.abc import Iterable
+
 from opendbc.car import make_tester_present_msg, uds
 from opendbc.car.can_definitions import CanData
 from opendbc.car.carlog import carlog
@@ -40,14 +43,17 @@ def rx_addr(addr: int) -> int:
   return HONDA_DIAG_RX_BASE + ecu_id(addr)
 
 
-def scan_ecus(can_recv, can_send, bus: int, timeout: float = 1.0) -> set[int]:
-  """TesterPresent every Honda 29-bit physical diagnostic address on the bus and return the tx addresses of
-  the ECUs that answered. Only usable while the panda is in a safety mode that allows arbitrary diagnostic
-  addresses (ELM327 during CarInterface.init())."""
-  queries = {(HONDA_DIAG_TX_BASE + (i << 8), None, bus) for i in range(256)}
-  responses = {(HONDA_DIAG_RX_BASE + i, None, bus) for i in range(256)}
-  responders = get_ecu_addrs(can_recv, can_send, queries, responses, timeout=timeout)
-  return {HONDA_DIAG_TX_BASE + ((addr - HONDA_DIAG_RX_BASE) << 8) for addr, _, _ in responders}
+def scan_ecus(can_recv, can_send, buses: Iterable[int], timeout: float = 1.0) -> dict[int, set[int]]:
+  """TesterPresent every Honda 29-bit physical diagnostic address on each bus (all buses in one pass, so the
+  timeout is paid once) and return, per bus, the tx addresses of the ECUs that answered. Only usable while
+  the panda is in a safety mode that allows arbitrary diagnostic addresses (ELM327 during CarInterface.init())."""
+  buses = tuple(buses)
+  queries = {(HONDA_DIAG_TX_BASE + (i << 8), None, bus) for i in range(256) for bus in buses}
+  responses = {(HONDA_DIAG_RX_BASE + i, None, bus) for i in range(256) for bus in buses}
+  responders: dict[int, set[int]] = {bus: set() for bus in buses}
+  for addr, _, bus in get_ecu_addrs(can_recv, can_send, queries, responses, timeout=timeout):
+    responders[bus].add(HONDA_DIAG_TX_BASE + ((addr - HONDA_DIAG_RX_BASE) << 8))
+  return responders
 
 
 def order_candidates(responders: set[int], known_ecu_addrs: set[int]) -> list[int]:
