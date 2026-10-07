@@ -36,6 +36,7 @@ non_tested_cars = [
   HONDA.HONDA_CLARITY,
   HONDA.ACURA_TLX_1G,
   HONDA.ACURA_RLX_HYBRID,  # requires pre-flashed steer-bus bridge panda
+  HONDA.ACURA_MDX_4G_TYPE_S, # awaiting LKAS control
 
   # These had their DSUs unplugged, need new routes
   # TOYOTA.LEXUS_ES  # hybrid
