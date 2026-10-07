@@ -319,10 +319,13 @@ class CAR(Platforms):
     CarSpecs(mass=4776 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.7),
   )
   ACURA_MDX_4G_TYPE_S = HondaBoschCANFDPlatformConfig(
-    # US MMR TYPE S. CAN FD body like the 4G_MMR, but there is no separate
-    # radar (no 0x18DAB0F1 ECU, no ACC_CONTROL 0x1DF, empty radar bus): a single radar/vision controller
+    # US MMR Type S (TYB part codes). CAN FD body like the 4G_MMR, but no Bosch radar on the powertrain bus
+    # (no 0x18DAB0F1 ECU, no ACC_CONTROL 0x1DF, no radar tick references): a single radar/vision controller
     # authors STEERING_CONTROL and the radarless-style ACC messages (0x1C8/0x1EF), and the comma harness at the
-    # camera does not isolate it, so openpilot has to silence it over UDS before it can steer (vision_ctrl.py).
+    # camera is assumed not to isolate it, so openpilot has to silence it over UDS before it can steer
+    # (vision_ctrl.py). Unlike the EU CR-V, the harness radar bus is not empty: it carries an unidentified
+    # CAN FD sensor stream (0xE6/0x334 at 100 Hz, 64-byte 0x5xx object-list style frames on a 60 ms cycle)
+    # that answered none of the standard Honda diagnostic addresses (route ad9840558640c31d/00000001--d1808da632).
     # Don't show in docs until lateral control is proven on-car.
     [],
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.7),
@@ -530,6 +533,7 @@ STEER_THRESHOLD = {
   CAR.HONDA_PILOT_4G_MMR: 600,
   CAR.HONDA_PASSPORT_4G: 600,
   CAR.ACURA_MDX_4G_MMR: 600,
+  CAR.ACURA_MDX_4G_TYPE_S: 600,
   CAR.HONDA_CRV: 600,
   CAR.HONDA_CRV_6G: 600,
   CAR.HONDA_CRV_6G_EU: 600,
