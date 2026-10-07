@@ -628,6 +628,11 @@ FW_VERSIONS = {
       b'8S302-TYA-A020\x00\x00',
     ],
   },
+  CAR.ACURA_MDX_4G_TYPES: {
+    (Ecu.fwdCamera, 0x18dab5f1, None): [
+      b'8S102-TYB-A060\x00\x00',
+    ],
+  },
   CAR.ACURA_RLX_HYBRID: {
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'36161-TY3-A030\x00\x00',
