@@ -320,12 +320,14 @@ class CAR(Platforms):
   )
   ACURA_MDX_4G_TYPE_S = HondaBoschCANFDPlatformConfig(
     # US MMR Type S (TYB part codes). CAN FD body like the 4G_MMR, but no Bosch radar on the powertrain bus
-    # (no 0x18DAB0F1 ECU, no ACC_CONTROL 0x1DF, no radar tick references): a single radar/vision controller
-    # authors STEERING_CONTROL and the radarless-style ACC messages (0x1C8/0x1EF), and the comma harness at the
-    # camera is assumed not to isolate it, so openpilot has to silence it over UDS before it can steer
-    # (vision_ctrl.py). Unlike the EU CR-V, the harness radar bus is not empty: it carries an unidentified
-    # CAN FD sensor stream (0xE6/0x334 at 100 Hz, 64-byte 0x5xx object-list style frames on a 60 ms cycle)
-    # that answered none of the standard Honda diagnostic addresses (route ad9840558640c31d/00000001--d1808da632).
+    # (no 0x18DAB0F1 ECU, no ACC_CONTROL 0x1DF, no radar tick references). Per the service wiring diagram the
+    # driver-assist system is a central Radar Vision Unit (RVU) on AF-CAN A: the camera and all five radars
+    # (front center, two front corner, two rear corner) each hang off it on a private CAN pair. The RVU authors
+    # STEERING_CONTROL and the radarless-style ACC messages (0x1C8/0x1EF) on AF-CAN A, i.e. on the car side of
+    # the camera harness, so openpilot has to silence it over UDS before it can steer (vision_ctrl.py). The
+    # harness's second pair is the camera<->RVU private link, not a radar: it carries a CAN FD stream (0xE6/0x334
+    # at 100 Hz, 64-byte 0x5xx frames on a 60 ms cycle) that answered none of the standard Honda diagnostic
+    # addresses (route ad9840558640c31d/00000001--d1808da632). The RVU's own diagnostic address is not yet known.
     # Don't show in docs until lateral control is proven on-car.
     [],
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.7),
