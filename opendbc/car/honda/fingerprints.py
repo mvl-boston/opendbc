@@ -628,7 +628,7 @@ FW_VERSIONS = {
       b'8S302-TYA-A020\x00\x00',
     ],
   },
-  CAR.ACURA_MDX_4G_TYPES: {
+  CAR.ACURA_MDX_4G_TYPE_S: {
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'8S102-TYB-A060\x00\x00',
     ],
