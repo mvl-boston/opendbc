@@ -67,6 +67,7 @@ class HondaSafetyFlags(IntFlag):
   NIDEC_ALT = 4
   RADARLESS = 8
   BOSCH_CANFD = 16
+  LEAD_SPOOF = 32
 
 
 class HondaFlags(IntFlag):
@@ -90,6 +91,9 @@ class HondaFlags(IntFlag):
   HAS_BSM = 1024  # blind spot monitoring
   HYBRID = 2048
   BOSCH_TJA_CONTROL = 4096
+  # Experimental: inject a phantom camera forward-object toward the radar so the low-speed TJA
+  # steering relay stays engaged when the camera finds no lead car (see carcontroller/hondacan).
+  BOSCH_LEAD_SPOOF = 8192
 
 
 # Car button codes
@@ -318,7 +322,7 @@ class CAR(Platforms):
     [HondaCarDocs("Acura TLX 2021-22", "All")],
     CarSpecs(mass=3982 * CV.LB_TO_KG, wheelbase=2.87, steerRatio=14.0, centerToFrontRatio=0.43),
     {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated'},
-    flags=HondaFlags.BOSCH_ALT_RADAR,
+    flags=HondaFlags.BOSCH_ALT_RADAR | HondaFlags.BOSCH_LEAD_SPOOF,
   )
   # mid-model refresh
   ACURA_TLX_2G_MMR = HondaBoschCANFDPlatformConfig(
