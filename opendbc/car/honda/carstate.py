@@ -307,7 +307,12 @@ class CarState(CarStateBase):
         self.car_gas = cp.vl["GAS_PEDAL"]["CAR_GAS"]
       else:
         self.car_gas_available = False
-    if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
+    if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+      # The stock LKAS_HUD is authored on the PT bus by the controller openpilot silences (it never shows up on
+      # the camera bus once the relay is open, and goes away altogether once silenced), so read it from there
+      # without an alive check (see get_can_parsers); the last stock values are all create_lkas_hud needs.
+      self.lkas_hud = cp.vl["LKAS_HUD"]
+    elif self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
     if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
       # The radar emits low-rate "tick reference" messages that keep running even while the radar's
@@ -415,6 +420,9 @@ class CarState(CarStateBase):
       # Both messages intentionally go silent (the radar is disabled, the camera ends up behind the
       # open relay), so subscribe with NaN frequency to skip the alive/timeout checks.
       pt_messages += [("ACC_CONTROL", float('nan')), ("STEERING_CONTROL", float('nan'))]
+    if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+      # Stock LKAS_HUD lives on the PT bus here and disappears once its author is silenced (see update)
+      pt_messages.append(("LKAS_HUD", float('nan')))
     if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       # HUD_OBJECTS is polled by the HudObjectTracker, but not every radarless camera emits it,
       # so subscribe with NaN frequency to skip the alive/timeout checks.
