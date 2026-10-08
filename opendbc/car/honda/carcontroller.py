@@ -614,6 +614,9 @@ class CarController(CarControllerBase):
       if CS.supp_tick:
         radar_msgs.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
       if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+        # 0x334 @ 100 Hz on the harness radar bus: the RVU's private-link heartbeat (stops with the RVU on
+        # route 0000000b while 0xE6 keeps going)
+        can_sends.append(hondacan.create_vision_ctrl_private_link(self.packer, self.CAN.radar))
         # the silenced controller's constant status broadcasts (0x29B/0x2E8/0x1A45AA24), see hondacan
         radar_msgs.extend(hondacan.create_vision_ctrl_status(self.packer, self.CAN.pt, CS.vision_ctrl_silent_frames, CS.hud_tick,
                                                              CS.vision_ctrl_state))

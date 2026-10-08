@@ -818,7 +818,7 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
 
   TX_MSGS = [[0xE4, 0], [0x1C8, 0], [0x1C9, 0], [0x29B, 0], [0x2E8, 0], [0x29B, 2], [0x2E8, 2],
              [0x30C, 0], [0x33D, 0], [0x296, 2], [0x310, 0], [0x310, 2],
-             [0xE4, 2], [0x1C8, 2], [0x1C9, 2], [0x30C, 2], [0x33D, 2],
+             [0xE4, 2], [0x1C8, 2], [0x1C9, 2], [0x30C, 2], [0x33D, 2], [0x334, 1],
              *[[addr, 0] for addr in VISION_CTRL_CANDIDATE_ADDRS]]
   FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}
   # STEERING_CONTROL, ACC_CONTROL and LKAS_HUD stay on the PT bus until the controller is silenced, and are
@@ -924,6 +924,9 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
     for addr in (0x1CA, 0x29A, 0x29C, 0x2E7, 0x2E9, 0x1A45AA23, 0x1A45AA25):
       for bus in (0, 2):
         self.assertFalse(self._tx(make_msg(bus, addr, 8)), (hex(addr), bus))
+    self.assertTrue(self._tx(make_msg(1, 0x334, 8)))
+    self.assertFalse(self._tx(make_msg(0, 0x334, 8)))
+    self.assertFalse(self._tx(make_msg(2, 0x334, 8)))
 
   def test_camera_mirror(self):
     # the camera used to see the controller's STEERING_CONTROL, ACC_CONTROL, 0x1C9, ACC_HUD and LKAS_HUD through

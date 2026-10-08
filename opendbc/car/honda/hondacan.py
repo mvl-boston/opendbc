@@ -448,6 +448,11 @@ def create_vision_ctrl_status(packer, bus, silent_frames, hud_tick, state):
 VISION_CTRL_CAMERA_MIRROR_ADDRS = frozenset({0xE4, 0x1C8, 0x1C9, 0x30C, 0x33D})
 
 
+def create_vision_ctrl_private_link(packer, bus):
+  """0x334 @ 100 Hz on the harness radar bus: the RVU's private-link heartbeat (paired with 0xE6)."""
+  return packer.make_can_msg("RVU_PRIVATE_LINK_100HZ", bus, {})
+
+
 def honda_checksum(address: int, sig, d: bytearray) -> int:
   s = 0
   extended = address > 0x7FF
