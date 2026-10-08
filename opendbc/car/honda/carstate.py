@@ -179,7 +179,9 @@ class CarState(CarStateBase):
     ret.lowSpeedAlert = self.low_speed_alert
 
     if self.CP.openpilotLongitudinalControl:
-      if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_VISION_CTRL):
+        # vision ctrl: the brake module reports the loss of the controller's ACC_CONTROL (0x1C8) here, not in
+        # BRAKE_MODULE/HYBRID_BRAKE_ERROR (route 00000009: CRUISE_FAULT_STATUS flipped, BRAKE_ERROR never did)
         ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
       elif (self.CP.carFingerprint in (CAR.ACURA_MDX_4G, *HONDA_BOSCH_CANFD)) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
         ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
@@ -385,6 +387,12 @@ class CarState(CarStateBase):
         # still being received: it gates openpilot's STEERING_CONTROL, ACC and HUD streams exactly like
         # the radar's ACC_CONTROL does on the other CAN FD cars, until vision_ctrl has silenced it.
         self.stock_acc_alive = self.camera_steer_counter < 5
+        # No radar bus and no 0x730/0x750 tick references on these cars, so the 10 Hz ACC_HUD and the 50 Hz
+        # LANE_PATH/HUD_OBJECTS the silenced controller used to author run on a plain frame cadence (route
+        # 00000009: none of them were sent for the whole drive because the ticks never fired). 0x710 has no
+        # stock equivalent here either, so supp_tick is left to never fire.
+        self.hud_tick = self.canfd_frames % 10 == 0
+        self.radar_50hz_tick = self.canfd_frames % 2 == 0
     else:
       self.supp_tick = False
       self.hud_tick = False

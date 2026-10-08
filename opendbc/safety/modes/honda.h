@@ -443,12 +443,14 @@ static safety_config honda_bosch_init(uint16_t param) {
                                               {0x310, 2, 8, .check_relay = false}, {0x6CD5558, 2, 8, .check_relay = true}, {0x6CD5559, 2, 8, .check_relay = false},
                                               {0xF31AA52, 2, 8, .check_relay = false}, {0xF31AA5C, 2, 8, .check_relay = true}, {0x1A45AA4E, 2, 8, .check_relay = false}};
 
-  // Vision controller (EU CR-V, MDX Type S) w/ gas and brakes: as CAN FD long, but the stock STEERING_CONTROL,
-  // LKAS_HUD, LANE_PATH (0x6CD5558) and RADAR_LEAD (0xF31AA5C) are authored on the PT bus by the controller OP
-  // silences over UDS, so none of them can be relay-checked there (the MDX Type S latched relay_malfunction on
-  // the last two the moment the relay opened; honda_bosch_fwd_hook still blocks the camera-side copies of
-  // STEERING_CONTROL/LKAS_HUD from forwarding), plus the diagnostic addresses of the controller candidates.
-  static CanMsg HONDA_CANFD_VISION_CTRL_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = false}, {0x1DF, 0, 8, .check_relay = true}, {0x1EF, 0, 8, .check_relay = false},
+  // Vision controller (EU CR-V, MDX Type S) w/ gas and brakes: as CAN FD long, but the controller OP silences
+  // over UDS authors the radarless-style ACC_CONTROL (0x1C8, the message the brake module listens to; there is
+  // no 0x1DF on these cars and 0x1EF belongs to the camera) and, on the PT bus, the stock STEERING_CONTROL,
+  // LKAS_HUD, LANE_PATH (0x6CD5558) and RADAR_LEAD (0xF31AA5C), so none of them can be relay-checked there (the
+  // MDX Type S latched relay_malfunction on the last two the moment the relay opened; honda_bosch_fwd_hook still
+  // blocks the camera-side copies of STEERING_CONTROL/LKAS_HUD from forwarding), plus the diagnostic addresses
+  // of the controller candidates. No RADAR_LEAD2 (0xF31AA52): that one is the camera's and gets forwarded.
+  static CanMsg HONDA_CANFD_VISION_CTRL_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = false}, {0x1C8, 0, 8, .check_relay = false},
                                                           {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = false}, {0x296, 2, 4, .check_relay = false},
                                                           {0x18DAB5F1, 0, 8, .check_relay = false}, {0x18DAB8F1, 0, 8, .check_relay = false},
                                                           {0x18DAB9F1, 0, 8, .check_relay = false}, {0x18DABAF1, 0, 8, .check_relay = false},
@@ -456,9 +458,9 @@ static safety_config honda_bosch_init(uint16_t param) {
                                                           {0x18DAB0F1, 0, 8, .check_relay = false}, {0x18DAB3F1, 0, 8, .check_relay = false},
                                                           {0x18DA07F1, 0, 8, .check_relay = false},
                                                           {0x310, 0, 8, .check_relay = false}, {0x6CD5558, 0, 8, .check_relay = false}, {0x6CD5559, 0, 8, .check_relay = false},
-                                                          {0xF31AA52, 0, 8, .check_relay = false}, {0xF31AA5C, 0, 8, .check_relay = false}, {0x1A45AA4E, 0, 8, .check_relay = false},
+                                                          {0xF31AA5C, 0, 8, .check_relay = false}, {0x1A45AA4E, 0, 8, .check_relay = false},
                                                           {0x310, 2, 8, .check_relay = false}, {0x6CD5558, 2, 8, .check_relay = true}, {0x6CD5559, 2, 8, .check_relay = false},
-                                                          {0xF31AA52, 2, 8, .check_relay = false}, {0xF31AA5C, 2, 8, .check_relay = true}, {0x1A45AA4E, 2, 8, .check_relay = false}};
+                                                          {0xF31AA5C, 2, 8, .check_relay = true}, {0x1A45AA4E, 2, 8, .check_relay = false}};
 
   const uint16_t HONDA_PARAM_ALT_BRAKE = 1;
   const uint16_t HONDA_PARAM_RADARLESS = 8;

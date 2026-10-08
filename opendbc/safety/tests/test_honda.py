@@ -809,23 +809,53 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
     self.assertFalse(self._tx(trailing_bytes))
 
 
-class TestHondaBoschCANFDVisionCtrlLongSafety(TestHondaBoschCANFDLongSafety):
+class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest, TestHondaBoschCANFDLongSafety):
   """
     Covers the Honda Bosch CANFD safety mode with longitudinal control on the EU CR-V and the MDX Type S, whose
-    stock STEERING_CONTROL author is not behind the comma relay and gets silenced over UDS instead
+    stock STEERING_CONTROL author is not behind the comma relay and gets silenced over UDS instead, and whose
+    brake module takes the radarless-style ACC_CONTROL (0x1C8) rather than the radar's 0x1DF
   """
 
-  TX_MSGS = [[0xE4, 0], [0x1DF, 0], [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x296, 2], [0x310, 0], [0x310, 2],
+  TX_MSGS = [[0xE4, 0], [0x1C8, 0], [0x30C, 0], [0x33D, 0], [0x296, 2], [0x310, 0], [0x310, 2],
              *[[addr, 0] for addr in VISION_CTRL_CANDIDATE_ADDRS]]
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x1DF, 0x33D]}
-  # STEERING_CONTROL and LKAS_HUD stay on the PT bus until the controller is silenced: no relay malfunction on them
-  RELAY_MALFUNCTION_ADDRS = {0: (0x1DF,)}
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}
+  # STEERING_CONTROL, ACC_CONTROL and LKAS_HUD stay on the PT bus until the controller is silenced, and are
+  # not relay-checked (the controller is not behind the relay); 0x1DF is not a message on these cars at all
+  RELAY_MALFUNCTION_ADDRS = {}
 
   def setUp(self):
-    TestHondaBoschCANFDSafetyBase.setUp(self)
+    self.packer = CANPackerSafety("honda_vision_ctrl_generated")
+    self.safety = libsafety_py.libsafety
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch,
                                  HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG | HondaSafetyFlags.VISION_CTRL)
     self.safety.init_tests()
+
+  def _accel_msg(self, accel):
+    return self.packer.make_can_msg_safety("ACC_CONTROL", self.PT_BUS, {"ACCEL_COMMAND": accel})
+
+  # the radar-style ACC_CONTROL/ACC_CONTROL_ON (0x1DF/0x1EF) gas and brake tests do not apply: neither message
+  # is allowed in this mode (test_radar_acc_control_blocked), the 0x1C8 accel limits are covered by
+  # LongitudinalAccelSafetyTest
+  def test_gas_safety_check(self):
+    pass
+
+  def test_brake_safety_check(self):
+    pass
+
+  def test_radar_acc_control_blocked(self):
+    # 0x1DF is not a message on these cars (route 00000009: the brake module latched CRUISE_FAULT with it on the
+    # bus), and 0x1EF/RADAR_LEAD2 are the camera's own messages that the panda forwards from bus 2: OP must
+    # author none of them, while the radarless-style ACC_CONTROL and the controller's look-alikes are allowed
+    self.safety.set_controls_allowed(True)
+    for addr in (0x1DF, 0x1EF, 0xF31AA52):
+      for bus in (0, 2):
+        self.assertFalse(self._tx(make_msg(bus, addr, 8)), (hex(addr), bus))
+    for addr in (0x1EF, 0xF31AA52):
+      self.assertEqual(0, self.safety.safety_fwd_hook(2, addr), hex(addr))
+    self.assertTrue(self._tx(self._accel_msg(0)))
+    for addr in (0x6CD5558, 0x6CD5559, 0xF31AA5C):
+      for bus in (0, 2):
+        self.assertTrue(self._tx(make_msg(bus, addr, 8)), (hex(addr), bus))
 
   def test_diagnostics(self):
     # the full handshake (TesterPresent, extended session, CommunicationControl disable) plus the matching
