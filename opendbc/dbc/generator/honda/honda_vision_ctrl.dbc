@@ -6,3 +6,4 @@ CM_ "IMPORT _steering_sensors_a.dbc";
 CM_ "IMPORT _gearbox_common.dbc";
 CM_ "IMPORT _bosch_radarless_acc.dbc";
 CM_ "IMPORT _bosch_canfd.dbc";
+CM_ "IMPORT _bosch_vision_ctrl.dbc";
