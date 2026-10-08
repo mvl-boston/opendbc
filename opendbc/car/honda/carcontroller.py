@@ -604,7 +604,9 @@ class CarController(CarControllerBase):
         self.radar_hud_pulse = 30  # ~3 s at 10 Hz, matching the stock 2-6 s engage burst
       self.last_acc_enabled = CC.enabled
       radar_msgs = []
-      if CS.hud_tick:
+      # vision ctrl: hud_tick drives ACC_HUD below, but there is no stock RADAR_HUD_CANFD to look like
+      # (route 00000009: 0x310 was never on the bus, with the controller alive or silenced)
+      if CS.hud_tick and self.CP.carFingerprint not in HONDA_BOSCH_VISION_CTRL:
         radar_msgs.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled, self.radar_hud_pulse > 0))
         if self.radar_hud_pulse > 0:
           self.radar_hud_pulse -= 1
@@ -637,7 +639,8 @@ class CarController(CarControllerBase):
         radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter,
                                                                    lane_path.canfd_lane_length(self.dash_lane),
                                                                    lane_path.LANE_LINE_ON if self.dash_lane.left_line else 0,
-                                                                   lane_path.LANE_LINE_ON if self.dash_lane.right_line else 0))
+                                                                   lane_path.LANE_LINE_ON if self.dash_lane.right_line else 0,
+                                                                   radar_lead2=self.CP.carFingerprint not in HONDA_BOSCH_VISION_CTRL))
 
       # mirror each packed frame onto both the powertrain bus and the camera bus
       for addr, dat, _ in radar_msgs:
