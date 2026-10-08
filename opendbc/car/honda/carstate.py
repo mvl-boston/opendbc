@@ -205,7 +205,12 @@ class CarState(CarStateBase, CarStateExt):
       ret.brakePressed = (cp.vl["POWERTRAIN_DATA"]["BRAKE_PRESSED"] != 0) or self.brake_switch_active
 
     ret.brake = cp.vl["VSA_STATUS"]["USER_BRAKE"]
-    ret.cruiseState.enabled = cp.vl["POWERTRAIN_DATA"]["ACC_STATUS"] != 0
+    # With openpilot longitudinal, ACC_STATUS stays asserted while we command ACC; selfdrived
+    # treats pcmCruise=False as a permanent mismatch if this reflects raw PCM state.
+    if self.CP.openpilotLongitudinalControl:
+      ret.cruiseState.enabled = False
+    else:
+      ret.cruiseState.enabled = cp.vl["POWERTRAIN_DATA"]["ACC_STATUS"] != 0
     ret.cruiseState.available = bool(cp.vl[self.car_state_scm_msg]["MAIN_ON"])
 
     # Bosch cars take a few minutes after startup to clear prior faults
