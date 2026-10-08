@@ -1,0 +1,28 @@
+BO_ 457 ACC_CONTROL_2: 8 XXX
+ SG_ SET_SPEED : 7|8@0+ (1,0) [0|255] "kph" XXX
+ SG_ SET_ME_X63 : 15|8@0+ (1,0) [0|255] "" XXX
+ SG_ SET_ME_X9C : 23|8@0+ (1,0) [0|255] "" XXX
+ SG_ SPEED_SCALED_MAYBE : 31|16@0+ (1,0) [0|65535] "" XXX
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" XXX
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
+
+BO_ 667 VISION_CTRL_STATUS_25HZ: 8 XXX
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" XXX
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
+
+BO_ 744 VISION_CTRL_STATUS_10HZ: 8 XXX
+ SG_ SET_ME_X80 : 23|8@0+ (1,0) [0|255] "" XXX
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" XXX
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
+
+BO_ 440773156 VISION_CTRL_STATUS_1HZ: 8 XXX
+ SG_ SET_ME_X01 : 23|8@0+ (1,0) [0|255] "" XXX
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" XXX
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
+
+CM_ BO_ 457 "50 Hz companion of ACC_CONTROL (0x1C8), sent by the vision controller (RVU) one frame after it. Stock MDX Type S drive ad9840558640c31d/00000003: 20 63 9c 01 d2 when parked, byte 0 and bytes 3-4 vary while driving. The radarless Civic 2022 camera sends the same layout (bytes 3-4 near 401 at standstill); driving its fields there was found to have no effect on braking";
+CM_ SG_ 457 SET_SPEED "ACC set speed in kph (0x20 = 32 kph = 20 mph before any speed was set, keeps the last value when ACC is off)";
+CM_ SG_ 457 SPEED_SCALED_MAYBE "466 at standstill, rises with vehicle speed (~51 per kph above 25 kph, steeper below)";
+CM_ BO_ 667 "vision controller 25 Hz status broadcast, all zero in every stock frame";
+CM_ BO_ 744 "vision controller 10 Hz status broadcast, sent in the same frame as ACC_HUD/LKAS_HUD; 00 00 80 00 00 00 00 in every stock frame";
+CM_ BO_ 440773156 "vision controller 1 Hz status broadcast, 00 00 01 00 00 00 00 in every stock frame";
