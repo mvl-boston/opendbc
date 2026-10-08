@@ -32,9 +32,12 @@ def compute_gb_honda_bosch(accel, speed):
   return 0.0, 0.0
 
 
+NIDEC_CREEP_SPEED_MPS = 2.3
+
+
 def compute_gb_honda_nidec(accel, speed, creep_factor):
   creep_brake = 0.0
-  creep_speed = 2.3
+  creep_speed = NIDEC_CREEP_SPEED_MPS
   creep_brake_value = 0.15
   if speed < creep_speed:
     creep_brake = (creep_speed - speed) / creep_speed * creep_brake_value
@@ -547,6 +550,11 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         # the brake. Everything outside the window keeps the hill/creep terms as before.
         if self.launch_active:
           brake, creep_impact = compute_gb_honda_nidec(self.accel, CS.out.vEgo, 0.0)
+        elif CS.out.vEgo > NIDEC_CREEP_SPEED_MPS:
+          # Grade is compensated on the PCM speed/gas servo; adding hill_brake to adjust_accel
+          # here only weakens COMPUTER_BRAKE on uphill approaches (plan already includes grade).
+          brake_accel_cmd = min(self.accel, actuators.accel)
+          brake, creep_impact = compute_gb_honda_nidec(brake_accel_cmd, CS.out.vEgo, self.creep_factor)
         else:
           brake, creep_impact = compute_gb_honda_nidec(adjust_accel, CS.out.vEgo, self.creep_factor)
         gas_error = self.accel - CS.out.aEgo
@@ -1143,7 +1151,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb):
               if not ((self.accel >= 1e-5) and CS.out.vEgo < 1.0): # don't wind PID at launch lurch
-                self.brake_pid_factor = self.nidec_brake_pid.update(error = -(self.accel - CS.out.aEgo) * apply_brake, speed = CS.out.vEgo)
+                brake_accel_cmd = min(self.accel, actuators.accel)
+                self.brake_pid_factor = self.nidec_brake_pid.update(error = -(brake_accel_cmd - CS.out.aEgo),
+                                                                     speed = CS.out.vEgo)
           if (CS.out.vEgo >= 2): # save pid above 2m/s
             self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
           if (CS.out.vEgo < 1e-5) and (self.accel < 1e-5): # gradually restore 2m/s pid after stopped
