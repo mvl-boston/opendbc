@@ -261,8 +261,8 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     }
   }
 
-  // ACCEL: safety check (radarless)
-  if ((msg->addr == 0x1C8U) && (msg->bus == bus_pt)) {
+  // ACCEL: safety check (radarless; the vision controller cars also mirror it onto the camera bus)
+  if ((msg->addr == 0x1C8U) && ((msg->bus == bus_pt) || (msg->bus == 2U))) {
     int accel = (msg->data[0] << 4) | (msg->data[1] >> 4);
     accel = to_signed(accel, 12);
 
@@ -452,9 +452,14 @@ static safety_config honda_bosch_init(uint16_t param) {
   // of the controller candidates. No RADAR_LEAD2 (0xF31AA52): that one is the camera's and gets forwarded.
   // The controller also authors the 50 Hz ACC_CONTROL companion 0x1C9 and the constant status broadcasts
   // 0x29B/0x2E8/0x1A45AA24 on the PT bus until silenced; OP replaces all of them (the status ones on both buses
-  // like the radar look-alikes), so none can be relay-checked on the PT bus either.
+  // like the radar look-alikes), so none can be relay-checked on the PT bus either. The camera used to see the
+  // controller's STEERING_CONTROL, ACC_CONTROL, 0x1C9, ACC_HUD and LKAS_HUD through forwarding, so OP mirrors
+  // its replacements onto the camera bus too (same bytes; the ACC_CONTROL accel check covers bus 2 as well).
   static CanMsg HONDA_CANFD_VISION_CTRL_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = false}, {0x1C8, 0, 8, .check_relay = false},
                                                           {0x1C9, 0, 8, .check_relay = false},
+                                                          {0xE4, 2, 5, .check_relay = false}, {0x1C8, 2, 8, .check_relay = false},
+                                                          {0x1C9, 2, 8, .check_relay = false}, {0x30C, 2, 8, .check_relay = false},
+                                                          {0x33D, 2, 8, .check_relay = false},
                                                           {0x29B, 0, 8, .check_relay = false}, {0x2E8, 0, 8, .check_relay = false}, {0x1A45AA24, 0, 8, .check_relay = false},
                                                           {0x29B, 2, 8, .check_relay = false}, {0x2E8, 2, 8, .check_relay = false}, {0x1A45AA24, 2, 8, .check_relay = false},
                                                           {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = false}, {0x296, 2, 4, .check_relay = false},
