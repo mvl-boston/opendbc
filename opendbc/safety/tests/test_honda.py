@@ -818,10 +818,13 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
 
   TX_MSGS = [[0xE4, 0], [0x1C8, 0], [0x1C9, 0], [0x29B, 0], [0x2E8, 0], [0x29B, 2], [0x2E8, 2],
              [0x30C, 0], [0x33D, 0], [0x296, 2], [0x310, 0], [0x310, 2],
+             [0xE4, 2], [0x1C8, 2], [0x1C9, 2], [0x30C, 2], [0x33D, 2],
              *[[addr, 0] for addr in VISION_CTRL_CANDIDATE_ADDRS]]
   FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}
   # STEERING_CONTROL, ACC_CONTROL and LKAS_HUD stay on the PT bus until the controller is silenced, and are
-  # not relay-checked (the controller is not behind the relay); 0x1DF is not a message on these cars at all
+  # not relay-checked (the controller is not behind the relay); 0x1DF is not a message on these cars at all.
+  # The camera-bus mirrors are not relay-checked either: with the relay closed the camera bus receives the
+  # controller's copies too.
   RELAY_MALFUNCTION_ADDRS = {}
 
   def setUp(self):
@@ -831,8 +834,11 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
                                  HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG | HondaSafetyFlags.VISION_CTRL)
     self.safety.init_tests()
 
-  def _accel_msg(self, accel):
-    return self.packer.make_can_msg_safety("ACC_CONTROL", self.PT_BUS, {"ACCEL_COMMAND": accel})
+  def _accel_msg(self, accel, bus=None):
+    return self.packer.make_can_msg_safety("ACC_CONTROL", self.PT_BUS if bus is None else bus, {"ACCEL_COMMAND": accel})
+
+  def _send_steer_msg(self, steer, bus=None):
+    return self.packer.make_can_msg_safety("STEERING_CONTROL", self.STEER_BUS if bus is None else bus, {"STEER_TORQUE": steer})
 
   # the radar-style ACC_CONTROL/ACC_CONTROL_ON (0x1DF/0x1EF) gas and brake tests do not apply: neither message
   # is allowed in this mode (test_radar_acc_control_blocked), the 0x1C8 accel limits are covered by
@@ -908,8 +914,9 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
     # disappear with it: the first is replaced on the PT bus alongside ACC_CONTROL, the broadcasts on both buses
     # like the radar look-alikes. Nothing else in that range opens up.
     self.safety.set_controls_allowed(True)
-    self.assertTrue(self._tx(make_msg(0, 0x1C9, 8)))
-    self.assertFalse(self._tx(make_msg(2, 0x1C9, 8)))
+    for bus in (0, 2):
+      self.assertTrue(self._tx(make_msg(bus, 0x1C9, 8)), bus)
+    self.assertFalse(self._tx(make_msg(1, 0x1C9, 8)))
     for addr in (0x29B, 0x2E8, 0x1A45AA24):
       for bus in (0, 2):
         self.assertTrue(self._tx(make_msg(bus, addr, 8)), (hex(addr), bus))
@@ -917,6 +924,29 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
     for addr in (0x1CA, 0x29A, 0x29C, 0x2E7, 0x2E9, 0x1A45AA23, 0x1A45AA25):
       for bus in (0, 2):
         self.assertFalse(self._tx(make_msg(bus, addr, 8)), (hex(addr), bus))
+
+  def test_camera_mirror(self):
+    # the camera used to see the controller's STEERING_CONTROL, ACC_CONTROL, 0x1C9, ACC_HUD and LKAS_HUD through
+    # panda forwarding and lost all of them at the switchover (route 0000000b): OP mirrors its replacements onto
+    # the camera bus with the same bytes, under the same checks as the PT-bus copies
+    for controls_allowed in (True, False):
+      self.safety.set_controls_allowed(controls_allowed)
+      for addr, length in ((0x1C9, 8), (0x30C, 8), (0x33D, 8)):
+        self.assertTrue(self._tx(make_msg(2, addr, length)), (hex(addr), controls_allowed))
+        self.assertFalse(self._tx(make_msg(1, addr, length)), (hex(addr), controls_allowed))
+
+      # STEERING_CONTROL: torque only while controls are allowed, on either bus
+      for bus in (0, 2):
+        self.assertTrue(self._tx(self._send_steer_msg(0, bus=bus)), (bus, controls_allowed))
+        self.assertEqual(controls_allowed, self._tx(self._send_steer_msg(0x1000, bus=bus)), (bus, controls_allowed))
+
+      # ACC_CONTROL: the accel limits apply to the camera-bus copy as well
+      self.assertTrue(self._tx(self._accel_msg(0, bus=2)), controls_allowed)
+      for accel in (self.MAX_ACCEL, self.MIN_ACCEL):
+        self.assertEqual(controls_allowed, self._tx(self._accel_msg(accel, bus=2)), (accel, controls_allowed))
+      for accel in (self.MAX_ACCEL + 0.1, self.MIN_ACCEL - 0.1):
+        self.assertFalse(self._tx(self._accel_msg(accel, bus=2)), (accel, controls_allowed))
+    self.assertFalse(self._tx(self._accel_msg(0, bus=1)))
 
 
 if __name__ == "__main__":
