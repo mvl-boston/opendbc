@@ -521,9 +521,15 @@ HONDA_GATEWAY_DIAG_ADDR = 0x18DAEFF1
 # deliberately not candidates. CarInterface.init() scans the bus and moves the responding candidates to the front;
 # CarController then verifies each one empirically (the stock STEERING_CONTROL must stop) before settling on it.
 VISION_CTRL_CANDIDATE_ADDRS = [
-  0x18DAB8F1,  # unknown ADAS ECU polled by the Honda tester on the EU CR-V ACC-CAN; best guess for the Radar Vision Unit
+  # 0xB8..0xBB: the four unknown ADAS ECUs that answered TesterPresent on the MDX Type S PT bus (route
+  # ad9840558640c31d/00000008--276649690b, next to the camera and 0xB3); 0xB8 is also the ECU the Honda tester
+  # polls on the EU CR-V ACC-CAN. One of them should be the Radar Vision Unit.
+  0x18DAB8F1,
+  0x18DAB9F1,
+  0x18DABAF1,
+  0x18DABBF1,
+  0x18DAB3F1,  # secondary camera address seen on Bosch radarless cameras; answers on the MDX Type S too
   0x18DAB0F1,  # fwdRadar address on every other Bosch Honda
-  0x18DAB3F1,  # secondary camera address seen on Bosch radarless cameras
   0x18DA07F1,  # ECU 0x07, probed in the crveubackup experiments
   # fwdCamera: answers the scan on every car, but it is a sensor of the Radar Vision Unit, not the STEERING_CONTROL
   # author (EU CR-V: 0 stock STEERING_CONTROL frames on the camera bus in 399 relay-open segments). Kept as the last
