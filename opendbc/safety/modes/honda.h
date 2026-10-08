@@ -450,7 +450,13 @@ static safety_config honda_bosch_init(uint16_t param) {
   // MDX Type S latched relay_malfunction on the last two the moment the relay opened; honda_bosch_fwd_hook still
   // blocks the camera-side copies of STEERING_CONTROL/LKAS_HUD from forwarding), plus the diagnostic addresses
   // of the controller candidates. No RADAR_LEAD2 (0xF31AA52): that one is the camera's and gets forwarded.
+  // The controller also authors the 50 Hz ACC_CONTROL companion 0x1C9 and the constant status broadcasts
+  // 0x29B/0x2E8/0x1A45AA24 on the PT bus until silenced; OP replaces all of them (the status ones on both buses
+  // like the radar look-alikes), so none can be relay-checked on the PT bus either.
   static CanMsg HONDA_CANFD_VISION_CTRL_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = false}, {0x1C8, 0, 8, .check_relay = false},
+                                                          {0x1C9, 0, 8, .check_relay = false},
+                                                          {0x29B, 0, 8, .check_relay = false}, {0x2E8, 0, 8, .check_relay = false}, {0x1A45AA24, 0, 8, .check_relay = false},
+                                                          {0x29B, 2, 8, .check_relay = false}, {0x2E8, 2, 8, .check_relay = false}, {0x1A45AA24, 2, 8, .check_relay = false},
                                                           {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = false}, {0x296, 2, 4, .check_relay = false},
                                                           {0x18DAB5F1, 0, 8, .check_relay = false}, {0x18DAB8F1, 0, 8, .check_relay = false},
                                                           {0x18DAB9F1, 0, 8, .check_relay = false}, {0x18DABAF1, 0, 8, .check_relay = false},
