@@ -347,9 +347,11 @@ class CAR(Platforms):
     # With those (route ad9840558640c31d/0000000b--5cfa56b3e8) CRUISE_FAULT no longer latched, but the same three
     # cluster faults did, the transmission one 1.02 s after the RVU's last 50 Hz frames in every drive: the
     # switchover gap was 3 frames on the 50 Hz pair and the camera (behind the relay) had been seeing the RVU's
-    # STEERING_CONTROL/ACC_CONTROL/0x1C9/ACC_HUD/LKAS_HUD through panda forwarding and lost all of them. Now the
+    # STEERING_CONTROL/ACC_CONTROL/0x1C9/ACC_HUD/LKAS_HUD through panda forwarding and lost all of them, and
+    # 0x334 @ 100 Hz on the harness radar bus (bus 1) stopped with the RVU while 0xE6 kept going. Now the
     # switchover is detected after 2 missed frames, every look-alike goes out in the first silent frame with the
-    # stock idle contents, and the five camera-facing messages are mirrored onto the camera bus byte-identically.
+    # stock idle contents, the five camera-facing messages are mirrored onto the camera bus byte-identically, and
+    # 0x334 is authored on bus 1.
     # Don't show in docs until lateral control is proven on-car.
     [],
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.7),

@@ -460,6 +460,7 @@ static safety_config honda_bosch_init(uint16_t param) {
                                                           {0xE4, 2, 5, .check_relay = false}, {0x1C8, 2, 8, .check_relay = false},
                                                           {0x1C9, 2, 8, .check_relay = false}, {0x30C, 2, 8, .check_relay = false},
                                                           {0x33D, 2, 8, .check_relay = false},
+                                                          {0x334, 1, 8, .check_relay = false},
                                                           {0x29B, 0, 8, .check_relay = false}, {0x2E8, 0, 8, .check_relay = false}, {0x1A45AA24, 0, 8, .check_relay = false},
                                                           {0x29B, 2, 8, .check_relay = false}, {0x2E8, 2, 8, .check_relay = false}, {0x1A45AA24, 2, 8, .check_relay = false},
                                                           {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = false}, {0x296, 2, 4, .check_relay = false},
