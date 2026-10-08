@@ -46,7 +46,8 @@ static bool honda_vision_ctrl = false;
 // The vision controller's diagnostic address is searched for among exactly these candidates (see
 // opendbc/car/honda/values.py VISION_CTRL_CANDIDATE_ADDRS); no other ECU can be addressed by OP
 static bool honda_vision_ctrl_candidate(unsigned int addr) {
-  return (addr == 0x18DAB5F1U) || (addr == 0x18DAB8F1U) || (addr == 0x18DAB0F1U) || (addr == 0x18DAB3F1U) || (addr == 0x18DA07F1U);
+  return (addr == 0x18DAB5F1U) || (addr == 0x18DAB8F1U) || (addr == 0x18DAB9F1U) || (addr == 0x18DABAF1U) || (addr == 0x18DABBF1U) ||
+         (addr == 0x18DAB0F1U) || (addr == 0x18DAB3F1U) || (addr == 0x18DA07F1U);
 }
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
 static HondaHw honda_hw = HONDA_NIDEC;
@@ -442,17 +443,20 @@ static safety_config honda_bosch_init(uint16_t param) {
                                               {0x310, 2, 8, .check_relay = false}, {0x6CD5558, 2, 8, .check_relay = true}, {0x6CD5559, 2, 8, .check_relay = false},
                                               {0xF31AA52, 2, 8, .check_relay = false}, {0xF31AA5C, 2, 8, .check_relay = true}, {0x1A45AA4E, 2, 8, .check_relay = false}};
 
-  // EU CR-V (vision controller) w/ gas and brakes: as CAN FD long, but the stock STEERING_CONTROL and LKAS_HUD
-  // are expected on the PT bus until OP has silenced their author over UDS (so no relay-malfunction check on
-  // them; honda_bosch_fwd_hook still blocks the camera-side copies from forwarding), plus the diagnostic
-  // addresses of the controller candidates.
+  // Vision controller (EU CR-V, MDX Type S) w/ gas and brakes: as CAN FD long, but the stock STEERING_CONTROL,
+  // LKAS_HUD, LANE_PATH (0x6CD5558) and RADAR_LEAD (0xF31AA5C) are authored on the PT bus by the controller OP
+  // silences over UDS, so none of them can be relay-checked there (the MDX Type S latched relay_malfunction on
+  // the last two the moment the relay opened; honda_bosch_fwd_hook still blocks the camera-side copies of
+  // STEERING_CONTROL/LKAS_HUD from forwarding), plus the diagnostic addresses of the controller candidates.
   static CanMsg HONDA_CANFD_VISION_CTRL_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = false}, {0x1DF, 0, 8, .check_relay = true}, {0x1EF, 0, 8, .check_relay = false},
                                                           {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = false}, {0x296, 2, 4, .check_relay = false},
                                                           {0x18DAB5F1, 0, 8, .check_relay = false}, {0x18DAB8F1, 0, 8, .check_relay = false},
+                                                          {0x18DAB9F1, 0, 8, .check_relay = false}, {0x18DABAF1, 0, 8, .check_relay = false},
+                                                          {0x18DABBF1, 0, 8, .check_relay = false},
                                                           {0x18DAB0F1, 0, 8, .check_relay = false}, {0x18DAB3F1, 0, 8, .check_relay = false},
                                                           {0x18DA07F1, 0, 8, .check_relay = false},
-                                                          {0x310, 0, 8, .check_relay = false}, {0x6CD5558, 0, 8, .check_relay = true}, {0x6CD5559, 0, 8, .check_relay = false},
-                                                          {0xF31AA52, 0, 8, .check_relay = false}, {0xF31AA5C, 0, 8, .check_relay = true}, {0x1A45AA4E, 0, 8, .check_relay = false},
+                                                          {0x310, 0, 8, .check_relay = false}, {0x6CD5558, 0, 8, .check_relay = false}, {0x6CD5559, 0, 8, .check_relay = false},
+                                                          {0xF31AA52, 0, 8, .check_relay = false}, {0xF31AA5C, 0, 8, .check_relay = false}, {0x1A45AA4E, 0, 8, .check_relay = false},
                                                           {0x310, 2, 8, .check_relay = false}, {0x6CD5558, 2, 8, .check_relay = true}, {0x6CD5559, 2, 8, .check_relay = false},
                                                           {0xF31AA52, 2, 8, .check_relay = false}, {0xF31AA5C, 2, 8, .check_relay = true}, {0x1A45AA4E, 2, 8, .check_relay = false}};
 

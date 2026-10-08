@@ -811,8 +811,8 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
 
 class TestHondaBoschCANFDVisionCtrlLongSafety(TestHondaBoschCANFDLongSafety):
   """
-    Covers the Honda Bosch CANFD safety mode with longitudinal control on the EU CR-V, whose stock
-    STEERING_CONTROL author is not behind the comma relay and gets silenced over UDS instead
+    Covers the Honda Bosch CANFD safety mode with longitudinal control on the EU CR-V and the MDX Type S, whose
+    stock STEERING_CONTROL author is not behind the comma relay and gets silenced over UDS instead
   """
 
   TX_MSGS = [[0xE4, 0], [0x1DF, 0], [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x296, 2], [0x310, 0], [0x310, 2],
@@ -862,6 +862,15 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(TestHondaBoschCANFDLongSafety):
     self.assertEqual(-1, self.safety.safety_fwd_hook(2, 0xE4))
     self.assertEqual(-1, self.safety.safety_fwd_hook(2, 0x33D))
     self.assertEqual(2, self.safety.safety_fwd_hook(0, 0xE4))
+
+  def test_stock_canfd_lookalikes_on_pt_bus(self):
+    # the controller also authors LANE_PATH and RADAR_LEAD on the PT bus (MDX Type S relay-open census): until
+    # it is silenced they are the stock stream, not a stuck relay. Regression for the first MDX Type S drive,
+    # where both latched relay_malfunction one second after the relay opened and blocked the whole handshake.
+    for addr in (0x6CD5558, 0x6CD5559, 0xF31AA52, 0xF31AA5C):
+      self.safety.set_relay_malfunction(False)
+      self._rx(make_msg(0, addr, 8))
+      self.assertFalse(self.safety.get_relay_malfunction(), hex(addr))
 
 
 if __name__ == "__main__":
