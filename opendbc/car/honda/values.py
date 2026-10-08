@@ -147,6 +147,12 @@ class HondaBoschCANFDPlatformConfig(HondaBoschPlatformConfig):
     self.flags |= HondaFlags.BOSCH_CANFD
 
 
+# CAN FD body and radar look-alikes (LANE_PATH, HUD_OBJECTS, RADAR_LEAD, RADAR_REFERENCE) but the radarless-style
+# ACC_CONTROL (0x1C8) and CRUISE_FAULT_STATUS instead of the radar's 0x1DF/0x1EF: what the vision controller
+# authors on the EU CR-V and the MDX Type S (relay-open census of route ad9840558640c31d/00000009--b2e159e05d)
+VISION_CTRL_DBC: DbcDict = {Bus.pt: 'honda_vision_ctrl_generated', Bus.radar: 'honda_vision_ctrl_generated'}
+
+
 @dataclass
 class HondaNidecPlatformConfig(PlatformConfig):
   def init(self):
@@ -241,6 +247,7 @@ class CAR(Platforms):
     # Don't show in docs until lateral control is proven on-car.
     [],
     HONDA_CRV_6G.specs,
+    VISION_CTRL_DBC,
     flags=HondaFlags.VISION_CTRL,
   )
   HONDA_CRV_HYBRID = HondaBoschPlatformConfig(
@@ -324,15 +331,18 @@ class CAR(Platforms):
     # driver-assist system is a central Radar Vision Unit (RVU) on AF-CAN A: the camera and all five radars
     # (front center, two front corner, two rear corner) each hang off it on a private CAN pair. The RVU authors
     # STEERING_CONTROL and the radarless-style ACC messages (0x1C8/0x1EF) on AF-CAN A, i.e. on the car side of
-    # the camera harness (same architecture as the EU CR-V, where 0 stock STEERING_CONTROL frames were seen on
-    # the camera bus in 399 relay-open segments; the MDX route below was recorded with the relay closed and
-    # cannot tell the two sides apart), so openpilot has to silence it over UDS before it can steer
-    # (vision_ctrl.py). The harness's second pair is the camera<->RVU private link, not a radar: it carries a
+    # the camera harness (same architecture as the EU CR-V), so openpilot has to silence it over UDS before it
+    # can steer (vision_ctrl.py). Confirmed on route ad9840558640c31d/00000009--b2e159e05d: the RVU answers at
+    # 0x18DAB8F1, and CommunicationControl there stops its STEERING_CONTROL, ACC_CONTROL (0x1C8), ACC_HUD,
+    # LKAS_HUD, LANE_PATH, HUD_OBJECTS and RADAR_LEAD within one frame, while RADAR_REFERENCE (0x3A1) and the
+    # camera's own 0x1EF/0x35E/RADAR_LEAD2 keep going. The only car-side messages the relay isolates are those
+    # three camera ones. The harness's second pair is the camera<->RVU private link, not a radar: it carries a
     # CAN FD stream (0xE6/0x334 at 100 Hz, 64-byte 0x5xx frames on a 60 ms cycle) that answered none of the
-    # standard Honda diagnostic addresses (route ad9840558640c31d/00000001--d1808da632). The RVU's own
-    # diagnostic address is not yet known. Don't show in docs until lateral control is proven on-car.
+    # standard Honda diagnostic addresses (route ad9840558640c31d/00000001--d1808da632).
+    # Don't show in docs until lateral control is proven on-car.
     [],
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.7),
+    VISION_CTRL_DBC,
     flags=HondaFlags.VISION_CTRL,
   )
   HONDA_ODYSSEY_5G_MMR = HondaBoschPlatformConfig(

@@ -913,6 +913,9 @@ class SafetyTest(SafetyTestBase):
               continue
             if {attr, current_test}.issubset({'TestHondaBoschCANFDLongSafety', 'TestHondaBoschCANFDVisionCtrlLongSafety'}):
               continue
+            # the vision controller cars take the radarless-style ACC_CONTROL (0x1C8) on the PT bus
+            if {attr, current_test}.issubset({'TestHondaBoschRadarlessLongSafety', 'TestHondaBoschCANFDVisionCtrlLongSafety'}):
+              continue
             volkswagen_shared = ('TestVolkswagenMqb', 'TestVolkswagenMlb')
             if attr.startswith(volkswagen_shared) and current_test.startswith(volkswagen_shared):
               continue

@@ -1,7 +1,7 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS,
-                                      HONDA_BOSCH_CANFD)
+                                      HONDA_BOSCH_CANFD, HONDA_BOSCH_VISION_CTRL)
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -95,7 +95,10 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
     'STANDSTILL': standstill,
   }
 
-  if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+  # Vision controller cars (EU CR-V, MDX Type S) have the CAN FD body but the brake module listens to the
+  # radarless-style ACC_CONTROL (0x1C8): with only the radar-style 0x1DF on the bus it latched CRUISE_FAULT
+  # 0.28 s after the controller was silenced (route ad9840558640c31d/00000009--b2e159e05d)
+  if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_VISION_CTRL):
     acc_control_values.update({
       "CONTROL_ON": enabled,
       # required whenever braking for Hybrid and Bosch Alt Brake vehicles, allow idle stop after 4 seconds (50 Hz) for other vehicles
@@ -342,7 +345,7 @@ def create_canfd_50hz_radar_messages(packer, bus, radar_mux):
   return commands
 
 
-def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr, lane_path_length=6, left_lane=0, right_lane=0):
+def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr, lane_path_length=6, left_lane=0, right_lane=0, radar_lead2=True):
   commands = []
 
   radar_lead_values = {
@@ -361,12 +364,15 @@ def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr, lane_path_lengt
   }
   commands.append(packer.make_can_msg('RADAR_LEAD', bus, radar_lead_values))
 
-  radar_lead2_values = {
-    'SET_ME_X88': 136,
-    'SET_ME_X78': 120,
-    'LEAD_DISTANCE_MAYBE': 0,
-  }
-  commands.append(packer.make_can_msg('RADAR_LEAD2', bus, radar_lead2_values))
+  # vision ctrl cars: RADAR_LEAD2 is the camera's message there (it moves to the camera bus when the relay
+  # opens and the panda forwards it), so OP must not author a second copy
+  if radar_lead2:
+    radar_lead2_values = {
+      'SET_ME_X88': 136,
+      'SET_ME_X78': 120,
+      'LEAD_DISTANCE_MAYBE': 0,
+    }
+    commands.append(packer.make_can_msg('RADAR_LEAD2', bus, radar_lead2_values))
 
   return commands
 
