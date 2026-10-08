@@ -5,6 +5,7 @@ from collections import defaultdict
 from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs, DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
+from opendbc.car.honda import vision_ctrl
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_TJA_CONTROL, \
@@ -93,6 +94,9 @@ class CarState(CarStateBase):
     self.camera_steer_seen = False
     self.canfd_frames = 0
     self.canfd_relay_open = False
+    # vision ctrl: frames since the controller went silent (-1 while it is alive), see update()
+    self.vision_ctrl_silent_frames = -1
+    self.vision_ctrl_state = 0
 
     # Only radarless cars have a camera that emits HUD_OBJECTS to poll for secondary vehicle locations.
     # On CAN FD cars the radar owned HUD_OBJECTS and it is disabled, so there is nothing to track.
@@ -386,13 +390,25 @@ class CarState(CarStateBase):
         # not isolated by the harness, so "stock alive" is the controller's own 100 Hz STEERING_CONTROL
         # still being received: it gates openpilot's STEERING_CONTROL, ACC and HUD streams exactly like
         # the radar's ACC_CONTROL does on the other CAN FD cars, until vision_ctrl has silenced it.
-        self.stock_acc_alive = self.camera_steer_counter < 5
+        # While vision_ctrl expects the controller to go quiet (CommunicationControl just sent, or held
+        # silent), two missed frames are enough: the other ECUs time out on the switchover gap, and the
+        # 5-frame detection cost the 50 Hz ACC_CONTROL/0x1C9 pair three frames (70 ms, routes 0000000a/b).
+        self.stock_acc_alive = self.camera_steer_counter < (2 if vision_ctrl.expecting_silence() else 5)
         # No radar bus and no 0x730/0x750 tick references on these cars, so the 10 Hz ACC_HUD and the 50 Hz
-        # LANE_PATH/HUD_OBJECTS the silenced controller used to author run on a plain frame cadence (route
+        # LANE_PATH/HUD_OBJECTS the silenced controller used to author run on a frame cadence (route
         # 00000009: none of them were sent for the whole drive because the ticks never fired). 0x710 has no
-        # stock equivalent here either, so supp_tick is left to never fire.
-        self.hud_tick = self.canfd_frames % 10 == 0
-        self.radar_50hz_tick = self.canfd_frames % 2 == 0
+        # stock equivalent here either, so supp_tick is left to never fire. The cadence is phase-locked to
+        # the switchover so every look-alike goes out in the first silent frame instead of waiting for its
+        # slot (the 1 Hz broadcast waited 1.43 s on route 0000000b).
+        self.vision_ctrl_silent_frames = -1 if self.stock_acc_alive else self.vision_ctrl_silent_frames + 1
+        self.hud_tick = self.vision_ctrl_silent_frames % 10 == 0
+        self.radar_50hz_tick = self.vision_ctrl_silent_frames % 2 == 0
+        # This controller's RADAR_LEAD follows RADAR_REFERENCE by ~50 ms (stock drive 00000003), not the radar's
+        # 120 ms; the first one after the switchover goes out at once if this period's slot has already passed
+        # (it waited 300 ms on route 0000000b)
+        self.radar_5hz_tick = (self.radar_5hz_tick_counter == 4 or
+                               (self.vision_ctrl_silent_frames == 0 and self.radar_5hz_tick_counter > 4))
+        self.vision_ctrl_state = cp.vl["VISION_CTRL_STATUS_1HZ"]["STATE_MAYBE"]
     else:
       self.supp_tick = False
       self.hud_tick = False
@@ -429,8 +445,9 @@ class CarState(CarStateBase):
       # open relay), so subscribe with NaN frequency to skip the alive/timeout checks.
       pt_messages += [("ACC_CONTROL", float('nan')), ("STEERING_CONTROL", float('nan'))]
     if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
-      # Stock LKAS_HUD lives on the PT bus here and disappears once its author is silenced (see update)
-      pt_messages.append(("LKAS_HUD", float('nan')))
+      # Stock LKAS_HUD lives on the PT bus here and disappears once its author is silenced (see update); the
+      # 1 Hz status broadcast is read for its state byte, which openpilot's replacement carries forward
+      pt_messages += [("LKAS_HUD", float('nan')), ("VISION_CTRL_STATUS_1HZ", float('nan'))]
     if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       # HUD_OBJECTS is polled by the HudObjectTracker, but not every radarless camera emits it,
       # so subscribe with NaN frequency to skip the alive/timeout checks.

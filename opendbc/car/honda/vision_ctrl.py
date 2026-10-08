@@ -80,6 +80,7 @@ def order_candidates(responders: set[int], known_ecu_addrs: set[int]) -> list[in
 # search, which only starts after init() has returned.
 _candidates: list[int] = list(VISION_CTRL_CANDIDATE_ADDRS)
 _silenced_addr: int | None = None
+_expecting_silence: bool = False
 
 
 def set_candidates(candidates: list[int]) -> None:
@@ -100,6 +101,20 @@ def _set_silenced_addr(addr: int | None) -> None:
   _silenced_addr = addr
 
 
+def expecting_silence() -> bool:
+  """True from the frame CommunicationControl disable is sent to a candidate until that probe is given up, and
+  for as long as the controller is held silent. CarState uses it to call the stock STEERING_CONTROL dead after
+  two missed frames instead of five: the switchover gap is what the other ECUs time out on (the 50 Hz
+  ACC_CONTROL/0x1C9 pair lost 3 frames with the slow detection), and a short RX dropout outside this window
+  must not start openpilot's streams alongside a live controller."""
+  return _expecting_silence
+
+
+def _set_expecting_silence(expecting: bool) -> None:
+  global _expecting_silence
+  _expecting_silence = expecting
+
+
 class VisionControllerSilencer:
   """Frame-driven (100 Hz) search-and-silence state machine, run from CarController.update()."""
   SESSION_FRAME = 0      # extended diagnostic session request
@@ -117,6 +132,7 @@ class VisionControllerSilencer:
     self.silenced_addr: int | None = None
     self.gave_up = False
     _set_silenced_addr(None)
+    _set_expecting_silence(False)
 
   @property
   def addr(self) -> int:
@@ -134,6 +150,7 @@ class VisionControllerSilencer:
     self.silenced_addr = None
     self.counter = 0
     _set_silenced_addr(None)
+    _set_expecting_silence(False)
 
   def update(self, stock_alive: bool, bus: int) -> list[CanData]:
     """stock_alive: the stock STEERING_CONTROL is still being received on the powertrain bus."""
@@ -162,11 +179,13 @@ class VisionControllerSilencer:
     elif self.counter == self.DISABLE_FRAME:
       msgs.append(CanData(self.addr, COMM_CONTROL_DISABLE_MSG, bus))
       self.probing = True
+      _set_expecting_silence(True)
     elif self.counter >= self.PROBE_FRAMES - 1:
       # the stock STEERING_CONTROL survived this candidate: it is not the author, restore it and move on
       msgs.append(CanData(self.addr, COMM_CONTROL_ENABLE_MSG, bus))
       carlog.error(f"vision controller candidate {hex(self.addr)} did not stop STEERING_CONTROL, restored")
       self.probing = False
+      _set_expecting_silence(False)
       self.counter = -1
       self.idx += 1
       if self.idx >= len(self.candidates):

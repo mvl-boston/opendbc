@@ -615,7 +615,8 @@ class CarController(CarControllerBase):
         radar_msgs.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
       if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
         # the silenced controller's constant status broadcasts (0x29B/0x2E8/0x1A45AA24), see hondacan
-        radar_msgs.extend(hondacan.create_vision_ctrl_status(self.packer, self.CAN.pt, self.frame, CS.hud_tick))
+        radar_msgs.extend(hondacan.create_vision_ctrl_status(self.packer, self.CAN.pt, CS.vision_ctrl_silent_frames, CS.hud_tick,
+                                                             CS.vision_ctrl_state))
       if CS.radar_50hz_tick:
         # Cycle the radar MUX through the same banks the stock radar uses: 1-10, 17-26, 33-42, 49-58.
         # This counter also drives the LANE_PATH/HUD_OBJECTS mux below: it advances exactly one step
@@ -644,7 +645,8 @@ class CarController(CarControllerBase):
                                                                    lane_path.canfd_lane_length(self.dash_lane),
                                                                    lane_path.LANE_LINE_ON if self.dash_lane.left_line else 0,
                                                                    lane_path.LANE_LINE_ON if self.dash_lane.right_line else 0,
-                                                                   radar_lead2=self.CP.carFingerprint not in HONDA_BOSCH_VISION_CTRL))
+                                                                   radar_lead2=self.CP.carFingerprint not in HONDA_BOSCH_VISION_CTRL,
+                                                                   target_speed=0 if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL else 140))
 
       # mirror each packed frame onto both the powertrain bus and the camera bus
       for addr, dat, _ in radar_msgs:
@@ -1172,7 +1174,10 @@ class CarController(CarControllerBase):
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                  self.CP.openpilotLongitudinalControl))
 
-    if self.frame % 10 == 0:
+    # vision ctrl: LKAS_HUD rides the same switchover-locked 10 Hz tick as ACC_HUD, like the controller's own
+    # pair (the frame cadence left it five frames behind the switchover on route 0000000b)
+    hud_frame = CS.hud_tick if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL else self.frame % 10 == 0
+    if hud_frame:
       if self.CP.openpilotLongitudinalControl:
         if self.CP.carFingerprint not in HONDA_BOSCH_CANFD:
           # On Nidec, this also controls longitudinal positive acceleration
@@ -1350,6 +1355,15 @@ class CarController(CarControllerBase):
         "HondaLatAccelFactor55Params": self.latFactors["55"],
         "HondaLatAccelFactor60Params": self.latFactors["60"],
       })
+
+    if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+      # The camera sits behind the relay and, until the controller was silenced, saw its STEERING_CONTROL,
+      # ACC_CONTROL, ACC_CONTROL_2, ACC_HUD and LKAS_HUD through panda forwarding; openpilot's own
+      # transmissions are not forwarded, so the camera lost all five streams at the switchover (route
+      # 0000000b). Mirror the same packed bytes onto the camera bus, like the radar look-alikes above, so the
+      # counters/checksums stay in lockstep on both buses (re-packing would advance them twice).
+      can_sends.extend((addr, dat, self.CAN.camera) for addr, dat, bus in list(can_sends)
+                       if bus == self.CAN.pt and addr in hondacan.VISION_CTRL_CAMERA_MIRROR_ADDRS)
 
     self.frame += 1
     return new_actuators, can_sends
