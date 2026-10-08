@@ -816,7 +816,8 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
     brake module takes the radarless-style ACC_CONTROL (0x1C8) rather than the radar's 0x1DF
   """
 
-  TX_MSGS = [[0xE4, 0], [0x1C8, 0], [0x30C, 0], [0x33D, 0], [0x296, 2], [0x310, 0], [0x310, 2],
+  TX_MSGS = [[0xE4, 0], [0x1C8, 0], [0x1C9, 0], [0x29B, 0], [0x2E8, 0], [0x29B, 2], [0x2E8, 2],
+             [0x30C, 0], [0x33D, 0], [0x296, 2], [0x310, 0], [0x310, 2],
              *[[addr, 0] for addr in VISION_CTRL_CANDIDATE_ADDRS]]
   FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}
   # STEERING_CONTROL, ACC_CONTROL and LKAS_HUD stay on the PT bus until the controller is silenced, and are
@@ -897,10 +898,25 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
     # the controller also authors LANE_PATH and RADAR_LEAD on the PT bus (MDX Type S relay-open census): until
     # it is silenced they are the stock stream, not a stuck relay. Regression for the first MDX Type S drive,
     # where both latched relay_malfunction one second after the relay opened and blocked the whole handshake.
-    for addr in (0x6CD5558, 0x6CD5559, 0xF31AA52, 0xF31AA5C):
+    for addr in (0x6CD5558, 0x6CD5559, 0xF31AA52, 0xF31AA5C, 0x1C9, 0x29B, 0x2E8, 0x1A45AA24):
       self.safety.set_relay_malfunction(False)
       self._rx(make_msg(0, addr, 8))
       self.assertFalse(self.safety.get_relay_malfunction(), hex(addr))
+
+  def test_vision_ctrl_status_lookalikes(self):
+    # the controller's ACC_CONTROL companion (0x1C9) and its constant status broadcasts (0x29B/0x2E8/0x1A45AA24)
+    # disappear with it: the first is replaced on the PT bus alongside ACC_CONTROL, the broadcasts on both buses
+    # like the radar look-alikes. Nothing else in that range opens up.
+    self.safety.set_controls_allowed(True)
+    self.assertTrue(self._tx(make_msg(0, 0x1C9, 8)))
+    self.assertFalse(self._tx(make_msg(2, 0x1C9, 8)))
+    for addr in (0x29B, 0x2E8, 0x1A45AA24):
+      for bus in (0, 2):
+        self.assertTrue(self._tx(make_msg(bus, addr, 8)), (hex(addr), bus))
+      self.assertFalse(self._tx(make_msg(1, addr, 8)), hex(addr))
+    for addr in (0x1CA, 0x29A, 0x29C, 0x2E7, 0x2E9, 0x1A45AA23, 0x1A45AA25):
+      for bus in (0, 2):
+        self.assertFalse(self._tx(make_msg(bus, addr, 8)), (hex(addr), bus))
 
 
 if __name__ == "__main__":
