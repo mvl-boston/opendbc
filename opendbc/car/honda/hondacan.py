@@ -1,3 +1,5 @@
+import numpy as np
+
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS,
@@ -78,7 +80,7 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
-def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, CP, gas_force):
+def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, CP, gas_force, park_or_reverse=False):
 
   commands = []
 
@@ -99,11 +101,22 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   # radarless-style ACC_CONTROL (0x1C8): with only the radar-style 0x1DF on the bus it latched CRUISE_FAULT
   # 0.28 s after the controller was silenced (route ad9840558640c31d/00000009--b2e159e05d)
   if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_VISION_CTRL):
+    # required whenever braking for Hybrid and Bosch Alt Brake vehicles, allow idle stop after 4 seconds (50 Hz) for other vehicles
+    brake_assist = braking if CP.flags & (HondaFlags.HYBRID | HondaFlags.BOSCH_ALT_BRAKE) else stopping_counter > 200
     acc_control_values.update({
       "CONTROL_ON": enabled,
-      # required whenever braking for Hybrid and Bosch Alt Brake vehicles, allow idle stop after 4 seconds (50 Hz) for other vehicles
-      "COMPUTER_BRAKE_ASSIST": braking if CP.flags & (HondaFlags.HYBRID | HondaFlags.BOSCH_ALT_BRAKE) else stopping_counter > 200,
+      "COMPUTER_BRAKE_ASSIST": brake_assist,
     })
+    if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+      # Match the silenced controller's idle frame byte for byte: the stock MDX Type S RVU keeps bit 8 set whenever
+      # it is not controlling (idle stop allowed) and bits 20/23 set in P and R (00 01 90 .. parked, 00 01 00 .. in D
+      # unengaged, 00 04 00 .. engaged). On route ad9840558640c31d/0000000a--cffee2dde2 the brake module latched
+      # CRUISE_FAULT 0.34 s after the switchover even though our 0x1C8 was flowing, and ours read 00 00 00 ..
+      acc_control_values.update({
+        "COMPUTER_BRAKE_ASSIST": brake_assist or not enabled,
+        "BOH": park_or_reverse,
+        "BOH_2": park_or_reverse,
+      })
   else:
     acc_control_values.update({
       # setting CONTROL_ON causes car to set POWERTRAIN_DATA->ACC_STATUS = 1
@@ -374,6 +387,42 @@ def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr, lane_path_lengt
     }
     commands.append(packer.make_can_msg('RADAR_LEAD2', bus, radar_lead2_values))
 
+  return commands
+
+
+# ACC_CONTROL_2 bytes 3-4 against vehicle speed, stock MDX Type S drive ad9840558640c31d/00000003--3f42518a26 (466 at
+# standstill in 19k frames, medians of 1.5 kph wide bins while driving; about 51 per kph above 25 kph, steeper below)
+VISION_CTRL_SPEED_SCALED_BP = [0., 5., 10., 20., 30., 40., 50., 60., 70.]
+VISION_CTRL_SPEED_SCALED_V = [466., 796., 1079., 1515., 2035., 2530., 3020., 3555., 4050.]
+# SET_SPEED with no set speed yet (32 kph = 20 mph, the ACC minimum)
+VISION_CTRL_SET_SPEED_MIN = 32
+
+
+def create_vision_ctrl_acc_status(packer, bus, set_speed_kph, v_ego):
+  """ACC_CONTROL_2 (0x1C9): the 50 Hz message the vision controller sends in the frame after ACC_CONTROL. The
+  stock drive shows the brake module losing it as well when the controller is silenced, so it is replaced on the
+  same cadence as ACC_CONTROL with the same constant bytes the stock controller uses."""
+  values = {
+    "SET_SPEED": int(np.clip(round(set_speed_kph), VISION_CTRL_SET_SPEED_MIN, 255)),
+    "SET_ME_X63": 0x63,
+    "SET_ME_X9C": 0x9C,
+    "SPEED_SCALED_MAYBE": int(np.interp(v_ego * CV.MS_TO_KPH, VISION_CTRL_SPEED_SCALED_BP, VISION_CTRL_SPEED_SCALED_V)),
+  }
+  return packer.make_can_msg("ACC_CONTROL_2", bus, values)
+
+
+def create_vision_ctrl_status(packer, bus, frame, hud_tick):
+  """The constant status broadcasts the vision controller authors alongside its control messages: 25 Hz 0x29B
+  (all zero), 10 Hz 0x2E8 (byte 2 = 0x80, in the ACC_HUD/LKAS_HUD frame) and 1 Hz 0x1A45AA24 (byte 2 = 0x01). All
+  of them disappear with the controller; the MDX Type S cluster raised transmission, lane change CMBS and front
+  cross traffic faults once it was silenced (route ad9840558640c31d/0000000a--cffee2dde2)."""
+  commands = []
+  if frame % 4 == 0:
+    commands.append(packer.make_can_msg("VISION_CTRL_STATUS_25HZ", bus, {}))
+  if hud_tick:
+    commands.append(packer.make_can_msg("VISION_CTRL_STATUS_10HZ", bus, {"SET_ME_X80": 0x80}))
+  if frame % 100 == 0:
+    commands.append(packer.make_can_msg("VISION_CTRL_STATUS_1HZ", bus, {"SET_ME_X01": 0x01}))
   return commands
 
 

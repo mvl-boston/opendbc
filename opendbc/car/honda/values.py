@@ -339,6 +339,11 @@ class CAR(Platforms):
     # three camera ones. The harness's second pair is the camera<->RVU private link, not a radar: it carries a
     # CAN FD stream (0xE6/0x334 at 100 Hz, 64-byte 0x5xx frames on a 60 ms cycle) that answered none of the
     # standard Honda diagnostic addresses (route ad9840558640c31d/00000001--d1808da632).
+    # The RVU also authors a 50 Hz ACC_CONTROL companion (0x1C9) and constant status broadcasts at 25/10/1 Hz
+    # (0x29B, 0x2E8, 0x1A45AA24) that all stop with it; with only STEERING_CONTROL/ACC_CONTROL/HUD look-alikes
+    # replacing it (route ad9840558640c31d/0000000a--cffee2dde2, no panda blocks) the brake module still latched
+    # CRUISE_FAULT 0.34 s after the switchover and the cluster raised transmission, lane change CMBS and front
+    # cross traffic faults, so hondacan replaces those four as well and matches the stock idle ACC_CONTROL bytes.
     # Don't show in docs until lateral control is proven on-car.
     [],
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.7),
