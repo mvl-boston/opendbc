@@ -405,27 +405,78 @@ def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr, lane_path_lengt
   return commands
 
 
-# ACC_CONTROL_2 GAP_DISTANCE_MAYBE (m) against vehicle speed, stock MDX Type S drive ad9840558640c31d/00000003--3f42518a26
-# with 3 distance bars (4.66 m at standstill in 19k frames, medians of 1.5 kph wide bins while driving; about 0.51 m
-# per kph above 25 kph, steeper below). Looks like the desired following distance.
-VISION_CTRL_GAP_DISTANCE_BP = [0., 5., 10., 20., 30., 40., 50., 60., 70.]
-VISION_CTRL_GAP_DISTANCE_V = [4.66, 7.96, 10.79, 15.15, 20.35, 25.30, 30.20, 35.55, 40.50]
+# ACC_CONTROL_2 GAP_DISTANCE_MAYBE (m) against vehicle speed: the desired following distance for the selected
+# distance-bar setting (ACC_HUD HUD_DISTANCE). Per bar count, from stock MDX Type S drives (medians of 1.5 kph wide
+# wheel-speed bins):
+#   3 bars: ad9840558640c31d/00000003--3f42518a26 (4.66 m at standstill in 19k frames; about 0.51 m per kph above
+#           25 kph, steeper below)
+#   2 bars: ad9840558640c31d/0000000f--e75f85e2d5 (4.33 m at standstill; about 0.37 m per kph), the dashcam drive
+#           on which the cluster's remembered faults cleared with the stock controller back in charge
+# Routes 0000000b/0000000d sent the 3-bar table under a 2-bar HUD_DISTANCE and the 3-bar HUD_DISTANCE under 2 bars
+# in the earlier drive: the two must agree, the brake module gets both.
+VISION_CTRL_GAP_DISTANCE_BP = {
+  2: [0., 5., 10., 15., 20., 25., 30., 35., 40., 45., 50., 55.],
+  3: [0., 5., 10., 20., 30., 40., 50., 60., 70.],
+}
+VISION_CTRL_GAP_DISTANCE_V = {
+  2: [4.33, 6.85, 9.44, 10.92, 12.69, 14.40, 15.95, 17.91, 19.87, 20.71, 22.91, 24.42],
+  3: [4.66, 7.96, 10.79, 15.15, 20.35, 25.30, 30.20, 35.55, 40.50],
+}
 # LEAD_DISTANCE_MAYBE with nothing ahead (0x639C)
 VISION_CTRL_NO_LEAD_DISTANCE = 255.0
 # SET_SPEED with no set speed yet (32 kph = 20 mph, the ACC minimum)
 VISION_CTRL_SET_SPEED_MIN = 32
 
 
-def create_vision_ctrl_acc_status(packer, bus, set_speed_kph, v_ego):
+def vision_ctrl_gap_distance(v_ego, lead_distance_bars):
+  """GAP_DISTANCE_MAYBE for the distance-bar setting shown in ACC_HUD. Only the 2- and 3-bar tables have been
+  logged: 1 bar uses the 2-bar table and 4 bars (or none) the 3-bar table, the nearest logged setting."""
+  bars = 2 if 0 < lead_distance_bars <= 2 else 3
+  return float(np.interp(v_ego * CV.MS_TO_KPH, VISION_CTRL_GAP_DISTANCE_BP[bars], VISION_CTRL_GAP_DISTANCE_V[bars]))
+
+
+def create_vision_ctrl_acc_status(packer, bus, set_speed_kph, v_ego, lead_distance_bars=3, lead_distance=None):
   """ACC_CONTROL_2 (0x1C9): the 50 Hz message the vision controller sends in the frame after ACC_CONTROL. The
   stock drive shows the brake module losing it as well when the controller is silenced, so it is replaced on the
-  same cadence as ACC_CONTROL with the values the stock controller sends with nothing ahead."""
+  same cadence as ACC_CONTROL. lead_distance is the model's lead distance in m (None with nothing ahead), the
+  gap distance follows the distance-bar setting shown in ACC_HUD."""
+  if lead_distance is None:
+    lead_distance = VISION_CTRL_NO_LEAD_DISTANCE
   values = {
     "SET_SPEED": int(np.clip(round(set_speed_kph), VISION_CTRL_SET_SPEED_MIN, 255)),
-    "LEAD_DISTANCE_MAYBE": VISION_CTRL_NO_LEAD_DISTANCE,
-    "GAP_DISTANCE_MAYBE": float(np.interp(v_ego * CV.MS_TO_KPH, VISION_CTRL_GAP_DISTANCE_BP, VISION_CTRL_GAP_DISTANCE_V)),
+    "LEAD_DISTANCE_MAYBE": float(np.clip(lead_distance, 0., VISION_CTRL_NO_LEAD_DISTANCE)),
+    "GAP_DISTANCE_MAYBE": vision_ctrl_gap_distance(v_ego, lead_distance_bars),
   }
   return packer.make_can_msg("ACC_CONTROL_2", bus, values)
+
+
+# LANE_PATH / HUD_OBJECTS as the MDX Type S vision controller sends them with nothing to draw, every MUX
+# (routes 00000003..0000000f): all four path offsets at 2044 (not the 2047 sentinel of the Civic/MDX radars, and no
+# terminated prefix: with lanes the Type S fills all 40 points of every bank) and one blank object with CAR_TYPE
+# UNKNOWN, ROTATION -128, LONG_DIST at full scale and LAT_DIST 204.4 (raw 2044 again).
+VISION_CTRL_IDLE_PATH_OFFSET = 2044
+VISION_CTRL_IDLE_LAT_DIST = 204.4
+
+
+def create_vision_ctrl_lane_idle(packer, bus, mux):
+  """The vision controller's idle LANE_PATH and HUD_OBJECTS pair for one MUX."""
+  lane_msg = packer.make_can_msg("LANE_PATH", bus, {
+    "MUX": mux,
+    "PATH_OFFSET_1": VISION_CTRL_IDLE_PATH_OFFSET,
+    "PATH_OFFSET_2": VISION_CTRL_IDLE_PATH_OFFSET,
+    "PATH_OFFSET_3": VISION_CTRL_IDLE_PATH_OFFSET,
+    "PATH_OFFSET_4": VISION_CTRL_IDLE_PATH_OFFSET,
+  })
+  hud_msg = packer.make_can_msg("HUD_OBJECTS", bus, {
+    "MUX": mux,
+    "OBJECT_ID": 0,
+    "IS_LEAD_CAR": 0,
+    "CAR_TYPE": 0,
+    "ROTATION": -128,
+    "LONG_DIST": 196.9,
+    "LAT_DIST": VISION_CTRL_IDLE_LAT_DIST,
+  })
+  return lane_msg, hud_msg
 
 
 def create_vision_ctrl_status(packer, bus, status_25hz_tick, hud_tick, status_1hz_tick, state):

@@ -352,6 +352,18 @@ class CAR(Platforms):
     # switchover is detected after 2 missed frames, every look-alike goes out in the first silent frame with the
     # stock idle contents, the five camera-facing messages are mirrored onto the camera bus byte-identically, and
     # 0x334 is authored on bus 1.
+    # Route ad9840558640c31d/0000000d--b1a7407153 (tick-exact cutover, stock checksums, stock intervals on every
+    # replaced stream) still raised the same faults on the same clock: PCM GEARBOX_AUTO (0x1A3) gear nibble
+    # blinking from +1.03 s, the 25 Hz 0x22C status zeroed at +1.57 s, RADAR_REFERENCE (0x3A1) and 0xF31AA57
+    # dropping a bit at +2.14 s, nothing on buses 0/1/2 changing before them, and the camera's messages unchanged
+    # for 15 s. On the dashcam drive 0000000f--e75f85e2d5 (stock RVU) the remembered faults cleared within seconds
+    # of driving. The wiring diagram puts the RVU on AF-CAN B as well (the rear corner radars' network, not
+    # reachable from the harness) besides AF-CAN A and the six private pairs, so the every-network
+    # CommunicationControl (28 83 03) also took it off the networks that cannot be replaced: vision_ctrl now tries
+    # the this-network form (28 01 F3, disableTx on AF-CAN A only, private links and AF-CAN B stay up) first and
+    # falls back to the every-network one if STEERING_CONTROL survives it. The remaining content differences to
+    # stock (0x1C9 gap table per distance bar, LANE_PATH/HUD_OBJECTS idle sentinel 2044, LKAS_STATE_CHANGE pulse,
+    # counters restarting at 0) are gone too.
     # Don't show in docs until lateral control is proven on-car.
     [],
     CarSpecs(mass=4544 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.428, steerRatio=16.7),
