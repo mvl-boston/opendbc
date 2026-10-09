@@ -386,7 +386,7 @@ class CarState(CarStateBase):
         self.vision_lead_tick_counter = _phase_counter(seen_lead, self.vision_lead_tick_counter, 20)
         self.radar_5hz_tick = (self.vision_lead_tick_counter == 19)
 
-        # 50 Hz RVU ACC_CONTROL / LANE_PATH (0x1C9 follows ACC_CONTROL one frame later, see carcontroller).
+        # 50 Hz RVU ACC_CONTROL / LANE_PATH (0x1C9 rides the same frame as ACC_CONTROL, see carcontroller).
         seen_50hz = _cp_msg_seen(cp, "ACC_CONTROL") or _cp_msg_seen(cp, "LANE_PATH")
         self.radar_50hz_tick_counter = _phase_counter(seen_50hz, self.radar_50hz_tick_counter, 2)
         self.radar_50hz_tick = (self.radar_50hz_tick_counter == 1)

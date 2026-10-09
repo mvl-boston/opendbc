@@ -265,7 +265,6 @@ class CarController(CarControllerBase):
     self.radar_disable_counter = 0
     # EU CR-V: created on first use, after CarInterface.init() has scanned the bus for the controller
     self.vision_ctrl_silencer: vision_ctrl.VisionControllerSilencer | None = None
-    self.vision_acc_control_2_pending = False
     self.vision_gas_pedal_force = 0.0
 
     self.gasalpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
@@ -1203,24 +1202,23 @@ class CarController(CarControllerBase):
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
 
-      if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and not CS.stock_acc_alive:
+      if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and not CS.stock_acc_alive and CS.radar_50hz_tick:
         # Stock RVU ACC_CONTROL is 50 Hz on the RVU's own phase (CS.radar_50hz_tick, seeded from the stock
         # frames in carstate), which has nothing to do with this controller's frame parity: gating the send
         # on the even-frame gas/brake block above would drop every ACC_CONTROL on drives where the stock slot
-        # falls on odd frames. 0x1C9 follows one frame later (see _bosch_vision_ctrl.dbc). Never alongside
-        # the stock stream: ours starts the frame the controller is called dead.
-        if self.vision_acc_control_2_pending:
-          set_speed_kph = hud_control.setSpeed * CV.MS_TO_KPH if hud_control.speedVisible else 0
-          # gap distance for the distance bars ACC_HUD shows (the brake module gets both, stock keeps them in
-          # step), lead distance from the model's lead (same source as the dash lead below)
-          can_sends.append(hondacan.create_vision_ctrl_acc_status(self.packer, self.CAN.pt, set_speed_kph, CS.out.vEgo,
-                                                                  hud_control.leadDistanceBars, self.vision_lead_distance))
-          self.vision_acc_control_2_pending = False
-        if CS.radar_50hz_tick:
-          park_or_reverse = CS.out.gearShifter in (GearShifter.park, GearShifter.reverse)
-          can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                        self.stopping_counter, self.CP, self.vision_gas_pedal_force, park_or_reverse))
-          self.vision_acc_control_2_pending = True
+        # falls on odd frames. 0x1C9 goes out right behind it, in the same frame: the stock pair lands in the
+        # same 10 ms batch in 92-99% of frames (routes 00000003, 0000000f, 00000011), the rest straddle a
+        # batch boundary; sending it a frame later opened the pair with a 1.5-period gap at the switchover and
+        # kept it 10 ms behind the stock cadence for the whole drive. Never alongside the stock stream: ours
+        # starts the frame the controller is called dead.
+        park_or_reverse = CS.out.gearShifter in (GearShifter.park, GearShifter.reverse)
+        can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
+                                                      self.stopping_counter, self.CP, self.vision_gas_pedal_force, park_or_reverse))
+        set_speed_kph = hud_control.setSpeed * CV.MS_TO_KPH if hud_control.speedVisible else 0
+        # gap distance for the distance bars ACC_HUD shows (the brake module gets both, stock keeps them in
+        # step), lead distance from the model's lead (same source as the dash lead below)
+        can_sends.append(hondacan.create_vision_ctrl_acc_status(self.packer, self.CAN.pt, set_speed_kph, CS.out.vEgo,
+                                                                hud_control.leadDistanceBars, self.vision_lead_distance))
 
     # Send dashboard UI commands. On CAN FD, ACC_HUD is a radar/ADAS look-alike that openpilot only
     # owns when it has disabled the radar (op longitudinal); in stock ACC the real system sends it and
@@ -1271,10 +1269,17 @@ class CarController(CarControllerBase):
         lkas_state_change = self.lkas_state_change_frames > 0
         self.lkas_state_change_frames = max(0, self.lkas_state_change_frames - 1)
 
+      lane_lines = None
+      if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+        # in step with the lane status openpilot's RADAR_LEAD carries (stock keeps the two together): none while
+        # the dash lanes are off, the detected lines otherwise
+        lanes_up = VISION_CTRL_DASH_LANES and (self.dash_lane.left_line or self.dash_lane.right_line)
+        lane_lines = lane_path.LANE_LINE_ON if lanes_up else 0
+
       if not stock_steer_alive:
         can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
                                                   steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed, CS,
-                                                  lkas_state_change=lkas_state_change))
+                                                  lkas_state_change=lkas_state_change, lane_lines=lane_lines))
 
       if self.CP.openpilotLongitudinalControl:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated

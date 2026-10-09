@@ -205,7 +205,7 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
 
 
 def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed, CS,
-                    lkas_state_change=None):
+                    lkas_state_change=None, lane_lines=None):
   commands = []
 
   if CP.carFingerprint in HONDA_BOSCH:
@@ -262,6 +262,11 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     # setting forward instead of telling the dash RDM is off
     lkas_hud_values['RDM_ON'] = lkas_hud['RDM_ON']
     lkas_hud_values['RDM_OFF'] = lkas_hud['RDM_OFF']
+    # the MDX Type S RVU keeps LANE_LINES in step with RADAR_LEAD's LEFT_LANE/RIGHT_LANE: 0 with no lane lines
+    # drawn (idle 00 00 10 40 00 ..), 3 while they are up (.. 18 ..); the constant 3 above sat next to idle lanes
+    # on route ad9840558640c31d/00000011
+    if lane_lines is not None:
+      lkas_hud_values['LANE_LINES'] = lane_lines
 
   # New HUD concept for selected Bosch cars, overwrites some of the above
   # TODO: make global across all Honda if feedback is favorable
@@ -436,10 +441,10 @@ def vision_ctrl_gap_distance(v_ego, lead_distance_bars):
 
 
 def create_vision_ctrl_acc_status(packer, bus, set_speed_kph, v_ego, lead_distance_bars=3, lead_distance=None):
-  """ACC_CONTROL_2 (0x1C9): the 50 Hz message the vision controller sends in the frame after ACC_CONTROL. The
-  stock drive shows the brake module losing it as well when the controller is silenced, so it is replaced on the
-  same cadence as ACC_CONTROL. lead_distance is the model's lead distance in m (None with nothing ahead), the
-  gap distance follows the distance-bar setting shown in ACC_HUD."""
+  """ACC_CONTROL_2 (0x1C9): the 50 Hz message the vision controller sends right behind ACC_CONTROL (same 10 ms
+  batch in 92-99% of stock frames). The stock drive shows the brake module losing it as well when the controller
+  is silenced, so it is replaced in the same frame as ACC_CONTROL. lead_distance is the model's lead distance in
+  m (None with nothing ahead), the gap distance follows the distance-bar setting shown in ACC_HUD."""
   if lead_distance is None:
     lead_distance = VISION_CTRL_NO_LEAD_DISTANCE
   values = {
