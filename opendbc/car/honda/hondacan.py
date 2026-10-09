@@ -139,7 +139,19 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   return commands
 
 
-def create_steering_control(packer, CAN, apply_torque, lkas_active, tja_control):
+def _vision_ctrl_idle_steering_bytes(packer, dat: bytes) -> bytes:
+  """Stock MDX Type S RVU idle STEERING_CONTROL is 00 00 40 00 .. (route ad9840558640c31d/00000003); the Bosch
+  DBC repacks that constant byte away when torque is zero, but the checksum still validates on the stock bytes."""
+  from opendbc.can.packer import set_value
+  d = bytearray(dat)
+  d[2] = 0x40
+  cs_sig = packer.dbc.addr_to_msg[0xE4].sigs['CHECKSUM']
+  set_value(d, cs_sig, 0)
+  set_value(d, cs_sig, honda_checksum(0xE4, cs_sig, d))
+  return bytes(d)
+
+
+def create_steering_control(packer, CAN, apply_torque, lkas_active, tja_control, vision_ctrl=False):
   values = {
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
@@ -148,7 +160,10 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active, tja_control)
   if tja_control:
     values["STEER_DOWN_TO_ZERO"] = lkas_active
 
-  return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
+  addr, dat, bus = packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
+  if vision_ctrl and not lkas_active and apply_torque == 0:
+    dat = _vision_ctrl_idle_steering_bytes(packer, dat)
+  return addr, dat, bus
 
 
 def create_bosch_supplemental_1(packer, CAN):

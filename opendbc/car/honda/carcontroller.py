@@ -661,7 +661,8 @@ class CarController(CarControllerBase):
     # gate is the only thing keeping the two streams apart); ours starts once vision_ctrl has silenced it.
     stock_steer_alive = self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and CS.stock_acc_alive
     if not stock_steer_alive:
-      can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
+      can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control,
+                                                        vision_ctrl=self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL))
 
     wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
 
