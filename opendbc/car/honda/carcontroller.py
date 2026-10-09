@@ -675,11 +675,15 @@ class CarController(CarControllerBase):
         # authoring; the stock radar keeps the two in lockstep and the dash won't draw lanes otherwise.
         # LEFT_LANE/RIGHT_LANE carry the per-side line-detected status (3/0) the same way the stock
         # radar mirrors the camera's LANE_LINES bits; the dash draws no lane lines while both are 0.
-        # vision ctrl: the RVU's RADAR_LEAD echoes the last RADAR_REFERENCE counter plus one (4783/4783
-        # frames of stock route 00000003); the CAN FD radars echo it as is.
+        # vision ctrl: the RVU's RADAR_LEAD CNTR_REF is its own COUNTER plus one, not an echo of RADAR_REFERENCE:
+        # the offset to the brake module's 5 Hz counters differs per drive (+1 on routes 00000003/0000000f, +2 on
+        # 00000011, 0 on 00000012) while CNTR_REF - COUNTER is 1 in every stock frame (2719/2719). Echoing
+        # RADAR_REFERENCE + 1 matched route 00000003 by phase only and broke the pairing on routes 11 (offset 0) and
+        # 12 (offset 2) from the first replacement frame. The CAN FD radars echo RADAR_REFERENCE as is.
         cntr_ref = CS.radar_ref_counter
         if vision:
-          cntr_ref = (int(cntr_ref) + 1) % 4
+          radar_lead = self.packer.dbc.name_to_msg["RADAR_LEAD"]
+          cntr_ref = (self.packer.counters.get(radar_lead.address, 0) + 1) % (1 << radar_lead.sigs["COUNTER"].size)
         if vision and not VISION_CTRL_DASH_LANES:
           # idle like the LANE_PATH/HUD_OBJECTS pair below (stock 20 00 00 18 ..: 6 points, no lines)
           lane_length, left_line, right_line = lane_path.CANFD_MIN_VALID_PTS, 0, 0
