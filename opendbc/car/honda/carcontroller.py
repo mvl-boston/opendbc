@@ -22,6 +22,13 @@ VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
 GearShifter = structs.CarState.GearShifter
 
+# vision ctrl: draw openpilot's lane path and lead on the dash (LANE_PATH/HUD_OBJECTS/RADAR_LEAD lane fields). The
+# MDX Type S RVU encodes them differently from the Civic/MDX radars (2044 sentinel, every point of every bank
+# filled, RADAR_LEAD TARGET_SPEED_MAYBE 101-118 while lanes are up, see hondacan.create_vision_ctrl_lane_idle) and
+# the car has raised faults on every drive so far: until those are gone the look-alikes carry the stock idle
+# content, so the dash sees exactly what the RVU sends with nothing to draw.
+VISION_CTRL_DASH_LANES = False
+
 
 def compute_gb_honda_bosch(accel, speed):
   # TODO returns 0s, is unused
@@ -232,6 +239,8 @@ class CarController(CarControllerBase):
     self.hud_object_author = hud_objects.HudObjectAuthor()
     self.lane_path_fitter = lane_path.LanePathFitter()
     self.dash_lane = lane_path.DashLane([lane_path.OFFSET_UNAVAILABLE] * lane_path.NUM_PTS, 0.0, False, False)
+    # vision ctrl: the model lead's distance in m for ACC_CONTROL_2 (None with nothing ahead), from the dash lead fit
+    self.vision_lead_distance = None
     self.lkas_hud_key = None
     self.lkas_state_change_frames = 0
     self.tja_control = CP.carFingerprint in HONDA_BOSCH_TJA_CONTROL
@@ -571,6 +580,17 @@ class CarController(CarControllerBase):
           if self.vision_ctrl_silencer is None:
             self.vision_ctrl_silencer = vision_ctrl.VisionControllerSilencer()
           can_sends.extend(self.vision_ctrl_silencer.update(CS.stock_acc_alive, self.CAN.pt))
+        if CS.vision_switchover:
+          # First frame of openpilot's streams: continue each stock COUNTER sequence instead of restarting
+          # at 0 (route 0000000d jumped on nearly every stream at the handover; the brake module and the
+          # cluster keep taking a jump, but the look-alikes have no business being distinguishable).
+          for name, counter in CS.vision_stock_counters.items():
+            msg = self.packer.dbc.name_to_msg.get(name)
+            if msg is not None and "COUNTER" in msg.sigs:
+              self.packer.counters[msg.address] = (counter + 1) % (1 << msg.sigs["COUNTER"].size)
+          # same for the LANE_PATH/HUD_OBJECTS MUX sweep: the 50 Hz tick below steps it to the stock one's successor
+          if CS.vision_stock_lane_mux in lane_path.MUX_CYCLE:
+            self.radar_mux = CS.vision_stock_lane_mux
       elif self.CP.carFingerprint in HONDA_BOSCH_CANFD and CS.stock_acc_alive:
         # CAN FD: the radar is still transmitting. It is silenced from here rather than from
         # CarInterface.init(), and only once the comma relay is confirmed open: init() ran while the
@@ -618,7 +638,10 @@ class CarController(CarControllerBase):
       if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
         # 0x334 @ 100 Hz on the harness radar bus: the RVU's private-link heartbeat (stops with the RVU on
         # route 0000000b). Every control frame, like STEERING_CONTROL: at 100 Hz there is no slot to phase.
-        can_sends.append(hondacan.create_vision_ctrl_private_link(self.packer, self.CAN.radar))
+        # Only when the RVU's own has gone: silenced on this network only (vision_ctrl variant 0) it keeps its
+        # private pairs up itself, and a second 0x334 would double the heartbeat the camera is listening to.
+        if vision_ctrl.private_link_silenced() or not CS.stock_private_link_alive:
+          can_sends.append(hondacan.create_vision_ctrl_private_link(self.packer, self.CAN.radar))
         # the silenced controller's constant status broadcasts (0x29B/0x2E8/0x1A45AA24), see hondacan
         radar_msgs.extend(hondacan.create_vision_ctrl_status(self.packer, self.CAN.pt, CS.vision_status_25hz_tick,
                                                              CS.hud_tick, CS.vision_status_1hz_tick,
@@ -650,14 +673,18 @@ class CarController(CarControllerBase):
         # vision ctrl: the RVU's RADAR_LEAD echoes the last RADAR_REFERENCE counter plus one (4783/4783
         # frames of stock route 00000003); the CAN FD radars echo it as is.
         cntr_ref = CS.radar_ref_counter
-        if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+        vision = self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL
+        if vision:
           cntr_ref = (int(cntr_ref) + 1) % 4
-        radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, cntr_ref,
-                                                                   lane_path.canfd_lane_length(self.dash_lane),
-                                                                   lane_path.LANE_LINE_ON if self.dash_lane.left_line else 0,
-                                                                   lane_path.LANE_LINE_ON if self.dash_lane.right_line else 0,
-                                                                   radar_lead2=self.CP.carFingerprint not in HONDA_BOSCH_VISION_CTRL,
-                                                                   target_speed=0 if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL else 140))
+        if vision and not VISION_CTRL_DASH_LANES:
+          # idle like the LANE_PATH/HUD_OBJECTS pair below (stock 20 00 00 18 ..: 6 points, no lines)
+          lane_length, left_line, right_line = lane_path.CANFD_MIN_VALID_PTS, 0, 0
+        else:
+          lane_length = lane_path.canfd_lane_length(self.dash_lane)
+          left_line = lane_path.LANE_LINE_ON if self.dash_lane.left_line else 0
+          right_line = lane_path.LANE_LINE_ON if self.dash_lane.right_line else 0
+        radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, cntr_ref, lane_length, left_line, right_line,
+                                                                   radar_lead2=not vision, target_speed=0 if vision else 140))
 
       # mirror each packed frame onto both the powertrain bus and the camera bus
       for addr, dat, _ in radar_msgs:
@@ -1184,7 +1211,10 @@ class CarController(CarControllerBase):
         # the stock stream: ours starts the frame the controller is called dead.
         if self.vision_acc_control_2_pending:
           set_speed_kph = hud_control.setSpeed * CV.MS_TO_KPH if hud_control.speedVisible else 0
-          can_sends.append(hondacan.create_vision_ctrl_acc_status(self.packer, self.CAN.pt, set_speed_kph, CS.out.vEgo))
+          # gap distance for the distance bars ACC_HUD shows (the brake module gets both, stock keeps them in
+          # step), lead distance from the model's lead (same source as the dash lead below)
+          can_sends.append(hondacan.create_vision_ctrl_acc_status(self.packer, self.CAN.pt, set_speed_kph, CS.out.vEgo,
+                                                                  hud_control.leadDistanceBars, self.vision_lead_distance))
           self.vision_acc_control_2_pending = False
         if CS.radar_50hz_tick:
           park_or_reverse = CS.out.gearShifter in (GearShifter.park, GearShifter.reverse)
@@ -1220,7 +1250,11 @@ class CarController(CarControllerBase):
         steer_maxed = (abs(apply_torque) >= self.params.STEER_MAX) or not (CS.steer_control_active)
 
       lkas_state_change = None
-      if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+        # the MDX Type S RVU never sets LKAS_STATE_CHANGE (idle 00 00 10 40 00 00, LKAS on 01 44 10 40 18 00 across
+        # stock routes 00000003 and 0000000f): no pulse, the one LKAS_HUD bit openpilot's copy still differed in
+        lkas_state_change = False
+      elif self.CP.carFingerprint in HONDA_BOSCH_CANFD:
         # The stock camera holds LKAS_STATE_CHANGE low and pulses it high for ~3s around HUD state
         # changes; holding it high permanently (the default below) suppresses the dash lane lines.
         # The key must contain exactly the signals that change the LKAS_HUD payload, nothing more:
@@ -1261,32 +1295,37 @@ class CarController(CarControllerBase):
       leads = hud_objects.leads_from_model(self.model, CS.out.vEgo)
       lead = leads[0]
       lead_d = lead.dRel if lead.status else 0.0  # extend the lane out to the lead (0 = no lead)
+      self.vision_lead_distance = lead.dRel if lead.status else None  # vision ctrl ACC_CONTROL_2 LEAD_DISTANCE_MAYBE
       canfd = self.CP.carFingerprint in HONDA_BOSCH_CANFD
       self.dash_lane = self.lane_path_fitter.update(self.model, CS.out.vEgo, lead_d, canfd)
       # Important: same mux for lane_path and hud_objects. Lane display freezes if muxes don't match.
-      if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
-        # self.radar_mux advances one step per 50Hz tick (above), so the mux sweep stays contiguous
-        # across missed ticks, unlike a frame-derived mux.
-        mux = self.radar_mux
-        # No LKAS_HUD_2 on CAN FD: the dash reads the lane length from the stock radar's in-band
-        # terminator, so reshape the path into the terminated-prefix form (see lane_path.py).
-        lane_offsets = lane_path.canfd_lane_offsets(self.dash_lane)
+      if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and not VISION_CTRL_DASH_LANES:
+        # the RVU's idle pair for this mux (the path and lead are still fitted above for ACC_CONTROL_2)
+        lane_msg, hud_msg = hondacan.create_vision_ctrl_lane_idle(self.packer, self.CAN.lkas, self.radar_mux)
       else:
-        mux = lane_path.MUX_CYCLE[(self.frame // 2) % len(lane_path.MUX_CYCLE)]
-        lane_offsets = self.dash_lane.offsets
-      lane_msg = lane_path.create_lane_path(self.packer, self.CAN.lkas, lane_offsets, mux)
-      can_sends.append(lane_msg)
+        if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+          # self.radar_mux advances one step per 50Hz tick (above), so the mux sweep stays contiguous
+          # across missed ticks, unlike a frame-derived mux.
+          mux = self.radar_mux
+          # No LKAS_HUD_2 on CAN FD: the dash reads the lane length from the stock radar's in-band
+          # terminator, so reshape the path into the terminated-prefix form (see lane_path.py).
+          lane_offsets = lane_path.canfd_lane_offsets(self.dash_lane)
+        else:
+          mux = lane_path.MUX_CYCLE[(self.frame // 2) % len(lane_path.MUX_CYCLE)]
+          lane_offsets = self.dash_lane.offsets
+        lane_msg = lane_path.create_lane_path(self.packer, self.CAN.lkas, lane_offsets, mux)
 
-      # CAN FD cars have no camera HUD_OBJECTS to poll (the disabled radar owned it), so there are no
-      # secondary vehicle locations: author OP's lead in slot 0 with the other slots blank (tracks=None).
-      tracks = CS.hud_object_tracker.snapshot() if CS.hud_object_tracker is not None else None
-      if self.CP.openpilotLongitudinalControl:
-        # For OP long, replace lead car and forward rest of objects
-        hud_msg = self.hud_object_author.create(self.packer, self.CAN.lkas, lead, tracks, mux, now_nanos * 1e-9,
-                                                extra_leads=leads[1:], canfd=canfd)
-      else:
-        # For ACC, forward objects but with our mux
-        hud_msg = hud_objects.forward_hud_object(self.packer, self.CAN.lkas, mux, tracks)
+        # CAN FD cars have no camera HUD_OBJECTS to poll (the disabled radar owned it), so there are no
+        # secondary vehicle locations: author OP's lead in slot 0 with the other slots blank (tracks=None).
+        tracks = CS.hud_object_tracker.snapshot() if CS.hud_object_tracker is not None else None
+        if self.CP.openpilotLongitudinalControl:
+          # For OP long, replace lead car and forward rest of objects
+          hud_msg = self.hud_object_author.create(self.packer, self.CAN.lkas, lead, tracks, mux, now_nanos * 1e-9,
+                                                  extra_leads=leads[1:], canfd=canfd)
+        else:
+          # For ACC, forward objects but with our mux
+          hud_msg = hud_objects.forward_hud_object(self.packer, self.CAN.lkas, mux, tracks)
+      can_sends.append(lane_msg)
       can_sends.append(hud_msg)
 
       # On CAN FD the camera (behind the relay) also consumes these radar look-alikes, and openpilot's

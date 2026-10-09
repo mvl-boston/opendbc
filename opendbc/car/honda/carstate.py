@@ -26,6 +26,13 @@ def _cp_msg_seen(cp, msg_name: str, signal: str = "COUNTER") -> bool:
   return len(cp.vl_all.get(msg_name, {}).get(signal, [])) > 0
 
 
+# vision ctrl: every stock frame openpilot replaces once the controller is silenced, by DBC message name (the
+# packer counters are seeded from the last stock COUNTER of each at the switchover, see carcontroller)
+VISION_CTRL_STOCK_PT_MSGS = ("STEERING_CONTROL", "ACC_CONTROL", "ACC_CONTROL_2", "ACC_HUD", "LKAS_HUD", "LANE_PATH", "HUD_OBJECTS",
+                             "RADAR_LEAD", "VISION_CTRL_STATUS_25HZ", "VISION_CTRL_STATUS_10HZ", "VISION_CTRL_STATUS_1HZ")
+VISION_CTRL_STOCK_RADAR_MSGS = ("RVU_PRIVATE_LINK_100HZ",)
+
+
 def _phase_counter(seen: bool, counter: int, period: int) -> int:
   """Phase counter for a stock message openpilot replaces: reset by the stock frame, otherwise free-running
   modulo the period so the phase seeded by the last stock frame carries on once its author is silenced
@@ -102,6 +109,16 @@ class CarState(CarStateBase):
     # vision ctrl: which of the stock frames above have seeded their phase counter at least once
     self.vision_phase_seeded: set[str] = set()
     self.vision_stock_alive_prev = True
+    # vision ctrl: True on the one frame the stock controller is first called dead (carcontroller seeds the
+    # look-alike counters from the stock ones there)
+    self.vision_switchover = False
+    # vision ctrl: last COUNTER of every stock frame openpilot replaces, by DBC message name
+    self.vision_stock_counters: dict[str, int] = {}
+    # vision ctrl: MUX of the last stock LANE_PATH, so openpilot's sweep carries on from it (0 = none seen)
+    self.vision_stock_lane_mux = 0
+    # vision ctrl: the RVU's 0x334 private-link heartbeat on the harness radar bus is still being received
+    self.stock_private_link_counter = 0
+    self.stock_private_link_alive = False
 
     self.scm_ambient_light = 0
     # CAN FD deferred radar disable (see carcontroller): the stock radar is assumed alive until it has
@@ -392,6 +409,26 @@ class CarState(CarStateBase):
           if seen:
             self.vision_phase_seeded.add(name)
 
+        # last stock COUNTER of every frame openpilot replaces, so the look-alikes continue the sequence
+        # (route 0000000d: every stream jumped at the handover, the packer started them all at 0)
+        for parser, names in ((cp, VISION_CTRL_STOCK_PT_MSGS), (cp_radar, VISION_CTRL_STOCK_RADAR_MSGS)):
+          for name in names:
+            counters = parser.vl_all.get(name, {}).get("COUNTER", [])
+            if len(counters) > 0:
+              self.vision_stock_counters[name] = int(counters[-1])
+        # and the LANE_PATH/HUD_OBJECTS MUX sweep position, same reason
+        lane_mux = cp.vl_all.get("LANE_PATH", {}).get("MUX", [])
+        if len(lane_mux) > 0:
+          self.vision_stock_lane_mux = int(lane_mux[-1])
+
+        # 0x334 @ 100 Hz: alive while the RVU keeps its private links (this-network CommunicationControl),
+        # two missed frames call it gone (single-batch gaps happen, two in a row do not)
+        if _cp_msg_seen(cp_radar, "RVU_PRIVATE_LINK_100HZ"):
+          self.stock_private_link_counter = 0
+        else:
+          self.stock_private_link_counter += 1
+        self.stock_private_link_alive = self.stock_private_link_counter < 2
+
         self.supp_tick = False
       else:
         self.radar_5hz_tick = (self.radar_5hz_tick_counter == 11)
@@ -461,7 +498,8 @@ class CarState(CarStateBase):
         else:
           alive_frames = 5
         self.stock_acc_alive = self.camera_steer_counter < alive_frames
-        if self.vision_stock_alive_prev and not self.stock_acc_alive:
+        self.vision_switchover = self.vision_stock_alive_prev and not self.stock_acc_alive
+        if self.vision_switchover:
           # Switchover frame. A phased slot due on this very frame (counter 0) could not be fired a frame
           # earlier because the stock STEERING_CONTROL was still there; send it now, late by the transmit
           # latency rather than skipped, so no stream opens with a two-period gap.
@@ -523,6 +561,9 @@ class CarState(CarStateBase):
         ("VISION_CTRL_STATUS_25HZ", float('nan')),
         ("VISION_CTRL_STATUS_10HZ", float('nan')),
         ("VISION_CTRL_STATUS_1HZ", float('nan')),
+        # only read for their last stock COUNTER (see VISION_CTRL_STOCK_PT_MSGS)
+        ("ACC_CONTROL_2", float('nan')),
+        ("HUD_OBJECTS", float('nan')),
       ]
     if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       # HUD_OBJECTS is polled by the HudObjectTracker, but not every radarless camera emits it,
@@ -541,10 +582,15 @@ class CarState(CarStateBase):
       #   0x750 RADAR_50HZ_TICK_REFERENCE (50 Hz)
       # The EU CR-V has no radar and its radar bus is empty, so there these must not count against canValid.
       tick_freq = float('nan') if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL else 0
-      parsers[Bus.radar] = CANParser(DBC[CP.carFingerprint][Bus.radar], [
+      radar_messages = [
         ("RADAR_SUPP_TICK_REFERENCE", tick_freq),
         ("RADAR_HUD_TICK_REFERENCE", tick_freq),
         ("RADAR_50HZ_TICK_REFERENCE", tick_freq),
-      ], CanBus(CP).radar)
+      ]
+      if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+        # the RVU's private-link heartbeat on the harness radar bus: alive while the RVU keeps its private
+        # pairs up (this-network CommunicationControl), gone when it is silenced on every network (see update)
+        radar_messages.append(("RVU_PRIVATE_LINK_100HZ", float('nan')))
+      parsers[Bus.radar] = CANParser(DBC[CP.carFingerprint][Bus.radar], radar_messages, CanBus(CP).radar)
 
     return parsers
