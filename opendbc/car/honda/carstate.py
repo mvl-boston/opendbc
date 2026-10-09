@@ -26,10 +26,13 @@ def _cp_msg_seen(cp, msg_name: str, signal: str = "COUNTER") -> bool:
   return len(cp.vl_all.get(msg_name, {}).get(signal, [])) > 0
 
 
-# vision ctrl: every stock frame openpilot replaces once the controller is silenced, by DBC message name (the
-# packer counters are seeded from the last stock COUNTER of each at the switchover, see carcontroller)
-VISION_CTRL_STOCK_PT_MSGS = ("STEERING_CONTROL", "ACC_CONTROL", "ACC_CONTROL_2", "ACC_HUD", "LKAS_HUD", "LANE_PATH", "HUD_OBJECTS",
-                             "RADAR_LEAD", "VISION_CTRL_STATUS_25HZ", "VISION_CTRL_STATUS_10HZ", "VISION_CTRL_STATUS_1HZ")
+# vision ctrl: every stock frame openpilot replaces once the controller is silenced, by DBC message name with its
+# period in control frames (the packer counters are seeded from the last stock COUNTER of each at the switchover,
+# see carcontroller)
+VISION_CTRL_STOCK_PT_MSG_PERIODS = {"STEERING_CONTROL": 1, "ACC_CONTROL": 2, "ACC_CONTROL_2": 2, "LANE_PATH": 2, "HUD_OBJECTS": 2,
+                                    "VISION_CTRL_STATUS_25HZ": 4, "ACC_HUD": 10, "LKAS_HUD": 10, "VISION_CTRL_STATUS_10HZ": 10,
+                                    "RADAR_LEAD": 20, "VISION_CTRL_STATUS_1HZ": 100}
+VISION_CTRL_STOCK_PT_MSGS = tuple(VISION_CTRL_STOCK_PT_MSG_PERIODS)
 VISION_CTRL_STOCK_RADAR_MSGS = ("RVU_PRIVATE_LINK_100HZ",)
 
 
@@ -114,6 +117,10 @@ class CarState(CarStateBase):
     self.vision_switchover = False
     # vision ctrl: last COUNTER of every stock frame openpilot replaces, by DBC message name
     self.vision_stock_counters: dict[str, int] = {}
+    # vision ctrl: control frames since each of those stock frames was last received, and the ones received
+    # again after the switchover (a CommunicationControl variant that left part of the RVU's traffic running)
+    self.vision_stock_missing: dict[str, int] = dict.fromkeys(VISION_CTRL_STOCK_PT_MSGS, 0)
+    self.vision_stock_resumed: set[str] = set()
     # vision ctrl: MUX of the last stock LANE_PATH, so openpilot's sweep carries on from it (0 = none seen)
     self.vision_stock_lane_mux = 0
     # vision ctrl: the RVU's 0x334 private-link heartbeat on the harness radar bus is still being received
@@ -135,6 +142,13 @@ class CarState(CarStateBase):
     # Only radarless cars have a camera that emits HUD_OBJECTS to poll for secondary vehicle locations.
     # On CAN FD cars the radar owned HUD_OBJECTS and it is disabled, so there is nothing to track.
     self.hud_object_tracker = HudObjectTracker() if CP.carFingerprint in HONDA_BOSCH_RADARLESS else None
+
+  def vision_stock_alive(self, name: str) -> bool:
+    """vision ctrl: the RVU is still sending this car-bus frame after being called silent (a CommunicationControl
+    variant that left it running), so openpilot must not author it: True from the first such frame until two of
+    its periods have passed without one (single-batch gaps happen, two periods do not). Always False with the
+    every-network variant, where nothing comes back, so the switchover timing is unchanged there."""
+    return name in self.vision_stock_resumed and self.vision_stock_missing[name] < 2 * VISION_CTRL_STOCK_PT_MSG_PERIODS[name]
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
@@ -416,6 +430,18 @@ class CarState(CarStateBase):
             counters = parser.vl_all.get(name, {}).get("COUNTER", [])
             if len(counters) > 0:
               self.vision_stock_counters[name] = int(counters[-1])
+        # which of the RVU's car-bus frames are still coming in: all of them while it is alive; after the
+        # switchover only those a partial CommunicationControl variant (one subnet, normal messages only) left
+        # running, and openpilot does not author a frame the RVU still sends (see vision_stock_alive)
+        if self.stock_acc_alive:
+          self.vision_stock_resumed.clear()
+        for name in VISION_CTRL_STOCK_PT_MSGS:
+          if _cp_msg_seen(cp, name):
+            self.vision_stock_missing[name] = 0
+            if not self.stock_acc_alive:
+              self.vision_stock_resumed.add(name)
+          else:
+            self.vision_stock_missing[name] += 1
         # and the LANE_PATH/HUD_OBJECTS MUX sweep position, same reason
         lane_mux = cp.vl_all.get("LANE_PATH", {}).get("MUX", [])
         if len(lane_mux) > 0:
