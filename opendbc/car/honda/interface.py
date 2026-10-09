@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import numpy as np
 from opendbc.car import get_safety_config, structs, uds
+from opendbc.car.can_definitions import CanData
 from opendbc.car.carlog import carlog
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.disable_ecu import disable_ecu, clear_all_dtcs, clear_ecu_dtcs
@@ -356,6 +357,13 @@ class CarInterface(CarInterfaceBase):
     ret.radarDelay = 0.1
 
     return ret
+
+  def update(self, can_packets: list[tuple[int, list[CanData]]]) -> structs.CarState:
+    if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and vision_ctrl.awaiting_response():
+      # the probed controller's UDS answer (its diagnostic reply id is not a DBC message): logged, and a
+      # rejected CommunicationControl variant moves the search on without waiting out the probe
+      vision_ctrl.record_diag_responses(can_packets, CanBus(self.CP).pt)
+    return super().update(can_packets)
 
   @staticmethod
   def init(CP, can_recv, can_send, communication_control=None):

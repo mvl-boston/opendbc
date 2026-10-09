@@ -331,9 +331,11 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     }
     if (vision_ctrl_diag) {
       allowed = allowed || (first_bytes == 0x03802803U);  // 03 28 80 03: CommunicationControl enable rx/tx
-      // 03 28 01 F3: CommunicationControl enableRxAndDisableTx on the network the request is received on only
-      // (the vision controller keeps its private sensor links; tried before the every-network disable above)
-      allowed = allowed || (first_bytes == 0xF3012803U);
+      // 03 28 03 F3: CommunicationControl disableRxAndTx on the network the request is received on only, positive
+      // response requested (the vision controller keeps its other networks and private sensor links; tried
+      // before the every-network disable above). The MDX Type S RVU answers 7F 28 12 to controlType 01
+      // (enableRxAndDisableTx), so only the controlType it implements is allowed with the subnet form.
+      allowed = allowed || (first_bytes == 0xF3032803U);
     }
     if (!allowed || (GET_BYTES(msg, 4, 4) != 0x0U)) {
       tx = false;

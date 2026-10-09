@@ -865,18 +865,22 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
         self.assertTrue(self._tx(make_msg(bus, addr, 8)), (hex(addr), bus))
 
   def test_diagnostics(self):
-    # the full handshake (TesterPresent, extended session, both CommunicationControl disable variants: disableTx
-    # on the receiving network only, disableRxAndTx on every network) plus the matching CommunicationControl
-    # enable (to restore a candidate that was not the controller) is allowed towards exactly the candidate
-    # addresses, with all-zero padding
+    # the full handshake (TesterPresent, extended session, both CommunicationControl disable variants:
+    # disableRxAndTx on the receiving network only with a positive response requested, disableRxAndTx on every
+    # network) plus the matching CommunicationControl enable (to restore a candidate that was not the
+    # controller) is allowed towards exactly the candidate addresses, with all-zero padding. Nothing else of
+    # service 0x28: no other controlType (01/02, the RVU rejects 01 anyway), no other subnet, no suppressed
+    # this-network form, no all-network form with a response requested.
     for addr in VISION_CTRL_CANDIDATE_ADDRS:
-      for dat in (b"\x02\x3E\x80\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x00", b"\x03\x28\x01\xF3\x00\x00\x00\x00",
+      for dat in (b"\x02\x3E\x80\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x00", b"\x03\x28\x03\xF3\x00\x00\x00\x00",
                   b"\x03\x28\x83\x03\x00\x00\x00\x00", b"\x03\x28\x80\x03\x00\x00\x00\x00"):
         self.assertTrue(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
       for dat in (b"\x03\xAA\xAA\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x01", b"\x03\x28\x80\x03\x00\x00\x00\x01",
                   b"\x02\x10\x01\x00\x00\x00\x00\x00", b"\x02\x11\x01\x00\x00\x00\x00\x00", b"\x03\x28\x81\x03\x00\x00\x00\x00",
-                  b"\x03\x28\x01\x03\x00\x00\x00\x00", b"\x03\x28\x03\xF3\x00\x00\x00\x00", b"\x03\x28\x81\xF3\x00\x00\x00\x00",
-                  b"\x03\x28\x01\xF3\x00\x00\x00\x01"):
+                  b"\x03\x28\x01\x03\x00\x00\x00\x00", b"\x03\x28\x03\x03\x00\x00\x00\x00", b"\x03\x28\x01\xF3\x00\x00\x00\x00",
+                  b"\x03\x28\x02\xF3\x00\x00\x00\x00", b"\x03\x28\x83\xF3\x00\x00\x00\x00", b"\x03\x28\x81\xF3\x00\x00\x00\x00",
+                  b"\x03\x28\x03\xF1\x00\x00\x00\x00", b"\x03\x28\x03\x13\x00\x00\x00\x00", b"\x03\x28\x03\xE3\x00\x00\x00\x00",
+                  b"\x03\x28\x03\xF3\x00\x00\x00\x01"):
         self.assertFalse(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
       # never on the camera bus
       self.assertFalse(self._tx(libsafety_py.make_CANPacket(addr, 2, b"\x02\x3E\x80\x00\x00\x00\x00\x00")))
@@ -884,7 +888,7 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
     # every other ECU stays unreachable, the EPS, VSA and gateway in particular
     for addr in (0x18DA30F1, 0x18DA28F1, 0x18DAEFF1, 0x18DA10F1, 0x18DB33F1):
       for dat in (b"\x02\x3E\x80\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x00", b"\x03\x28\x83\x03\x00\x00\x00\x00",
-                  b"\x03\x28\x01\xF3\x00\x00\x00\x00"):
+                  b"\x03\x28\x03\xF3\x00\x00\x00\x00"):
         self.assertFalse(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
 
   def test_candidate_list_matches_safety(self):
