@@ -26,6 +26,10 @@ def _cp_msg_seen(cp, msg_name: str, signal: str = "COUNTER") -> bool:
   return len(cp.vl_all.get(msg_name, {}).get(signal, [])) > 0
 
 
+def _cp_radar_msg_seen(cp_radar, msg_name: str, signal: str = "COUNTER") -> bool:
+  return len(cp_radar.vl_all.get(msg_name, {}).get(signal, [])) > 0
+
+
 class CarState(CarStateBase):
   def __init__(self, CP):
     super().__init__(CP)
@@ -91,6 +95,8 @@ class CarState(CarStateBase):
     self.vision_status_25hz_tick = False
     self.vision_status_1hz_tick_counter = 0
     self.vision_status_1hz_tick = False
+    self.rvu_private_link_ref_prev = False
+    self.rvu_private_link_tick = False
 
     self.scm_ambient_light = 0
     # CAN FD deferred radar disable (see carcontroller): the stock radar is assumed alive until it has
@@ -376,6 +382,13 @@ class CarState(CarStateBase):
           self.vision_status_1hz_tick_counter += 1
         self.vision_status_1hz_tick = (self.vision_status_1hz_tick_counter == 99)
 
+        # 100 Hz 0x334: phase off surviving 0xE6 on bus 1 (and stock 0x334 while the RVU is still up).
+        # Stock pairs them in the same log bucket; transmit one frame after the reference (+1 TX delay).
+        link_ref = (_cp_radar_msg_seen(cp_radar, "RVU_PRIVATE_LINK_CAMERA_100HZ") or
+                    _cp_radar_msg_seen(cp_radar, "RVU_PRIVATE_LINK_100HZ"))
+        self.rvu_private_link_tick = self.rvu_private_link_ref_prev
+        self.rvu_private_link_ref_prev = link_ref
+
         self.supp_tick = False
       else:
         self.radar_5hz_tick = (self.radar_5hz_tick_counter == 11)
@@ -440,13 +453,16 @@ class CarState(CarStateBase):
         vision_ctrl.set_shutdown_allowed(
           _cp_msg_seen(cp, "RADAR_REFERENCE") and
           _cp_msg_seen(cp, "ACC_CONTROL") and
-          any(_cp_msg_seen(cp, m) for m in ("ACC_HUD", "LKAS_HUD", "VISION_CTRL_STATUS_10HZ"))
+          any(_cp_msg_seen(cp, m) for m in ("ACC_HUD", "LKAS_HUD", "VISION_CTRL_STATUS_10HZ")) and
+          (_cp_radar_msg_seen(cp_radar, "RVU_PRIVATE_LINK_CAMERA_100HZ") or
+           _cp_radar_msg_seen(cp_radar, "RVU_PRIVATE_LINK_100HZ"))
         )
     else:
       self.supp_tick = False
       self.hud_tick = False
       self.radar_5hz_tick = False
       self.radar_50hz_tick = False
+      self.rvu_private_link_tick = False
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
@@ -507,10 +523,16 @@ class CarState(CarStateBase):
       #   0x750 RADAR_50HZ_TICK_REFERENCE (50 Hz)
       # The EU CR-V has no radar and its radar bus is empty, so there these must not count against canValid.
       tick_freq = float('nan') if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL else 0
-      parsers[Bus.radar] = CANParser(DBC[CP.carFingerprint][Bus.radar], [
+      radar_messages = [
         ("RADAR_SUPP_TICK_REFERENCE", tick_freq),
         ("RADAR_HUD_TICK_REFERENCE", tick_freq),
         ("RADAR_50HZ_TICK_REFERENCE", tick_freq),
-      ], CanBus(CP).radar)
+      ]
+      if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+        radar_messages += [
+          ("RVU_PRIVATE_LINK_CAMERA_100HZ", tick_freq),
+          ("RVU_PRIVATE_LINK_100HZ", tick_freq),
+        ]
+      parsers[Bus.radar] = CANParser(DBC[CP.carFingerprint][Bus.radar], radar_messages, CanBus(CP).radar)
 
     return parsers
