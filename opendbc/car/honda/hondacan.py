@@ -428,18 +428,18 @@ def create_vision_ctrl_acc_status(packer, bus, set_speed_kph, v_ego):
   return packer.make_can_msg("ACC_CONTROL_2", bus, values)
 
 
-def create_vision_ctrl_status(packer, bus, silent_frames, hud_tick, state):
+def create_vision_ctrl_status(packer, bus, status_25hz_tick, hud_tick, status_1hz_tick, state):
   """The constant status broadcasts the vision controller authors alongside its control messages: 25 Hz 0x29B
   (all zero), 10 Hz 0x2E8 (byte 2 = 0x80, in the ACC_HUD/LKAS_HUD frame) and 1 Hz 0x1A45AA24 (byte 0 = the
   controller's last state byte, byte 2 = 0x01). All of them disappear with the controller; the MDX Type S cluster
   raised transmission, lane change CMBS and front cross traffic faults once it was silenced (route
-  ad9840558640c31d/0000000a--cffee2dde2). silent_frames counts from the switchover so each goes out at once."""
+  ad9840558640c31d/0000000a--cffee2dde2). Ticks are phase-locked to the last stock RVU frames (see carstate)."""
   commands = []
-  if silent_frames % 4 == 0:
+  if status_25hz_tick:
     commands.append(packer.make_can_msg("VISION_CTRL_STATUS_25HZ", bus, {}))
   if hud_tick:
     commands.append(packer.make_can_msg("VISION_CTRL_STATUS_10HZ", bus, {"SET_ME_X80": 0x80}))
-  if silent_frames % 100 == 0:
+  if status_1hz_tick:
     commands.append(packer.make_can_msg("VISION_CTRL_STATUS_1HZ", bus, {"STATE_MAYBE": state, "SET_ME_X01": 0x01}))
   return commands
 
