@@ -506,6 +506,52 @@ def create_vision_ctrl_status(packer, bus, status_25hz_tick, hud_tick, status_1h
 # CarController mirrors openpilot's replacements onto the camera bus byte-identically, like the radar look-alikes.
 VISION_CTRL_CAMERA_MIRROR_ADDRS = frozenset({0xE4, 0x1C8, 0x1C9, 0x30C, 0x33D})
 
+# vision ctrl: while the car is in Park, every RVU frame whose content does not cycle on its own is re-sent with the
+# bytes of the last stock frame (route ad9840558640c31d/00000012: at the switchover in Park openpilot's ACC_CONTROL_2
+# changed GAP_DISTANCE 4.66 -> 4.33 m and LEAD_DISTANCE 255 -> 2..7 m, ACC_HUD HUD_DISTANCE 3 -> 2, LKAS_HUD LKAS_READY
+# and DASHED_LANES 0 -> 1, then the PCM blinked the gear indicator 1 s later). Holding the stock bytes rules the
+# content, a plausibility check or a misread DBC definition in or out as the cause. STEERING_CONTROL, the 0x334
+# private-link heartbeat and the LANE_PATH/HUD_OBJECTS MUX sweep are not held: the first two were byte-identical to
+# stock, the sweep is a cycle.
+VISION_CTRL_PARK_HOLD_MSGS = ("ACC_CONTROL", "ACC_CONTROL_2", "ACC_HUD", "LKAS_HUD", "RADAR_LEAD",
+                              "VISION_CTRL_STATUS_25HZ", "VISION_CTRL_STATUS_10HZ", "VISION_CTRL_STATUS_1HZ")
+# the signals of those that keep openpilot's value because they cycle with the COUNTER
+VISION_CTRL_PARK_HOLD_KEEP = {"RADAR_LEAD": ("CNTR_REF",)}
+
+
+def restamp_stock_frame(packer, name, stock_dat, op_dat):
+  """The stock bytes of `name` with openpilot's COUNTER (and the signals in VISION_CTRL_PARK_HOLD_KEEP) copied over from
+  openpilot's packed frame and the checksum recomputed, so the held frame continues the sequence openpilot is sending."""
+  # imported here: opendbc.can.dbc imports honda_checksum from this module
+  from opendbc.can.dbc import SignalType
+  from opendbc.can.packer import set_value
+  from opendbc.can.parser import get_raw_value
+  msg = packer.dbc.name_to_msg[name]
+  if len(stock_dat) != msg.size:
+    return op_dat
+  dat = bytearray(stock_dat)
+  keep = VISION_CTRL_PARK_HOLD_KEEP.get(name, ())
+  for sig in msg.sigs.values():
+    if sig.type == SignalType.COUNTER or sig.name == "COUNTER" or sig.name in keep:
+      set_value(dat, sig, get_raw_value(op_dat, sig))
+  sig_checksum = next((s for s in msg.sigs.values() if s.type > SignalType.COUNTER), None)
+  if sig_checksum is not None and sig_checksum.calc_checksum is not None:
+    set_value(dat, sig_checksum, sig_checksum.calc_checksum(msg.address, sig_checksum, dat))
+  return bytes(dat)
+
+
+def hold_vision_stock_frames(packer, can_sends, stock_payloads, buses):
+  """can_sends with every VISION_CTRL_PARK_HOLD_MSGS frame on `buses` replaced by its restamped stock frame
+  (stock_payloads: DBC message name -> bytes of the last stock frame; frames with no stock frame seen are kept)."""
+  addr_to_name = {packer.dbc.name_to_msg[name].address: name for name in VISION_CTRL_PARK_HOLD_MSGS if name in stock_payloads}
+  out = []
+  for addr, dat, bus in can_sends:
+    name = addr_to_name.get(addr)
+    if name is not None and bus in buses:
+      dat = restamp_stock_frame(packer, name, stock_payloads[name], dat)
+    out.append((addr, dat, bus))
+  return out
+
 
 def create_vision_ctrl_private_link(packer, bus):
   """0x334 @ 100 Hz on the harness radar bus: the RVU's private-link heartbeat (paired with 0xE6)."""

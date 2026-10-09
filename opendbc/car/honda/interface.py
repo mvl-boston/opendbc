@@ -359,10 +359,13 @@ class CarInterface(CarInterfaceBase):
     return ret
 
   def update(self, can_packets: list[tuple[int, list[CanData]]]) -> structs.CarState:
-    if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and vision_ctrl.awaiting_response():
-      # the probed controller's UDS answer (its diagnostic reply id is not a DBC message): logged, and a
-      # rejected CommunicationControl variant moves the search on without waiting out the probe
-      vision_ctrl.record_diag_responses(can_packets, CanBus(self.CP).pt)
+    if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+      if vision_ctrl.awaiting_response():
+        # the probed controller's UDS answer (its diagnostic reply id is not a DBC message): logged, and a
+        # rejected CommunicationControl variant moves the search on without waiting out the probe
+        vision_ctrl.record_diag_responses(can_packets, CanBus(self.CP).pt)
+      # the stock bytes of the frames re-sent as is while the car is in Park (see hondacan.VISION_CTRL_PARK_HOLD_MSGS)
+      self.CS.capture_vision_stock_frames(can_packets, CanBus(self.CP).pt)
     return super().update(can_packets)
 
   @staticmethod

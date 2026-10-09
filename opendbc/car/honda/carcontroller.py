@@ -1452,6 +1452,13 @@ class CarController(CarControllerBase):
         "HondaLatAccelFactor60Params": self.latFactors["60"],
       })
 
+    if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and CS.out.gearShifter == GearShifter.park and not CC.longActive:
+      # In Park, openpilot's look-alikes carry the bytes of the RVU's last stock frame (counter and checksum continue
+      # openpilot's sequence), see hondacan.VISION_CTRL_PARK_HOLD_MSGS. Done before the camera mirroring below so
+      # both buses carry the same bytes; the radar look-alikes above already sit on both buses. Never while
+      # longitudinal control is active: ACC_CONTROL is one of the held frames.
+      can_sends = hondacan.hold_vision_stock_frames(self.packer, can_sends, CS.vision_stock_payloads, (self.CAN.pt, self.CAN.camera))
+
     if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
       # The camera sits behind the relay and, until the controller was silenced, saw its STEERING_CONTROL,
       # ACC_CONTROL, ACC_CONTROL_2, ACC_HUD and LKAS_HUD through panda forwarding; openpilot's own
