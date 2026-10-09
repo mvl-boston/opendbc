@@ -615,9 +615,9 @@ class CarController(CarControllerBase):
       if CS.supp_tick:
         radar_msgs.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
       if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
-        # 0x334 @ 100 Hz on bus 1: phased one frame after surviving 0xE6 (see carstate).
-        if CS.rvu_private_link_tick:
-          can_sends.append(hondacan.create_vision_ctrl_private_link(self.packer, self.CAN.radar))
+        # 0x334 @ 100 Hz on the harness radar bus: the RVU's private-link heartbeat (stops with the RVU on
+        # route 0000000b). Every control frame, like STEERING_CONTROL: at 100 Hz there is no slot to phase.
+        can_sends.append(hondacan.create_vision_ctrl_private_link(self.packer, self.CAN.radar))
         # the silenced controller's constant status broadcasts (0x29B/0x2E8/0x1A45AA24), see hondacan
         radar_msgs.extend(hondacan.create_vision_ctrl_status(self.packer, self.CAN.pt, CS.vision_status_25hz_tick,
                                                              CS.hud_tick, CS.vision_status_1hz_tick,
@@ -646,7 +646,12 @@ class CarController(CarControllerBase):
         # authoring; the stock radar keeps the two in lockstep and the dash won't draw lanes otherwise.
         # LEFT_LANE/RIGHT_LANE carry the per-side line-detected status (3/0) the same way the stock
         # radar mirrors the camera's LANE_LINES bits; the dash draws no lane lines while both are 0.
-        radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, CS.radar_ref_counter,
+        # vision ctrl: the RVU's RADAR_LEAD echoes the last RADAR_REFERENCE counter plus one (4783/4783
+        # frames of stock route 00000003); the CAN FD radars echo it as is.
+        cntr_ref = CS.radar_ref_counter
+        if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+          cntr_ref = (int(cntr_ref) + 1) % 4
+        radar_msgs.extend(hondacan.create_canfd_5hz_radar_messages(self.packer, self.CAN.pt, cntr_ref,
                                                                    lane_path.canfd_lane_length(self.dash_lane),
                                                                    lane_path.LANE_LINE_ON if self.dash_lane.left_line else 0,
                                                                    lane_path.LANE_LINE_ON if self.dash_lane.right_line else 0,
