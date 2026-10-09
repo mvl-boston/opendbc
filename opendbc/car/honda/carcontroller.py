@@ -641,9 +641,14 @@ class CarController(CarControllerBase):
         # private pairs up itself, and a second 0x334 would double the heartbeat the camera is listening to.
         if vision_ctrl.private_link_silenced() or not CS.stock_private_link_alive:
           can_sends.append(hondacan.create_vision_ctrl_private_link(self.packer, self.CAN.radar))
-        # the silenced controller's constant status broadcasts (0x29B/0x2E8/0x1A45AA24), see hondacan
-        radar_msgs.extend(hondacan.create_vision_ctrl_status(self.packer, self.CAN.pt, CS.vision_status_25hz_tick,
-                                                             CS.hud_tick, CS.vision_status_1hz_tick,
+        # the silenced controller's constant status broadcasts (0x29B/0x2E8/0x1A45AA24), see hondacan. Each
+        # only while the RVU's own is gone: a CommunicationControl variant that silences normal messages only
+        # leaves whatever the RVU classes as network management (the status broadcasts are the likely ones)
+        # running, and the panda forwards those to the camera as before.
+        radar_msgs.extend(hondacan.create_vision_ctrl_status(self.packer, self.CAN.pt,
+                                                             CS.vision_status_25hz_tick and not CS.vision_stock_alive("VISION_CTRL_STATUS_25HZ"),
+                                                             CS.hud_tick and not CS.vision_stock_alive("VISION_CTRL_STATUS_10HZ"),
+                                                             CS.vision_status_1hz_tick and not CS.vision_stock_alive("VISION_CTRL_STATUS_1HZ"),
                                                              CS.vision_ctrl_state))
       if CS.radar_50hz_tick:
         # Cycle the radar MUX through the same banks the stock radar uses: 1-10, 17-26, 33-42, 49-58.
@@ -664,7 +669,8 @@ class CarController(CarControllerBase):
         else:
           self.radar_mux += 1
         # radar_msgs.extend(hondacan.create_canfd_50hz_radar_messages(self.packer, self.CAN.pt, self.radar_mux))
-      if CS.radar_5hz_tick:
+      vision = self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL
+      if CS.radar_5hz_tick and not (vision and CS.vision_stock_alive("RADAR_LEAD")):
         # RADAR_LEAD's LANE_PATH_LENGTH must track the valid-point count of the LANE_PATH sweep we are
         # authoring; the stock radar keeps the two in lockstep and the dash won't draw lanes otherwise.
         # LEFT_LANE/RIGHT_LANE carry the per-side line-detected status (3/0) the same way the stock
@@ -672,7 +678,6 @@ class CarController(CarControllerBase):
         # vision ctrl: the RVU's RADAR_LEAD echoes the last RADAR_REFERENCE counter plus one (4783/4783
         # frames of stock route 00000003); the CAN FD radars echo it as is.
         cntr_ref = CS.radar_ref_counter
-        vision = self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL
         if vision:
           cntr_ref = (int(cntr_ref) + 1) % 4
         if vision and not VISION_CTRL_DASH_LANES:
@@ -1210,21 +1215,26 @@ class CarController(CarControllerBase):
         # same 10 ms batch in 92-99% of frames (routes 00000003, 0000000f, 00000011), the rest straddle a
         # batch boundary; sending it a frame later opened the pair with a 1.5-period gap at the switchover and
         # kept it 10 ms behind the stock cadence for the whole drive. Never alongside the stock stream: ours
-        # starts the frame the controller is called dead.
+        # starts the frame the controller is called dead, and each stays out while the RVU still sends its own
+        # (CS.vision_stock_alive: a partial CommunicationControl variant).
         park_or_reverse = CS.out.gearShifter in (GearShifter.park, GearShifter.reverse)
-        can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                      self.stopping_counter, self.CP, self.vision_gas_pedal_force, park_or_reverse))
-        set_speed_kph = hud_control.setSpeed * CV.MS_TO_KPH if hud_control.speedVisible else 0
-        # gap distance for the distance bars ACC_HUD shows (the brake module gets both, stock keeps them in
-        # step), lead distance from the model's lead (same source as the dash lead below)
-        can_sends.append(hondacan.create_vision_ctrl_acc_status(self.packer, self.CAN.pt, set_speed_kph, CS.out.vEgo,
-                                                                hud_control.leadDistanceBars, self.vision_lead_distance))
+        if not CS.vision_stock_alive("ACC_CONTROL"):
+          can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
+                                                        self.stopping_counter, self.CP, self.vision_gas_pedal_force, park_or_reverse))
+        if not CS.vision_stock_alive("ACC_CONTROL_2"):
+          set_speed_kph = hud_control.setSpeed * CV.MS_TO_KPH if hud_control.speedVisible else 0
+          # gap distance for the distance bars ACC_HUD shows (the brake module gets both, stock keeps them in
+          # step), lead distance from the model's lead (same source as the dash lead below)
+          can_sends.append(hondacan.create_vision_ctrl_acc_status(self.packer, self.CAN.pt, set_speed_kph, CS.out.vEgo,
+                                                                  hud_control.leadDistanceBars, self.vision_lead_distance))
 
     # Send dashboard UI commands. On CAN FD, ACC_HUD is a radar/ADAS look-alike that openpilot only
     # owns when it has disabled the radar (op longitudinal); in stock ACC the real system sends it and
     # the non-long safety config doesn't allowlist it.
     speed_control = 0 if self.CP.carFingerprint in HONDA_BOSCH else self.launch_active
-    if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
+    vision_ctrl_car = self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL
+    if (self.CP.carFingerprint in HONDA_BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive \
+        and not (vision_ctrl_car and CS.vision_stock_alive("ACC_HUD")):
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, actuators.accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                  self.CP.openpilotLongitudinalControl))
@@ -1276,7 +1286,7 @@ class CarController(CarControllerBase):
         lanes_up = VISION_CTRL_DASH_LANES and (self.dash_lane.left_line or self.dash_lane.right_line)
         lane_lines = lane_path.LANE_LINE_ON if lanes_up else 0
 
-      if not stock_steer_alive:
+      if not stock_steer_alive and not (vision_ctrl_car and CS.vision_stock_alive("LKAS_HUD")):
         can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
                                                   steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed, CS,
                                                   lkas_state_change=lkas_state_change, lane_lines=lane_lines))
@@ -1330,15 +1340,19 @@ class CarController(CarControllerBase):
         else:
           # For ACC, forward objects but with our mux
           hud_msg = hud_objects.forward_hud_object(self.packer, self.CAN.lkas, mux, tracks)
-      can_sends.append(lane_msg)
-      can_sends.append(hud_msg)
+      # vision ctrl: the pair stays with the RVU while it still sends it (partial CommunicationControl variant);
+      # the path and lead above are still fitted for ACC_CONTROL_2
+      stock_pair_alive = vision_ctrl_car and (CS.vision_stock_alive("LANE_PATH") or CS.vision_stock_alive("HUD_OBJECTS"))
+      if not stock_pair_alive:
+        can_sends.append(lane_msg)
+        can_sends.append(hud_msg)
 
-      # On CAN FD the camera (behind the relay) also consumes these radar look-alikes, and openpilot's
-      # own TX is not forwarded across the open relay. Mirror the identical packed bytes onto the camera
-      # bus (packed once above, so the counter/checksum don't double-increment and both buses match).
-      if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
-        for addr, dat, _ in (lane_msg, hud_msg):
-          can_sends.append((addr, dat, self.CAN.camera))
+        # On CAN FD the camera (behind the relay) also consumes these radar look-alikes, and openpilot's
+        # own TX is not forwarded across the open relay. Mirror the identical packed bytes onto the camera
+        # bus (packed once above, so the counter/checksum don't double-increment and both buses match).
+        if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+          for addr, dat, _ in (lane_msg, hud_msg):
+            can_sends.append((addr, dat, self.CAN.camera))
 
     if self.frame % 20 == 0 and self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       # COUNTER_2 trails the packer's COUNTER (frame//20 % 4) by one. TODO: do we need the - 1 trail?
