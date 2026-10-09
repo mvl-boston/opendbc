@@ -3,10 +3,11 @@ import numpy as np
 from collections import defaultdict
 
 from opendbc.can import CANDefine, CANParser
+from opendbc.can.dbc import DBC as DbcFile
 from opendbc.car import Bus, create_button_events, structs, DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda import vision_ctrl
-from opendbc.car.honda.hondacan import CanBus
+from opendbc.car.honda.hondacan import CanBus, VISION_CTRL_PARK_HOLD_MSGS
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_TJA_CONTROL, \
                                                  HONDA_BOSCH_VISION_CTRL, HondaFlags, CruiseButtons, CruiseSettings, GearShifter, \
@@ -123,6 +124,13 @@ class CarState(CarStateBase):
     self.vision_stock_resumed: set[str] = set()
     # vision ctrl: MUX of the last stock LANE_PATH, so openpilot's sweep carries on from it (0 = none seen)
     self.vision_stock_lane_mux = 0
+    # vision ctrl: raw bytes of the last stock frame of each message held in Park (see hondacan.VISION_CTRL_PARK_HOLD_MSGS),
+    # by DBC message name; captured from the car-bus RX before parsing so no definition sits in between
+    self.vision_stock_payloads: dict[str, bytes] = {}
+    self.vision_hold_addrs: dict[int, str] = {}
+    if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+      dbc = DbcFile(DBC[CP.carFingerprint][Bus.pt])
+      self.vision_hold_addrs = {dbc.name_to_msg[name].address: name for name in VISION_CTRL_PARK_HOLD_MSGS}
     # vision ctrl: the RVU's 0x334 private-link heartbeat on the harness radar bus is still being received
     self.stock_private_link_counter = 0
     self.stock_private_link_alive = False
@@ -149,6 +157,16 @@ class CarState(CarStateBase):
     its periods have passed without one (single-batch gaps happen, two periods do not). Always False with the
     every-network variant, where nothing comes back, so the switchover timing is unchanged there."""
     return name in self.vision_stock_resumed and self.vision_stock_missing[name] < 2 * VISION_CTRL_STOCK_PT_MSG_PERIODS[name]
+
+  def capture_vision_stock_frames(self, can_packets, bus: int) -> None:
+    """Remember the raw bytes of the last stock frame of every message held in Park (vision ctrl, car bus RX only:
+    openpilot's own transmissions are not received back)."""
+    for _, frames in can_packets:
+      for addr, dat, src in frames:
+        if src == bus:
+          name = self.vision_hold_addrs.get(addr)
+          if name is not None:
+            self.vision_stock_payloads[name] = bytes(dat)
 
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
