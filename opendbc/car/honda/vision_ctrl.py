@@ -4,8 +4,8 @@ On this car the ECU that authors STEERING_CONTROL (0xE4) and the ACC messages si
 comma harness: opening the relay does not take its STEERING_CONTROL off the powertrain bus, so openpilot
 cannot simply replace the stream the way it does with the camera on the other CAN FD Hondas. The approach
 is the same one alphalong uses for the Bosch radar: put the ECU in the extended diagnostic session, send
-UDS CommunicationControl (disableRxAndTx on the car bus only first, disableRxAndTx everywhere as the fallback,
-see COMM_CONTROL_DISABLE_MSGS), and keep it silent with TesterPresent.
+UDS CommunicationControl (the variants that would leave the ECU's other networks alive first, disableRxAndTx
+everywhere as the fallback, see COMM_CONTROL_DISABLE_MSGS), and keep it silent with TesterPresent.
 
 The controller's diagnostic address is not known for certain, so it is searched for:
   1. CarInterface.init() (ELM327 safety mode, every diagnostic address allowed) scans the whole Honda
@@ -35,39 +35,53 @@ SCAN_SKIP_ECU_IDS = {(HONDA_GATEWAY_DIAG_ADDR - HONDA_DIAG_TX_BASE) >> 8, HONDA_
 
 # UDS payloads of the handshake, as ISO-TP single frames (exactly what panda safety gates on)
 EXT_DIAG_SESSION_MSG = bytes([0x02, uds.SERVICE_TYPE.DIAGNOSTIC_SESSION_CONTROL, uds.SESSION_TYPE.EXTENDED_DIAGNOSTIC]) + b'\x00' * 5
-# ISO 14229-1 communicationType: low nibble = message kinds, high nibble = subnet (0x0 = every network the
-# server is on, 0xF = only the network the request was received on).
-COMM_TYPE_THIS_NETWORK = 0xF0
+# ISO 14229-1 communicationType: low nibble = message kinds (normal / network management / both), high nibble =
+# subnet (0x0 = every network the server is on, 0x1-0xE = that subnet number, 0xF = only the network the request
+# was received on).
 # The MDX Type S wiring diagram (Driving Support) puts the RVU on two shared networks plus six private pairs:
 # AF-CAN A (the camera's bus, openpilot bus 0), AF-CAN B (the rear corner radars' network, not reachable from the
 # harness), and point-to-point pairs to the camera (the 0xE6/0x334 pair the harness taps as bus 1), the front
 # center radar and the four corner radars. PCM, VSA, brake, TCM, EPS and the cluster are on PF-/VF-/IF-CAN behind
-# a gateway. CommunicationControl disable variants, tried in this order on each candidate (see
-# VisionControllerSilencer):
-#   0. disableRxAndTx on the network the request came in on (AF-CAN A): the RVU goes quiet on the car bus only,
-#      so AF-CAN B and the private pairs stay up. Positive response requested (no 0x80), so the log shows
-#      whether the RVU accepts the subnet form (68 03 on 0x18DAF1B8) or rejects it (7F 28 31). The gentler
-#      enableRxAndDisableTx (28 01 F3) was tried first on route ad9840558640c31d/00000011 and answered
-#      7F 28 12 (sub-function not supported): the RVU does not implement controlType 01 at all, so the subnet
-#      form itself is still untested and goes out with the controlType it is known to accept (03).
-#   1. disableRxAndTx of normal + NM messages on every network (what the first MDX Type S drives used): with
-#      every car-bus frame replaced tick-exact and byte-identical in idle (routes ad9840558640c31d/0000000b,
-#      0000000d and 00000011), the PCM still raised the transmission fault 1.03 s after the RVU's last frame, and
-#      the brake/corner-radar status (0x22C, 0x3A1, 0xF31AA57) followed at +1.5/+2.1 s: it also took the RVU off
-#      AF-CAN B and the six private pairs, none of which openpilot can see or replace (the "lane change CMBS"
-#      and "front cross traffic" faults are the corner radars on those pairs), so this is only the fallback for
-#      an RVU that rejects 0.
-COMM_CONTROL_DISABLE_MSGS = (
+# a gateway. CommunicationControl disableRxAndTx of normal + NM messages on every network (28 83 03, what the
+# first MDX Type S drives used) silences every car-bus frame, and with all of them replaced tick-exact and
+# byte-identical in idle (routes ad9840558640c31d/0000000b, 0000000d, 00000011, 00000012) the PCM still raised
+# the transmission fault 1.02 s after the RVU's last frame and the brake/corner-radar status (0x22C, 0x3A1,
+# 0xF31AA57) followed at +1.5/+2.1 s: it also takes the RVU off AF-CAN B and the six private pairs, none of which
+# openpilot can see or replace (the "lane change CMBS" and "front cross traffic" faults are the corner radars on
+# those pairs). The RVU's answers so far, all on 0x18DAF1B8 within 10-20 ms:
+#   28 01 F3 (enableRxAndDisableTx, this network)  -> 7F 28 12: controlType 01 not implemented (route 00000011)
+#   28 03 F3 (disableRxAndTx, this network)        -> 7F 28 31: the "network received on" subnet is out of range
+#                                                                (route 00000012)
+#   28 83 03 / 28 80 03 (every network, suppressed) -> accepted on every drive
+# Variants tried in this order on each candidate (see VisionControllerSilencer), positive response requested
+# (no 0x80) so a rejection (7F 28 xx) is logged and the next variant goes out right away:
+#   - disableRxAndTx on subnet 1 .. 14 (28 03 13 .. 28 03 E3): if the RVU numbers its networks instead of
+#     accepting 0xF, one of these is AF-CAN A. A variant the RVU accepts (68 03) without the stock
+#     STEERING_CONTROL stopping silenced some other network: it is restored (28 80 03) 200 ms later and the
+#     next one is tried.
+#   - disableRxAndTx of normal messages only, every network (28 03 01): whatever the RVU classes as network
+#     management (keep-alive / node status) keeps flowing everywhere, so the corner radars and the gateway still
+#     see it. Any such frame on the car bus keeps being received and CarController then leaves that one to the
+#     RVU (see CarState.vision_stock_alive).
+#   - disableRxAndTx of normal + NM messages, every network (28 83 03): the known behavior, the fallback.
+COMM_TYPE_SUBNETS = tuple(range(0x1, 0xF))
+COMM_CONTROL_DISABLE_MSGS = tuple(
   bytes([0x03, uds.SERVICE_TYPE.COMMUNICATION_CONTROL, uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
-         COMM_TYPE_THIS_NETWORK | uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT]) + b'\x00' * 4,
+         (subnet << 4) | uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT]) + b'\x00' * 4
+  for subnet in COMM_TYPE_SUBNETS
+) + (
+  bytes([0x03, uds.SERVICE_TYPE.COMMUNICATION_CONTROL, uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
+         uds.MESSAGE_TYPE.NORMAL]) + b'\x00' * 4,
   bytes([0x03, uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
          uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT]) + b'\x00' * 4,
 )
-COMM_CONTROL_DISABLE_NAMES = ("disableRxAndTx on this network only", "disableRxAndTx on every network")
-# UDS negative response: 7F <rejected service> <NRC>
+COMM_CONTROL_DISABLE_NAMES = tuple(f"disableRxAndTx on subnet {subnet}" for subnet in COMM_TYPE_SUBNETS) + \
+                             ("disableRxAndTx of normal messages on every network", "disableRxAndTx on every network")
+# UDS negative response: 7F <rejected service> <NRC>; positive response to CommunicationControl: 68 <controlType>
 UDS_NEGATIVE_RESPONSE = 0x7F
+COMM_CONTROL_POSITIVE_RESPONSE = 0x40 | uds.SERVICE_TYPE.COMMUNICATION_CONTROL
 # index of the variant that takes the RVU's private links (0x334 on the harness radar bus) down with it
-COMM_CONTROL_ALL_NETWORKS_VARIANT = 1
+COMM_CONTROL_ALL_NETWORKS_VARIANT = len(COMM_CONTROL_DISABLE_MSGS) - 1
 COMM_CONTROL_DISABLE_MSG = COMM_CONTROL_DISABLE_MSGS[COMM_CONTROL_ALL_NETWORKS_VARIANT]
 # enableRxAndTx on every network restores a candidate whatever variant silenced it
 COMM_CONTROL_ENABLE_MSG = bytes([0x03, uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.ENABLE_RX_ENABLE_TX,
@@ -154,8 +168,9 @@ def _set_silenced_addr(addr: int | None, variant: int | None = None) -> None:
 
 def private_link_silenced() -> bool:
   """True once the controller is held silent with the every-network variant, which also stops its private-link
-  heartbeat (0x334 on the harness radar bus): CarController then authors that one too. With the this-network
-  variant the RVU keeps its private pairs up itself and openpilot must not double the heartbeat."""
+  heartbeat (0x334 on the harness radar bus): CarController then authors that one too. With any other variant
+  the RVU may keep its private pairs up itself, and CarController only steps in once the stock heartbeat is
+  actually gone (CarState.stock_private_link_alive)."""
   return _silenced_variant == COMM_CONTROL_ALL_NETWORKS_VARIANT
 
 
@@ -249,6 +264,9 @@ class VisionControllerSilencer:
   # batch, not the controller coming back: resume the probe instead of redoing the handshake
   RELOCK_FRAMES = 3
   PROBE_FRAMES = 100     # a candidate gets 1 s to take the stock STEERING_CONTROL down
+  # once the controller has accepted a variant (68 03) it stops within 0-2 ticks if that variant covers the car
+  # bus at all (routes 0000000b-00000012): a variant accepted this long ago silenced some other network
+  ACCEPTED_PROBE_FRAMES = 20
   TESTER_PRESENT_PERIOD = 10
   MAX_CYCLES = 3         # full passes over the candidates before giving up (avoids flapping ECUs forever)
 
@@ -260,6 +278,8 @@ class VisionControllerSilencer:
     self.probing = False
     # CommunicationControl disable variant being tried on the current candidate (COMM_CONTROL_DISABLE_MSGS)
     self.variant = 0
+    # counter value at which the controller's positive response to the current variant was seen (None: none yet)
+    self.accepted_at: int | None = None
     self.silenced_addr: int | None = None
     self.gave_up = False
     _set_silenced_addr(None)
@@ -275,23 +295,33 @@ class VisionControllerSilencer:
     self.silenced_addr = self.addr
     self.probing = False
     self.counter = 0
+    self.accepted_at = None
     _set_silenced_addr(self.silenced_addr, self.variant)
-    _set_awaiting_response(None)
+    # the controller's answer keeps being collected through the relock window: a lock on a dropped batch the
+    # frame the NRC arrives must not lose it (the resumed probe would then sit out the full second)
     variant_name = COMM_CONTROL_DISABLE_NAMES[self.variant]
     carlog.error(f"vision controller silenced at {hex(self.silenced_addr)} with {variant_name}: stock STEERING_CONTROL stopped")
 
-  def _probe_failed(self, bus: int, why: str) -> list[CanData]:
+  def _probe_failed(self, bus: int, why: str, rejected: bool) -> list[CanData]:
     """The variant being tried did not take the stock STEERING_CONTROL down (probe expired, or the controller
     rejected the request): next variant on the same candidate, still in the extended session, or restore the
-    candidate and move on once every variant has been tried."""
+    candidate and move on once every variant has been tried. A rejected variant changed nothing, so the next one
+    goes out in this frame; anything else may have silenced a network openpilot cannot see, so the candidate is
+    restored (enableRxAndTx everywhere) first and the next variant follows one frame later."""
     msgs: list[CanData] = []
     tried = COMM_CONTROL_DISABLE_NAMES[self.variant]
+    self.accepted_at = None
     if self.variant + 1 < len(COMM_CONTROL_DISABLE_MSGS):
       self.variant += 1
       carlog.error(f"vision controller candidate {hex(self.addr)}: {tried} {why}, trying {COMM_CONTROL_DISABLE_NAMES[self.variant]}")
-      msgs.append(CanData(self.addr, COMM_CONTROL_DISABLE_MSGS[self.variant], bus))
-      _set_awaiting_response(self.addr)
-      self.counter = self.DISABLE_FRAME + 1
+      if rejected:
+        msgs.append(CanData(self.addr, COMM_CONTROL_DISABLE_MSGS[self.variant], bus))
+        _set_awaiting_response(self.addr)
+        self.counter = self.DISABLE_FRAME + 1
+      else:
+        msgs.append(CanData(self.addr, COMM_CONTROL_ENABLE_MSG, bus))
+        _set_awaiting_response(None)
+        self.counter = self.DISABLE_FRAME
       return msgs
     # the stock STEERING_CONTROL survived this candidate: it is not the author, restore it and move on
     msgs.append(CanData(self.addr, COMM_CONTROL_ENABLE_MSG, bus))
@@ -343,6 +373,8 @@ class VisionControllerSilencer:
         else:
           self._unlock()
       else:
+        if self.counter == self.RELOCK_FRAMES:
+          _set_awaiting_response(None)
         if self.counter % self.TESTER_PRESENT_PERIOD == 0:
           msgs.append(make_tester_present_msg(self.silenced_addr, bus, suppress_response=True))
         self.counter += 1
@@ -366,7 +398,9 @@ class VisionControllerSilencer:
         carlog.error(f"vision controller candidate {hex(self.addr)}: {COMM_CONTROL_DISABLE_NAMES[self.variant]} answered "
                      + describe_uds_response(dat))
         if rejected:
-          return self._probe_failed(bus, "was rejected")
+          return self._probe_failed(bus, "was rejected", rejected=True)
+        if len(dat) >= 2 and dat[1] == COMM_CONTROL_POSITIVE_RESPONSE and self.accepted_at is None:
+          self.accepted_at = self.counter
 
     if self.counter == self.SESSION_FRAME:
       msgs.append(CanData(self.addr, EXT_DIAG_SESSION_MSG, bus))
@@ -375,9 +409,12 @@ class VisionControllerSilencer:
         return msgs
       msgs.append(CanData(self.addr, COMM_CONTROL_DISABLE_MSGS[self.variant], bus))
       self.probing = True
+      self.accepted_at = None
       _set_expecting_silence(True)
       _set_awaiting_response(self.addr)
+    elif self.accepted_at is not None and self.counter - self.accepted_at >= self.ACCEPTED_PROBE_FRAMES:
+      return self._probe_failed(bus, "was accepted but did not stop STEERING_CONTROL", rejected=False)
     elif self.counter >= self.PROBE_FRAMES - 1:
-      return self._probe_failed(bus, "did not stop STEERING_CONTROL")
+      return self._probe_failed(bus, "did not stop STEERING_CONTROL", rejected=False)
     self.counter += 1
     return msgs

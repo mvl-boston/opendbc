@@ -2,6 +2,7 @@
 import unittest
 import numpy as np
 
+from opendbc.car.honda import vision_ctrl
 from opendbc.car.honda.values import HondaSafetyFlags, VISION_CTRL_CANDIDATE_ADDRS
 from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
@@ -865,22 +866,25 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
         self.assertTrue(self._tx(make_msg(bus, addr, 8)), (hex(addr), bus))
 
   def test_diagnostics(self):
-    # the full handshake (TesterPresent, extended session, both CommunicationControl disable variants:
-    # disableRxAndTx on the receiving network only with a positive response requested, disableRxAndTx on every
-    # network) plus the matching CommunicationControl enable (to restore a candidate that was not the
-    # controller) is allowed towards exactly the candidate addresses, with all-zero padding. Nothing else of
-    # service 0x28: no other controlType (01/02, the RVU rejects 01 anyway), no other subnet, no suppressed
-    # this-network form, no all-network form with a response requested.
+    # the full handshake (TesterPresent, extended session, every CommunicationControl disable variant the
+    # CarController tries: disableRxAndTx on subnet 1..14 and of normal messages only with a positive response
+    # requested, disableRxAndTx on every network suppressed) plus the matching CommunicationControl enable (to
+    # restore a candidate that was not the controller) is allowed towards exactly the candidate addresses, with
+    # all-zero padding. Nothing else of service 0x28: no other controlType (01/02, the RVU rejects 01 anyway),
+    # no subnet 0/F with a response requested or with other message kinds, no suppressed subnet form, no NM-only.
+    subnet_disables = [bytes([0x03, 0x28, 0x03, (subnet << 4) | 0x03]) + b"\x00" * 4 for subnet in range(0x1, 0xF)]
     for addr in VISION_CTRL_CANDIDATE_ADDRS:
-      for dat in (b"\x02\x3E\x80\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x00", b"\x03\x28\x03\xF3\x00\x00\x00\x00",
-                  b"\x03\x28\x83\x03\x00\x00\x00\x00", b"\x03\x28\x80\x03\x00\x00\x00\x00"):
+      for dat in (b"\x02\x3E\x80\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x00", b"\x03\x28\x03\x01\x00\x00\x00\x00",
+                  b"\x03\x28\x83\x03\x00\x00\x00\x00", b"\x03\x28\x80\x03\x00\x00\x00\x00", *subnet_disables):
         self.assertTrue(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
       for dat in (b"\x03\xAA\xAA\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x01", b"\x03\x28\x80\x03\x00\x00\x00\x01",
                   b"\x02\x10\x01\x00\x00\x00\x00\x00", b"\x02\x11\x01\x00\x00\x00\x00\x00", b"\x03\x28\x81\x03\x00\x00\x00\x00",
                   b"\x03\x28\x01\x03\x00\x00\x00\x00", b"\x03\x28\x03\x03\x00\x00\x00\x00", b"\x03\x28\x01\xF3\x00\x00\x00\x00",
                   b"\x03\x28\x02\xF3\x00\x00\x00\x00", b"\x03\x28\x83\xF3\x00\x00\x00\x00", b"\x03\x28\x81\xF3\x00\x00\x00\x00",
-                  b"\x03\x28\x03\xF1\x00\x00\x00\x00", b"\x03\x28\x03\x13\x00\x00\x00\x00", b"\x03\x28\x03\xE3\x00\x00\x00\x00",
-                  b"\x03\x28\x03\xF3\x00\x00\x00\x01"):
+                  b"\x03\x28\x03\xF3\x00\x00\x00\x00", b"\x03\x28\x03\xF1\x00\x00\x00\x00", b"\x03\x28\x03\x11\x00\x00\x00\x00",
+                  b"\x03\x28\x03\x12\x00\x00\x00\x00", b"\x03\x28\x03\x02\x00\x00\x00\x00", b"\x03\x28\x83\x01\x00\x00\x00\x00",
+                  b"\x03\x28\x83\x13\x00\x00\x00\x00", b"\x03\x28\x01\x13\x00\x00\x00\x00", b"\x03\x28\x03\x13\x00\x00\x00\x01",
+                  b"\x03\x28\x03\x01\x00\x00\x00\x01", b"\x03\x28\x80\x13\x00\x00\x00\x00"):
         self.assertFalse(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
       # never on the camera bus
       self.assertFalse(self._tx(libsafety_py.make_CANPacket(addr, 2, b"\x02\x3E\x80\x00\x00\x00\x00\x00")))
@@ -888,7 +892,7 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
     # every other ECU stays unreachable, the EPS, VSA and gateway in particular
     for addr in (0x18DA30F1, 0x18DA28F1, 0x18DAEFF1, 0x18DA10F1, 0x18DB33F1):
       for dat in (b"\x02\x3E\x80\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x00", b"\x03\x28\x83\x03\x00\x00\x00\x00",
-                  b"\x03\x28\x03\xF3\x00\x00\x00\x00"):
+                  b"\x03\x28\x03\x01\x00\x00\x00\x00", subnet_disables[0]):
         self.assertFalse(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
 
   def test_candidate_list_matches_safety(self):
@@ -896,6 +900,12 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
     for addr in range(0x18DA00F1, 0x18DB00F1, 0x100):
       tester_present = libsafety_py.make_CANPacket(addr, self.PT_BUS, b"\x02\x3E\x80\x00\x00\x00\x00\x00")
       self.assertEqual(addr in VISION_CTRL_CANDIDATE_ADDRS, self._tx(tester_present), hex(addr))
+
+  def test_handshake_payloads_match_safety(self):
+    # every frame the silencer can send (session, each disable variant in its order, restore) is allowed
+    for addr in VISION_CTRL_CANDIDATE_ADDRS:
+      for dat in (vision_ctrl.EXT_DIAG_SESSION_MSG, *vision_ctrl.COMM_CONTROL_DISABLE_MSGS, vision_ctrl.COMM_CONTROL_ENABLE_MSG):
+        self.assertTrue(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
 
   def test_stock_steering_control_fwd(self):
     # the controller's STEERING_CONTROL on the PT bus (bus 0) is the stock stream OP is waiting on: it must
