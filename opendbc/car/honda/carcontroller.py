@@ -257,6 +257,7 @@ class CarController(CarControllerBase):
     # EU CR-V: created on first use, after CarInterface.init() has scanned the bus for the controller
     self.vision_ctrl_silencer: vision_ctrl.VisionControllerSilencer | None = None
     self.vision_acc_control_2_pending = False
+    self.vision_gas_pedal_force = 0.0
 
     self.gasalpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
@@ -1112,21 +1113,13 @@ class CarController(CarControllerBase):
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
           # CAN FD: never overlap the stock radar's own ACC_CONTROL stream; ours starts within a few
           # frames of the radar going silent (see the deferred radar disable above)
-          if not (self.CP.carFingerprint in HONDA_BOSCH_CANFD and CS.stock_acc_alive):
+          if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+            # transmitted below on the RVU's 50 Hz phase, not on this block's frame parity
+            self.vision_gas_pedal_force = gas_pedal_force
+          elif not (self.CP.carFingerprint in HONDA_BOSCH_CANFD and CS.stock_acc_alive):
             park_or_reverse = CS.out.gearShifter in (GearShifter.park, GearShifter.reverse)
-            if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
-              # Stock RVU ACC_CONTROL is 50 Hz; 0x1C9 follows one frame later (see _bosch_vision_ctrl.dbc).
-              if self.vision_acc_control_2_pending:
-                set_speed_kph = hud_control.setSpeed * CV.MS_TO_KPH if hud_control.speedVisible else 0
-                can_sends.append(hondacan.create_vision_ctrl_acc_status(self.packer, self.CAN.pt, set_speed_kph, CS.out.vEgo))
-                self.vision_acc_control_2_pending = False
-              if CS.radar_50hz_tick:
-                can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                              self.stopping_counter, self.CP, gas_pedal_force, park_or_reverse))
-                self.vision_acc_control_2_pending = True
-            else:
-              can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                            self.stopping_counter, self.CP, gas_pedal_force, park_or_reverse))
+            can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
+                                                          self.stopping_counter, self.CP, gas_pedal_force, park_or_reverse))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb):
@@ -1182,6 +1175,22 @@ class CarController(CarControllerBase):
 
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
+
+      if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and not CS.stock_acc_alive:
+        # Stock RVU ACC_CONTROL is 50 Hz on the RVU's own phase (CS.radar_50hz_tick, seeded from the stock
+        # frames in carstate), which has nothing to do with this controller's frame parity: gating the send
+        # on the even-frame gas/brake block above would drop every ACC_CONTROL on drives where the stock slot
+        # falls on odd frames. 0x1C9 follows one frame later (see _bosch_vision_ctrl.dbc). Never alongside
+        # the stock stream: ours starts the frame the controller is called dead.
+        if self.vision_acc_control_2_pending:
+          set_speed_kph = hud_control.setSpeed * CV.MS_TO_KPH if hud_control.speedVisible else 0
+          can_sends.append(hondacan.create_vision_ctrl_acc_status(self.packer, self.CAN.pt, set_speed_kph, CS.out.vEgo))
+          self.vision_acc_control_2_pending = False
+        if CS.radar_50hz_tick:
+          park_or_reverse = CS.out.gearShifter in (GearShifter.park, GearShifter.reverse)
+          can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
+                                                        self.stopping_counter, self.CP, self.vision_gas_pedal_force, park_or_reverse))
+          self.vision_acc_control_2_pending = True
 
     # Send dashboard UI commands. On CAN FD, ACC_HUD is a radar/ADAS look-alike that openpilot only
     # owns when it has disabled the radar (op longitudinal); in stock ACC the real system sends it and
