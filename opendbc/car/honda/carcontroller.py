@@ -184,6 +184,8 @@ NIDEC_AEGO_FILTER_ALPHA = 0.05
 
 # EU CR-V vision controller: controls frames to wait before the first UDS silence handshake (see update())
 VISION_CTRL_START_FRAME = 200
+# vision ctrl: the RVU streams replaced at 100 Hz, whose first replacement is always one slot late (see update())
+VISION_CTRL_100HZ_MSGS = ("STEERING_CONTROL", "RVU_PRIVATE_LINK_100HZ")
 
 
 def band_weights(bands, v_ego):
@@ -583,10 +585,16 @@ class CarController(CarControllerBase):
           # First frame of openpilot's streams: continue each stock COUNTER sequence instead of restarting
           # at 0 (route 0000000d jumped on nearly every stream at the handover; the brake module and the
           # cluster keep taking a jump, but the look-alikes have no business being distinguishable).
+          # The 100 Hz streams cannot make their next slot: the stock frame is called dead on the first frame it is
+          # missing and the replacement reaches the bus a transmit latency later, one 10 ms slot after the one it
+          # should have filled (route 00000012: 0xE4 and 0x334 last stock at 0.000, first openpilot frame at
+          # +0.020, every slower stream exactly on its next slot). Skip the counter value of the missed slot too, so
+          # a receiver sees one lost frame rather than a sender that stalled and resumed out of step.
           for name, counter in CS.vision_stock_counters.items():
             msg = self.packer.dbc.name_to_msg.get(name)
             if msg is not None and "COUNTER" in msg.sigs:
-              self.packer.counters[msg.address] = (counter + 1) % (1 << msg.sigs["COUNTER"].size)
+              step = 2 if name in VISION_CTRL_100HZ_MSGS else 1
+              self.packer.counters[msg.address] = (counter + step) % (1 << msg.sigs["COUNTER"].size)
           # same for the LANE_PATH/HUD_OBJECTS MUX sweep: the 50 Hz tick below steps it to the stock one's successor
           if CS.vision_stock_lane_mux in lane_path.MUX_CYCLE:
             self.radar_mux = CS.vision_stock_lane_mux
