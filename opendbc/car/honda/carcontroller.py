@@ -186,6 +186,8 @@ NIDEC_AEGO_FILTER_ALPHA = 0.05
 VISION_CTRL_START_FRAME = 200
 # vision ctrl: the RVU streams replaced at 100 Hz, whose first replacement is always one slot late (see update())
 VISION_CTRL_100HZ_MSGS = ("STEERING_CONTROL", "RVU_PRIVATE_LINK_100HZ")
+# vision ctrl: speed above which the RVU's 1 Hz STATE_MAYBE drops its standby bit (stock: between 3.5 and 8.7 kph)
+VISION_CTRL_STATE_MOVING_SPEED = 1.5  # m/s
 
 
 def band_weights(bands, v_ego):
@@ -267,6 +269,8 @@ class CarController(CarControllerBase):
     self.radar_disable_counter = 0
     # EU CR-V: created on first use, after CarInterface.init() has scanned the bus for the controller
     self.vision_ctrl_silencer: vision_ctrl.VisionControllerSilencer | None = None
+    # vision ctrl: the car has moved this drive, so the RVU's 1 Hz STATE_MAYBE standby bit is cleared
+    self.vision_ctrl_moved = False
     self.vision_gas_pedal_force = 0.0
 
     self.gasalpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
@@ -653,11 +657,18 @@ class CarController(CarControllerBase):
         # only while the RVU's own is gone: a CommunicationControl variant that silences normal messages only
         # leaves whatever the RVU classes as network management (the status broadcasts are the likely ones)
         # running, and the panda forwards those to the camera as before.
+        # STATE_MAYBE: bit 0 is shared with the other ECUs' 0x1A45AA25/26/29 frames and constant over a drive (1 on
+        # routes 0000000f/00000012, 0 on 00000003); bit 1 is the RVU's own standby flag, set from ignition until the
+        # car first moves and never set again (stock route 0000000f: 3 -> 1 between 3.5 and 8.7 kph, 1 for the rest
+        # of the drive including standstill). Passing the last stock value through kept it at 3 for the whole drive.
+        if CS.out.vEgo > VISION_CTRL_STATE_MOVING_SPEED:
+          self.vision_ctrl_moved = True
+        state = int(CS.vision_ctrl_state) & ~0x2 if self.vision_ctrl_moved else int(CS.vision_ctrl_state)
         radar_msgs.extend(hondacan.create_vision_ctrl_status(self.packer, self.CAN.pt,
                                                              CS.vision_status_25hz_tick and not CS.vision_stock_alive("VISION_CTRL_STATUS_25HZ"),
                                                              CS.hud_tick and not CS.vision_stock_alive("VISION_CTRL_STATUS_10HZ"),
                                                              CS.vision_status_1hz_tick and not CS.vision_stock_alive("VISION_CTRL_STATUS_1HZ"),
-                                                             CS.vision_ctrl_state))
+                                                             state))
       if CS.radar_50hz_tick:
         # Cycle the radar MUX through the same banks the stock radar uses: 1-10, 17-26, 33-42, 49-58.
         # This counter also drives the LANE_PATH/HUD_OBJECTS mux below: it advances exactly one step
