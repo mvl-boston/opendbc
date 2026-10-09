@@ -81,8 +81,12 @@ def order_candidates(responders: set[int], known_ecu_addrs: set[int]) -> list[in
 _candidates: list[int] = list(VISION_CTRL_CANDIDATE_ADDRS)
 _silenced_addr: int | None = None
 _expecting_silence: bool = False
-# CarState sets this once the surviving RADAR_REFERENCE tick and the RVU's 50/10 Hz frames have been
-# seen in the same control cycle, so CommunicationControl disable can seed the replacement counters.
+# True for the few frames right after CommunicationControl disable in which the controller is expected to
+# stop (measured 0-2 ticks on the MDX): CarState then calls the stock STEERING_CONTROL dead on the first
+# missed frame so openpilot's replacement goes out on the very next control frame.
+_fast_detect: bool = False
+# CarState sets this once every stock frame openpilot replaces has been seen at least once, so the phase
+# counters are seeded before CommunicationControl disable takes their author down.
 _shutdown_allowed: bool = False
 
 
@@ -109,13 +113,30 @@ def expecting_silence() -> bool:
   for as long as the controller is held silent. CarState uses it to call the stock STEERING_CONTROL dead after
   two missed frames instead of five: the switchover gap is what the other ECUs time out on (the 50 Hz
   ACC_CONTROL/0x1C9 pair lost 3 frames with the slow detection), and a short RX dropout outside this window
-  must not start openpilot's streams alongside a live controller."""
+  must not start openpilot's streams alongside a live controller. Two frames is the floor outside
+  fast_detect(): ~2% of 10 ms control batches see no stock STEERING_CONTROL while it is alive (the 100 Hz
+  bus period beating against the batch cadence, always a single-batch gap), so one missed frame on its own
+  cannot tell a dropped batch from the controller stopping."""
   return _expecting_silence
 
 
 def _set_expecting_silence(expecting: bool) -> None:
   global _expecting_silence
   _expecting_silence = expecting
+
+
+def fast_detect() -> bool:
+  """True for FAST_DETECT_FRAMES frames after CommunicationControl disable is sent, while the controller is
+  expected to stop any tick now. CarState calls the stock STEERING_CONTROL dead on the first missed frame
+  here, so openpilot's STEERING_CONTROL (and the phased 50 Hz ACC_CONTROL/LANE_PATH pair) go out on the frame
+  the stock ones would have. A batch gap in this window locks one frame early and sends one idle
+  STEERING_CONTROL next to the stock one; VisionControllerSilencer then resumes the probe (see update)."""
+  return _fast_detect
+
+
+def _set_fast_detect(fast: bool) -> None:
+  global _fast_detect
+  _fast_detect = fast
 
 
 def set_shutdown_allowed(allowed: bool) -> None:
@@ -131,6 +152,12 @@ class VisionControllerSilencer:
   """Frame-driven (100 Hz) search-and-silence state machine, run from CarController.update()."""
   SESSION_FRAME = 0      # extended diagnostic session request
   DISABLE_FRAME = 5      # CommunicationControl disableRxAndTx, 50 ms later (same spacing as the radar disable)
+  # frames after DISABLE_FRAME in which the stock STEERING_CONTROL is called dead on its first missed frame
+  # (route ad9840558640c31d: the RVU stops 0-2 ticks after the disable; +1 for the parse/transmit frame)
+  FAST_DETECT_FRAMES = 4
+  # a lock this soon after the disable that sees the stock STEERING_CONTROL again was a dropped control
+  # batch, not the controller coming back: resume the probe instead of redoing the handshake
+  RELOCK_FRAMES = 3
   PROBE_FRAMES = 100     # a candidate gets 1 s to take the stock STEERING_CONTROL down
   TESTER_PRESENT_PERIOD = 10
   MAX_CYCLES = 3         # full passes over the candidates before giving up (avoids flapping ECUs forever)
@@ -145,6 +172,7 @@ class VisionControllerSilencer:
     self.gave_up = False
     _set_silenced_addr(None)
     _set_expecting_silence(False)
+    _set_fast_detect(False)
 
   @property
   def addr(self) -> int:
@@ -164,13 +192,31 @@ class VisionControllerSilencer:
     _set_silenced_addr(None)
     _set_expecting_silence(False)
 
+  def _resume_probe(self) -> None:
+    carlog.error(f"vision controller at {hex(self.silenced_addr)} still transmitting after an early lock, resuming the probe")
+    self.silenced_addr = None
+    self.probing = True
+    self.counter = self.DISABLE_FRAME + 1
+    _set_silenced_addr(None)
+
   def update(self, stock_alive: bool, bus: int) -> list[CanData]:
     """stock_alive: the stock STEERING_CONTROL is still being received on the powertrain bus."""
+    msgs = self._update(stock_alive, bus)
+    # Published after this frame's transitions so CarState sees it on the next frame, the first one in which
+    # the controller can have gone quiet. counter is already DISABLE_FRAME + 1 on the disable frame itself.
+    _set_fast_detect(self.probing and self.silenced_addr is None and
+                     0 < self.counter - self.DISABLE_FRAME <= self.FAST_DETECT_FRAMES)
+    return msgs
+
+  def _update(self, stock_alive: bool, bus: int) -> list[CanData]:
     msgs: list[CanData] = []
 
     if self.silenced_addr is not None:
       if stock_alive:
-        self._unlock()
+        if self.counter < self.RELOCK_FRAMES:
+          self._resume_probe()
+        else:
+          self._unlock()
       else:
         if self.counter % self.TESTER_PRESENT_PERIOD == 0:
           msgs.append(make_tester_present_msg(self.silenced_addr, bus, suppress_response=True))
