@@ -917,6 +917,17 @@ class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest
       self._rx(make_msg(0, addr, 8))
       self.assertFalse(self.safety.get_relay_malfunction(), hex(addr))
 
+  def test_stock_canfd_lookalikes_reach_the_camera(self):
+    # and, like HUD_OBJECTS and the status broadcasts, they keep being forwarded to the camera until the
+    # controller is silenced (route 00000011: a bus-2 relay check on LANE_PATH/RADAR_LEAD blocked the forward
+    # and left the camera without them for the 2.7 s between the relay opening and OP's replacements); the
+    # camera authors none of them, so none is a relay malfunction on the camera bus either
+    for addr in (0x6CD5558, 0x6CD5559, 0xF31AA5C, 0x1C8, 0x1C9, 0x29B, 0x2E8, 0x30C, 0x1A45AA24):
+      self.assertEqual(2, self.safety.safety_fwd_hook(0, addr), hex(addr))
+      self.safety.set_relay_malfunction(False)
+      self._rx(make_msg(2, addr, 8))
+      self.assertFalse(self.safety.get_relay_malfunction(), hex(addr))
+
   def test_vision_ctrl_status_lookalikes(self):
     # the controller's ACC_CONTROL companion (0x1C9) and its constant status broadcasts (0x29B/0x2E8/0x1A45AA24)
     # disappear with it: the first is replaced on the PT bus alongside ACC_CONTROL, the broadcasts on both buses

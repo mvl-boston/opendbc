@@ -39,7 +39,7 @@ BO_ 228 STEERING_CONTROL: 5 EON
  SG_ STEER_DOWN_TO_ZERO : 38|1@0+ (1,0) [0|1] "" EPS
  SG_ HAPTIC_WARNING : 39|1@0+ (1,0) [0|1] "" XXX
 
-CM_ BO_ 457 "50 Hz companion of ACC_CONTROL (0x1C8), sent by the vision controller (RVU) one frame after it. The radarless Civic 2022 camera sends the same layout; driving its fields there was found to have no effect on braking";
+CM_ BO_ 457 "50 Hz companion of ACC_CONTROL (0x1C8), sent by the vision controller (RVU) right behind it (same 10 ms batch in 92-99% of frames, MDX Type S routes ad9840558640c31d/00000003, 0000000f, 00000011). The radarless Civic 2022 camera sends the same layout; driving its fields there was found to have no effect on braking";
 CM_ SG_ 457 SET_SPEED "ACC set speed in kph (0x20 = 32 kph = 20 mph before any speed was set, keeps the last value when ACC is off)";
 CM_ SG_ 457 LEAD_DISTANCE_MAYBE "255.00 m (0x639C) in every frame of a drive with nothing ahead; 2.52-2.54 m and 7.96-7.97 m, slowly drifting, in two drives started with a parked car in front (MDX Type S routes ad9840558640c31d/00000001 and 0000000b)";
 CM_ SG_ 457 GAP_DISTANCE_MAYBE "desired following distance for the ACC_HUD distance-bar setting: 3 bars 4.66 m at standstill rising ~0.51 m per kph above 25 kph (steeper below, route ad9840558640c31d/00000003); 2 bars 4.33 m at standstill rising ~0.37 m per kph (6.85 m at 5 kph, 12.69 at 20, 19.87 at 40, 24.42 at 55, route 0000000f). Zero with the RVU silenced";

@@ -460,6 +460,11 @@ static safety_config honda_bosch_init(uint16_t param) {
   // like the radar look-alikes), so none can be relay-checked on the PT bus either. The camera used to see the
   // controller's STEERING_CONTROL, ACC_CONTROL, 0x1C9, ACC_HUD and LKAS_HUD through forwarding, so OP mirrors
   // its replacements onto the camera bus too (same bytes; the ACC_CONTROL accel check covers bus 2 as well).
+  // Nothing is relay-checked on the camera bus either: the camera authors none of these, and a relay check
+  // there also blocks the forward of the controller's own copy, which left the camera without LANE_PATH and
+  // RADAR_LEAD from the relay opening until OP's replacements started 2.7 s later (route
+  // ad9840558640c31d/00000011) while HUD_OBJECTS kept flowing; the controller's copies now reach the camera
+  // until it is silenced, OP's bus-2 copies take over the frame after (never both, OP's start on silence).
   static CanMsg HONDA_CANFD_VISION_CTRL_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = false}, {0x1C8, 0, 8, .check_relay = false},
                                                           {0x1C9, 0, 8, .check_relay = false},
                                                           {0xE4, 2, 5, .check_relay = false}, {0x1C8, 2, 8, .check_relay = false},
@@ -476,8 +481,8 @@ static safety_config honda_bosch_init(uint16_t param) {
                                                           {0x18DA07F1, 0, 8, .check_relay = false},
                                                           {0x310, 0, 8, .check_relay = false}, {0x6CD5558, 0, 8, .check_relay = false}, {0x6CD5559, 0, 8, .check_relay = false},
                                                           {0xF31AA5C, 0, 8, .check_relay = false}, {0x1A45AA4E, 0, 8, .check_relay = false},
-                                                          {0x310, 2, 8, .check_relay = false}, {0x6CD5558, 2, 8, .check_relay = true}, {0x6CD5559, 2, 8, .check_relay = false},
-                                                          {0xF31AA5C, 2, 8, .check_relay = true}, {0x1A45AA4E, 2, 8, .check_relay = false}};
+                                                          {0x310, 2, 8, .check_relay = false}, {0x6CD5558, 2, 8, .check_relay = false}, {0x6CD5559, 2, 8, .check_relay = false},
+                                                          {0xF31AA5C, 2, 8, .check_relay = false}, {0x1A45AA4E, 2, 8, .check_relay = false}};
 
   const uint16_t HONDA_PARAM_ALT_BRAKE = 1;
   const uint16_t HONDA_PARAM_RADARLESS = 8;
