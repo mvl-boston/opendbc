@@ -256,6 +256,7 @@ class CarController(CarControllerBase):
     self.radar_disable_counter = 0
     # EU CR-V: created on first use, after CarInterface.init() has scanned the bus for the controller
     self.vision_ctrl_silencer: vision_ctrl.VisionControllerSilencer | None = None
+    self.vision_acc_control_2_pending = False
 
     self.gasalpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
@@ -618,7 +619,8 @@ class CarController(CarControllerBase):
         # route 0000000b while 0xE6 keeps going)
         can_sends.append(hondacan.create_vision_ctrl_private_link(self.packer, self.CAN.radar))
         # the silenced controller's constant status broadcasts (0x29B/0x2E8/0x1A45AA24), see hondacan
-        radar_msgs.extend(hondacan.create_vision_ctrl_status(self.packer, self.CAN.pt, CS.vision_ctrl_silent_frames, CS.hud_tick,
+        radar_msgs.extend(hondacan.create_vision_ctrl_status(self.packer, self.CAN.pt, CS.vision_status_25hz_tick,
+                                                             CS.hud_tick, CS.vision_status_1hz_tick,
                                                              CS.vision_ctrl_state))
       if CS.radar_50hz_tick:
         # Cycle the radar MUX through the same banks the stock radar uses: 1-10, 17-26, 33-42, 49-58.
@@ -1107,12 +1109,19 @@ class CarController(CarControllerBase):
           # frames of the radar going silent (see the deferred radar disable above)
           if not (self.CP.carFingerprint in HONDA_BOSCH_CANFD and CS.stock_acc_alive):
             park_or_reverse = CS.out.gearShifter in (GearShifter.park, GearShifter.reverse)
-            can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
-                                                          self.stopping_counter, self.CP, gas_pedal_force, park_or_reverse))
             if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
-              # the controller's 50 Hz ACC_CONTROL companion (0x1C9) goes silent with it: replace it in the same frame
-              set_speed_kph = hud_control.setSpeed * CV.MS_TO_KPH if hud_control.speedVisible else 0
-              can_sends.append(hondacan.create_vision_ctrl_acc_status(self.packer, self.CAN.pt, set_speed_kph, CS.out.vEgo))
+              # Stock RVU ACC_CONTROL is 50 Hz; 0x1C9 follows one frame later (see _bosch_vision_ctrl.dbc).
+              if self.vision_acc_control_2_pending:
+                set_speed_kph = hud_control.setSpeed * CV.MS_TO_KPH if hud_control.speedVisible else 0
+                can_sends.append(hondacan.create_vision_ctrl_acc_status(self.packer, self.CAN.pt, set_speed_kph, CS.out.vEgo))
+                self.vision_acc_control_2_pending = False
+              if CS.radar_50hz_tick:
+                can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
+                                                              self.stopping_counter, self.CP, gas_pedal_force, park_or_reverse))
+                self.vision_acc_control_2_pending = True
+            else:
+              can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
+                                                            self.stopping_counter, self.CP, gas_pedal_force, park_or_reverse))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
           if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb):
@@ -1178,8 +1187,7 @@ class CarController(CarControllerBase):
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                  self.CP.openpilotLongitudinalControl))
 
-    # vision ctrl: LKAS_HUD rides the same switchover-locked 10 Hz tick as ACC_HUD, like the controller's own
-    # pair (the frame cadence left it five frames behind the switchover on route 0000000b)
+    # vision ctrl: LKAS_HUD rides the same 10 Hz tick as ACC_HUD (phase-locked to stock RVU frames in carstate).
     hud_frame = CS.hud_tick if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL else self.frame % 10 == 0
     if hud_frame:
       if self.CP.openpilotLongitudinalControl:

@@ -81,6 +81,9 @@ def order_candidates(responders: set[int], known_ecu_addrs: set[int]) -> list[in
 _candidates: list[int] = list(VISION_CTRL_CANDIDATE_ADDRS)
 _silenced_addr: int | None = None
 _expecting_silence: bool = False
+# CarState sets this once the surviving RADAR_REFERENCE tick and the RVU's 50/10 Hz frames have been
+# seen in the same control cycle, so CommunicationControl disable can seed the replacement counters.
+_shutdown_allowed: bool = False
 
 
 def set_candidates(candidates: list[int]) -> None:
@@ -113,6 +116,15 @@ def expecting_silence() -> bool:
 def _set_expecting_silence(expecting: bool) -> None:
   global _expecting_silence
   _expecting_silence = expecting
+
+
+def set_shutdown_allowed(allowed: bool) -> None:
+  global _shutdown_allowed
+  _shutdown_allowed = allowed
+
+
+def shutdown_allowed() -> bool:
+  return _shutdown_allowed
 
 
 class VisionControllerSilencer:
@@ -177,6 +189,8 @@ class VisionControllerSilencer:
     if self.counter == self.SESSION_FRAME:
       msgs.append(CanData(self.addr, EXT_DIAG_SESSION_MSG, bus))
     elif self.counter == self.DISABLE_FRAME:
+      if not shutdown_allowed():
+        return msgs
       msgs.append(CanData(self.addr, COMM_CONTROL_DISABLE_MSG, bus))
       self.probing = True
       _set_expecting_silence(True)

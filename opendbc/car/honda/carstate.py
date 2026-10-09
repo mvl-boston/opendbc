@@ -22,6 +22,10 @@ BUTTONS_DICT = {CruiseButtons.RES_ACCEL: ButtonType.accelCruise, CruiseButtons.D
 SETTINGS_BUTTONS_DICT = {CruiseSettings.DISTANCE: ButtonType.gapAdjustCruise, CruiseSettings.LKAS: ButtonType.lkas}
 
 
+def _cp_msg_seen(cp, msg_name: str, signal: str = "COUNTER") -> bool:
+  return len(cp.vl_all.get(msg_name, {}).get(signal, [])) > 0
+
+
 class CarState(CarStateBase):
   def __init__(self, CP):
     super().__init__(CP)
@@ -83,6 +87,10 @@ class CarState(CarStateBase):
     self.hud_tick = False
     self.radar_50hz_tick_counter = 0
     self.radar_50hz_tick = False
+    self.vision_status_25hz_tick_counter = 0
+    self.vision_status_25hz_tick = False
+    self.vision_status_1hz_tick_counter = 0
+    self.vision_status_1hz_tick = False
 
     self.scm_ambient_light = 0
     # CAN FD deferred radar disable (see carcontroller): the stock radar is assumed alive until it has
@@ -94,8 +102,6 @@ class CarState(CarStateBase):
     self.camera_steer_seen = False
     self.canfd_frames = 0
     self.canfd_relay_open = False
-    # vision ctrl: frames since the controller went silent (-1 while it is alive), see update()
-    self.vision_ctrl_silent_frames = -1
     self.vision_ctrl_state = 0
 
     # Only radarless cars have a camera that emits HUD_OBJECTS to poll for secondary vehicle locations.
@@ -339,31 +345,64 @@ class CarState(CarStateBase):
         self.radar_5hz_tick_counter = 0
       else:
         self.radar_5hz_tick_counter += 1
-      self.radar_5hz_tick = (self.radar_5hz_tick_counter == 11)
 
-      # 1 Hz: 0x710 -> BOSCH_SUPPLEMENTAL_CANFD, one frame before the next tick
-      supp_tick_vals = cp_radar.vl_all.get("RADAR_SUPP_TICK_REFERENCE", {}).get("IGNORE", [])
-      if len(supp_tick_vals) > 0:
-        self.supp_tick_counter = 0
-      else:
-        self.supp_tick_counter += 1
-      self.supp_tick = (self.supp_tick_counter == 99)
+      if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+        # 5 Hz RADAR_LEAD: RADAR_REFERENCE (0x3A1) survives RVU silencing on the PT bus (~50 ms later on MDX).
+        self.radar_5hz_tick = (self.radar_5hz_tick_counter == 4)
 
-      # 10 Hz: 0x730 -> RADAR_HUD_CANFD, one frame before the next tick
-      hud_tick_vals = cp_radar.vl_all.get("RADAR_HUD_TICK_REFERENCE", {}).get("IGNORE", [])
-      if len(hud_tick_vals) > 0:
-        self.hud_tick_counter = 0
-      else:
-        self.hud_tick_counter += 1
-      self.hud_tick = (self.hud_tick_counter == 9)
+        # 50 Hz RVU ACC_CONTROL / LANE_PATH (period 2 @ 100 Hz): reset when the stock frame is seen.
+        if _cp_msg_seen(cp, "ACC_CONTROL") or _cp_msg_seen(cp, "LANE_PATH"):
+          self.radar_50hz_tick_counter = 0
+        else:
+          self.radar_50hz_tick_counter += 1
+        self.radar_50hz_tick = (self.radar_50hz_tick_counter == 1)
 
-      # 50 Hz: 0x750 -> LANE_PATH/HUD_OBJECTS, one frame before the next tick
-      tick_50hz_vals = cp_radar.vl_all.get("RADAR_50HZ_TICK_REFERENCE", {}).get("IGNORE", [])
-      if len(tick_50hz_vals) > 0:
-        self.radar_50hz_tick_counter = 0
+        # 10 Hz ACC_HUD / LKAS_HUD / VISION_CTRL_STATUS_10HZ (stock 0x2E8 rides the HUD frame).
+        if any(_cp_msg_seen(cp, m) for m in ("ACC_HUD", "LKAS_HUD", "VISION_CTRL_STATUS_10HZ")):
+          self.hud_tick_counter = 0
+        else:
+          self.hud_tick_counter += 1
+        self.hud_tick = (self.hud_tick_counter == 9)
+
+        if _cp_msg_seen(cp, "VISION_CTRL_STATUS_25HZ"):
+          self.vision_status_25hz_tick_counter = 0
+        else:
+          self.vision_status_25hz_tick_counter += 1
+        self.vision_status_25hz_tick = (self.vision_status_25hz_tick_counter == 3)
+
+        if _cp_msg_seen(cp, "VISION_CTRL_STATUS_1HZ"):
+          self.vision_status_1hz_tick_counter = 0
+        else:
+          self.vision_status_1hz_tick_counter += 1
+        self.vision_status_1hz_tick = (self.vision_status_1hz_tick_counter == 99)
+
+        self.supp_tick = False
       else:
-        self.radar_50hz_tick_counter += 1
-      self.radar_50hz_tick = (self.radar_50hz_tick_counter == 1)
+        self.radar_5hz_tick = (self.radar_5hz_tick_counter == 11)
+
+        # 1 Hz: 0x710 -> BOSCH_SUPPLEMENTAL_CANFD, one frame before the next tick
+        supp_tick_vals = cp_radar.vl_all.get("RADAR_SUPP_TICK_REFERENCE", {}).get("IGNORE", [])
+        if len(supp_tick_vals) > 0:
+          self.supp_tick_counter = 0
+        else:
+          self.supp_tick_counter += 1
+        self.supp_tick = (self.supp_tick_counter == 99)
+
+        # 10 Hz: 0x730 -> RADAR_HUD_CANFD, one frame before the next tick
+        hud_tick_vals = cp_radar.vl_all.get("RADAR_HUD_TICK_REFERENCE", {}).get("IGNORE", [])
+        if len(hud_tick_vals) > 0:
+          self.hud_tick_counter = 0
+        else:
+          self.hud_tick_counter += 1
+        self.hud_tick = (self.hud_tick_counter == 9)
+
+        # 50 Hz: 0x750 -> LANE_PATH/HUD_OBJECTS, one frame before the next tick
+        tick_50hz_vals = cp_radar.vl_all.get("RADAR_50HZ_TICK_REFERENCE", {}).get("IGNORE", [])
+        if len(tick_50hz_vals) > 0:
+          self.radar_50hz_tick_counter = 0
+        else:
+          self.radar_50hz_tick_counter += 1
+        self.radar_50hz_tick = (self.radar_50hz_tick_counter == 1)
 
       # Deferred radar disable (see carcontroller). The stock radar transmits ACC_CONTROL every 2
       # frames, so 4 missed frames means it has been silenced; assume alive until then so the
@@ -394,21 +433,15 @@ class CarState(CarStateBase):
         # silent), two missed frames are enough: the other ECUs time out on the switchover gap, and the
         # 5-frame detection cost the 50 Hz ACC_CONTROL/0x1C9 pair three frames (70 ms, routes 0000000a/b).
         self.stock_acc_alive = self.camera_steer_counter < (2 if vision_ctrl.expecting_silence() else 5)
-        # No radar bus and no 0x730/0x750 tick references on these cars, so the 10 Hz ACC_HUD and the 50 Hz
-        # LANE_PATH/HUD_OBJECTS the silenced controller used to author run on a frame cadence (route
-        # 00000009: none of them were sent for the whole drive because the ticks never fired). 0x710 has no
-        # stock equivalent here either, so supp_tick is left to never fire. The cadence is phase-locked to
-        # the switchover so every look-alike goes out in the first silent frame instead of waiting for its
-        # slot (the 1 Hz broadcast waited 1.43 s on route 0000000b).
-        self.vision_ctrl_silent_frames = -1 if self.stock_acc_alive else self.vision_ctrl_silent_frames + 1
-        self.hud_tick = self.vision_ctrl_silent_frames % 10 == 0
-        self.radar_50hz_tick = self.vision_ctrl_silent_frames % 2 == 0
-        # This controller's RADAR_LEAD follows RADAR_REFERENCE by ~50 ms (stock drive 00000003), not the radar's
-        # 120 ms; the first one after the switchover goes out at once if this period's slot has already passed
-        # (it waited 300 ms on route 0000000b)
-        self.radar_5hz_tick = (self.radar_5hz_tick_counter == 4 or
-                               (self.vision_ctrl_silent_frames == 0 and self.radar_5hz_tick_counter > 4))
         self.vision_ctrl_state = cp.vl["VISION_CTRL_STATUS_1HZ"]["STATE_MAYBE"]
+        # Hold CommunicationControl disable until the surviving RADAR_REFERENCE tick and the RVU's 50/10 Hz
+        # frames have been seen this cycle so the counters above are freshly seeded (same idea as CAN FD's
+        # 0x730/0x750 tick references that keep running after the radar is silenced).
+        vision_ctrl.set_shutdown_allowed(
+          _cp_msg_seen(cp, "RADAR_REFERENCE") and
+          _cp_msg_seen(cp, "ACC_CONTROL") and
+          any(_cp_msg_seen(cp, m) for m in ("ACC_HUD", "LKAS_HUD", "VISION_CTRL_STATUS_10HZ"))
+        )
     else:
       self.supp_tick = False
       self.hud_tick = False
@@ -446,8 +479,17 @@ class CarState(CarStateBase):
       pt_messages += [("ACC_CONTROL", float('nan')), ("STEERING_CONTROL", float('nan'))]
     if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
       # Stock LKAS_HUD lives on the PT bus here and disappears once its author is silenced (see update); the
-      # 1 Hz status broadcast is read for its state byte, which openpilot's replacement carries forward
-      pt_messages += [("LKAS_HUD", float('nan')), ("VISION_CTRL_STATUS_1HZ", float('nan'))]
+      # 1 Hz status broadcast is read for its state byte, which openpilot's replacement carries forward.
+      # The rest are vl_all tick references for phasing replacements (see update()).
+      pt_messages += [
+        ("RADAR_REFERENCE", float('nan')),
+        ("ACC_HUD", float('nan')),
+        ("LANE_PATH", float('nan')),
+        ("LKAS_HUD", float('nan')),
+        ("VISION_CTRL_STATUS_25HZ", float('nan')),
+        ("VISION_CTRL_STATUS_10HZ", float('nan')),
+        ("VISION_CTRL_STATUS_1HZ", float('nan')),
+      ]
     if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       # HUD_OBJECTS is polled by the HudObjectTracker, but not every radarless camera emits it,
       # so subscribe with NaN frequency to skip the alive/timeout checks.
