@@ -1,7 +1,9 @@
+import numpy as np
+
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_RADARLESS,
-                                      HONDA_BOSCH_CANFD, CarControllerParams)
+from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS,
+                                      HONDA_BOSCH_CANFD, HONDA_BOSCH_VISION_CTRL)
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -46,15 +48,13 @@ class CanBus(CanBusBase):
     return self.offset
 
 
-def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_cancel_cmd, fcw, car_fingerprint, stock_brake):
+def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_cancel_cmd, fcw, CP, stock_brake):
   # TODO: do we loose pressure if we keep pump off for long?
   brakelights = apply_brake > 0
   brake_rq = apply_brake > 0
   pcm_fault_cmd = False
 
   values = {
-    "COMPUTER_BRAKE": apply_brake,
-    "BRAKE_PUMP_REQUEST": pump_on,
     "CRUISE_OVERRIDE": pcm_override,
     "CRUISE_FAULT_CMD": pcm_fault_cmd,
     "CRUISE_CANCEL_CMD": pcm_cancel_cmd,
@@ -67,17 +67,27 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
     "AEB_REQ_2": 0,
     "AEB_STATUS": 0,
   }
+  if (CP.flags & HondaFlags.HYBRID):
+    values.update({
+      "COMPUTER_BRAKE_HYBRID": apply_brake,
+      "BRAKE_PUMP_REQUEST_HYBRID": (apply_brake > 0),
+    })
+  else:
+    values.update({
+      "COMPUTER_BRAKE": apply_brake,
+      "BRAKE_PUMP_REQUEST": pump_on,
+    })
   return packer.make_can_msg("BRAKE_COMMAND", CAN.pt, values)
 
 
-def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, car_fingerprint):
+def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, CP, gas_force, park_or_reverse=False):
+
   commands = []
-  min_gas_accel = CarControllerParams.BOSCH_GAS_LOOKUP_BP[0]
 
   control_on = 5 if enabled else 0
-  gas_command = gas if active and accel > min_gas_accel else -30000
+  gas_command = gas if active and gas_force > 0 else -30000
   accel_command = accel if active else 0
-  braking = 1 if active and accel < min_gas_accel else 0
+  braking = 1 if active and gas_force < 0 else 0
   standstill = 1 if active and stopping_counter > 0 else 0
   standstill_release = 1 if active and stopping_counter == 0 else 0
 
@@ -87,11 +97,26 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
     'STANDSTILL': standstill,
   }
 
-  if car_fingerprint in HONDA_BOSCH_RADARLESS:
+  # Vision controller cars (EU CR-V, MDX Type S) have the CAN FD body but the brake module listens to the
+  # radarless-style ACC_CONTROL (0x1C8): with only the radar-style 0x1DF on the bus it latched CRUISE_FAULT
+  # 0.28 s after the controller was silenced (route ad9840558640c31d/00000009--b2e159e05d)
+  if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_VISION_CTRL):
+    # required whenever braking for Hybrid and Bosch Alt Brake vehicles, allow idle stop after 4 seconds (50 Hz) for other vehicles
+    brake_assist = braking if CP.flags & (HondaFlags.HYBRID | HondaFlags.BOSCH_ALT_BRAKE) else stopping_counter > 200
     acc_control_values.update({
       "CONTROL_ON": enabled,
-      "IDLESTOP_ALLOW": stopping_counter > 200,  # allow idle stop after 4 seconds (50 Hz)
+      "COMPUTER_BRAKE_ASSIST": brake_assist,
     })
+    if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+      # Match the silenced controller's idle frame byte for byte: the stock MDX Type S RVU keeps bit 8 set whenever
+      # it is not controlling (idle stop allowed) and bits 20/23 set in P and R (00 01 90 .. parked, 00 01 00 .. in D
+      # unengaged, 00 04 00 .. engaged). On route ad9840558640c31d/0000000a--cffee2dde2 the brake module latched
+      # CRUISE_FAULT 0.34 s after the switchover even though our 0x1C8 was flowing, and ours read 00 00 00 ..
+      acc_control_values.update({
+        "COMPUTER_BRAKE_ASSIST": brake_assist or not enabled,
+        "BOH": park_or_reverse,
+        "BOH_2": park_or_reverse,
+      })
   else:
     acc_control_values.update({
       # setting CONTROL_ON causes car to set POWERTRAIN_DATA->ACC_STATUS = 1
@@ -114,7 +139,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   return commands
 
 
-def create_steering_control(packer, CAN, apply_torque, lkas_active, tja_control):
+def create_steering_control(packer, CAN, apply_torque, lkas_active, tja_control, vision_ctrl=False):
   values = {
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
@@ -122,6 +147,9 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active, tja_control)
 
   if tja_control:
     values["STEER_DOWN_TO_ZERO"] = lkas_active
+
+  if vision_ctrl:
+    values["RADAR_VISION_IDLE"] = 1 if not values["STEER_TORQUE_REQUEST"] else 0
 
   return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
 
@@ -136,7 +164,8 @@ def create_bosch_supplemental_1(packer, CAN):
   return packer.make_can_msg("BOSCH_SUPPLEMENTAL_1", CAN.lkas, values)
 
 
-def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, hud_v_cruise, is_metric, acc_hud):
+def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, hud_v_cruise, is_metric, acc_hud, speed_control,
+                   alphalong):
   acc_hud_values = {
     'CRUISE_SPEED': hud_v_cruise,
     'ENABLE_MINI_CAR': 1 if enabled else 0,
@@ -147,16 +176,26 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     'SET_ME_X01_2': 1,
   }
 
+  if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+    # the MDX Type S controller holds bit 55 and never sets bit 48 (idle 00 00 00 ff 00 c0 c0, engaged .. d0 d0)
+    acc_hud_values['SET_ME_X01'] = 0
+    acc_hud_values['SET_ME_X01_2'] = 1
+  elif CP.carFingerprint in HONDA_BOSCH_CANFD:
+    acc_hud_values['SET_ME_X01'] = int(enabled and (bool(acc_hud_values['HUD_LEAD']) or (pcm_accel < 0.2)))
+    acc_hud_values['SET_ME_X01_2'] = int(enabled and (bool(acc_hud_values['HUD_LEAD']) or (pcm_accel < 0.2)))
+
   if CP.carFingerprint in HONDA_BOSCH:
     acc_hud_values['ACC_ON'] = int(enabled)
-    acc_hud_values['FCM_OFF'] = 1
-    acc_hud_values['FCM_OFF_2'] = 1
+    acc_hud_values['FCM_OFF'] = bool(0)
+    acc_hud_values['FCM_OFF_2'] = bool(0)
   else:
     # Shows the distance bars, TODO: stock camera shows updates temporarily while disabled
     acc_hud_values['ACC_ON'] = int(enabled)
     acc_hud_values['PCM_SPEED'] = pcm_speed * CV.MS_TO_KPH
     acc_hud_values['PCM_GAS'] = pcm_accel
-    acc_hud_values['SET_ME_X01'] = 1
+    # stock holds X01 through accelerate-to-target ramps ("1 gives power"), so keep it set for the
+    # whole launch window; outside launches keep the existing at-the-rails behavior
+    acc_hud_values['SET_ME_X01'] = 1 if (speed_control or pcm_accel == 0 or pcm_accel == 198) else 0
     acc_hud_values['FCM_OFF'] = acc_hud['FCM_OFF']
     acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
     acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
@@ -165,16 +204,30 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
   return packer.make_can_msg("ACC_HUD", bus, acc_hud_values)
 
 
-def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, alert_steer_required, lkas_hud):
+def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available, reduced_steering, alert_steer_required, lkas_hud, steer_maxed, CS,
+                    lkas_state_change=None, lane_lines=None):
   commands = []
+
+  if CP.carFingerprint in HONDA_BOSCH:
+    solid_lanes = hud_control.lanesVisible and not steer_maxed
+    dashed_lanes = lat_active
+  else:
+    solid_lanes = lat_active and not steer_maxed
+    dashed_lanes = hud_control.lanesVisible
 
   lkas_hud_values = {
     'LKAS_READY': 1,
     'LKAS_STATE_CHANGE': 1,
     'STEERING_REQUIRED': alert_steer_required,
-    'SOLID_LANES': hud_control.lanesVisible,
+    'SOLID_LANES': solid_lanes,
+    'DASHED_LANES': dashed_lanes,
     'BEEP': 0,
   }
+
+  # MDX CAN FD factory logs show the stock camera holds LKAS_STATE_CHANGE low, pulsing it high for ~3s
+  # only when the HUD state changes; holding it high permanently suppresses the dash lane-line rendering.
+  if lkas_state_change is not None:
+    lkas_hud_values['LKAS_STATE_CHANGE'] = int(lkas_state_change)
 
   if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
     lkas_hud_values['LANE_LINES'] = 3
@@ -185,13 +238,40 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
       lkas_hud_values['LKAS_PROBLEM'] = lkas_hud['LKAS_PROBLEM']
 
+    if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
+      lkas_hud_values['LKAS_PROBLEM'] = CS.out.steerFaultPermanent # CS.lkas_hud['LKAS_PROBLEM']
+      lkas_hud_values['DASHED_LANES'] = 1  # show gray lanes when disengaged
+
+    if CP.carFingerprint in HONDA_BOSCH_CANFD:
+      # Don't let steer saturation flicker SOLID_LANES: every payload change must coincide with an
+      # LKAS_STATE_CHANGE pulse (see carcontroller), and a 10Hz flicker would keep the pulse
+      # re-triggering, which suppresses the dash lane lines.
+      # Keyed on lat_active, NOT hud_control.lanesVisible (== CC.enabled): under sunnypilot MADS
+      # the lateral control stays engaged when a brake press disengages ACC, and the dash LKAS
+      # indication must follow the lateral state or the driver can't tell MADS is still steering
+      # (drivers pressing the LKAS button to "re-engage" silently toggled MADS off). On forks
+      # without MADS, lat_active == enabled while moving, so this stays equivalent there.
+      lkas_hud_values['SOLID_LANES'] = lat_active
+
   if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
     lkas_hud_values['RDM_OFF'] = 1
     lkas_hud_values['LANE_ASSIST_BEEP_OFF'] = 1
 
+  if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+    # the silenced controller reported RDM on (RDM_ON set, RDM_OFF clear: idle 00 00 10 40 ..); carry its last
+    # setting forward instead of telling the dash RDM is off
+    lkas_hud_values['RDM_ON'] = lkas_hud['RDM_ON']
+    lkas_hud_values['RDM_OFF'] = lkas_hud['RDM_OFF']
+    # the MDX Type S RVU keeps LANE_LINES in step with RADAR_LEAD's LEFT_LANE/RIGHT_LANE: 0 with no lane lines
+    # drawn (idle 00 00 10 40 00 ..), 3 while they are up (.. 18 ..); the constant 3 above sat next to idle lanes
+    # on route ad9840558640c31d/00000011
+    if lane_lines is not None:
+      lkas_hud_values['LANE_LINES'] = lane_lines
+
   # New HUD concept for selected Bosch cars, overwrites some of the above
   # TODO: make global across all Honda if feedback is favorable
-  if CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
+  # Try all Bosch A, didn't work on Nidec, and caused LKAS error in Bosch B/C
+  if CP.carFingerprint in HONDA_BOSCH and CP.carFingerprint not in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
     lkas_hud_values['DASHED_LANES'] = steering_available
     lkas_hud_values['SOLID_LANES'] = lat_active
 
@@ -217,19 +297,272 @@ def create_legacy_brake_command(packer, bus):
   return packer.make_can_msg("LEGACY_BRAKE_COMMAND", bus, {})
 
 
-def spam_buttons_command(packer, CAN, button_val, car_fingerprint):
+def spam_buttons_command(packer, CAN, cruise_button, cruise_setting, ambient_light, car_fingerprint, bus=None):
   values = {
-    'CRUISE_BUTTONS': button_val,
-    'CRUISE_SETTING': 0,
+    'CRUISE_BUTTONS': cruise_button,
+    'CRUISE_SETTING': cruise_setting,
+    # the camera consumes this byte too (adaptive high beam); echo the SCM's live value
+    'AMBIENT_LIGHT_MAYBE': ambient_light,
   }
-  # send buttons to camera on radarless (camera does ACC) cars
-  bus = CAN.camera if car_fingerprint in HONDA_BOSCH_RADARLESS else CAN.pt
+  if bus is None:
+    # send buttons to camera on radarless (camera does ACC) cars
+    bus = CAN.camera if car_fingerprint in HONDA_BOSCH_RADARLESS else CAN.pt
   return packer.make_can_msg("SCM_BUTTONS", bus, values)
+
+
+def create_radar_hud_canfd(packer, bus, acc, acc_pulse=False):
+  values = {
+    # The stock radar only raises this bit in short (~2-6 s) bursts right after ACC engages/resumes,
+    # then drops it for the rest of the drive; it is never held for a whole engagement.
+    'CMBS_ENABLED_MAYBE': 1 if (acc and acc_pulse) else 0,
+    'ACC_ON': acc,
+    'SET_ME_X01': 0x01,
+    'SET_ME_X01_2': 0x01,
+  }
+  return packer.make_can_msg("RADAR_HUD_CANFD", bus, values)
+
+
+def create_canfd_supplemental(packer, bus):
+  values = {
+    'SET_ME_X01': 0x01,
+    'SET_ME_X41': 0x41,
+  }
+  return packer.make_can_msg("BOSCH_SUPPLEMENTAL_CANFD", bus, values)
+
+
+# Radar MUX banks: 1-10, 17-26, 33-42, 49-58. Each bank is a fresh sweep of path points.
+RADAR_MUX_BANK_STARTS = (1, 17, 33, 49)
+# "no detection" sentinel the stock radar uses for an empty path point / object slot
+PATH_OFFSET_INVALID = 2047
+
+
+def _lane_path_offsets(radar_mux):
+  # The stock radar reports path points as a sweep within each MUX bank: the first point (bank start)
+  # is 0, the second has the first two offsets valid (0) and the rest invalid, and the remaining points
+  # are fully invalid. Match that exact per-MUX pattern so the camera sees a consistent empty path.
+  pos = next((radar_mux - start for start in RADAR_MUX_BANK_STARTS if start <= radar_mux <= start + 9), 0)
+  if pos == 0:
+    return (0, 0, 0, 0)
+  if pos == 1:
+    return (0, 0, PATH_OFFSET_INVALID, PATH_OFFSET_INVALID)
+  return (PATH_OFFSET_INVALID,) * 4
+
+
+def create_canfd_50hz_radar_messages(packer, bus, radar_mux):
+  commands = []
+
+  offsets = _lane_path_offsets(radar_mux)
+  lane_path_values = {
+    'MUX': radar_mux,
+    'PATH_OFFSET_1': offsets[0],
+    'PATH_OFFSET_2': offsets[1],
+    'PATH_OFFSET_3': offsets[2],
+    'PATH_OFFSET_4': offsets[3],
+  }
+  commands.append(packer.make_can_msg('LANE_PATH', bus, lane_path_values))
+
+  # Empty-object-slot sentinel the stock radar transmits (no lead/object): max distances, CAR_TYPE=-1.
+  hud_objects_values = {
+    'MUX': radar_mux,
+    'OBJECT_ID': 0,
+    'IS_LEAD_CAR': 0,
+    'CAR_TYPE': -1,
+    'ROTATION': -128,
+    'LONG_DIST': 196.9,
+    'LAT_DIST': 204.7,
+  }
+  commands.append(packer.make_can_msg('HUD_OBJECTS', bus, hud_objects_values))
+
+  return commands
+
+
+def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr, lane_path_length=6, left_lane=0, right_lane=0, radar_lead2=True,
+                                    target_speed=140):
+  commands = []
+
+  radar_lead_values = {
+    'CNTR_REF': radar_ref_cntr,
+    'SET_ME_X01': 0x01,
+    # stock radar transmits a constant 140 here (confirmed from logs); 120 causes a camera mismatch. The MDX
+    # Type S vision controller sends 0 (routes 00000003..0000000b)
+    'TARGET_SPEED_MAYBE': target_speed,
+    # stock: per-side lane-line detection status (3 = line present, 0 = none), in lockstep with the
+    # camera's LKAS_HUD LANE_LINES bits. This is the CAN FD counterpart of radarless LKAS_HUD_2's
+    # LEFT_LANE/RIGHT_LANE; the dash does not draw lane lines while both are 0.
+    'LEFT_LANE': left_lane,
+    'RIGHT_LANE': right_lane,
+    # stock: number of valid points in the current LANE_PATH sweep (6 = idle). The dash cross-checks
+    # this against the path's in-band 2047 terminator; a mismatch suppresses the lane-line rendering.
+    'LANE_PATH_LENGTH': lane_path_length,
+  }
+  commands.append(packer.make_can_msg('RADAR_LEAD', bus, radar_lead_values))
+
+  # vision ctrl cars: RADAR_LEAD2 is the camera's message there (it moves to the camera bus when the relay
+  # opens and the panda forwards it), so OP must not author a second copy
+  if radar_lead2:
+    radar_lead2_values = {
+      'SET_ME_X88': 136,
+      'SET_ME_X78': 120,
+      'LEAD_DISTANCE_MAYBE': 0,
+    }
+    commands.append(packer.make_can_msg('RADAR_LEAD2', bus, radar_lead2_values))
+
+  return commands
+
+
+# ACC_CONTROL_2 GAP_DISTANCE_MAYBE (m) against vehicle speed: the desired following distance for the selected
+# distance-bar setting (ACC_HUD HUD_DISTANCE). Per bar count, from stock MDX Type S drives (medians of 1.5 kph wide
+# wheel-speed bins):
+#   3 bars: ad9840558640c31d/00000003--3f42518a26 (4.66 m at standstill in 19k frames; about 0.51 m per kph above
+#           25 kph, steeper below)
+#   2 bars: ad9840558640c31d/0000000f--e75f85e2d5 (4.33 m at standstill; about 0.37 m per kph), the dashcam drive
+#           on which the cluster's remembered faults cleared with the stock controller back in charge
+# Routes 0000000b/0000000d sent the 3-bar table under a 2-bar HUD_DISTANCE and the 3-bar HUD_DISTANCE under 2 bars
+# in the earlier drive: the two must agree, the brake module gets both.
+VISION_CTRL_GAP_DISTANCE_BP = {
+  2: [0., 5., 10., 15., 20., 25., 30., 35., 40., 45., 50., 55.],
+  3: [0., 5., 10., 20., 30., 40., 50., 60., 70.],
+}
+VISION_CTRL_GAP_DISTANCE_V = {
+  2: [4.33, 6.85, 9.44, 10.92, 12.69, 14.40, 15.95, 17.91, 19.87, 20.71, 22.91, 24.42],
+  3: [4.66, 7.96, 10.79, 15.15, 20.35, 25.30, 30.20, 35.55, 40.50],
+}
+# LEAD_DISTANCE_MAYBE with nothing ahead (0x639C)
+VISION_CTRL_NO_LEAD_DISTANCE = 255.0
+# SET_SPEED with no set speed yet (32 kph = 20 mph, the ACC minimum)
+VISION_CTRL_SET_SPEED_MIN = 32
+
+
+def vision_ctrl_gap_distance(v_ego, lead_distance_bars):
+  """GAP_DISTANCE_MAYBE for the distance-bar setting shown in ACC_HUD. Only the 2- and 3-bar tables have been
+  logged: 1 bar uses the 2-bar table and 4 bars (or none) the 3-bar table, the nearest logged setting."""
+  bars = 2 if 0 < lead_distance_bars <= 2 else 3
+  return float(np.interp(v_ego * CV.MS_TO_KPH, VISION_CTRL_GAP_DISTANCE_BP[bars], VISION_CTRL_GAP_DISTANCE_V[bars]))
+
+
+def create_vision_ctrl_acc_status(packer, bus, set_speed_kph, v_ego, lead_distance_bars=3, lead_distance=None):
+  """ACC_CONTROL_2 (0x1C9): the 50 Hz message the vision controller sends right behind ACC_CONTROL (same 10 ms
+  batch in 92-99% of stock frames). The stock drive shows the brake module losing it as well when the controller
+  is silenced, so it is replaced in the same frame as ACC_CONTROL. lead_distance is the model's lead distance in
+  m (None with nothing ahead), the gap distance follows the distance-bar setting shown in ACC_HUD."""
+  if lead_distance is None:
+    lead_distance = VISION_CTRL_NO_LEAD_DISTANCE
+  values = {
+    "SET_SPEED": int(np.clip(round(set_speed_kph), VISION_CTRL_SET_SPEED_MIN, 255)),
+    "LEAD_DISTANCE_MAYBE": float(np.clip(lead_distance, 0., VISION_CTRL_NO_LEAD_DISTANCE)),
+    "GAP_DISTANCE_MAYBE": vision_ctrl_gap_distance(v_ego, lead_distance_bars),
+  }
+  return packer.make_can_msg("ACC_CONTROL_2", bus, values)
+
+
+# LANE_PATH / HUD_OBJECTS as the MDX Type S vision controller sends them with nothing to draw, every MUX
+# (routes 00000003..0000000f): all four path offsets at 2044 (not the 2047 sentinel of the Civic/MDX radars, and no
+# terminated prefix: with lanes the Type S fills all 40 points of every bank) and one blank object with CAR_TYPE
+# UNKNOWN, ROTATION -128, LONG_DIST at full scale and LAT_DIST 204.4 (raw 2044 again).
+VISION_CTRL_IDLE_PATH_OFFSET = 2044
+VISION_CTRL_IDLE_LAT_DIST = 204.4
+
+
+def create_vision_ctrl_lane_idle(packer, bus, mux):
+  """The vision controller's idle LANE_PATH and HUD_OBJECTS pair for one MUX."""
+  lane_msg = packer.make_can_msg("LANE_PATH", bus, {
+    "MUX": mux,
+    "PATH_OFFSET_1": VISION_CTRL_IDLE_PATH_OFFSET,
+    "PATH_OFFSET_2": VISION_CTRL_IDLE_PATH_OFFSET,
+    "PATH_OFFSET_3": VISION_CTRL_IDLE_PATH_OFFSET,
+    "PATH_OFFSET_4": VISION_CTRL_IDLE_PATH_OFFSET,
+  })
+  hud_msg = packer.make_can_msg("HUD_OBJECTS", bus, {
+    "MUX": mux,
+    "OBJECT_ID": 0,
+    "IS_LEAD_CAR": 0,
+    "CAR_TYPE": 0,
+    "ROTATION": -128,
+    "LONG_DIST": 196.9,
+    "LAT_DIST": VISION_CTRL_IDLE_LAT_DIST,
+  })
+  return lane_msg, hud_msg
+
+
+def create_vision_ctrl_status(packer, bus, status_25hz_tick, hud_tick, status_1hz_tick, state):
+  """The constant status broadcasts the vision controller authors alongside its control messages: 25 Hz 0x29B
+  (all zero), 10 Hz 0x2E8 (byte 2 = 0x80, in the ACC_HUD/LKAS_HUD frame) and 1 Hz 0x1A45AA24 (byte 0 = the
+  controller's last state byte, byte 2 = 0x01). All of them disappear with the controller; the MDX Type S cluster
+  raised transmission, lane change CMBS and front cross traffic faults once it was silenced (route
+  ad9840558640c31d/0000000a--cffee2dde2). Ticks are phase-locked to the last stock RVU frames (see carstate)."""
+  commands = []
+  if status_25hz_tick:
+    commands.append(packer.make_can_msg("VISION_CTRL_STATUS_25HZ", bus, {}))
+  if hud_tick:
+    commands.append(packer.make_can_msg("VISION_CTRL_STATUS_10HZ", bus, {"SET_ME_X80": 0x80}))
+  if status_1hz_tick:
+    commands.append(packer.make_can_msg("VISION_CTRL_STATUS_1HZ", bus, {"STATE_MAYBE": state, "SET_ME_X01": 0x01}))
+  return commands
+
+
+# The vision controller's PT-bus messages the camera used to see through panda forwarding: STEERING_CONTROL,
+# ACC_CONTROL, ACC_CONTROL_2, ACC_HUD and LKAS_HUD (route ad9840558640c31d/0000000b: the forwarded copies stop on
+# the camera bus the moment the controller is silenced, and openpilot's own transmissions are never forwarded).
+# CarController mirrors openpilot's replacements onto the camera bus byte-identically, like the radar look-alikes.
+VISION_CTRL_CAMERA_MIRROR_ADDRS = frozenset({0xE4, 0x1C8, 0x1C9, 0x30C, 0x33D})
+
+# vision ctrl: while the car is in Park, every RVU frame whose content does not cycle on its own is re-sent with the
+# bytes of the last stock frame (route ad9840558640c31d/00000012: at the switchover in Park openpilot's ACC_CONTROL_2
+# changed GAP_DISTANCE 4.66 -> 4.33 m and LEAD_DISTANCE 255 -> 2..7 m, ACC_HUD HUD_DISTANCE 3 -> 2, LKAS_HUD LKAS_READY
+# and DASHED_LANES 0 -> 1, then the PCM blinked the gear indicator 1 s later). Holding the stock bytes rules the
+# content, a plausibility check or a misread DBC definition in or out as the cause. STEERING_CONTROL, the 0x334
+# private-link heartbeat and the LANE_PATH/HUD_OBJECTS MUX sweep are not held: the first two were byte-identical to
+# stock, the sweep is a cycle.
+VISION_CTRL_PARK_HOLD_MSGS = ("ACC_CONTROL", "ACC_CONTROL_2", "ACC_HUD", "LKAS_HUD", "RADAR_LEAD",
+                              "VISION_CTRL_STATUS_25HZ", "VISION_CTRL_STATUS_10HZ", "VISION_CTRL_STATUS_1HZ")
+# the signals of those that keep openpilot's value because they cycle with the COUNTER
+VISION_CTRL_PARK_HOLD_KEEP = {"RADAR_LEAD": ("CNTR_REF",)}
+
+
+def restamp_stock_frame(packer, name, stock_dat, op_dat):
+  """The stock bytes of `name` with openpilot's COUNTER (and the signals in VISION_CTRL_PARK_HOLD_KEEP) copied over from
+  openpilot's packed frame and the checksum recomputed, so the held frame continues the sequence openpilot is sending."""
+  # imported here: opendbc.can.dbc imports honda_checksum from this module
+  from opendbc.can.dbc import SignalType
+  from opendbc.can.packer import set_value
+  from opendbc.can.parser import get_raw_value
+  msg = packer.dbc.name_to_msg[name]
+  if len(stock_dat) != msg.size:
+    return op_dat
+  dat = bytearray(stock_dat)
+  keep = VISION_CTRL_PARK_HOLD_KEEP.get(name, ())
+  for sig in msg.sigs.values():
+    if sig.type == SignalType.COUNTER or sig.name == "COUNTER" or sig.name in keep:
+      set_value(dat, sig, get_raw_value(op_dat, sig))
+  sig_checksum = next((s for s in msg.sigs.values() if s.type > SignalType.COUNTER), None)
+  if sig_checksum is not None and sig_checksum.calc_checksum is not None:
+    set_value(dat, sig_checksum, sig_checksum.calc_checksum(msg.address, sig_checksum, dat))
+  return bytes(dat)
+
+
+def hold_vision_stock_frames(packer, can_sends, stock_payloads, buses):
+  """can_sends with every VISION_CTRL_PARK_HOLD_MSGS frame on `buses` replaced by its restamped stock frame
+  (stock_payloads: DBC message name -> bytes of the last stock frame; frames with no stock frame seen are kept)."""
+  addr_to_name = {packer.dbc.name_to_msg[name].address: name for name in VISION_CTRL_PARK_HOLD_MSGS if name in stock_payloads}
+  out = []
+  for addr, dat, bus in can_sends:
+    name = addr_to_name.get(addr)
+    if name is not None and bus in buses:
+      dat = restamp_stock_frame(packer, name, stock_payloads[name], dat)
+    out.append((addr, dat, bus))
+  return out
+
+
+def create_vision_ctrl_private_link(packer, bus):
+  """0x334 @ 100 Hz on the harness radar bus: the RVU's private-link heartbeat (paired with 0xE6)."""
+  return packer.make_can_msg("RVU_PRIVATE_LINK_100HZ", bus, {})
 
 
 def honda_checksum(address: int, sig, d: bytearray) -> int:
   s = 0
   extended = address > 0x7FF
+  # Higher extended-ID range adds 10, lower adds 3. TODO: confirm the exact boundary.
+  high_extended = address > 0x100000
   addr = address
   while addr:
     s += addr & 0xF
@@ -241,5 +574,5 @@ def honda_checksum(address: int, sig, d: bytearray) -> int:
     s += (x & 0xF) + (x >> 4)
   s = 8 - s
   if extended:
-    s += 3
+    s += 10 if high_extended else 3
   return s & 0xF

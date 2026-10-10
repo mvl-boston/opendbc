@@ -1,0 +1,55 @@
+BO_ 457 ACC_CONTROL_2: 8 XXX
+ SG_ SET_SPEED : 7|8@0+ (1,0) [0|255] "kph" XXX
+ SG_ LEAD_DISTANCE_MAYBE : 15|16@0+ (0.01,0) [0|255] "m" XXX
+ SG_ GAP_DISTANCE_MAYBE : 31|16@0+ (0.01,0) [0|655.35] "m" XXX
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" XXX
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
+
+BO_ 667 VISION_CTRL_STATUS_25HZ: 8 XXX
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" XXX
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
+
+BO_ 744 VISION_CTRL_STATUS_10HZ: 8 XXX
+ SG_ SET_ME_X80 : 23|8@0+ (1,0) [0|255] "" XXX
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" XXX
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
+
+BO_ 230 RVU_PRIVATE_LINK_CAMERA_100HZ: 6 XXX
+ SG_ CHECKSUM : 43|4@0+ (1,0) [0|15] "" XXX
+ SG_ COUNTER : 47|2@0+ (1,0) [0|3] "" XXX
+
+BO_ 820 RVU_PRIVATE_LINK_100HZ: 8 XXX
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" XXX
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
+
+BO_ 440773156 VISION_CTRL_STATUS_1HZ: 8 XXX
+ SG_ STATE_MAYBE : 7|8@0+ (1,0) [0|255] "" XXX
+ SG_ SET_ME_X01 : 23|8@0+ (1,0) [0|255] "" XXX
+ SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" XXX
+ SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" XXX
+
+BO_ 228 STEERING_CONTROL: 5 EON
+ SG_ STEER_TORQUE : 7|16@0- (1,0) [-4096|4096] "" EPS
+ SG_ DRIVER_OVERRIDE : 17|1@0+ (1,0) [0|1] "" XXX
+ SG_ STEER_TORQUE_REQUEST : 23|1@0+ (1,0) [0|1] "" EPS
+ SG_ CONTROL_STATE : 26|3@0+ (1,0) [0|7] "" XXX
+ SG_ RADAR_VISION_IDLE : 22|1@0+ (1,0) [0|1] "" XXX
+ SG_ CHECKSUM : 35|4@0+ (1,0) [0|15] "" EPS
+ SG_ COUNTER : 37|2@0+ (1,0) [0|3] "" EPS
+ SG_ STEER_DOWN_TO_ZERO : 38|1@0+ (1,0) [0|1] "" EPS
+ SG_ HAPTIC_WARNING : 39|1@0+ (1,0) [0|1] "" XXX
+
+CM_ BO_ 457 "50 Hz companion of ACC_CONTROL (0x1C8), sent by the vision controller (RVU) right behind it (same 10 ms batch in 92-99% of frames, MDX Type S routes ad9840558640c31d/00000003, 0000000f, 00000011). The radarless Civic 2022 camera sends the same layout; driving its fields there was found to have no effect on braking";
+CM_ SG_ 457 SET_SPEED "ACC set speed in kph (0x20 = 32 kph = 20 mph before any speed was set, keeps the last value when ACC is off)";
+CM_ SG_ 457 LEAD_DISTANCE_MAYBE "255.00 m (0x639C) in every frame of a drive with nothing ahead; 2.52-2.54 m and 7.96-7.97 m, slowly drifting, in two drives started with a parked car in front (MDX Type S routes ad9840558640c31d/00000001 and 0000000b)";
+CM_ SG_ 457 GAP_DISTANCE_MAYBE "desired following distance for the ACC_HUD distance-bar setting: 3 bars 4.66 m at standstill rising ~0.51 m per kph above 25 kph (steeper below, route ad9840558640c31d/00000003); 2 bars 4.33 m at standstill rising ~0.37 m per kph (6.85 m at 5 kph, 12.69 at 20, 19.87 at 40, 24.42 at 55, route 0000000f). Zero with the RVU silenced";
+CM_ BO_ 114120024 "MDX Type S RVU: 7fc 7fc 7fc 7fc (all four offsets 2044, not the Civic/MDX radars' 2047) on every MUX with nothing to draw, and all 40 points of every bank filled with the lane curve when lanes are up (no terminated prefix); openpilot sends the idle form (hondacan.create_vision_ctrl_lane_idle)";
+CM_ BO_ 114120025 "MDX Type S RVU idle object on every MUX: 00 00 80 ff c7 fc = OBJECT_ID 0, CAR_TYPE 0, ROTATION -128, LONG_DIST full scale, LAT_DIST 204.4 (raw 2044 like LANE_PATH)";
+CM_ SG_ 254913116 TARGET_SPEED_MAYBE "MDX Type S RVU: 0 with nothing to draw (20 00 00 18 ..), 101-118 while lane lines are up (stock routes 00000003 and 0000000f, with LEFT_LANE/RIGHT_LANE 3 and LANE_PATH_LENGTH 6/15/17)";
+CM_ BO_ 230 "100 Hz on the harness radar bus (bus 1): the camera side of the RVU private-link pair (0xE6). Survives RVU silencing while 0x334 stops (route ad9840558640c31d/0000000b). Stock logs show 0xE6 and 0x334 in the same ~10 ms bucket. Not parsed by openpilot: its 0x334 replacement is sent every 100 Hz control frame, so there is no slot to phase.";
+CM_ BO_ 820 "100 Hz on the harness radar bus (bus 1): the RVU's private-link heartbeat paired with 0xE6 on the camera<->RVU pair. All zero except checksum/counter (e.g. 00 00 00 00 00 00 00 2c). Stops the same frame the RVU is silenced (route ad9840558640c31d/0000000b); 0xE6 on bus 1 keeps going";
+CM_ BO_ 667 "vision controller 25 Hz status broadcast, all zero in every stock frame";
+CM_ BO_ 744 "vision controller 10 Hz status broadcast, sent in the same frame as ACC_HUD/LKAS_HUD; 00 00 80 00 00 00 00 in every stock frame. Bytes 0-1 went c0 04 when the relay cut the controller off from its camera (route 00000008)";
+CM_ BO_ 440773156 "vision controller 1 Hz status broadcast, XX 00 01 00 00 00 00 in every stock frame";
+CM_ SG_ 440773156 STATE_MAYBE "constant within a drive, 0x00, 0x01 or 0x02 across drives (MDX Type S stock logs)";
+CM_ SG_ 228 RADAR_VISION_IDLE "1 when STEERING_CONTROL is not requesting torque (stock RVU idle 00 00 40 00 on route ad9840558640c31d/00000003); 0 when STEER_TORQUE_REQUEST is set (00 00 80 00)";

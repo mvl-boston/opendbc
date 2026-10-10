@@ -2,11 +2,12 @@
 import unittest
 import numpy as np
 
-from opendbc.car.honda.values import HondaSafetyFlags
+from opendbc.car.honda import vision_ctrl
+from opendbc.car.honda.values import HondaSafetyFlags, VISION_CTRL_CANDIDATE_ADDRS
 from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
 from opendbc.car.structs import CarParams
-from opendbc.safety.tests.common import CANPackerSafety, MAX_WRONG_COUNTERS
+from opendbc.safety.tests.common import CANPackerSafety, MAX_WRONG_COUNTERS, make_msg
 
 HONDA_N_COMMON_TX_MSGS = [[0xE4, 0], [0x194, 0], [0x1FA, 0], [0x30C, 0], [0x33D, 0]]
 
@@ -278,6 +279,24 @@ class TestHondaNidecSafetyBase(HondaBase):
           send = (controls_allowed and pcm_gas <= self.MAX_GAS) or (pcm_gas == 0 and pcm_speed == 0)
           self.assertEqual(send, self._tx(self._send_acc_hud_msg(pcm_gas, pcm_speed)))
 
+  def test_acc_hud_gas_pressed_passthrough(self):
+    # the carcontroller mirrors the driver's pedal onto ACC_HUD during a gas override; blocking it
+    # makes the PCM drop ACC_STATUS, so the speed/gas checks are waived while the pedal is pressed
+    self.safety.set_controls_allowed(True)
+    self._rx(self._user_gas_msg(1))
+    self.assertTrue(self.safety.get_gas_pressed_prev())
+    for pcm_gas in (0, 1, self.MAX_GAS, 255):
+      for pcm_speed in (0, 1, 99):
+        self.assertTrue(self._tx(self._send_acc_hud_msg(pcm_gas, pcm_speed)))
+
+    # pedal released: back to the standard limits
+    self._rx(self._user_gas_msg(0))
+    self.assertFalse(self.safety.get_gas_pressed_prev())
+    self.assertTrue(self._tx(self._send_acc_hud_msg(self.MAX_GAS, 99)))
+    self.assertFalse(self._tx(self._send_acc_hud_msg(self.MAX_GAS + 1, 0)))
+    self.safety.set_controls_allowed(False)
+    self.assertFalse(self._tx(self._send_acc_hud_msg(1, 0)))
+
   def test_fwd_hook(self):
     # normal operation, not forwarding AEB
     self.FWD_BLACKLISTED_ADDRS[2].append(0x1FA)
@@ -358,6 +377,92 @@ class TestHondaNidecPcmAltSafety(TestHondaNidecPcmSafety):
     values = {"CRUISE_BUTTONS": buttons, "MAIN_ON": main_on, "COUNTER": self.cnt_button % 4}
     self.__class__.cnt_button += 1
     return self.packer.make_can_msg_safety("SCM_BUTTONS", bus, values)
+
+
+class TestHondaNidecPcmHybridSafety(TestHondaNidecPcmAltSafety):
+  """
+    Covers the Honda Nidec safety mode with alt SCM messages and hybrid brake
+  """
+
+  def setUp(self):
+    self.packer = CANPackerSafety("acura_ilx_2016_can_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, HondaSafetyFlags.NIDEC_ALT | HondaSafetyFlags.NIDEC_HYBRID)
+    self.safety.init_tests()
+
+  def _send_brake_msg(self, brake, aeb_req=0, bus=0):
+    values = {"COMPUTER_BRAKE_HYBRID": brake, "AEB_REQ_1": aeb_req}
+    return self.packer.make_can_msg_safety("BRAKE_COMMAND", bus, values)
+
+
+class TestHondaNidecPcmRlxBridgeSafety(TestHondaNidecPcmHybridSafety):
+  """
+    Covers the Honda Nidec safety mode for the RLX steer-bus bridge: a bridge panda relays the stock
+    camera's LKAS_HUD onto the powertrain bus, so 0x33D on bus 0 is a checked RX message rather than
+    a relay malfunction
+  """
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x30C]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x194, 0x30C)}
+
+  cnt_lkas_hud = 0
+
+  def setUp(self):
+    self.packer = CANPackerSafety("acura_rlx_2017_can_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec,
+                                 HondaSafetyFlags.NIDEC_ALT | HondaSafetyFlags.NIDEC_HYBRID | HondaSafetyFlags.RLX_STEER_BRIDGE)
+    self.safety.init_tests()
+
+  def _lkas_hud_msg(self, lkas_problem=False, bus=0):
+    values = {"LKAS_PROBLEM": lkas_problem, "COUNTER": self.cnt_lkas_hud % 4}
+    self.__class__.cnt_lkas_hud += 1
+    return self.packer.make_can_msg_safety("LKAS_HUD", bus, values)
+
+  def test_steer_safety_check(self):
+    # the RLX's 4 byte STEERING_CONTROL only has a 12 bit torque field
+    self.safety.set_controls_allowed(0)
+    self.assertTrue(self._tx(self._send_steer_msg(0x0000)))
+    self.assertFalse(self._tx(self._send_steer_msg(0x0100)))
+
+  def test_fwd_hook(self):
+    # normal operation, not forwarding AEB. LKAS_HUD is no longer statically blocked
+    self.FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x30C, 0x1FA]}
+    self.safety.set_honda_fwd_brake(False)
+    HondaBase.test_fwd_hook(self)
+
+    # forwarding AEB brake signal
+    self.FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x30C]}
+    self.safety.set_honda_fwd_brake(True)
+    HondaBase.test_fwd_hook(self)
+
+  def test_lkas_hud_rx_check(self):
+    # the bridged stock camera LKAS_HUD is expected on the powertrain bus and never a relay malfunction
+    self.safety.set_controls_allowed(True)
+    for lkas_problem in (False, True):
+      self.assertTrue(self._rx(self._lkas_hud_msg(lkas_problem)))
+    self.assertFalse(self.safety.get_relay_malfunction())
+    self.assertTrue(self.safety.get_controls_allowed())
+
+    # a bad checksum is rejected and disengages
+    msg = self._lkas_hud_msg()
+    msg[0].data[4] ^= 0x1
+    self.assertFalse(self._rx(msg))
+    self.assertFalse(self.safety.get_controls_allowed())
+
+    # so are repeated counter skips
+    for i in range(MAX_WRONG_COUNTERS + 1):
+      self.__class__.cnt_lkas_hud += 1
+      if i < MAX_WRONG_COUNTERS:
+        self.safety.set_controls_allowed(True)
+        self._rx(self._lkas_hud_msg())
+      else:
+        self.assertFalse(self._rx(self._lkas_hud_msg()))
+        self.assertFalse(self.safety.get_controls_allowed())
+
+    # recover with good messages
+    for _ in range(2):
+      self._rx(self._lkas_hud_msg())
+    self.assertTrue(self._rx(self._lkas_hud_msg()))
 
 
 # ********************* Honda Bosch **********************
@@ -482,6 +587,12 @@ class TestHondaBoschLongSafety(HondaButtonEnableBase, TestHondaBoschSafetyBase):
     not_tester_present = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\xAA\xAA\x00\x00\x00\x00\x00")
     self.assertFalse(self._tx(not_tester_present))
 
+    # the radar disable requests are only allowed on CAN FD
+    ext_diag = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x10\x03\x00\x00\x00\x00\x00")
+    self.assertFalse(self._tx(ext_diag))
+    comm_control_disable = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\x28\x83\x03\x00\x00\x00\x00")
+    self.assertFalse(self._tx(comm_control_disable))
+
   def test_gas_safety_check(self):
     for controls_allowed in [True, False]:
       for gas in np.arange(self.NO_GAS, self.MAX_GAS + 2000, 100):
@@ -505,13 +616,41 @@ class TestHondaBoschRadarlessSafetyBase(TestHondaBoschSafetyBase):
   STEER_BUS = 0
   BUTTONS_BUS = 2  # camera controls ACC, need to send buttons on bus 2
 
-  TX_MSGS = [[0xE4, 0], [0x296, 2], [0x33D, 0]]
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}
-  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D)}  # STEERING_CONTROL
+  TX_MSGS = [[0xE4, 0], [0x296, 2], [0x33D, 0], [0x6CD5554, 0], [0xF31AA54, 0], [0x6CD5557, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D, 0x6CD5554, 0xF31AA54, 0x6CD5557]}
+  # STEERING_CONTROL, LANE_PATH, LKAS_HUD_2, HUD_OBJECTS
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D, 0x6CD5554, 0xF31AA54, 0x6CD5557)}
 
   def setUp(self):
     self.packer = CANPackerSafety("honda_bosch_radarless_generated")
     self.safety = libsafety_py.libsafety
+
+  def test_buttons_fwd(self):
+    # SCM_BUTTONS (0x296) forwards to the camera unless OP's replacement button stream is flowing
+    # (engaged + a recent OP SCM_BUTTONS tx on the camera bus). The camera needs the message content
+    # beyond the buttons, so the block fails safe back to forwarding when OP stops sending (e.g. it
+    # refuses to engage even though the panda's button state machine allowed controls).
+    self.safety.set_controls_allowed(False)
+    self.assertEqual(2, self.safety.safety_fwd_hook(0, 0x296))
+
+    # engaged but OP not sending buttons: keep forwarding
+    self.safety.set_controls_allowed(True)
+    self.assertEqual(2, self.safety.safety_fwd_hook(0, 0x296))
+
+    # OP button stream flowing: block the stock buttons
+    self.assertTrue(self._tx(self._button_msg(Btn.NONE, bus=2)))
+    self.assertEqual(-1, self.safety.safety_fwd_hook(0, 0x296))
+
+    # never blocked while disengaged
+    self.safety.set_controls_allowed(False)
+    self.assertEqual(2, self.safety.safety_fwd_hook(0, 0x296))
+    self.safety.set_controls_allowed(True)
+    self.assertEqual(-1, self.safety.safety_fwd_hook(0, 0x296))
+
+    # freshness decays after 10 stock button frames without an OP tx
+    for _ in range(10):
+      self._rx(self._button_msg(Btn.NONE, main_on=True))
+    self.assertEqual(2, self.safety.safety_fwd_hook(0, 0x296))
 
 
 class TestHondaBoschRadarlessSafety(HondaPcmEnableBase, TestHondaBoschRadarlessSafetyBase):
@@ -541,9 +680,9 @@ class TestHondaBoschRadarlessLongSafety(common.LongitudinalAccelSafetyTest, Hond
   """
     Covers the Honda Bosch Radarless safety mode with longitudinal control
   """
-  TX_MSGS = [[0xE4, 0], [0x33D, 0], [0x1C8, 0], [0x30C, 0]]
-  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D, 0x1C8, 0x30C]}
-  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1C8, 0x30C, 0x33D)}
+  TX_MSGS = [[0xE4, 0], [0x33D, 0], [0x1C8, 0], [0x30C, 0], [0x296, 2], [0x6CD5554, 0], [0xF31AA54, 0], [0x6CD5557, 0]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D, 0x1C8, 0x30C, 0x6CD5554, 0xF31AA54, 0x6CD5557]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1C8, 0x30C, 0x33D, 0x6CD5554, 0xF31AA54, 0x6CD5557)}
 
   def setUp(self):
     super().setUp()
@@ -567,13 +706,49 @@ class TestHondaBoschCANFDSafetyBase(TestHondaBoschSafetyBase):
   STEER_BUS = 0
   BUTTONS_BUS = 0
 
-  TX_MSGS = [[0xE4, 0], [0x296, 0], [0x33D, 0]]
+  TX_MSGS = [[0xE4, 0], [0x296, 0], [0x296, 2], [0x33D, 0]]
   FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}
   RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D)}
 
   def setUp(self):
     self.packer = CANPackerSafety("honda_common_canfd_generated")
     self.safety = libsafety_py.libsafety
+
+  def test_buttons_fwd(self):
+    # SCM_BUTTONS (0x296) forwards to the camera unless OP's replacement button stream is flowing
+    # (engaged + a recent OP SCM_BUTTONS tx on the camera bus); see the radarless variant of this test
+    self.safety.set_controls_allowed(True)
+    self.assertEqual(2, self.safety.safety_fwd_hook(0, 0x296))
+
+    self.assertTrue(self._tx(self._button_msg(Btn.NONE, bus=2)))
+    self.assertEqual(-1, self.safety.safety_fwd_hook(0, 0x296))
+
+    self.safety.set_controls_allowed(False)
+    self.assertEqual(2, self.safety.safety_fwd_hook(0, 0x296))
+
+    self.safety.set_controls_allowed(True)
+    for _ in range(10):
+      self._rx(self._button_msg(Btn.NONE, main_on=True))
+    self.assertEqual(2, self.safety.safety_fwd_hook(0, 0x296))
+
+  def test_radar_diag_response_fwd(self):
+    # the radar's UDS responses (0x18DAF1B0) never forward to the camera: the radar disable handshake
+    # happens after the relay is open on CAN FD
+    self.safety.set_controls_allowed(False)
+    self.assertEqual(-1, self.safety.safety_fwd_hook(0, 0x18DAF1B0))
+    self.safety.set_controls_allowed(True)
+    self.assertEqual(-1, self.safety.safety_fwd_hook(0, 0x18DAF1B0))
+
+  def test_buttons_tx_camera_bus(self):
+    # Buttons to the camera (bus 2): cancel-only while disengaged, any button while engaged
+    # (OP takes over SCM_BUTTONS towards the camera when engaged)
+    self.safety.set_controls_allowed(0)
+    self.assertTrue(self._tx(self._button_msg(Btn.CANCEL, bus=2)))
+    self.assertFalse(self._tx(self._button_msg(Btn.RESUME, bus=2)))
+    self.assertFalse(self._tx(self._button_msg(Btn.SET, bus=2)))
+    self.safety.set_controls_allowed(1)
+    self.assertTrue(self._tx(self._button_msg(Btn.NONE, bus=2)))
+    self.assertTrue(self._tx(self._button_msg(Btn.RESUME, bus=2)))
 
 
 class TestHondaBoschCANFDSafety(HondaPcmEnableBase, TestHondaBoschCANFDSafetyBase):
@@ -596,6 +771,213 @@ class TestHondaBoschCANFDAltBrakeSafety(HondaPcmEnableBase, TestHondaBoschCANFDS
     super().setUp()
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.ALT_BRAKE)
     self.safety.init_tests()
+
+
+class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANFDSafetyBase):
+  """
+    Covers the Honda Bosch CANFD safety mode with longitudinal control
+  """
+
+  PT_BUS = 0
+  STEER_BUS = 0
+  BUTTONS_BUS = 0
+
+  TX_MSGS = [[0xE4, 0], [0x1DF, 0],  [0x1EF, 0], [0x30C, 0], [0x33D, 0], [0x296, 2], [0x18DAB0F1, 0], [0x310, 0], [0x310, 2]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x1DF, 0x33D]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x1DF, 0x33D)}  # STEERING_CONTROL / ACC_CONTROL / LKAS_HUD
+
+  def setUp(self):
+    super().setUp()
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG)
+    self.safety.init_tests()
+
+  def test_diagnostics(self):
+    # CAN FD silences the radar from CarController after the relay opens, so exactly the extended
+    # diagnostic session and the suppressed-response CommunicationControl disable are allowed too
+    tester_present = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x3E\x80\x00\x00\x00\x00\x00")
+    self.assertTrue(self._tx(tester_present))
+    ext_diag = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x10\x03\x00\x00\x00\x00\x00")
+    self.assertTrue(self._tx(ext_diag))
+    comm_control_disable = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\x28\x83\x03\x00\x00\x00\x00")
+    self.assertTrue(self._tx(comm_control_disable))
+
+    # anything else stays blocked, including re-enabling the radar and non-zero trailing bytes
+    comm_control_enable = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\x28\x80\x03\x00\x00\x00\x00")
+    self.assertFalse(self._tx(comm_control_enable))
+    not_tester_present = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\xAA\xAA\x00\x00\x00\x00\x00")
+    self.assertFalse(self._tx(not_tester_present))
+    trailing_bytes = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x10\x03\x00\x00\x00\x00\x01")
+    self.assertFalse(self._tx(trailing_bytes))
+
+
+class TestHondaBoschCANFDVisionCtrlLongSafety(common.LongitudinalAccelSafetyTest, TestHondaBoschCANFDLongSafety):
+  """
+    Covers the Honda Bosch CANFD safety mode with longitudinal control on the EU CR-V and the MDX Type S, whose
+    stock STEERING_CONTROL author is not behind the comma relay and gets silenced over UDS instead, and whose
+    brake module takes the radarless-style ACC_CONTROL (0x1C8) rather than the radar's 0x1DF
+  """
+
+  TX_MSGS = [[0xE4, 0], [0x1C8, 0], [0x1C9, 0], [0x29B, 0], [0x2E8, 0], [0x29B, 2], [0x2E8, 2],
+             [0x30C, 0], [0x33D, 0], [0x296, 2], [0x310, 0], [0x310, 2],
+             [0xE4, 2], [0x1C8, 2], [0x1C9, 2], [0x30C, 2], [0x33D, 2], [0x334, 1],
+             *[[addr, 0] for addr in VISION_CTRL_CANDIDATE_ADDRS]]
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}
+  # STEERING_CONTROL, ACC_CONTROL and LKAS_HUD stay on the PT bus until the controller is silenced, and are
+  # not relay-checked (the controller is not behind the relay); 0x1DF is not a message on these cars at all.
+  # The camera-bus mirrors are not relay-checked either: with the relay closed the camera bus receives the
+  # controller's copies too.
+  RELAY_MALFUNCTION_ADDRS = {}
+
+  def setUp(self):
+    self.packer = CANPackerSafety("honda_vision_ctrl_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch,
+                                 HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG | HondaSafetyFlags.VISION_CTRL)
+    self.safety.init_tests()
+
+  def _accel_msg(self, accel, bus=None):
+    return self.packer.make_can_msg_safety("ACC_CONTROL", self.PT_BUS if bus is None else bus, {"ACCEL_COMMAND": accel})
+
+  def _send_steer_msg(self, steer, bus=None):
+    return self.packer.make_can_msg_safety("STEERING_CONTROL", self.STEER_BUS if bus is None else bus, {"STEER_TORQUE": steer})
+
+  # the radar-style ACC_CONTROL/ACC_CONTROL_ON (0x1DF/0x1EF) gas and brake tests do not apply: neither message
+  # is allowed in this mode (test_radar_acc_control_blocked), the 0x1C8 accel limits are covered by
+  # LongitudinalAccelSafetyTest
+  def test_gas_safety_check(self):
+    pass
+
+  def test_brake_safety_check(self):
+    pass
+
+  def test_radar_acc_control_blocked(self):
+    # 0x1DF is not a message on these cars (route 00000009: the brake module latched CRUISE_FAULT with it on the
+    # bus), and 0x1EF/RADAR_LEAD2 are the camera's own messages that the panda forwards from bus 2: OP must
+    # author none of them, while the radarless-style ACC_CONTROL and the controller's look-alikes are allowed
+    self.safety.set_controls_allowed(True)
+    for addr in (0x1DF, 0x1EF, 0xF31AA52):
+      for bus in (0, 2):
+        self.assertFalse(self._tx(make_msg(bus, addr, 8)), (hex(addr), bus))
+    for addr in (0x1EF, 0xF31AA52):
+      self.assertEqual(0, self.safety.safety_fwd_hook(2, addr), hex(addr))
+    self.assertTrue(self._tx(self._accel_msg(0)))
+    for addr in (0x6CD5558, 0x6CD5559, 0xF31AA5C):
+      for bus in (0, 2):
+        self.assertTrue(self._tx(make_msg(bus, addr, 8)), (hex(addr), bus))
+
+  def test_diagnostics(self):
+    # the handshake (TesterPresent, extended session, CommunicationControl disableRxAndTx on every network) plus
+    # the matching CommunicationControl enable (to restore a candidate that was not the controller) is allowed
+    # towards exactly the candidate addresses, with all-zero padding. Nothing else of service 0x28: no other
+    # controlType (01/02), none of the scoped communicationTypes the RVU rejected (F3, subnets 1..14, normal
+    # messages only), no response-requested form of the every-network disable.
+    subnet_disables = [bytes([0x03, 0x28, 0x03, (subnet << 4) | 0x03]) + b"\x00" * 4 for subnet in range(0x1, 0x10)]
+    for addr in VISION_CTRL_CANDIDATE_ADDRS:
+      for dat in (b"\x02\x3E\x80\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x00",
+                  b"\x03\x28\x83\x03\x00\x00\x00\x00", b"\x03\x28\x80\x03\x00\x00\x00\x00"):
+        self.assertTrue(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
+      for dat in (b"\x03\xAA\xAA\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x01", b"\x03\x28\x80\x03\x00\x00\x00\x01",
+                  b"\x02\x10\x01\x00\x00\x00\x00\x00", b"\x02\x11\x01\x00\x00\x00\x00\x00", b"\x03\x28\x81\x03\x00\x00\x00\x00",
+                  b"\x03\x28\x01\x03\x00\x00\x00\x00", b"\x03\x28\x03\x03\x00\x00\x00\x00", b"\x03\x28\x01\xF3\x00\x00\x00\x00",
+                  b"\x03\x28\x02\xF3\x00\x00\x00\x00", b"\x03\x28\x83\xF3\x00\x00\x00\x00", b"\x03\x28\x81\xF3\x00\x00\x00\x00",
+                  b"\x03\x28\x03\xF1\x00\x00\x00\x00", b"\x03\x28\x03\x11\x00\x00\x00\x00", b"\x03\x28\x03\x12\x00\x00\x00\x00",
+                  b"\x03\x28\x03\x01\x00\x00\x00\x00", b"\x03\x28\x03\x02\x00\x00\x00\x00", b"\x03\x28\x83\x01\x00\x00\x00\x00",
+                  b"\x03\x28\x83\x13\x00\x00\x00\x00", b"\x03\x28\x01\x13\x00\x00\x00\x00", b"\x03\x28\x80\x13\x00\x00\x00\x00",
+                  b"\x03\x28\x83\x03\x00\x00\x00\x01", *subnet_disables):
+        self.assertFalse(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
+      # never on the camera bus
+      self.assertFalse(self._tx(libsafety_py.make_CANPacket(addr, 2, b"\x02\x3E\x80\x00\x00\x00\x00\x00")))
+
+    # every other ECU stays unreachable, the EPS, VSA and gateway in particular
+    for addr in (0x18DA30F1, 0x18DA28F1, 0x18DAEFF1, 0x18DA10F1, 0x18DB33F1):
+      for dat in (b"\x02\x3E\x80\x00\x00\x00\x00\x00", b"\x02\x10\x03\x00\x00\x00\x00\x00", b"\x03\x28\x83\x03\x00\x00\x00\x00",
+                  b"\x03\x28\x80\x03\x00\x00\x00\x00"):
+        self.assertFalse(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
+
+  def test_candidate_list_matches_safety(self):
+    # the Python candidate list (what the CarController probes) and the panda allowlist must agree
+    for addr in range(0x18DA00F1, 0x18DB00F1, 0x100):
+      tester_present = libsafety_py.make_CANPacket(addr, self.PT_BUS, b"\x02\x3E\x80\x00\x00\x00\x00\x00")
+      self.assertEqual(addr in VISION_CTRL_CANDIDATE_ADDRS, self._tx(tester_present), hex(addr))
+
+  def test_handshake_payloads_match_safety(self):
+    # every frame the silencer can send (session, each disable variant in its order, restore) is allowed
+    for addr in VISION_CTRL_CANDIDATE_ADDRS:
+      for dat in (vision_ctrl.EXT_DIAG_SESSION_MSG, *vision_ctrl.COMM_CONTROL_DISABLE_MSGS, vision_ctrl.COMM_CONTROL_ENABLE_MSG):
+        self.assertTrue(self._tx(libsafety_py.make_CANPacket(addr, self.PT_BUS, dat)), (hex(addr), dat))
+
+  def test_stock_steering_control_fwd(self):
+    # the controller's STEERING_CONTROL on the PT bus (bus 0) is the stock stream OP is waiting on: it must
+    # neither latch a relay malfunction nor be forwarded; a camera-side copy is blocked from forwarding too
+    self.safety.set_controls_allowed(True)
+    self._rx(make_msg(0, 0xE4, 5))
+    self.assertFalse(self.safety.get_relay_malfunction())
+    self.assertTrue(self.safety.get_controls_allowed())
+    self.assertEqual(-1, self.safety.safety_fwd_hook(2, 0xE4))
+    self.assertEqual(-1, self.safety.safety_fwd_hook(2, 0x33D))
+    self.assertEqual(2, self.safety.safety_fwd_hook(0, 0xE4))
+
+  def test_stock_canfd_lookalikes_on_pt_bus(self):
+    # the controller also authors LANE_PATH and RADAR_LEAD on the PT bus (MDX Type S relay-open census): until
+    # it is silenced they are the stock stream, not a stuck relay. Regression for the first MDX Type S drive,
+    # where both latched relay_malfunction one second after the relay opened and blocked the whole handshake.
+    for addr in (0x6CD5558, 0x6CD5559, 0xF31AA52, 0xF31AA5C, 0x1C9, 0x29B, 0x2E8, 0x1A45AA24):
+      self.safety.set_relay_malfunction(False)
+      self._rx(make_msg(0, addr, 8))
+      self.assertFalse(self.safety.get_relay_malfunction(), hex(addr))
+
+  def test_stock_canfd_lookalikes_reach_the_camera(self):
+    # and, like HUD_OBJECTS and the status broadcasts, they keep being forwarded to the camera until the
+    # controller is silenced (route 00000011: a bus-2 relay check on LANE_PATH/RADAR_LEAD blocked the forward
+    # and left the camera without them for the 2.7 s between the relay opening and OP's replacements); the
+    # camera authors none of them, so none is a relay malfunction on the camera bus either
+    for addr in (0x6CD5558, 0x6CD5559, 0xF31AA5C, 0x1C8, 0x1C9, 0x29B, 0x2E8, 0x30C, 0x1A45AA24):
+      self.assertEqual(2, self.safety.safety_fwd_hook(0, addr), hex(addr))
+      self.safety.set_relay_malfunction(False)
+      self._rx(make_msg(2, addr, 8))
+      self.assertFalse(self.safety.get_relay_malfunction(), hex(addr))
+
+  def test_vision_ctrl_status_lookalikes(self):
+    # the controller's ACC_CONTROL companion (0x1C9) and its constant status broadcasts (0x29B/0x2E8/0x1A45AA24)
+    # disappear with it: the first is replaced on the PT bus alongside ACC_CONTROL, the broadcasts on both buses
+    # like the radar look-alikes. Nothing else in that range opens up.
+    self.safety.set_controls_allowed(True)
+    for bus in (0, 2):
+      self.assertTrue(self._tx(make_msg(bus, 0x1C9, 8)), bus)
+    self.assertFalse(self._tx(make_msg(1, 0x1C9, 8)))
+    for addr in (0x29B, 0x2E8, 0x1A45AA24):
+      for bus in (0, 2):
+        self.assertTrue(self._tx(make_msg(bus, addr, 8)), (hex(addr), bus))
+      self.assertFalse(self._tx(make_msg(1, addr, 8)), hex(addr))
+    for addr in (0x1CA, 0x29A, 0x29C, 0x2E7, 0x2E9, 0x1A45AA23, 0x1A45AA25):
+      for bus in (0, 2):
+        self.assertFalse(self._tx(make_msg(bus, addr, 8)), (hex(addr), bus))
+    self.assertTrue(self._tx(make_msg(1, 0x334, 8)))
+    self.assertFalse(self._tx(make_msg(0, 0x334, 8)))
+    self.assertFalse(self._tx(make_msg(2, 0x334, 8)))
+
+  def test_camera_mirror(self):
+    # the camera used to see the controller's STEERING_CONTROL, ACC_CONTROL, 0x1C9, ACC_HUD and LKAS_HUD through
+    # panda forwarding and lost all of them at the switchover (route 0000000b): OP mirrors its replacements onto
+    # the camera bus with the same bytes, under the same checks as the PT-bus copies
+    for controls_allowed in (True, False):
+      self.safety.set_controls_allowed(controls_allowed)
+      for addr, length in ((0x1C9, 8), (0x30C, 8), (0x33D, 8)):
+        self.assertTrue(self._tx(make_msg(2, addr, length)), (hex(addr), controls_allowed))
+        self.assertFalse(self._tx(make_msg(1, addr, length)), (hex(addr), controls_allowed))
+
+      # STEERING_CONTROL: torque only while controls are allowed, on either bus
+      for bus in (0, 2):
+        self.assertTrue(self._tx(self._send_steer_msg(0, bus=bus)), (bus, controls_allowed))
+        self.assertEqual(controls_allowed, self._tx(self._send_steer_msg(0x1000, bus=bus)), (bus, controls_allowed))
+
+      # ACC_CONTROL: the accel limits apply to the camera-bus copy as well
+      self.assertTrue(self._tx(self._accel_msg(0, bus=2)), controls_allowed)
+      for accel in (self.MAX_ACCEL, self.MIN_ACCEL):
+        self.assertEqual(controls_allowed, self._tx(self._accel_msg(accel, bus=2)), (accel, controls_allowed))
+      for accel in (self.MAX_ACCEL + 0.1, self.MIN_ACCEL - 0.1):
+        self.assertFalse(self._tx(self._accel_msg(accel, bus=2)), (accel, controls_allowed))
+    self.assertFalse(self._tx(self._accel_msg(0, bus=1)))
 
 
 if __name__ == "__main__":

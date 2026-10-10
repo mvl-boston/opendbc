@@ -1,14 +1,19 @@
+import math
 import numpy as np
 from collections import defaultdict
 
 from opendbc.can import CANDefine, CANParser
-from opendbc.car import Bus, create_button_events, structs
+from opendbc.can.dbc import DBC as DbcFile
+from opendbc.car import Bus, create_button_events, structs, DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.hondacan import CanBus
+from opendbc.car.honda import vision_ctrl
+from opendbc.car.honda.hondacan import CanBus, VISION_CTRL_PARK_HOLD_MSGS
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HONDA_BOSCH_ALT_RADAR, HONDA_BOSCH_CANFD, \
-                                                 HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, \
-                                                 HondaFlags, CruiseButtons, CruiseSettings, GearShifter, CarControllerParams
+                                                 HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_TJA_CONTROL, \
+                                                 HONDA_BOSCH_VISION_CTRL, HondaFlags, CruiseButtons, CruiseSettings, GearShifter, \
+                                                 CarControllerParams
 from opendbc.car.interfaces import CarStateBase
+from opendbc.car.honda.hud_objects import HudObjectTracker
 
 TransmissionType = structs.CarParams.TransmissionType
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -16,6 +21,27 @@ ButtonType = structs.CarState.ButtonEvent.Type
 BUTTONS_DICT = {CruiseButtons.RES_ACCEL: ButtonType.accelCruise, CruiseButtons.DECEL_SET: ButtonType.decelCruise,
                 CruiseButtons.MAIN: ButtonType.mainCruise, CruiseButtons.CANCEL: ButtonType.cancel}
 SETTINGS_BUTTONS_DICT = {CruiseSettings.DISTANCE: ButtonType.gapAdjustCruise, CruiseSettings.LKAS: ButtonType.lkas}
+
+
+def _cp_msg_seen(cp, msg_name: str, signal: str = "COUNTER") -> bool:
+  return len(cp.vl_all.get(msg_name, {}).get(signal, [])) > 0
+
+
+# vision ctrl: every stock frame openpilot replaces once the controller is silenced, by DBC message name with its
+# period in control frames (the packer counters are seeded from the last stock COUNTER of each at the switchover,
+# see carcontroller)
+VISION_CTRL_STOCK_PT_MSG_PERIODS = {"STEERING_CONTROL": 1, "ACC_CONTROL": 2, "ACC_CONTROL_2": 2, "LANE_PATH": 2, "HUD_OBJECTS": 2,
+                                    "VISION_CTRL_STATUS_25HZ": 4, "ACC_HUD": 10, "LKAS_HUD": 10, "VISION_CTRL_STATUS_10HZ": 10,
+                                    "RADAR_LEAD": 20, "VISION_CTRL_STATUS_1HZ": 100}
+VISION_CTRL_STOCK_PT_MSGS = tuple(VISION_CTRL_STOCK_PT_MSG_PERIODS)
+VISION_CTRL_STOCK_RADAR_MSGS = ("RVU_PRIVATE_LINK_100HZ",)
+
+
+def _phase_counter(seen: bool, counter: int, period: int) -> int:
+  """Phase counter for a stock message openpilot replaces: reset by the stock frame, otherwise free-running
+  modulo the period so the phase seeded by the last stock frame carries on once its author is silenced
+  (unlike the CAN FD tick references, these stock frames do not survive the switchover)."""
+  return 0 if seen else (counter + 1) % period
 
 
 class CarState(CarStateBase):
@@ -34,6 +60,14 @@ class CarState(CarStateBase):
       self.car_state_scm_msg = "SCM_BUTTONS"
 
     self.brake_error_msg = "HYBRID_BRAKE_ERROR" if CP.flags & HondaFlags.HYBRID else "STANDSTILL"
+    self.brakehold_msg = "BRAKE_HOLD_HYBRID_ALT" if CP.flags & HondaFlags.HYBRID_ALT_BRAKEHOLD else "VSA_STATUS"
+
+    if CP.carFingerprint in (CAR.ACURA_MDX_3G, CAR.ACURA_TLX_1G) and not (CP.flags & HondaFlags.HYBRID):
+      self.steer_status_msg = "STEER_STATUS_LEGACY"
+    else:
+      self.steer_status_msg = "STEER_STATUS"
+
+    self.steer_control_active = False  # whether EPS is reacting to steering messages
 
     self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
 
@@ -41,7 +75,8 @@ class CarState(CarStateBase):
     self.brake_switch_active = False
     self.low_speed_alert = False
 
-    self.dynamic_v_cruise_units = self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_ALT_RADAR | HONDA_BOSCH_CANFD)
+    self.dynamic_v_cruise_units = self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_ALT_RADAR |
+                                                             HONDA_BOSCH_TJA_CONTROL | HONDA_BOSCH_CANFD)
     self.cruise_setting = 0
     self.v_cruise_pcm_prev = 0
 
@@ -51,11 +86,95 @@ class CarState(CarStateBase):
     self.is_metric = False
     self.v_cruise_factor = 1.
 
+    self.initial_accFault_cleared = False
+    self.initial_accFault_cleared_timer = int(10 / DT_CTRL) # 10 seconds after startup for initial faults to clear
+
+    # Applied gas pedal in PCM units (includes ACC-applied gas, not just driver PEDAL_GAS).
+    # Source message varies by platform: GAS_PEDAL_2 (0x130) or GAS_PEDAL (0x13C).
+    self.car_gas = 0.0
+    self.car_gas_available = False
+    # engine speed, used to distinguish EV/idle-stop from engine-on regimes on hybrids
+    self.engine_rpm = 0.0
+
+    self.radar_ref_counter = 0
+    self.radar_5hz_tick_counter = 0
+    self.radar_5hz_tick = False
+    self.supp_tick_counter = 0
+    self.supp_tick = False
+    self.hud_tick_counter = 0
+    self.hud_tick = False
+    self.radar_50hz_tick_counter = 0
+    self.radar_50hz_tick = False
+    self.vision_status_25hz_tick_counter = 0
+    self.vision_status_25hz_tick = False
+    self.vision_status_1hz_tick_counter = 0
+    self.vision_status_1hz_tick = False
+    self.vision_lead_tick_counter = 0
+    # vision ctrl: which of the stock frames above have seeded their phase counter at least once
+    self.vision_phase_seeded: set[str] = set()
+    self.vision_stock_alive_prev = True
+    # vision ctrl: True on the one frame the stock controller is first called dead (carcontroller seeds the
+    # look-alike counters from the stock ones there)
+    self.vision_switchover = False
+    # vision ctrl: last COUNTER of every stock frame openpilot replaces, by DBC message name
+    self.vision_stock_counters: dict[str, int] = {}
+    # vision ctrl: control frames since each of those stock frames was last received, and the ones received
+    # again after the switchover (a CommunicationControl variant that left part of the RVU's traffic running)
+    self.vision_stock_missing: dict[str, int] = dict.fromkeys(VISION_CTRL_STOCK_PT_MSGS, 0)
+    self.vision_stock_resumed: set[str] = set()
+    # vision ctrl: MUX of the last stock LANE_PATH, so openpilot's sweep carries on from it (0 = none seen)
+    self.vision_stock_lane_mux = 0
+    # vision ctrl: raw bytes of the last stock frame of each message held in Park (see hondacan.VISION_CTRL_PARK_HOLD_MSGS),
+    # by DBC message name; captured from the car-bus RX before parsing so no definition sits in between
+    self.vision_stock_payloads: dict[str, bytes] = {}
+    self.vision_hold_addrs: dict[int, str] = {}
+    if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+      dbc = DbcFile(DBC[CP.carFingerprint][Bus.pt])
+      self.vision_hold_addrs = {dbc.name_to_msg[name].address: name for name in VISION_CTRL_PARK_HOLD_MSGS}
+    # vision ctrl: the RVU's 0x334 private-link heartbeat on the harness radar bus is still being received
+    self.stock_private_link_counter = 0
+    self.stock_private_link_alive = False
+
+    self.scm_ambient_light = 0
+    # CAN FD deferred radar disable (see carcontroller): the stock radar is assumed alive until it has
+    # been silent for a few frames, and the relay is detected open once the camera's STEERING_CONTROL
+    # stops being physically visible on the PT bus.
+    self.stock_acc_counter = 0
+    self.stock_acc_alive = False
+    self.camera_steer_counter = 0
+    self.camera_steer_seen = False
+    self.canfd_frames = 0
+    self.canfd_relay_open = False
+    self.vision_ctrl_state = 0
+
+    # Only radarless cars have a camera that emits HUD_OBJECTS to poll for secondary vehicle locations.
+    # On CAN FD cars the radar owned HUD_OBJECTS and it is disabled, so there is nothing to track.
+    self.hud_object_tracker = HudObjectTracker() if CP.carFingerprint in HONDA_BOSCH_RADARLESS else None
+
+  def vision_stock_alive(self, name: str) -> bool:
+    """vision ctrl: the RVU is still sending this car-bus frame after being called silent (a CommunicationControl
+    variant that left it running), so openpilot must not author it: True from the first such frame until two of
+    its periods have passed without one (single-batch gaps happen, two periods do not). Always False with the
+    every-network variant, where nothing comes back, so the switchover timing is unchanged there."""
+    return name in self.vision_stock_resumed and self.vision_stock_missing[name] < 2 * VISION_CTRL_STOCK_PT_MSG_PERIODS[name]
+
+  def capture_vision_stock_frames(self, can_packets, bus: int) -> None:
+    """Remember the raw bytes of the last stock frame of every message held in Park (vision ctrl, car bus RX only:
+    openpilot's own transmissions are not received back)."""
+    for _, frames in can_packets:
+      for addr, dat, src in frames:
+        if src == bus:
+          name = self.vision_hold_addrs.get(addr)
+          if name is not None:
+            self.vision_stock_payloads[name] = bytes(dat)
+
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
     if self.CP.enableBsm:
       cp_body = can_parsers[Bus.body]
+    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      cp_radar = can_parsers[Bus.radar]
 
     ret = structs.CarState()
 
@@ -68,6 +187,10 @@ class CarState(CarStateBase):
     prev_cruise_setting = self.cruise_setting
     self.cruise_setting = cp.vl["SCM_BUTTONS"]["CRUISE_SETTING"]
     self.cruise_buttons = cp.vl["SCM_BUTTONS"]["CRUISE_BUTTONS"]
+    if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
+      # The camera consumes SCM_BUTTONS content beyond the buttons (losing/zeroing this byte raises an
+      # adaptive high beam error), so it must be echoed on frames sent in the SCM's place.
+      self.scm_ambient_light = cp.vl["SCM_BUTTONS"]["AMBIENT_LIGHT_MAYBE"]
 
     # used for car hud message
     # TODO: find CAR_SPEED for HONDA_ODYSSEY_TWN or use ACC_HUD w/ detection
@@ -78,11 +201,12 @@ class CarState(CarStateBase):
 
     # blend in transmission speed at low speed, since it has more low speed accuracy
     # STANDSTILL->WHEELS_MOVING bit can be noisy around zero, so use XMISSION_SPEED
+    lowspeed_source = cp.vl["CAR_SPEED"]["CAR_SPEED"] if self.CP.carFingerprint == CAR.ACURA_INTEGRA else cp.vl["ENGINE_DATA"]["XMISSION_SPEED"]
     v_wheel = sum([cp.vl["WHEEL_SPEEDS"][f"WHEEL_SPEED_{s}"] for s in ("FL", "FR", "RL", "RR")]) / 4.0 * CV.KPH_TO_MS
     v_weight = float(np.interp(v_wheel, v_weight_bp, v_weight_v))
-    ret.vEgoRaw = (1. - v_weight) * cp.vl["ENGINE_DATA"]["XMISSION_SPEED"] * CV.KPH_TO_MS * self.CP.wheelSpeedFactor + v_weight * v_wheel
+    ret.vEgoRaw = (1. - v_weight) * lowspeed_source * CV.KPH_TO_MS * self.CP.wheelSpeedFactor + v_weight * v_wheel
     ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
-    ret.standstill = cp.vl["ENGINE_DATA"]["XMISSION_SPEED"] < 1e-5
+    ret.standstill = lowspeed_source < 1e-5
 
     # doorOpen is true if we can find any door open, but signal locations vary, and we may only see the driver's door
     # TODO: Test the eight Nidec cars without SCM signals for driver's door state, may be able to consolidate further
@@ -96,9 +220,9 @@ class CarState(CarStateBase):
 
     ret.seatbeltUnlatched = bool(cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LAMP"] or not cp.vl["SEATBELT_STATUS"]["SEATBELT_DRIVER_LATCHED"])
 
-    steer_status = self.steer_status_values[cp.vl["STEER_STATUS"]["STEER_STATUS"]]
+    steer_status = self.steer_status_values[cp.vl[self.steer_status_msg]["STEER_STATUS"]]
     ret.steerFaultPermanent = steer_status not in ("NORMAL", "NO_TORQUE_ALERT_1", "NO_TORQUE_ALERT_2", "LOW_SPEED_LOCKOUT", "TMP_FAULT")
-    if self.CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
+    if self.CP.carFingerprint in (HONDA_BOSCH_ALT_RADAR | HONDA_BOSCH_CANFD):
       # TODO: See if this logic works for all other Honda
       min_steer_speed = max(CarControllerParams.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       expected_low_speed_lockout = steer_status == "LOW_SPEED_LOCKOUT" and ret.vEgo < min_steer_speed
@@ -108,6 +232,8 @@ class CarState(CarStateBase):
       # NO_TORQUE_ALERT_2 can be caused by bump or steering nudge from driver
       # FIXME: the stock camera stops steering on NO_TORQUE_ALERT_1
       ret.steerFaultTemporary = steer_status not in ("NORMAL", "LOW_SPEED_LOCKOUT", "NO_TORQUE_ALERT_2")
+
+    self.steer_control_active = bool(cp.vl[self.steer_status_msg]["STEER_CONTROL_ACTIVE"])
 
     if (self.CP.carFingerprint == CAR.ACURA_MDX_4G) and (steer_status == "TJA_LOW_SPEED_LOCKOUT"):
       ret.steerFaultPermanent = False
@@ -122,18 +248,21 @@ class CarState(CarStateBase):
       self.low_speed_alert = False
     ret.lowSpeedAlert = self.low_speed_alert
 
-    if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
-      ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
-    else:
-      if self.CP.openpilotLongitudinalControl:
-        if (self.CP.carFingerprint == CAR.ACURA_MDX_4G) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
-          ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
-        else:
-          ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
+    if self.CP.openpilotLongitudinalControl:
+      if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_VISION_CTRL):
+        # vision ctrl: the brake module reports the loss of the controller's ACC_CONTROL (0x1C8) here, not in
+        # BRAKE_MODULE/HYBRID_BRAKE_ERROR (route 00000009: CRUISE_FAULT_STATUS flipped, BRAKE_ERROR never did)
+        ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
+      elif (self.CP.carFingerprint in (CAR.ACURA_MDX_4G, *HONDA_BOSCH_CANFD)) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
+        ret.accFaulted = bool(cp.vl["BRAKE_MODULE"]["CRUISE_FAULT"])
+      else:
+        ret.accFaulted = bool(cp.vl[self.brake_error_msg]["BRAKE_ERROR_1"] or cp.vl[self.brake_error_msg]["BRAKE_ERROR_2"])
 
-      # Log non-critical stock ACC/LKAS faults if Nidec (camera)
-      if self.CP.carFingerprint not in HONDA_BOSCH:
-        ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or cp_cam.vl["LKAS_HUD"]["LKAS_PROBLEM"])
+    # Log non-critical stock ACC/LKAS faults if Nidec (camera) or longitudinal CANFD alt-brake
+    if self.CP.carFingerprint not in HONDA_BOSCH:
+      # RLX: the stock LKAS camera is on the steer bus; the bridge panda relays its LKAS_HUD onto the powertrain bus
+      lkas_hud_cp = cp if self.CP.carFingerprint == CAR.ACURA_RLX_HYBRID else cp_cam
+      ret.carFaultedNonCritical = bool(cp_cam.vl["ACC_HUD"]["ACC_PROBLEM"] or lkas_hud_cp.vl["LKAS_HUD"]["LKAS_PROBLEM"])
 
     ret.espDisabled = cp.vl["VSA_STATUS"]["ESP_DISABLED"] != 0
 
@@ -148,8 +277,11 @@ class CarState(CarStateBase):
 
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(
       250, cp.vl["SCM_FEEDBACK"]["LEFT_BLINKER"], cp.vl["SCM_FEEDBACK"]["RIGHT_BLINKER"])
-    ret.brakeHoldActive = cp.vl["VSA_STATUS"]["BRAKE_HOLD_ACTIVE"] == 1
+    ret.brakeHoldActive = cp.vl[self.brakehold_msg]["BRAKE_HOLD_ACTIVE"] == 1
     ret.parkingBrake = bool(cp.vl[self.car_state_scm_msg]["PARKING_BRAKE_ON"])
+
+    if (self.CP.flags & HondaFlags.NIDEC) and (self.CP.flags & HondaFlags.HYBRID):
+      ret.blockPcmEnable = ret.brakeHoldActive # Nidec Hybrids fault if resuming cruise from brake hold
 
     if self.CP.transmissionType == TransmissionType.manual:
       ret.gearShifter = GearShifter.reverse if bool(cp.vl[self.car_state_scm_msg]["REVERSE_LIGHT"]) else GearShifter.drive
@@ -159,7 +291,7 @@ class CarState(CarStateBase):
 
     ret.gasPressed = cp.vl["POWERTRAIN_DATA"]["PEDAL_GAS"] > 1e-5
 
-    ret.steeringTorque = cp.vl["STEER_STATUS"]["STEER_TORQUE_SENSOR"]
+    ret.steeringTorque = cp.vl[self.steer_status_msg]["STEER_TORQUE_SENSOR"]
     ret.steeringPressed = abs(ret.steeringTorque) > STEER_THRESHOLD.get(self.CP.carFingerprint, 1200)
 
     if self.CP.carFingerprint in HONDA_BOSCH:
@@ -198,6 +330,18 @@ class CarState(CarStateBase):
     ret.cruiseState.enabled = cp.vl["POWERTRAIN_DATA"]["ACC_STATUS"] != 0
     ret.cruiseState.available = bool(cp.vl[self.car_state_scm_msg]["MAIN_ON"])
 
+    # Bosch cars take a few minutes after startup to clear prior faults
+    if ret.accFaulted:
+      if (self.CP.carFingerprint in HONDA_BOSCH) and not self.initial_accFault_cleared:
+        # block via cruiseState since accFaulted is not reversible until offroad
+        ret.accFaulted = False
+        ret.cruiseState.available = False
+    elif self.initial_accFault_cleared_timer == 0:
+      self.initial_accFault_cleared = True
+
+    if self.initial_accFault_cleared_timer > 0:
+      self.initial_accFault_cleared_timer -= 1
+
     # Gets rid of Pedal Grinding noise when brake is pressed at slow speeds for some models
     if self.CP.carFingerprint in (CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE):
       if ret.brake > 0.1:
@@ -208,7 +352,10 @@ class CarState(CarStateBase):
       if self.CP.carFingerprint not in HONDA_BOSCH_RADARLESS:
         ret.stockAeb = (not self.CP.openpilotLongitudinalControl) and bool(cp.vl["ACC_CONTROL"]["AEB_STATUS"] and cp.vl["ACC_CONTROL"]["ACCEL_COMMAND"] < -1e-5)
     else:
-      ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE"] > 1e-5)
+      if self.CP.flags & HondaFlags.HYBRID:
+        ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE_HYBRID"] > 1e-5)
+      else:
+        ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE"] > 1e-5)
 
     self.acc_hud = False
     self.lkas_hud = False
@@ -216,8 +363,205 @@ class CarState(CarStateBase):
       ret.stockFcw = cp_cam.vl["BRAKE_COMMAND"]["FCW"] != 0
       self.acc_hud = cp_cam.vl["ACC_HUD"]
       self.stock_brake = cp_cam.vl["BRAKE_COMMAND"]
-    if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      # ENGINE_DATA and POWERTRAIN_DATA both carry an ENGINE_RPM field at the same bits, but the
+      # MDX 3G hybrid only populates the POWERTRAIN_DATA copy (route 48: 0x158 rpm was 0 for all
+      # 226k frames while 0x17C read 0-2668). Reading only ENGINE_DATA left engine_rpm pinned at
+      # 0, which permanently closed every rpm>500 learner gate (average_factor froze at its boot
+      # value for the whole drive) and made every breakaway look engine-off.
+      self.engine_rpm = max(cp.vl["ENGINE_DATA"]["ENGINE_RPM"], cp.vl["POWERTRAIN_DATA"]["ENGINE_RPM"])
+      gas_pedal_2_seen = cp.message_states.get(304) is not None and len(cp.message_states[304].timestamps) > 0
+      gas_pedal_seen = cp.message_states.get(316) is not None and len(cp.message_states[316].timestamps) > 0
+      if gas_pedal_2_seen:
+        self.car_gas_available = True
+        self.car_gas = cp.vl["GAS_PEDAL_2"]["CAR_GAS"]
+      elif gas_pedal_seen:
+        self.car_gas_available = True
+        self.car_gas = cp.vl["GAS_PEDAL"]["CAR_GAS"]
+      else:
+        self.car_gas_available = False
+    if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+      # The stock LKAS_HUD is authored on the PT bus by the controller openpilot silences (it never shows up on
+      # the camera bus once the relay is open, and goes away altogether once silenced), so read it from there
+      # without an alive check (see get_can_parsers); the last stock values are all create_lkas_hud needs.
+      self.lkas_hud = cp.vl["LKAS_HUD"]
+    elif self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       self.lkas_hud = cp_cam.vl["LKAS_HUD"]
+    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      # The radar emits low-rate "tick reference" messages that keep running even while the radar's
+      # data messages are disabled, so we phase our look-alikes to the stock cadence off of them.
+      #
+      # There is a one-frame (10 ms) delay between reading a tick here in carstate and transmitting the
+      # response in carcontroller. The stock radar sends each data message in the SAME frame as its
+      # tick, so we pulse one frame BEFORE the next tick (counter == period-1): the +1 transmit delay
+      # then lands the message on the next tick frame, matching stock.
+      #   period (frames @100Hz): 0x710=100, 0x730=10, 0x750=2, RADAR_REFERENCE=20
+      self.radar_ref_counter = cp.vl["RADAR_REFERENCE"]["COUNTER"]
+
+      # 5 Hz: RADAR_REFERENCE (0x3A1) is on the powertrain bus (cp), not the radar bus (cp_radar).
+      # RADAR_LEAD does NOT ride with the reference; stock sends it ~120 ms (12 frames) after, so fire
+      # at frame 11 (+1 transmit delay -> ~120 ms).
+      ref_tick_vals = cp.vl_all.get("RADAR_REFERENCE", {}).get("COUNTER", [])
+      if len(ref_tick_vals) > 0:
+        self.radar_5hz_tick_counter = 0
+      else:
+        self.radar_5hz_tick_counter += 1
+
+      if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+        # The RVU's own 50/25/10/5/1 Hz frames stop with it, so each counter is reset by the stock frame while
+        # it is alive and then free-runs modulo its period from that seed (see _phase_counter); the tick
+        # fires at period-1 so the +1 transmit frame lands the replacement where the stock frame would have
+        # been. The 100 Hz STEERING_CONTROL/0x334 are sent every control frame and need no phase.
+        # 5 Hz RADAR_LEAD rides the RVU's own grid (same bucket as every other ACC_HUD and as the 1 Hz
+        # status, stock route 00000003), NOT RADAR_REFERENCE's: 0x3A1 is another ECU's 5 Hz clock and
+        # RADAR_LEAD drifts 5-7 frames behind it, so seed from the stock RADAR_LEAD like the others.
+        seen_lead = _cp_msg_seen(cp, "RADAR_LEAD")
+        self.vision_lead_tick_counter = _phase_counter(seen_lead, self.vision_lead_tick_counter, 20)
+        self.radar_5hz_tick = (self.vision_lead_tick_counter == 19)
+
+        # 50 Hz RVU ACC_CONTROL / LANE_PATH (0x1C9 rides the same frame as ACC_CONTROL, see carcontroller).
+        seen_50hz = _cp_msg_seen(cp, "ACC_CONTROL") or _cp_msg_seen(cp, "LANE_PATH")
+        self.radar_50hz_tick_counter = _phase_counter(seen_50hz, self.radar_50hz_tick_counter, 2)
+        self.radar_50hz_tick = (self.radar_50hz_tick_counter == 1)
+
+        # 10 Hz ACC_HUD / LKAS_HUD / VISION_CTRL_STATUS_10HZ (stock 0x2E8 rides the HUD frame).
+        seen_10hz = any(_cp_msg_seen(cp, m) for m in ("ACC_HUD", "LKAS_HUD", "VISION_CTRL_STATUS_10HZ"))
+        self.hud_tick_counter = _phase_counter(seen_10hz, self.hud_tick_counter, 10)
+        self.hud_tick = (self.hud_tick_counter == 9)
+
+        seen_25hz = _cp_msg_seen(cp, "VISION_CTRL_STATUS_25HZ")
+        self.vision_status_25hz_tick_counter = _phase_counter(seen_25hz, self.vision_status_25hz_tick_counter, 4)
+        self.vision_status_25hz_tick = (self.vision_status_25hz_tick_counter == 3)
+
+        seen_1hz = _cp_msg_seen(cp, "VISION_CTRL_STATUS_1HZ")
+        self.vision_status_1hz_tick_counter = _phase_counter(seen_1hz, self.vision_status_1hz_tick_counter, 100)
+        self.vision_status_1hz_tick = (self.vision_status_1hz_tick_counter == 99)
+
+        for name, seen in (("5hz", seen_lead), ("50hz", seen_50hz), ("25hz", seen_25hz),
+                           ("10hz", seen_10hz), ("1hz", seen_1hz)):
+          if seen:
+            self.vision_phase_seeded.add(name)
+
+        # last stock COUNTER of every frame openpilot replaces, so the look-alikes continue the sequence
+        # (route 0000000d: every stream jumped at the handover, the packer started them all at 0)
+        for parser, names in ((cp, VISION_CTRL_STOCK_PT_MSGS), (cp_radar, VISION_CTRL_STOCK_RADAR_MSGS)):
+          for name in names:
+            counters = parser.vl_all.get(name, {}).get("COUNTER", [])
+            if len(counters) > 0:
+              self.vision_stock_counters[name] = int(counters[-1])
+        # which of the RVU's car-bus frames are still coming in: all of them while it is alive; after the
+        # switchover only those a partial CommunicationControl variant (one subnet, normal messages only) left
+        # running, and openpilot does not author a frame the RVU still sends (see vision_stock_alive)
+        if self.stock_acc_alive:
+          self.vision_stock_resumed.clear()
+        for name in VISION_CTRL_STOCK_PT_MSGS:
+          if _cp_msg_seen(cp, name):
+            self.vision_stock_missing[name] = 0
+            if not self.stock_acc_alive:
+              self.vision_stock_resumed.add(name)
+          else:
+            self.vision_stock_missing[name] += 1
+        # and the LANE_PATH/HUD_OBJECTS MUX sweep position, same reason
+        lane_mux = cp.vl_all.get("LANE_PATH", {}).get("MUX", [])
+        if len(lane_mux) > 0:
+          self.vision_stock_lane_mux = int(lane_mux[-1])
+
+        # 0x334 @ 100 Hz: alive while the RVU keeps its private links (this-network CommunicationControl),
+        # two missed frames call it gone (single-batch gaps happen, two in a row do not)
+        if _cp_msg_seen(cp_radar, "RVU_PRIVATE_LINK_100HZ"):
+          self.stock_private_link_counter = 0
+        else:
+          self.stock_private_link_counter += 1
+        self.stock_private_link_alive = self.stock_private_link_counter < 2
+
+        self.supp_tick = False
+      else:
+        self.radar_5hz_tick = (self.radar_5hz_tick_counter == 11)
+
+        # 1 Hz: 0x710 -> BOSCH_SUPPLEMENTAL_CANFD, one frame before the next tick
+        supp_tick_vals = cp_radar.vl_all.get("RADAR_SUPP_TICK_REFERENCE", {}).get("IGNORE", [])
+        if len(supp_tick_vals) > 0:
+          self.supp_tick_counter = 0
+        else:
+          self.supp_tick_counter += 1
+        self.supp_tick = (self.supp_tick_counter == 99)
+
+        # 10 Hz: 0x730 -> RADAR_HUD_CANFD, one frame before the next tick
+        hud_tick_vals = cp_radar.vl_all.get("RADAR_HUD_TICK_REFERENCE", {}).get("IGNORE", [])
+        if len(hud_tick_vals) > 0:
+          self.hud_tick_counter = 0
+        else:
+          self.hud_tick_counter += 1
+        self.hud_tick = (self.hud_tick_counter == 9)
+
+        # 50 Hz: 0x750 -> LANE_PATH/HUD_OBJECTS, one frame before the next tick
+        tick_50hz_vals = cp_radar.vl_all.get("RADAR_50HZ_TICK_REFERENCE", {}).get("IGNORE", [])
+        if len(tick_50hz_vals) > 0:
+          self.radar_50hz_tick_counter = 0
+        else:
+          self.radar_50hz_tick_counter += 1
+        self.radar_50hz_tick = (self.radar_50hz_tick_counter == 1)
+
+      # Deferred radar disable (see carcontroller). The stock radar transmits ACC_CONTROL every 2
+      # frames, so 4 missed frames means it has been silenced; assume alive until then so the
+      # replacement stream never overlaps it.
+      self.canfd_frames += 1
+      if len(cp.vl_all.get("ACC_CONTROL", {}).get("COUNTER", [])) > 0:
+        self.stock_acc_counter = 0
+      else:
+        self.stock_acc_counter += 1
+      self.stock_acc_alive = self.stock_acc_counter < 4
+
+      # While the comma relay is closed the camera's STEERING_CONTROL is physically visible on the PT
+      # bus; when the relay opens it disappears (openpilot's own 0xE4 TX is not parsed as RX). As a
+      # fallback, assume the relay is open after 5 s of controls in case the camera was never seen.
+      if len(cp.vl_all.get("STEERING_CONTROL", {}).get("COUNTER", [])) > 0:
+        self.camera_steer_counter = 0
+        self.camera_steer_seen = True
+      else:
+        self.camera_steer_counter += 1
+      self.canfd_relay_open = (self.camera_steer_seen and self.camera_steer_counter >= 5) or self.canfd_frames >= 500
+
+      if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+        # There is no radar ACC_CONTROL (0x1DF) on this car, and the ECU that authors STEERING_CONTROL is
+        # not isolated by the harness, so "stock alive" is the controller's own 100 Hz STEERING_CONTROL
+        # still being received: it gates openpilot's STEERING_CONTROL, ACC and HUD streams exactly like
+        # the radar's ACC_CONTROL does on the other CAN FD cars, until vision_ctrl has silenced it.
+        # The switchover gap is what the other ECUs time out on (the 5-frame detection cost the 50 Hz
+        # ACC_CONTROL/0x1C9 pair three frames, 70 ms, routes 0000000a/b), so the gate tightens with how
+        # sure vision_ctrl is that the controller is going quiet:
+        #   - fast_detect(): the frames right after CommunicationControl disable, dead on the FIRST missed
+        #     frame, so openpilot's STEERING_CONTROL goes out on the frame the stock one would have, and the
+        #     phased 50 Hz pair above does not miss a slot either;
+        #   - expecting_silence(): the rest of a probe / held silent, two missed frames (~2% of control
+        #     batches see no stock STEERING_CONTROL while it is alive, never two in a row);
+        #   - otherwise five, so a short RX dropout never starts openpilot's streams next to a live controller.
+        if vision_ctrl.fast_detect():
+          alive_frames = 1
+        elif vision_ctrl.expecting_silence():
+          alive_frames = 2
+        else:
+          alive_frames = 5
+        self.stock_acc_alive = self.camera_steer_counter < alive_frames
+        self.vision_switchover = self.vision_stock_alive_prev and not self.stock_acc_alive
+        if self.vision_switchover:
+          # Switchover frame. A phased slot due on this very frame (counter 0) could not be fired a frame
+          # earlier because the stock STEERING_CONTROL was still there; send it now, late by the transmit
+          # latency rather than skipped, so no stream opens with a two-period gap.
+          self.radar_50hz_tick |= self.radar_50hz_tick_counter == 0
+          self.hud_tick |= self.hud_tick_counter == 0
+          self.radar_5hz_tick |= self.vision_lead_tick_counter == 0
+          self.vision_status_25hz_tick |= self.vision_status_25hz_tick_counter == 0
+          self.vision_status_1hz_tick |= self.vision_status_1hz_tick_counter == 0
+        self.vision_stock_alive_prev = self.stock_acc_alive
+        self.vision_ctrl_state = cp.vl["VISION_CTRL_STATUS_1HZ"]["STATE_MAYBE"]
+        # Hold CommunicationControl disable until every phase counter above has been seeded by its stock
+        # frame at least once; from then on they free-run in phase, so the disable can go out any frame.
+        vision_ctrl.set_shutdown_allowed(self.vision_phase_seeded >= {"5hz", "50hz", "25hz", "10hz", "1hz"})
+    else:
+      self.supp_tick = False
+      self.hud_tick = False
+      self.radar_5hz_tick = False
+      self.radar_50hz_tick = False
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
@@ -230,14 +574,67 @@ class CarState(CarStateBase):
       *create_button_events(self.cruise_setting, prev_cruise_setting, SETTINGS_BUTTONS_DICT),
     ]
 
+    if self.hud_object_tracker is not None:
+      self.hud_object_tracker.update(cp_cam)
+
     return ret
 
   def get_can_parsers(self, CP):
+    # Optional on Nidec: some platforms send GAS_PEDAL (0x13C) instead of GAS_PEDAL_2 (0x130).
+    # Register before lazy vl access so missing messages do not count against canValid.
+    pt_messages = [("GAS_PEDAL_2", math.nan), ("GAS_PEDAL", math.nan)]
+    if CP.carFingerprint == CAR.ACURA_RLX_HYBRID:
+      # the bridged stock camera LKAS_HUD must stay alive on the powertrain bus
+      pt_messages.append(("LKAS_HUD", 10))
+    cam_messages = []
+    if CP.carFingerprint in HONDA_BOSCH_CANFD:
+      # Radar-alive and relay-open detection for the deferred radar disable (see carcontroller).
+      # Both messages intentionally go silent (the radar is disabled, the camera ends up behind the
+      # open relay), so subscribe with NaN frequency to skip the alive/timeout checks.
+      pt_messages += [("ACC_CONTROL", float('nan')), ("STEERING_CONTROL", float('nan'))]
+    if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+      # Stock LKAS_HUD lives on the PT bus here and disappears once its author is silenced (see update); the
+      # 1 Hz status broadcast is read for its state byte, which openpilot's replacement carries forward.
+      # The rest are vl_all tick references for phasing replacements (see update()).
+      pt_messages += [
+        ("RADAR_REFERENCE", float('nan')),
+        ("RADAR_LEAD", float('nan')),
+        ("ACC_HUD", float('nan')),
+        ("LANE_PATH", float('nan')),
+        ("LKAS_HUD", float('nan')),
+        ("VISION_CTRL_STATUS_25HZ", float('nan')),
+        ("VISION_CTRL_STATUS_10HZ", float('nan')),
+        ("VISION_CTRL_STATUS_1HZ", float('nan')),
+        # only read for their last stock COUNTER (see VISION_CTRL_STOCK_PT_MSGS)
+        ("ACC_CONTROL_2", float('nan')),
+        ("HUD_OBJECTS", float('nan')),
+      ]
+    if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
+      # HUD_OBJECTS is polled by the HudObjectTracker, but not every radarless camera emits it,
+      # so subscribe with NaN frequency to skip the alive/timeout checks.
+      cam_messages += [("HUD_OBJECTS", float('nan'))]
     parsers = {
-      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).pt),
-      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], CanBus(CP).camera),
+      Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).pt),
+      Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_messages, CanBus(CP).camera),
     }
     if CP.enableBsm:
       parsers[Bus.body] = CANParser(DBC[CP.carFingerprint][Bus.body], [], CanBus(CP).radar)
+    if self.CP.carFingerprint in HONDA_BOSCH_CANFD:
+      # These radar tick-reference messages are only read via vl_all, which (unlike vl) does not
+      # auto-subscribe messages, so they must be listed explicitly or they are never parsed.
+      #   0x710 RADAR_SUPP_TICK_REFERENCE (1 Hz), 0x730 RADAR_HUD_TICK_REFERENCE (10 Hz),
+      #   0x750 RADAR_50HZ_TICK_REFERENCE (50 Hz)
+      # The EU CR-V has no radar and its radar bus is empty, so there these must not count against canValid.
+      tick_freq = float('nan') if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL else 0
+      radar_messages = [
+        ("RADAR_SUPP_TICK_REFERENCE", tick_freq),
+        ("RADAR_HUD_TICK_REFERENCE", tick_freq),
+        ("RADAR_50HZ_TICK_REFERENCE", tick_freq),
+      ]
+      if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+        # the RVU's private-link heartbeat on the harness radar bus: alive while the RVU keeps its private
+        # pairs up (this-network CommunicationControl), gone when it is silenced on every network (see update)
+        radar_messages.append(("RVU_PRIVATE_LINK_100HZ", float('nan')))
+      parsers[Bus.radar] = CANParser(DBC[CP.carFingerprint][Bus.radar], radar_messages, CanBus(CP).radar)
 
     return parsers

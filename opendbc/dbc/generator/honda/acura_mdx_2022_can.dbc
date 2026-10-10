@@ -5,4 +5,3 @@ CM_ "IMPORT _lkas_hud_8byte.dbc";
 CM_ "IMPORT _bosch_standstill.dbc";
 CM_ "IMPORT _steering_sensors_a.dbc";
 CM_ "IMPORT _gearbox_common.dbc";
-CM_ "IMPORT _bosch_canfd.dbc";

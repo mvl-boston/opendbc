@@ -6,7 +6,8 @@
 #define HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(pt_bus)                                                                                      \
   {.msg = {{0x1A6, (pt_bus), 8, 25U, .max_counter = 3U, .ignore_quality_flag = true},                  /* SCM_BUTTONS */       \
            {0x296, (pt_bus), 4, 25U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }}},                                 \
-  {.msg = {{0x158, (pt_bus), 8, 100U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* ENGINE_DATA */      \
+  {.msg = {{0x158, (pt_bus), 8, 100U, .max_counter = 3U, .ignore_quality_flag = true},                   /* ENGINE_DATA */     \
+           {0x309, (pt_bus), 8, 10U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }}},             /* CAR_SPEED */     \
   {.msg = {{0x17C, (pt_bus), 8, 100U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  /* POWERTRAIN_DATA */  \
 
 #define HONDA_COMMON_RX_CHECKS(pt_bus)                                                                                                  \
@@ -29,9 +30,25 @@ static int honda_brake = 0;
 static bool honda_brake_switch_prev = false;
 static bool honda_alt_brake_msg = false;
 static bool honda_fwd_brake = false;
+static bool honda_nidec_hybrid = false;
 static bool honda_bosch_long = false;
 static bool honda_bosch_radarless = false;
 static bool honda_bosch_canfd = false;
+// counts down on each stock SCM_BUTTONS rx, topped up on each OP SCM_BUTTONS tx to the camera:
+// the stock buttons are only blocked from forwarding while OP's replacement stream is actually flowing
+static int honda_op_buttons_fresh = 0;
+// EU CR-V (vision controller): the ECU authoring STEERING_CONTROL is not behind the relay, so OP silences it
+// over UDS from the CarController once the relay is open. Until then the stock STEERING_CONTROL is expected
+// on the PT bus, so it cannot carry the (latching) relay-malfunction check in this mode; the CarController
+// only authors STEERING_CONTROL once the stock stream has actually stopped.
+static bool honda_vision_ctrl = false;
+
+// The vision controller's diagnostic address is searched for among exactly these candidates (see
+// opendbc/car/honda/values.py VISION_CTRL_CANDIDATE_ADDRS); no other ECU can be addressed by OP
+static bool honda_vision_ctrl_candidate(unsigned int addr) {
+  return (addr == 0x18DAB5F1U) || (addr == 0x18DAB8F1U) || (addr == 0x18DAB9F1U) || (addr == 0x18DABAF1U) || (addr == 0x18DABBF1U) ||
+         (addr == 0x18DAB0F1U) || (addr == 0x18DAB3F1U) || (addr == 0x18DA07F1U);
+}
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
 static HondaHw honda_hw = HONDA_NIDEC;
 
@@ -71,8 +88,8 @@ static void honda_rx_hook(const CANPacket_t *msg) {
   const bool pcm_cruise = ((honda_hw == HONDA_BOSCH) && !honda_bosch_long) || (honda_hw == HONDA_NIDEC);
   unsigned int pt_bus = honda_get_pt_bus();
 
-  // sample speed
-  if (msg->addr == 0x158U) {
+  // sample speed - 0x158 used for all supported Hondas except Integra (use 0x309 car_speed message)
+  if ((msg->addr == 0x158U) || (msg->addr == 0x309U)) {
     vehicle_moving = msg->data[0] | msg->data[1];
   }
 
@@ -104,6 +121,11 @@ static void honda_rx_hook(const CANPacket_t *msg) {
   // state machine to enter and exit controls for button enabling
   // 0x1A6 for the ILX, 0x296 for the Civic Touring
   if (((msg->addr == 0x1A6U) || (msg->addr == 0x296U)) && (msg->bus == pt_bus)) {
+    // stock buttons act as the clock for the OP button takeover freshness (see honda_bosch_fwd_hook)
+    if (honda_op_buttons_fresh > 0) {
+      honda_op_buttons_fresh--;
+    }
+
     int button = (msg->data[0] & 0xE0U) >> 5;
 
     // enter controls on the falling edge of set or resume
@@ -147,8 +169,15 @@ static void honda_rx_hook(const CANPacket_t *msg) {
   if (!(alternative_experience & ALT_EXP_DISABLE_STOCK_AEB)) {
     if ((msg->bus == 2U) && (msg->addr == 0x1FAU)) {
       bool honda_stock_aeb = GET_BIT(msg, 29U);
-      int honda_stock_brake = (msg->data[0] << 2) | (msg->data[1] >> 6);
 
+      int honda_stock_brake;
+      if (honda_nidec_hybrid) {
+        honda_stock_brake = (msg->data[6] << 2) | (msg->data[7] >> 6);
+      }
+      else {
+        honda_stock_brake = (msg->data[0] << 2) | (msg->data[1] >> 6);
+      }
+      
       // Forward AEB when stock braking is higher than openpilot braking
       // only stop forwarding when AEB event is over
       if (!honda_stock_aeb) {
@@ -168,7 +197,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     .max_accel = 200,   // accel is used for brakes
     .min_accel = -350,
 
-    .max_gas = 2000,
+    .max_gas = 2200,
     .inactive_gas = -30000,
   };
 
@@ -192,14 +221,22 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     bool violation = false;
     violation |= longitudinal_speed_checks(pcm_speed, HONDA_NIDEC_LONG_LIMITS);
     violation |= longitudinal_gas_checks(pcm_gas, HONDA_NIDEC_LONG_LIMITS);
-    if (violation) {
+    // While the driver is on the gas, longitudinal_allowed is false and the checks above only pass an
+    // all-zero ACC_HUD. The carcontroller mirrors the driver's own pedal onto PCM_GAS through the
+    // override; blocking those frames starves the PCM of ACC_HUD and it drops ACC_STATUS
+    // ("Cruise Is Off" takeover on every override), so let them through while the pedal is pressed.
+    if (violation && !gas_pressed) {
       tx = false;
     }
   }
 
   // BRAKE: safety check (nidec)
   if ((msg->addr == 0x1FAU) && (msg->bus == bus_pt)) {
-    honda_brake = (msg->data[0] << 2) + ((msg->data[1] >> 6) & 0x3U);
+    if ( honda_nidec_hybrid ) {
+      honda_brake = (msg->data[6] << 2) + ((msg->data[7] >> 6) & 0x3U);
+    } else {
+      honda_brake = (msg->data[0] << 2) + ((msg->data[1] >> 6) & 0x3U);
+    }
     if (longitudinal_brake_checks(honda_brake, HONDA_NIDEC_LONG_LIMITS)) {
       tx = false;
     }
@@ -224,8 +261,8 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     }
   }
 
-  // ACCEL: safety check (radarless)
-  if ((msg->addr == 0x1C8U) && (msg->bus == bus_pt)) {
+  // ACCEL: safety check (radarless; the vision controller cars also mirror it onto the camera bus)
+  if ((msg->addr == 0x1C8U) && ((msg->bus == bus_pt) || (msg->bus == 2U))) {
     int accel = (msg->data[0] << 4) | (msg->data[1] >> 4);
     accel = to_signed(accel, 12);
 
@@ -256,15 +293,50 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   // FORCE CANCEL: safety check only relevant when spamming the cancel button in Bosch HW
   // ensuring that only the cancel button press is sent (VAL 2) when controls are off.
   // This avoids unintended engagements while still allowing resume spam
-  if ((msg->addr == 0x296U) && !controls_allowed && (msg->bus == bus_buttons)) {
+  // On CAN FD, buttons are also sent to the camera (bus 2) to take over SCM_BUTTONS while engaged,
+  // so the same check applies there.
+  const bool is_buttons_bus = (msg->bus == bus_buttons) || (honda_bosch_canfd && (msg->bus == 2U));
+  if ((msg->addr == 0x296U) && !controls_allowed && is_buttons_bus) {
     if (((msg->data[0] >> 5) & 0x7U) != 2U) {
       tx = false;
     }
   }
 
+  // OP is streaming SCM_BUTTONS to the camera: block the stock buttons from forwarding while this
+  // stream stays fresh (see honda_bosch_fwd_hook). Topped up here so the block fails safe: if OP
+  // stops sending (e.g. it refuses to engage while the panda's button state machine allowed controls),
+  // the stock buttons resume forwarding within ~10 button frames (~0.4 s).
+  if (tx && (msg->addr == 0x296U) && (msg->bus == 2U)) {
+    honda_op_buttons_fresh = 10;
+  }
+
   // Only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
-  if (msg->addr == 0x18DAB0F1U) {
-    if ((GET_BYTES(msg, 0, 4) != 0x00803E02U) || (GET_BYTES(msg, 4, 4) != 0x0U)) {
+  // On CAN FD the radar is silenced from CarController once the comma relay is open (rather than from
+  // CarInterface.init() under the ELM327 mode, which raced the safety-mode switch and could leave the
+  // brake module without ACC_CONTROL long enough to latch CRUISE_FAULT), so additionally allow exactly
+  // the extended-diagnostic-session request and the suppressed-response CommunicationControl
+  // disableRxAndTx request. The corresponding enable stays blocked: re-enabling the radar into OP's
+  // ACC_CONTROL stream would double up control messages while driving.
+  // Vision controller (EU CR-V): the same handshake is allowed towards each candidate address, plus the
+  // matching CommunicationControl enable so a candidate that turned out not to be the controller can be
+  // restored during the search (the CarController stops authoring STEERING_CONTROL whenever the stock one
+  // reappears, so the two streams do not overlap).
+  const bool vision_ctrl_diag = honda_vision_ctrl && honda_vision_ctrl_candidate(msg->addr);
+  if ((msg->addr == 0x18DAB0F1U) || vision_ctrl_diag) {
+    const uint32_t first_bytes = GET_BYTES(msg, 0, 4);
+    bool allowed = (first_bytes == 0x00803E02U);
+    if (honda_bosch_canfd) {
+      allowed = allowed || (first_bytes == 0x00031002U);  // 02 10 03: extended diagnostic session
+      allowed = allowed || (first_bytes == 0x03832803U);  // 03 28 83 03: CommunicationControl disable rx/tx
+    }
+    if (vision_ctrl_diag) {
+      // No other CommunicationControl form: the MDX Type S RVU implements exactly controlType 03 on every network.
+      // It answered 7F 28 12 to controlType 01 (enableRxAndDisableTx) and 7F 28 31 to every scoped
+      // communicationType (F3 "network the request was received on", subnets 1..14, normal messages only), see
+      // opendbc/car/honda/vision_ctrl.py.
+      allowed = allowed || (first_bytes == 0x03802803U);  // 03 28 80 03: CommunicationControl enable rx/tx
+    }
+    if (!allowed || (GET_BYTES(msg, 4, 4) != 0x0U)) {
       tx = false;
     }
   }
@@ -279,7 +351,15 @@ static safety_config honda_nidec_init(uint16_t param) {
   static CanMsg HONDA_N_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
                                      {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = true}};
 
+  // RLX steer-bus bridge: the EPS and the stock LKAS camera are on a separate bus, and a bridge panda relays the
+  // camera's LKAS_HUD (0x33D) onto the powertrain bus so openpilot can read LKAS_PROBLEM. A received 0x33D on bus 0
+  // is therefore expected rather than a relay malfunction, and it is a checked message like the rest of the car.
+  static CanMsg HONDA_N_RLX_BRIDGE_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x194, 0, 4, .check_relay = true}, {0x1FA, 0, 8, .check_relay = false},
+                                                {0x30C, 0, 8, .check_relay = true}, {0x33D, 0, 5, .check_relay = false}};
+
   const uint16_t HONDA_PARAM_NIDEC_ALT = 4;
+  const uint16_t HONDA_PARAM_NIDEC_HYBRID = 32;
+  const uint16_t HONDA_PARAM_RLX_STEER_BRIDGE = 64;
 
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
@@ -289,12 +369,25 @@ static safety_config honda_nidec_init(uint16_t param) {
   honda_bosch_long = false;
   honda_bosch_radarless = false;
   honda_bosch_canfd = false;
+  honda_vision_ctrl = false;
+  honda_op_buttons_fresh = 0;
 
   safety_config ret;
 
   bool enable_nidec_alt = GET_FLAG(param, HONDA_PARAM_NIDEC_ALT);
+  honda_nidec_hybrid = GET_FLAG(param, HONDA_PARAM_NIDEC_HYBRID);
+  const bool rlx_steer_bridge = GET_FLAG(param, HONDA_PARAM_RLX_STEER_BRIDGE);
 
-  if (enable_nidec_alt) {
+  if (rlx_steer_bridge) {
+    // RLX uses the alternate SCM messages, plus the bridged LKAS_HUD on the powertrain bus
+    static RxCheck honda_nidec_rlx_bridge_rx_checks[] = {
+      HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(0)
+      {.msg = {{0x1FA, 2, 8, 50U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // BRAKE_COMMAND
+      {.msg = {{0x33D, 0, 5, 10U, .max_counter = 3U, .ignore_quality_flag = true}, { 0 }, { 0 }}},  // LKAS_HUD (stock camera, bridged)
+    };
+
+    SET_RX_CHECKS(honda_nidec_rlx_bridge_rx_checks, ret);
+  } else if (enable_nidec_alt) {
     // For Nidecs with main on signal on an alternate msg (missing 0x326)
     static RxCheck honda_nidec_alt_rx_checks[] = {
       HONDA_COMMON_NO_SCM_FEEDBACK_RX_CHECKS(0)
@@ -312,7 +405,11 @@ static safety_config honda_nidec_init(uint16_t param) {
     SET_RX_CHECKS(honda_nidec_common_rx_checks, ret);
   }
 
-  SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
+  if (rlx_steer_bridge) {
+    SET_TX_MSGS(HONDA_N_RLX_BRIDGE_TX_MSGS, ret);
+  } else {
+    SET_TX_MSGS(HONDA_N_TX_MSGS, ret);
+  }
 
   return ret;
 }
@@ -326,17 +423,70 @@ static safety_config honda_bosch_init(uint16_t param) {
                                               {0x33DA, 1, 5, .check_relay = true}, {0x33DB, 1, 8, .check_relay = true}, {0x39F, 1, 8, .check_relay = false},
                                               {0x18DAB0F1, 1, 8, .check_relay = false}};  // Bosch w/ gas and brakes
 
-  static CanMsg HONDA_RADARLESS_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x296, 2, 4, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}};  // Bosch radarless
+  static CanMsg HONDA_RADARLESS_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x296, 2, 4, .check_relay = false}, {0x33D, 0, 8, .check_relay = true},
+                                             {0x6CD5554, 0, 8, .check_relay = true}, {0xF31AA54, 0, 8, .check_relay = true},
+                                             {0x6CD5557, 0, 8, .check_relay = true}};  // Bosch radarless (HUD_OBJECTS authored in stock ACC too)
 
   static CanMsg HONDA_RADARLESS_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x33D, 0, 8, .check_relay = true}, {0x1C8, 0, 8, .check_relay = true},
-                                                  {0x30C, 0, 8, .check_relay = true}};  // Bosch radarless w/ gas and brakes
+                                                  {0x30C, 0, 8, .check_relay = true}, {0x296, 2, 4, .check_relay = false}, {0x6CD5554, 0, 8, .check_relay = true},
+                                                  {0xF31AA54, 0, 8, .check_relay = true}, {0x6CD5557, 0, 8, .check_relay = true}};  // Bosch radarless w/ gas and brakes
 
-  static CanMsg HONDA_CANFD_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x296, 0, 4, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}};
+  // 0x296 on bus 2: OP takes over SCM_BUTTONS towards the camera to auto-disable stock LKAS and to block
+  // the driver's LKAS button while engaged (the physical SCM_BUTTONS is blocked from forwarding, see fwd hook)
+  static CanMsg HONDA_CANFD_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x296, 0, 4, .check_relay = false}, {0x296, 2, 4, .check_relay = false},
+                                         {0x33D, 0, 8, .check_relay = true}}; // Bosch CANFD
 
+  // The radar look-alikes (0x310, 0x6CD5558, 0x6CD5559, 0xF31AA52, 0xF31AA5C, 0x1A45AA4E) are consumed by both
+  // the camera (behind the relay on the camera bus, 2) and the powertrain (radar bus, 0). openpilot TX is not
+  // forwarded across the open relay, so each is sent on both buses; the control messages stay on bus 0.
+  static CanMsg HONDA_CANFD_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = true}, {0x1DF, 0, 8, .check_relay = true}, {0x1EF, 0, 8, .check_relay = false},
+                                              {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = true}, {0x296, 2, 4, .check_relay = false},
+                                              {0x18DAB0F1, 0, 8, .check_relay = false},
+                                              {0x310, 0, 8, .check_relay = false}, {0x6CD5558, 0, 8, .check_relay = true}, {0x6CD5559, 0, 8, .check_relay = false},
+                                              {0xF31AA52, 0, 8, .check_relay = false}, {0xF31AA5C, 0, 8, .check_relay = true}, {0x1A45AA4E, 0, 8, .check_relay = false},
+                                              {0x310, 2, 8, .check_relay = false}, {0x6CD5558, 2, 8, .check_relay = true}, {0x6CD5559, 2, 8, .check_relay = false},
+                                              {0xF31AA52, 2, 8, .check_relay = false}, {0xF31AA5C, 2, 8, .check_relay = true}, {0x1A45AA4E, 2, 8, .check_relay = false}};
+
+  // Vision controller (EU CR-V, MDX Type S) w/ gas and brakes: as CAN FD long, but the controller OP silences
+  // over UDS authors the radarless-style ACC_CONTROL (0x1C8, the message the brake module listens to; there is
+  // no 0x1DF on these cars and 0x1EF belongs to the camera) and, on the PT bus, the stock STEERING_CONTROL,
+  // LKAS_HUD, LANE_PATH (0x6CD5558) and RADAR_LEAD (0xF31AA5C), so none of them can be relay-checked there (the
+  // MDX Type S latched relay_malfunction on the last two the moment the relay opened; honda_bosch_fwd_hook still
+  // blocks the camera-side copies of STEERING_CONTROL/LKAS_HUD from forwarding), plus the diagnostic addresses
+  // of the controller candidates. No RADAR_LEAD2 (0xF31AA52): that one is the camera's and gets forwarded.
+  // The controller also authors the 50 Hz ACC_CONTROL companion 0x1C9 and the constant status broadcasts
+  // 0x29B/0x2E8/0x1A45AA24 on the PT bus until silenced; OP replaces all of them (the status ones on both buses
+  // like the radar look-alikes), so none can be relay-checked on the PT bus either. The camera used to see the
+  // controller's STEERING_CONTROL, ACC_CONTROL, 0x1C9, ACC_HUD and LKAS_HUD through forwarding, so OP mirrors
+  // its replacements onto the camera bus too (same bytes; the ACC_CONTROL accel check covers bus 2 as well).
+  // Nothing is relay-checked on the camera bus either: the camera authors none of these, and a relay check
+  // there also blocks the forward of the controller's own copy, which left the camera without LANE_PATH and
+  // RADAR_LEAD from the relay opening until OP's replacements started 2.7 s later (route
+  // ad9840558640c31d/00000011) while HUD_OBJECTS kept flowing; the controller's copies now reach the camera
+  // until it is silenced, OP's bus-2 copies take over the frame after (never both, OP's start on silence).
+  static CanMsg HONDA_CANFD_VISION_CTRL_LONG_TX_MSGS[] = {{0xE4, 0, 5, .check_relay = false}, {0x1C8, 0, 8, .check_relay = false},
+                                                          {0x1C9, 0, 8, .check_relay = false},
+                                                          {0xE4, 2, 5, .check_relay = false}, {0x1C8, 2, 8, .check_relay = false},
+                                                          {0x1C9, 2, 8, .check_relay = false}, {0x30C, 2, 8, .check_relay = false},
+                                                          {0x33D, 2, 8, .check_relay = false},
+                                                          {0x334, 1, 8, .check_relay = false},
+                                                          {0x29B, 0, 8, .check_relay = false}, {0x2E8, 0, 8, .check_relay = false}, {0x1A45AA24, 0, 8, .check_relay = false},
+                                                          {0x29B, 2, 8, .check_relay = false}, {0x2E8, 2, 8, .check_relay = false}, {0x1A45AA24, 2, 8, .check_relay = false},
+                                                          {0x30C, 0, 8, .check_relay = false}, {0x33D, 0, 8, .check_relay = false}, {0x296, 2, 4, .check_relay = false},
+                                                          {0x18DAB5F1, 0, 8, .check_relay = false}, {0x18DAB8F1, 0, 8, .check_relay = false},
+                                                          {0x18DAB9F1, 0, 8, .check_relay = false}, {0x18DABAF1, 0, 8, .check_relay = false},
+                                                          {0x18DABBF1, 0, 8, .check_relay = false},
+                                                          {0x18DAB0F1, 0, 8, .check_relay = false}, {0x18DAB3F1, 0, 8, .check_relay = false},
+                                                          {0x18DA07F1, 0, 8, .check_relay = false},
+                                                          {0x310, 0, 8, .check_relay = false}, {0x6CD5558, 0, 8, .check_relay = false}, {0x6CD5559, 0, 8, .check_relay = false},
+                                                          {0xF31AA5C, 0, 8, .check_relay = false}, {0x1A45AA4E, 0, 8, .check_relay = false},
+                                                          {0x310, 2, 8, .check_relay = false}, {0x6CD5558, 2, 8, .check_relay = false}, {0x6CD5559, 2, 8, .check_relay = false},
+                                                          {0xF31AA5C, 2, 8, .check_relay = false}, {0x1A45AA4E, 2, 8, .check_relay = false}};
 
   const uint16_t HONDA_PARAM_ALT_BRAKE = 1;
   const uint16_t HONDA_PARAM_RADARLESS = 8;
   const uint16_t HONDA_PARAM_BOSCH_CANFD = 16;
+  const uint16_t HONDA_PARAM_VISION_CTRL = 128;
 
   // Bosch radarless has the powertrain bus on bus 0
   static RxCheck honda_bosch_pt0_rx_checks[] = {
@@ -360,8 +510,12 @@ static safety_config honda_bosch_init(uint16_t param) {
 
   honda_hw = HONDA_BOSCH;
   honda_brake_switch_prev = false;
+  honda_op_buttons_fresh = 0;
   honda_bosch_radarless = GET_FLAG(param, HONDA_PARAM_RADARLESS);
   honda_bosch_canfd = GET_FLAG(param, HONDA_PARAM_BOSCH_CANFD);
+  // the vision controller handshake is only meaningful on CAN FD with OP longitudinal (the silenced
+  // controller takes the stock ACC with it); the flag is ignored otherwise
+  honda_vision_ctrl = GET_FLAG(param, HONDA_PARAM_VISION_CTRL) && honda_bosch_canfd;
   // Checking for alternate brake override from safety parameter
   honda_alt_brake_msg = GET_FLAG(param, HONDA_PARAM_ALT_BRAKE);
 
@@ -393,7 +547,13 @@ static safety_config honda_bosch_init(uint16_t param) {
       SET_TX_MSGS(HONDA_RADARLESS_TX_MSGS, ret);
     }
   } else if (honda_bosch_canfd) {
-    SET_TX_MSGS(HONDA_CANFD_TX_MSGS, ret);
+    if (honda_bosch_long && honda_vision_ctrl) {
+      SET_TX_MSGS(HONDA_CANFD_VISION_CTRL_LONG_TX_MSGS, ret);
+    } else if (honda_bosch_long) {
+      SET_TX_MSGS(HONDA_CANFD_LONG_TX_MSGS, ret);
+    } else {
+      SET_TX_MSGS(HONDA_CANFD_TX_MSGS, ret);
+    }
   } else {
     if (honda_bosch_long) {
       SET_TX_MSGS(HONDA_BOSCH_LONG_TX_MSGS, ret);
@@ -426,10 +586,40 @@ const safety_hooks honda_nidec_hooks = {
   .compute_checksum = honda_compute_checksum,
 };
 
+static bool honda_bosch_fwd_hook(int bus_num, int addr) {
+  bool block_msg = false;
+
+  // On radarless and CAN FD, OP takes over SCM_BUTTONS (0x296) towards the camera when engaged, to
+  // auto-disable stock LKAS and block the driver's LKAS button (the touch-steering-wheel timer would
+  // otherwise force a disengagement). Only block the stock buttons while OP's replacement stream is
+  // actually flowing (honda_op_buttons_fresh): the camera needs SCM_BUTTONS content beyond the buttons
+  // (it raises an adaptive high beam error when the message goes missing), so a bare controls_allowed
+  // gate would starve it whenever the panda allows controls but OP refuses to engage.
+  if ((honda_bosch_radarless || honda_bosch_canfd) && controls_allowed && (honda_op_buttons_fresh > 0) &&
+      (bus_num == 0) && (addr == 0x296)) {
+    block_msg = true;
+  }
+
+  // CAN FD: the radar disable handshake happens after the relay is open, so block the radar's UDS
+  // responses from forwarding to the camera (the camera doesn't need them)
+  if (honda_bosch_canfd && (bus_num == 0) && (addr == 0x18DAF1B0)) {
+    block_msg = true;
+  }
+
+  // vision controller: STEERING_CONTROL and LKAS_HUD carry no relay-malfunction check in this mode (the
+  // stock author is on the PT bus until silenced), so block the camera-side copies from forwarding here
+  if (honda_vision_ctrl && (bus_num == 2) && ((addr == 0xE4) || (addr == 0x33D))) {
+    block_msg = true;
+  }
+
+  return block_msg;
+}
+
 const safety_hooks honda_bosch_hooks = {
   .init = honda_bosch_init,
   .rx = honda_rx_hook,
   .tx = honda_tx_hook,
+  .fwd = honda_bosch_fwd_hook,
   .get_counter = honda_get_counter,
   .get_checksum = honda_get_checksum,
   .compute_checksum = honda_compute_checksum,
