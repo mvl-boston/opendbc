@@ -1,9 +1,11 @@
 import numpy as np
 
-from opendbc.car import CanBusBase
+from opendbc.car import CanBusBase, structs
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS,
                                       HONDA_BOSCH_CANFD, HONDA_BOSCH_VISION_CTRL)
+
+GearShifter = structs.CarState.GearShifter
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -538,6 +540,21 @@ def restamp_stock_frame(packer, name, stock_dat, op_dat):
   if sig_checksum is not None and sig_checksum.calc_checksum is not None:
     set_value(dat, sig_checksum, sig_checksum.calc_checksum(msg.address, sig_checksum, dat))
   return bytes(dat)
+
+
+def vision_park_hold(held, gear_shifter, standstill):
+  """Whether the stock bytes are held this frame, given last frame's decision: Park starts the hold, and it is kept
+  through gear reads of `unknown` while the car stands still. The PCM's reaction to the silenced RVU is a blinking
+  gear indicator (GEARBOX byte 2 toggling 0x00/0x92 every 0.3 s, route ad9840558640c31d/00000016 from +1.3 s): the
+  GEAR_SHIFTER value then reads as `unknown` half the time, and a hold gated on `park` alone dropped out in every
+  `unknown` phase, so openpilot's own ACC_CONTROL/ACC_CONTROL_2/ACC_HUD/LKAS_HUD content reached the car in Park
+  (79/79/16/16 frames on that route) and the content freeze was no longer under test. Any readable gear other than
+  Park, or the car moving, ends the hold."""
+  if gear_shifter == GearShifter.park:
+    return True
+  if gear_shifter == GearShifter.unknown and standstill:
+    return held
+  return False
 
 
 def hold_vision_stock_frames(packer, can_sends, stock_payloads, buses):
