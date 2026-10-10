@@ -329,6 +329,10 @@ class CarState(CarStateBase):
     ret.brake = cp.vl["VSA_STATUS"]["USER_BRAKE"]
     ret.cruiseState.enabled = cp.vl["POWERTRAIN_DATA"]["ACC_STATUS"] != 0
     ret.cruiseState.available = bool(cp.vl[self.car_state_scm_msg]["MAIN_ON"])
+    if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and not self.CP.openpilotLongitudinalControl:
+      # fault-clear run (CarInterface._get_params): the stock ACC stays the driver's; openpilot never engages
+      ret.cruiseState.enabled = False
+      ret.cruiseState.available = False
 
     # Bosch cars take a few minutes after startup to clear prior faults
     if ret.accFaulted:

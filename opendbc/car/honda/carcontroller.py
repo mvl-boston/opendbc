@@ -445,6 +445,12 @@ class CarController(CarControllerBase):
     }
 
   def update(self, CC, CS, now_nanos):
+    if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and not self.CP.openpilotLongitudinalControl:
+      # fault-clear run (CarInterface._get_params): the panda is in noOutput with the relay closed, the stock
+      # controller is never silenced and openpilot transmits nothing
+      self.frame += 1
+      return CC.actuators.as_builder(), []
+
     gas_pedal_force = 0.0
     actuators = CC.actuators
     hud_control = CC.hudControl

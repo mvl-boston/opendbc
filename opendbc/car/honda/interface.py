@@ -5,7 +5,7 @@ from opendbc.car.can_definitions import CanData
 from opendbc.car.carlog import carlog
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.disable_ecu import disable_ecu, clear_all_dtcs, clear_ecu_dtcs
-from opendbc.car.honda import vision_ctrl
+from opendbc.car.honda import obd_dtcs, vision_ctrl
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_VISION_CTRL, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HondaSafetyFlags
@@ -330,9 +330,13 @@ class CarInterface(CarInterfaceBase):
     if candidate in HONDA_BOSCH_VISION_CTRL:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.VISION_CTRL.value
       # Steering is only possible once the stock controller is silenced over UDS, which also takes its ACC
-      # down: without openpilot longitudinal there is nothing openpilot can control on this car.
+      # down: without openpilot longitudinal there is nothing openpilot can control on this car. Instead of
+      # dashcam-only (card never calls CarInterface.init() then), a drive without alpha long is the fault-clear
+      # run: the panda stays in noOutput with the relay closed, so the car is physically stock and nothing can be
+      # transmitted once init() has returned, CarController sends nothing, and init() reads and clears the DTCs
+      # the previous drives stored, over the OBD-II port with comma power (see obd_dtcs).
       if not ret.openpilotLongitudinalControl:
-        ret.dashcamOnly = True
+        ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.noOutput)]
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
     # to a negative value, so it won't matter. Otherwise, add 0.5 mph margin to not
@@ -372,8 +376,25 @@ class CarInterface(CarInterfaceBase):
 
   @staticmethod
   def init(CP, can_recv, can_send, communication_control=None):
-    if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and CP.openpilotLongitudinalControl:
+    if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and not CP.openpilotLongitudinalControl:
+      # Fault-clear run (see _get_params): read, clear and re-read the DTCs of every ECU reachable over the OBD-II
+      # port, i.e. the modules behind the gateway that the car-bus broadcast clear below never reached (no ECU
+      # behind the gateway answers on AF-CAN A), plus the AF-CAN A ECUs with the broadcast. Comma power required.
       if communication_control is None:
+        set_obd_multiplexing = obd_dtcs.params_obd_multiplexing()
+        if set_obd_multiplexing is not None:
+          obd_dtcs.inquire_obd_dtcs(can_recv, can_send, CanBus(CP).radar, set_obd_multiplexing, clear=True)
+        else:
+          carlog.error("fault-clear run: no Params, OBD-II port not reachable")
+        clear_all_dtcs(can_send, [CanBus(CP).pt, CanBus(CP).camera])
+    elif CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+      if communication_control is None:
+        # First, with comma power in the OBD-II port, read (never clear) the DTCs the modules behind the gateway
+        # stored on the previous drive: they name the data the PCM/brake module/cluster lost when the controller
+        # was silenced (see obd_dtcs). Bus 1 is multiplexed onto the port for the inquiry and put back after it.
+        set_obd_multiplexing = obd_dtcs.params_obd_multiplexing()
+        if set_obd_multiplexing is not None:
+          obd_dtcs.inquire_obd_dtcs(can_recv, can_send, CanBus(CP).radar, set_obd_multiplexing)
         # Same DTC hygiene as the CAN FD radar disable below: the ECUs that lose the controller's messages
         # (VSA, EPS) latch lost-communication DTCs that mature over trips.
         clear_all_dtcs(can_send, [CanBus(CP).pt, CanBus(CP).camera])
