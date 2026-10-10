@@ -360,12 +360,14 @@ class CarInterface(CarInterfaceBase):
 
   def update(self, can_packets: list[tuple[int, list[CanData]]]) -> structs.CarState:
     if self.CP.carFingerprint in HONDA_BOSCH_VISION_CTRL:
+      # a single (nanos, frames) packet is accepted like CANParser.update does (openpilot's test_models passes one)
+      packets = [can_packets] if can_packets and not isinstance(can_packets[0], list | tuple) else can_packets
       if vision_ctrl.awaiting_response():
         # the probed controller's UDS answer (its diagnostic reply id is not a DBC message): logged, and a
         # rejected CommunicationControl variant moves the search on without waiting out the probe
-        vision_ctrl.record_diag_responses(can_packets, CanBus(self.CP).pt)
+        vision_ctrl.record_diag_responses(packets, CanBus(self.CP).pt)
       # the stock bytes of the frames re-sent as is while the car is in Park (see hondacan.VISION_CTRL_PARK_HOLD_MSGS)
-      self.CS.capture_vision_stock_frames(can_packets, CanBus(self.CP).pt)
+      self.CS.capture_vision_stock_frames(packets, CanBus(self.CP).pt)
     return super().update(can_packets)
 
   @staticmethod
