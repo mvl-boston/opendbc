@@ -3,7 +3,9 @@ import unittest
 from opendbc.can import CANPacker
 from opendbc.car.honda import hondacan
 from opendbc.car.honda.values import CAR, DBC
-from opendbc.car import Bus
+from opendbc.car import Bus, structs
+
+GearShifter = structs.CarState.GearShifter
 
 # last stock frames of route ad9840558640c31d/00000012 (car in Park)
 STOCK = {
@@ -66,6 +68,32 @@ class TestVisionCtrlParkHold(unittest.TestCase):
   def test_size_mismatch_keeps_openpilot_frame(self):
     op = self.packer.make_can_msg("ACC_HUD", 0, {"COUNTER": 0})[1]
     self.assertEqual(hondacan.restamp_stock_frame(self.packer, "ACC_HUD", b"\x00\x01", op), op)
+
+
+class TestVisionCtrlParkHoldLatch(unittest.TestCase):
+  def _run(self, gears, standstill=True, held=False):
+    out = []
+    for gear in gears:
+      held = hondacan.vision_park_hold(held, gear, standstill)
+      out.append(held)
+    return out
+
+  def test_park_starts_hold_unknown_keeps_it(self):
+    # route 00000016 from +1.3 s: the gear indicator blink makes the gear read `unknown` 0.3 s of every 0.6 s
+    gears = [GearShifter.park] + [GearShifter.unknown, GearShifter.park] * 3 + [GearShifter.unknown] * 30
+    self.assertTrue(all(self._run(gears)))
+
+  def test_unknown_before_park_does_not_hold(self):
+    self.assertEqual(self._run([GearShifter.unknown, GearShifter.unknown]), [False, False])
+
+  def test_other_gear_ends_hold(self):
+    for gear in (GearShifter.reverse, GearShifter.drive, GearShifter.neutral, GearShifter.sport):
+      self.assertEqual(self._run([GearShifter.park, GearShifter.unknown, gear, GearShifter.unknown]), [True, True, False, False], gear)
+
+  def test_moving_ends_hold(self):
+    self.assertEqual(self._run([GearShifter.unknown], standstill=False, held=True), [False])
+    # a readable Park holds regardless of the speed reading
+    self.assertEqual(self._run([GearShifter.park], standstill=False), [True])
 
 
 if __name__ == "__main__":
