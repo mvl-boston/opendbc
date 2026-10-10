@@ -4,8 +4,8 @@ On this car the ECU that authors STEERING_CONTROL (0xE4) and the ACC messages si
 comma harness: opening the relay does not take its STEERING_CONTROL off the powertrain bus, so openpilot
 cannot simply replace the stream the way it does with the camera on the other CAN FD Hondas. The approach
 is the same one alphalong uses for the Bosch radar: put the ECU in the extended diagnostic session, send
-UDS CommunicationControl (the variants that would leave the ECU's other networks alive first, disableRxAndTx
-everywhere as the fallback, see COMM_CONTROL_DISABLE_MSGS), and keep it silent with TesterPresent.
+UDS CommunicationControl disableRxAndTx (see COMM_CONTROL_DISABLE_MSGS for the forms this controller accepts),
+and keep it silent with TesterPresent.
 
 The controller's diagnostic address is not known for certain, so it is searched for:
   1. CarInterface.init() (ELM327 safety mode, every diagnostic address allowed) scans the whole Honda
@@ -42,41 +42,28 @@ EXT_DIAG_SESSION_MSG = bytes([0x02, uds.SERVICE_TYPE.DIAGNOSTIC_SESSION_CONTROL,
 # AF-CAN A (the camera's bus, openpilot bus 0), AF-CAN B (the rear corner radars' network, not reachable from the
 # harness), and point-to-point pairs to the camera (the 0xE6/0x334 pair the harness taps as bus 1), the front
 # center radar and the four corner radars. PCM, VSA, brake, TCM, EPS and the cluster are on PF-/VF-/IF-CAN behind
-# a gateway. CommunicationControl disableRxAndTx of normal + NM messages on every network (28 83 03, what the
-# first MDX Type S drives used) silences every car-bus frame, and with all of them replaced tick-exact and
-# byte-identical in idle (routes ad9840558640c31d/0000000b, 0000000d, 00000011, 00000012) the PCM still raised
-# the transmission fault 1.02 s after the RVU's last frame and the brake/corner-radar status (0x22C, 0x3A1,
-# 0xF31AA57) followed at +1.5/+2.1 s: it also takes the RVU off AF-CAN B and the six private pairs, none of which
-# openpilot can see or replace (the "lane change CMBS" and "front cross traffic" faults are the corner radars on
-# those pairs). The RVU's answers so far, all on 0x18DAF1B8 within 10-20 ms:
-#   28 01 F3 (enableRxAndDisableTx, this network)  -> 7F 28 12: controlType 01 not implemented (route 00000011)
-#   28 03 F3 (disableRxAndTx, this network)        -> 7F 28 31: the "network received on" subnet is out of range
-#                                                                (route 00000012)
-#   28 83 03 / 28 80 03 (every network, suppressed) -> accepted on every drive
-# Variants tried in this order on each candidate (see VisionControllerSilencer), positive response requested
-# (no 0x80) so a rejection (7F 28 xx) is logged and the next variant goes out right away:
-#   - disableRxAndTx on subnet 1 .. 14 (28 03 13 .. 28 03 E3): if the RVU numbers its networks instead of
-#     accepting 0xF, one of these is AF-CAN A. A variant the RVU accepts (68 03) without the stock
-#     STEERING_CONTROL stopping silenced some other network: it is restored (28 80 03) 200 ms later and the
-#     next one is tried.
-#   - disableRxAndTx of normal messages only, every network (28 03 01): whatever the RVU classes as network
-#     management (keep-alive / node status) keeps flowing everywhere, so the corner radars and the gateway still
-#     see it. Any such frame on the car bus keeps being received and CarController then leaves that one to the
-#     RVU (see CarState.vision_stock_alive).
-#   - disableRxAndTx of normal + NM messages, every network (28 83 03): the known behavior, the fallback.
-COMM_TYPE_SUBNETS = tuple(range(0x1, 0xF))
-COMM_CONTROL_DISABLE_MSGS = tuple(
-  bytes([0x03, uds.SERVICE_TYPE.COMMUNICATION_CONTROL, uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
-         (subnet << 4) | uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT]) + b'\x00' * 4
-  for subnet in COMM_TYPE_SUBNETS
-) + (
-  bytes([0x03, uds.SERVICE_TYPE.COMMUNICATION_CONTROL, uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
-         uds.MESSAGE_TYPE.NORMAL]) + b'\x00' * 4,
+# a gateway. CommunicationControl disableRxAndTx of normal + NM messages on every network (28 83 03) silences
+# every car-bus frame, and with all of them replaced tick-exact and byte-identical in idle (routes
+# ad9840558640c31d/0000000b, 0000000d, 00000011, 00000012, 00000016) the PCM still raised the transmission fault
+# 1.02 s after the RVU's last frame and the brake/corner-radar status (0x22C, 0x3A1, 0xF31AA57) followed at
+# +1.5/+2.1 s: it also takes the RVU off AF-CAN B and the six private pairs, none of which openpilot can see or
+# replace (the "lane change CMBS" and "front cross traffic" faults are the corner radars on those pairs).
+# Every scoped form of the request was tried on this RVU and rejected on 0x18DAF1B8 within 10-30 ms:
+#   28 01 F3 (enableRxAndDisableTx, this network)       -> 7F 28 12: controlType 01 not implemented (route 00000011)
+#   28 03 F3 (disableRxAndTx, this network)             -> 7F 28 31 (route 00000012)
+#   28 03 13 .. 28 03 E3 (disableRxAndTx, subnet 1..14) -> 7F 28 31, all fourteen (route 00000016)
+#   28 03 01 (disableRxAndTx, normal messages only)     -> 7F 28 31 (route 00000016)
+#   28 83 03 / 28 80 03 (every network, suppressed)     -> accepted on every drive
+# So this RVU implements exactly one communicationType (03, every network): CommunicationControl cannot keep
+# its other networks alive, and the handshake goes straight to that form. The tuple is kept so a new variant
+# can be slotted in front of it: VisionControllerSilencer tries them in order with a positive response
+# requested, logs a rejection (7F 28 xx) and sends the next one right away, and restores a candidate that
+# accepted a variant without the stock STEERING_CONTROL stopping (it silenced some other network).
+COMM_CONTROL_DISABLE_MSGS = (
   bytes([0x03, uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
          uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT]) + b'\x00' * 4,
 )
-COMM_CONTROL_DISABLE_NAMES = tuple(f"disableRxAndTx on subnet {subnet}" for subnet in COMM_TYPE_SUBNETS) + \
-                             ("disableRxAndTx of normal messages on every network", "disableRxAndTx on every network")
+COMM_CONTROL_DISABLE_NAMES = ("disableRxAndTx on every network",)
 # UDS negative response: 7F <rejected service> <NRC>; positive response to CommunicationControl: 68 <controlType>
 UDS_NEGATIVE_RESPONSE = 0x7F
 COMM_CONTROL_POSITIVE_RESPONSE = 0x40 | uds.SERVICE_TYPE.COMMUNICATION_CONTROL

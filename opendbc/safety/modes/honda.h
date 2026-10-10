@@ -330,17 +330,11 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
       allowed = allowed || (first_bytes == 0x03832803U);  // 03 28 83 03: CommunicationControl disable rx/tx
     }
     if (vision_ctrl_diag) {
+      // No other CommunicationControl form: the MDX Type S RVU implements exactly controlType 03 on every network.
+      // It answered 7F 28 12 to controlType 01 (enableRxAndDisableTx) and 7F 28 31 to every scoped
+      // communicationType (F3 "network the request was received on", subnets 1..14, normal messages only), see
+      // opendbc/car/honda/vision_ctrl.py.
       allowed = allowed || (first_bytes == 0x03802803U);  // 03 28 80 03: CommunicationControl enable rx/tx
-      // CommunicationControl disableRxAndTx variants that would leave the vision controller's other networks and
-      // private sensor links alive, positive response requested (no 0x80) so the CarController sees a rejection
-      // and moves on; tried before the every-network disable above. Only controlType 03 is allowed: the MDX
-      // Type S RVU answers 7F 28 12 to controlType 01 (enableRxAndDisableTx) and 7F 28 31 to the
-      // "network the request was received on" subnet (communicationType F3), so neither is allowed.
-      //   03 28 03 X3, X = 1..E: normal + NM messages on subnet X
-      //   03 28 03 01:           normal messages only, every network
-      const uint32_t subnet = first_bytes >> 28;
-      allowed = allowed || (((first_bytes & 0x0FFFFFFFU) == 0x03032803U) && (subnet >= 0x1U) && (subnet <= 0xEU));
-      allowed = allowed || (first_bytes == 0x01032803U);
     }
     if (!allowed || (GET_BYTES(msg, 4, 4) != 0x0U)) {
       tx = false;
