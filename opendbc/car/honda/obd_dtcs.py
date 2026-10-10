@@ -9,7 +9,11 @@ safety param 0, the switch the firmware query uses for OBD-port cars; pandad app
 param whenever the car safety mode is not live yet, which is the case throughout init()), so init() can do the
 inquiry a scan tool would: TesterPresent every OBD 11-bit and Honda 29-bit physical address on the OBD bus, then UDS
 0x19 ReadDTCInformation reportDTCByStatusMask with status mask 0xFF (every DTC the ECU has: stored, pending or
-failed this cycle) to each responder, and log the decoded codes with their status bits. Nothing is cleared.
+failed this cycle) to each responder, and log the decoded codes with their status bits. With openpilot longitudinal
+on nothing is cleared. Without it (the fault-clear run, see CarInterface._get_params) the codes are cleared after the
+read, physically per ECU and by functional broadcast, and read again: the broadcast clear on the car buses only ever
+reached the AF-CAN A ECUs (no module behind the gateway answers there), so the PCM/brake module/meter codes of every
+failed silencing drive are still stored until this runs with comma power.
 
 Costs the scan timeout plus the read on every drive; with comma power not plugged in nothing answers on the OBD bus
 and only the scan timeout is paid. Runs before clear_all_dtcs, so the codes stored by the previous drive are read
@@ -19,7 +23,10 @@ import time
 from collections.abc import Callable
 
 from opendbc.car import uds
+from opendbc.car.can_definitions import CanData
 from opendbc.car.carlog import carlog
+from opendbc.car.disable_ecu import CLEAR_DTC_ISOTP_SF, CLEAR_DTC_REQUEST, CLEAR_DTC_RESPONSE, EXT_DIAG_REQUEST, EXT_DIAG_RESPONSE, \
+                                    FUNCTIONAL_ADDR_29BIT
 from opendbc.car.ecu_addrs import get_ecu_addrs
 from opendbc.car.fw_query_definitions import EcuAddrBusType
 from opendbc.car.honda.values import HONDA_DIAG_RX_BASE, HONDA_DIAG_TX_BASE
@@ -27,6 +34,7 @@ from opendbc.car.isotp_parallel_query import IsoTpParallelQuery
 
 # the legislated OBD request ids (the PCM answers 0x7E0 on 0x7E8); every other Honda ECU answers its 29-bit physical id
 OBD_11BIT_TX_ADDRS = tuple(range(0x7E0, 0x7E8))
+OBD_11BIT_FUNCTIONAL_ADDR = 0x7DF
 # the tester's own id is never scanned
 HONDA_TESTER_ID = 0xF1
 
@@ -91,10 +99,44 @@ def read_dtcs(can_recv, can_send, bus: int, addrs: set[int], timeout: float = 1.
   return {tx_addr: parse_dtc_response(dat) for (tx_addr, _), dat in query.get_data(timeout).items()}
 
 
+def log_dtcs(tag: str, responders: set[int], dtcs: dict[int, list[Dtc]]) -> None:
+  for addr in sorted(responders):
+    if addr not in dtcs:
+      carlog.error(f"{tag} {hex(addr)}: no ReadDTCInformation answer")
+    elif not dtcs[addr]:
+      carlog.error(f"{tag} {hex(addr)}: no DTCs")
+    else:
+      codes = ", ".join(f"{describe_dtc(dtc)} [{describe_dtc_status(status)}]" for dtc, status in dtcs[addr])
+      carlog.error(f"{tag} {hex(addr)}: {len(dtcs[addr])} DTCs: {codes}")
+  carlog.error(f"{tag}: {len(responders)} ECUs on the OBD port, {sum(1 for d in dtcs.values() if d)} with DTCs")
+
+
+def clear_dtcs(can_recv, can_send, bus: int, addrs: set[int], timeout: float = 1.0) -> set[int]:
+  """UDS 0x14 ClearDiagnosticInformation (all groups) on the OBD port: the functional broadcasts first (29-bit
+  0x18DB33F1 and 11-bit 0x7DF, for ECUs that did not answer TesterPresent), then physically to every ECU in `addrs`
+  in the default session, and once more behind an extended session request to the ones that did not answer
+  positively. Returns the ECUs that acknowledged the clear (0x54).
+
+  WARNING: this erases the stored DTCs of every ECU reachable over the port, safety-relevant modules included."""
+  for functional_addr in (FUNCTIONAL_ADDR_29BIT, OBD_11BIT_FUNCTIONAL_ADDR):
+    can_send([CanData(functional_addr, CLEAR_DTC_ISOTP_SF, bus)])
+  if not addrs:
+    return set()
+  query = IsoTpParallelQuery(can_send, can_recv, bus, sorted(addrs), [CLEAR_DTC_REQUEST], [CLEAR_DTC_RESPONSE])
+  cleared = {tx_addr for tx_addr, _ in query.get_data(timeout)}
+  remaining = addrs - cleared
+  if remaining:
+    query = IsoTpParallelQuery(can_send, can_recv, bus, sorted(remaining), [EXT_DIAG_REQUEST, CLEAR_DTC_REQUEST],
+                               [EXT_DIAG_RESPONSE, CLEAR_DTC_RESPONSE])
+    cleared |= {tx_addr for tx_addr, _ in query.get_data(timeout)}
+  return cleared
+
+
 def inquire_obd_dtcs(can_recv, can_send, bus: int, set_obd_multiplexing: Callable[[bool], bool],
-                     timeout: float = 1.0) -> dict[int, list[Dtc]]:
-  """The read-only inquiry: multiplex `bus` onto the OBD port, scan, read, log, and put the bus back. Returns the
-  DTCs per responding ECU (empty when the port could not be reached or nothing answered)."""
+                     timeout: float = 1.0, clear: bool = False) -> dict[int, list[Dtc]]:
+  """The inquiry: multiplex `bus` onto the OBD port, scan, read, log, and put the bus back. With `clear`, the DTCs
+  are cleared after the read and read again, so the log shows what was stored and what survived the clear. Returns
+  the DTCs per responding ECU as read first (empty when the port could not be reached or nothing answered)."""
   if not set_obd_multiplexing(True):
     carlog.error("obd dtc inquiry: OBD multiplexing was not applied, skipped")
     return {}
@@ -105,15 +147,12 @@ def inquire_obd_dtcs(can_recv, can_send, bus: int, set_obd_multiplexing: Callabl
       carlog.error("obd dtc inquiry: nothing answered on the OBD port (comma power not connected?)")
       return {}
     dtcs = read_dtcs(can_recv, can_send, bus, responders, timeout=timeout)
-    for addr in sorted(responders):
-      if addr not in dtcs:
-        carlog.error(f"obd dtc inquiry {hex(addr)}: no ReadDTCInformation answer")
-      elif not dtcs[addr]:
-        carlog.error(f"obd dtc inquiry {hex(addr)}: no DTCs")
-      else:
-        codes = ", ".join(f"{describe_dtc(dtc)} [{describe_dtc_status(status)}]" for dtc, status in dtcs[addr])
-        carlog.error(f"obd dtc inquiry {hex(addr)}: {len(dtcs[addr])} DTCs: {codes}")
-    carlog.error(f"obd dtc inquiry: {len(responders)} ECUs on the OBD port, {sum(1 for d in dtcs.values() if d)} with DTCs")
+    log_dtcs("obd dtc inquiry", responders, dtcs)
+    if clear:
+      cleared = clear_dtcs(can_recv, can_send, bus, responders, timeout=timeout)
+      not_cleared = [hex(a) for a in sorted(responders - cleared)]
+      carlog.error(f"obd dtc clear: acknowledged by {[hex(a) for a in sorted(cleared)]}, not by {not_cleared}")
+      log_dtcs("obd dtc after clear", responders, read_dtcs(can_recv, can_send, bus, responders, timeout=timeout))
   except Exception:
     carlog.exception("obd dtc inquiry exception")
   finally:
