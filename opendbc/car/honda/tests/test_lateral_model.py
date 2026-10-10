@@ -550,6 +550,45 @@ class TestHondaLateralEpsWireShape(unittest.TestCase):
     self.assertEqual(model.limit(5.0, 0.999, v), 1.0)
     self.assertFalse(model.ceiling_limited)
 
+  def test_reported_torque_is_request_plus_limiting_except_at_saturation(self):
+    # the Civic 2022's learned shape (routes 729a2e65b1f6201d|00000040..43 replayed): eff(1.0) = 0.65
+    civic = (1.0, 0.66, 0.47, 0.47, 0.47, 0.24, 0.18)
+    model = make_model(wire_params(civic[1:]))
+    eff_full = model.effective_wire(1.0)
+    self.assertAlmostEqual(eff_full, 0.4 + 0.1 * sum(civic[1:]))
+    self.assertEqual(model.wire_limit, 1.0)
+    # request at the unit clip, wire pinned at STEER_MAX: saturation, reported as the request (was eff(1.0), which
+    # kept controlsd's steer_limited_by_safety set and the steerSaturated alert from ever counting)
+    self.assertEqual(model.reported_torque(1.0, 1.0, 1.0, 1.0), 1.0)
+    self.assertEqual(model.reported_torque(-1.0, -1.0, -1.0, 1.0), -1.0)
+    self.assertEqual(model.reported_torque(0.9995, 0.9995, 1.0, 1.0), 0.9995)
+    # below the clip the shortfall is still limiting: the integrator stays frozen while the wire is pinned
+    self.assertAlmostEqual(model.reported_torque(0.86, 0.86, 1.0, 1.0), 0.86 + (eff_full - 0.86))
+    self.assertAlmostEqual(model.reported_torque(0.86, 0.86, 1.0, 1.0), eff_full)
+    # the model's own correction is not reported (the swapped feedforward is the point of the reporting)
+    self.assertAlmostEqual(model.reported_torque(0.2, 0.35, 0.35, 1.0), 0.2)
+    # a correction into a weak band: only what the band swallowed is reported
+    self.assertAlmostEqual(model.reported_torque(0.3, 0.5, 0.5, 1.0), 0.3 + (0.4 + 0.1 * 0.66 - 0.5))
+    # request at the clip but the wire still on its way up (rate limiter), or at the bound the other way: limiting
+    self.assertAlmostEqual(model.reported_torque(1.0, 1.0, 0.8, 1.0), model.effective_wire(0.8))
+    self.assertAlmostEqual(model.reported_torque(1.0, 1.0, -1.0, 1.0), 1.0 + (-eff_full - 1.0))
+    # steer control off (wire 0): nothing delivered, reported as such
+    self.assertAlmostEqual(model.reported_torque(1.0, 1.0, 0.0, 1.0), 0.0)
+    # a linear car is unchanged: the wire is the request
+    linear = make_model()
+    self.assertEqual(linear.reported_torque(1.0, 1.0, 1.0, 1.0), 1.0)
+    self.assertAlmostEqual(linear.reported_torque(0.6, 0.6, 0.55, 1.0), 0.55)
+    # the MDX's clamp: wire bounded at the dead band plus the probe (0.7), eff 0.538; request at the clip is saturation
+    mdx = make_model({CEILING_KEY: 0.538})
+    self.assertAlmostEqual(mdx.wire_limit, 0.7)
+    self.assertAlmostEqual(mdx.reported_torque(0.9, 0.9, 0.7, mdx.wire_limit), 0.538)
+    self.assertEqual(mdx.reported_torque(1.0, 1.0, 0.7, mdx.wire_limit), 1.0)
+    self.assertEqual(mdx.reported_torque(-1.0, -1.0, -0.7, mdx.wire_limit), -1.0)
+    # ... and so is the brake-steer clip while it is the bound in force (233/433)
+    brake_limit = 233 / 433
+    self.assertEqual(mdx.reported_torque(1.0, 1.0, brake_limit, brake_limit), 1.0)
+    self.assertAlmostEqual(mdx.reported_torque(1.0, 1.0, brake_limit, mdx.wire_limit), mdx.effective_wire(brake_limit))
+
   def test_limit_keeps_the_loop_gain_through_a_reduced_slope(self):
     # a request that steps up through the knee: the effective torque the wire delivers follows the request at
     # the ISO rate exactly as on a linear car, so the controller sees the same plant gain in every band; the

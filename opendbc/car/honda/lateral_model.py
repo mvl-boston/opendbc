@@ -123,6 +123,20 @@ construction, so its live estimate settles on the same number the correction is 
 effective wire torque is recoverable from the log as ``actuatorsOutput.torque + actuatorsOutput.brake``;
 the raw wire is on the CAN (``torqueOutputCan`` on the Bosch cars).
 
+One case is reported as the request and not as limiting (``reported_torque``): the controller's request is
+itself at the unit clip and the wire is at the bound in force in its direction. The EPS's shortfall there
+is real, but reporting it keeps ``steer_limited_by_safety`` set for as long as the car is at its limit, and
+controlsd's ``_check_saturation`` does not count while that flag is set, so the ``steerSaturated`` alert
+("turn exceeds steering limit") could never fire on a car whose response shape is below linear: Civic 2022
+routes 729a2e65b1f6201d|00000040..43 held the wire at 5120 for 8-16 s with the request at 1.0 and the
+torque reported at ``effective_wire(1.0)`` = 0.64-0.74 and no alert (route 42 at 11 m/s, desired 3.4 m/s^2
+against 2.3 delivered, hands off). The integrator loses nothing: at its own clip the PID does not wind up
+(``common/pid.py`` holds ``i`` wherever the sum is already past the limit), which is all the freeze was
+for. torqued is unaffected, it takes samples at ``|torque| <= 0.5`` only. Below the clip the shortfall is
+still reported as limiting (the integrator stays frozen while the wire is pinned and the request is not at
+1.0; letting it wind there is the exit-reversal lag the freeze exists to avoid), and the alert then needs
+the request to reach the clip on P and F alone.
+
 EPS wire response shape
 -----------------------
 The EPS does not answer to the whole of the torque range the car controller can command, and not
@@ -314,6 +328,9 @@ WIRE_PROBE = 0.10                                 # normalized torque the wire m
 CEILING_KEY = "HondaLatCeilingParams"             # start of the dead band, written for telemetry / older versions; read as a clamp when no shape is persisted
 CEILING_MIN = WIRE_CUTS[0]
 CEILING_MAX = 1.0
+# reporting (see the module docstring, "Reporting"): a request within this of the unit clip is the controller's own
+# saturation (latcontrol's check is steer_max - |output| < 1e-3), and a wire within this of the bound in force is at it
+REPORT_SATURATION_TOL = 1e-3
 # the speed table may not learn from a FILTER_TAU sample the response shape bent by more than this (normalized
 # torque): a shape that is too low would otherwise teach it the car's response per unit of a wire it never got,
 # and the table is the feedforward and the jerk bound (route 00000129: 0.77 m/s^2 per unit at 10 mph against
@@ -511,6 +528,20 @@ class HondaLateralModel:
     """The wire torque that delivers this effective torque, through the inverse shape at no more than
     1 / WIRE_INVERT_MIN_GAIN of wire per unit, bounded at the dead band plus the probe."""
     return self._invert(effective)[0]
+
+  def reported_torque(self, request, corrected_request, wire, wire_limit):
+    """What the car controller reports as actuatorsOutput.torque (see the module docstring, "Reporting").
+    request: the controller's output this tick; corrected_request: update()'s output for it (the model's
+    feedforward swapped in, before limit()); wire: the wire that went to the EPS (normalized, after
+    limit() and any car-specific clip); wire_limit: the bound in force on it (1.0, the dead band plus the
+    probe, or a car-specific clip, whichever is lowest). The request plus only the limiting that happened,
+    in effective torque; the request itself when it is at the unit clip and the wire is at the bound in its
+    direction, which is saturation and not limiting."""
+    at_clip = abs(request) >= 1.0 - REPORT_SATURATION_TOL
+    at_bound = abs(wire) >= wire_limit - REPORT_SATURATION_TOL and copysign(1.0, wire) == copysign(1.0, request)
+    if at_clip and at_bound:
+      return float(request)
+    return float(request + (self.effective_wire(wire) - corrected_request))
 
   def _invert(self, effective):
     a = abs(effective)
