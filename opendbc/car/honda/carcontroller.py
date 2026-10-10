@@ -1369,8 +1369,11 @@ class CarController(CarControllerBase):
     # fits latAccelFactor to it (see lateral_model.py, "Reporting"). The effective wire torque is
     # actuatorsOutput.torque + actuatorsOutput.brake; the raw wire is on the CAN. steer_torque is the model
     # output before the brake clip, so the clip is reported (route 00000114 09:22:58: 4.3 s of wire at 232
-    # reported as unlimited).
-    new_actuators.torque = float(actuators.torque + (self.lat_model.effective_wire(self.last_torque) - steer_torque))
+    # reported as unlimited). With the request at the unit clip and the wire at the bound in force (the EPS
+    # ceiling, the MDX brake limit, or STEER_MAX) the request is reported as-is: that is saturation, and
+    # reporting it as limiting kept controlsd's steer_limited_by_safety set, which stops the steerSaturated
+    # ("turn exceeds steering limit") alert from ever counting on a car with a learned response shape.
+    new_actuators.torque = self.lat_model.reported_torque(actuators.torque, steer_torque, self.last_torque, self.steer_limit)
     # actuatorsOutput gas/brake/speed: lateral model gain at this speed (m/s^2 per unit torque), feedforward
     # correction actually added this tick, and the start of the wire band the EPS no longer answers to
     # (normalized, 0.4-1.0) plus 2.0 while identification ran this tick (was long-channel telemetry)
