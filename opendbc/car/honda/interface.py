@@ -5,7 +5,7 @@ from opendbc.car.can_definitions import CanData
 from opendbc.car.carlog import carlog
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.disable_ecu import disable_ecu, clear_all_dtcs, clear_ecu_dtcs
-from opendbc.car.honda import vision_ctrl
+from opendbc.car.honda import obd_dtcs, vision_ctrl
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, HONDA_BOSCH_CANFD, HONDA_BOSCH_VISION_CTRL, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HondaSafetyFlags
@@ -374,6 +374,12 @@ class CarInterface(CarInterfaceBase):
   def init(CP, can_recv, can_send, communication_control=None):
     if CP.carFingerprint in HONDA_BOSCH_VISION_CTRL and CP.openpilotLongitudinalControl:
       if communication_control is None:
+        # First, with comma power in the OBD-II port, read (never clear) the DTCs the modules behind the gateway
+        # stored on the previous drive: they name the data the PCM/brake module/cluster lost when the controller
+        # was silenced (see obd_dtcs). Bus 1 is multiplexed onto the port for the inquiry and put back after it.
+        set_obd_multiplexing = obd_dtcs.params_obd_multiplexing()
+        if set_obd_multiplexing is not None:
+          obd_dtcs.inquire_obd_dtcs(can_recv, can_send, CanBus(CP).radar, set_obd_multiplexing)
         # Same DTC hygiene as the CAN FD radar disable below: the ECUs that lose the controller's messages
         # (VSA, EPS) latch lost-communication DTCs that mature over trips.
         clear_all_dtcs(can_send, [CanBus(CP).pt, CanBus(CP).camera])
