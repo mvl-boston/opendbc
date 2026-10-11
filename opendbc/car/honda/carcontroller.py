@@ -17,6 +17,7 @@ from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
 from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps
+from opendbc.car.carlog import carlog
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -250,6 +251,15 @@ class CarController(CarControllerBase):
     self.lkas_button_send_remaining = 0
     self.last_lkas_button_frame = 0
     self.radar_disable_counter = 0
+    # Alpha longitudinal toggle (Bosch): CarParams.openpilotLongitudinalControl is fixed for the drive, so a
+    # toggle flip is applied by an onroad cycle. On radar cars the radar openpilot silenced has to be
+    # transmitting again before that cycle, or the VSA latches BRAKE_ERROR / CRUISE_FAULT for the drive
+    # when the ACC_CONTROL stream stops with card (see the handback in update()).
+    self._params = Params()
+    self.alpha_long_desired_prev = self._alpha_long_desired()
+    self.radar_handback_active = False
+    self.radar_handback_counter = 0
+    self.onroad_cycle_requested = False
 
     self.gasalpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
@@ -422,6 +432,24 @@ class CarController(CarControllerBase):
       "60": 1.0 if (Params().get("HondaLatAccelFactor60Params") is None) else Params().get("HondaLatAccelFactor60Params")
     }
 
+  def _alpha_long_desired(self) -> bool | None:
+    """Longitudinal mode the toggle asks for, as CarParams would compute it on the next drive.
+
+    None until the toggle has been written at least once (replay, tests), in which case nothing is done.
+    """
+    if self._params.get("AlphaLongitudinalEnabled") is None:
+      return None
+    return self._params.get_bool("AlphaLongitudinalEnabled")
+
+  def _request_onroad_cycle(self):
+    self.onroad_cycle_requested = True
+    try:
+      self._params.put_bool("OnroadCycleRequested", True)
+      carlog.warning("Honda alpha long toggled: requesting onroad cycle")
+    except Exception:
+      # key only exists in the fork; without it the toggle applies on the next drive
+      carlog.warning("Honda alpha long toggled: OnroadCycleRequested unavailable, applies next drive")
+
   def update(self, CC, CS, now_nanos):
     gas_pedal_force = 0.0
     actuators = CC.actuators
@@ -552,17 +580,64 @@ class CarController(CarControllerBase):
     # Send CAN commands
     can_sends = []
 
-    if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and self.CP.openpilotLongitudinalControl:
-      if self.CP.carFingerprint in HONDA_BOSCH_CANFD and CS.stock_acc_alive:
-        # CAN FD: the radar is still transmitting. It is silenced from here rather than from
+    radar_bosch = self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS)
+
+    # Alpha longitudinal toggle. The toggle is only honored while disengaged (the UI grays it out when
+    # engaged; re-checked here) and takes effect through an onroad cycle, since CarParams, the panda
+    # safety config and the LKAS bus are all fixed for the drive. Only a change of the toggle counts: a
+    # mismatch already present at start is never acted on, so a cycle can't be re-requested every drive.
+    if self.CP.alphaLongitudinalAvailable and self.frame % 10 == 0 and not self.onroad_cycle_requested:
+      desired = self._alpha_long_desired()
+      if desired is not None and desired != self.alpha_long_desired_prev:
+        if desired == self.CP.openpilotLongitudinalControl:
+          # flipped back before it was applied
+          self.alpha_long_desired_prev = desired
+        elif not (CC.enabled or CC.latActive or CC.longActive):
+          self.alpha_long_desired_prev = desired
+          if radar_bosch and self.CP.openpilotLongitudinalControl:
+            # the cycle is requested once the radar is back on the bus (below)
+            self.radar_handback_active = True
+            self.radar_handback_counter = 0
+          else:
+            self._request_onroad_cycle()
+
+    if radar_bosch and self.radar_handback_active:
+      # Hand longitudinal back to the stock radar before the onroad cycle. The deferred disable below is
+      # suspended (no tester present), so the radar's S3 session timeout (~5 s) brings it back even if
+      # the explicit re-enable is missed. openpilot's own (disengaged) ACC_CONTROL stream keeps going
+      # until the radar's one is seen (see the stock_acc_alive gate on create_acc_commands below): a gap
+      # of more than ~0.1 s latches a VSA fault for the rest of the drive.
+      # The first stock ACC_CONTROL trips the panda's relay check for this (BOSCH_LONG) safety mode,
+      # which only blocks TX until pandad drops to NO_OUTPUT for the cycle a few hundred ms later.
+      if CS.stock_acc_alive:
+        if not self.onroad_cycle_requested:
+          self._request_onroad_cycle()
+      else:
+        if self.radar_handback_counter % 50 == 0:
+          # UDS extended diagnostic session, required before CommunicationControl
+          can_sends.append((0x18DAB0F1, b'\x02\x10\x03\x00\x00\x00\x00\x00', self.CAN.pt))
+        elif self.radar_handback_counter % 50 == 5:
+          # UDS CommunicationControl enableRxAndTx (0x80 suppresses the response), retried every 0.5 s
+          can_sends.append((0x18DAB0F1, b'\x03\x28\x80\x03\x00\x00\x00\x00', self.CAN.pt))
+        self.radar_handback_counter += 1
+        if self.radar_handback_counter >= 1000 and not self.onroad_cycle_requested:
+          carlog.error("Honda Bosch radar handback: stock ACC_CONTROL not seen after 10 s, cycling anyway")
+          self._request_onroad_cycle()
+
+    # Bosch radar (CAN FD and classic): deferred radar disable, then tester present to keep it disabled
+    elif radar_bosch and self.CP.openpilotLongitudinalControl:
+      if CS.stock_acc_alive:
+        # The radar is still transmitting. It is silenced from here rather than from
         # CarInterface.init(), and only once the comma relay is confirmed open: init() ran while the
         # panda was still in the ELM327 safety mode, so the replacement ACC_CONTROL stream was blocked
         # until the safety-mode switch landed, and whenever the switch took longer than ~110 ms after
-        # the radar went silent the brake module latched CRUISE_FAULT (accFaulted) for the whole drive.
-        # With the relay already open the stock radar keeps feeding the brake module (and, via panda
-        # forwarding, the camera) right up to the switchover, and the replacement stream starts within
-        # a few frames of radar silence (see CS.stock_acc_alive), well inside the fault threshold.
-        if CS.canfd_relay_open:
+        # the radar went silent the brake module latched a fault for the whole drive (CAN FD:
+        # CRUISE_FAULT / accFaulted; classic Bosch: BRAKE_ERROR_1/2, which carstate masks into
+        # cruiseState.available = False so no button press does anything). With the relay already open
+        # the stock radar keeps feeding the brake module (and, via panda forwarding, the camera) right
+        # up to the switchover, and the replacement stream starts within a few frames of radar silence
+        # (see CS.stock_acc_alive), well inside the fault threshold.
+        if CS.bosch_relay_open:
           if self.radar_disable_counter % 50 == 0:
             # UDS extended diagnostic session, required before CommunicationControl
             can_sends.append((0x18DAB0F1, b'\x02\x10\x03\x00\x00\x00\x00\x00', self.CAN.pt))
@@ -573,8 +648,7 @@ class CarController(CarControllerBase):
           self.radar_disable_counter += 1
       elif self.frame % 10 == 0:
         # tester present - w/ no response (keeps radar disabled)
-        bus = 0 if self.CP.carFingerprint in HONDA_BOSCH_CANFD else 1
-        can_sends.append(make_tester_present_msg(0x18DAB0F1, bus, suppress_response=True))
+        can_sends.append(make_tester_present_msg(0x18DAB0F1, self.CAN.pt, suppress_response=True))
 
     # simulate canfd radar to prevent faults
     # These radar look-alikes are consumed by both the camera ECU (behind the relay, on the camera
@@ -1077,9 +1151,9 @@ class CarController(CarControllerBase):
 
           stopping = actuators.longControlState == LongCtrlState.stopping
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
-          # CAN FD: never overlap the stock radar's own ACC_CONTROL stream; ours starts within a few
-          # frames of the radar going silent (see the deferred radar disable above)
-          if not (self.CP.carFingerprint in HONDA_BOSCH_CANFD and CS.stock_acc_alive):
+          # Never overlap the stock radar's own ACC_CONTROL stream; ours starts within a few frames of
+          # the radar going silent (see the deferred radar disable above)
+          if not CS.stock_acc_alive:
             can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
                                                           self.stopping_counter, self.CP, gas_pedal_force))
         else:
@@ -1147,8 +1221,12 @@ class CarController(CarControllerBase):
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                  self.CP.openpilotLongitudinalControl))
 
+    # Classic Bosch radar: the radar look-alikes below (ACC_HUD, RADAR_HUD, legacy BRAKE_COMMAND) are
+    # only openpilot's to send once the stock radar has been silenced by the deferred disable above.
+    radar_still_stock = radar_bosch and self.CP.carFingerprint not in HONDA_BOSCH_CANFD and CS.stock_acc_alive
+
     if self.frame % 10 == 0:
-      if self.CP.openpilotLongitudinalControl:
+      if self.CP.openpilotLongitudinalControl and not radar_still_stock:
         if self.CP.carFingerprint not in HONDA_BOSCH_CANFD:
           # On Nidec, this also controls longitudinal positive acceleration
           acc_hud_pcm_accel = self.new_accel if self.CP.carFingerprint not in HONDA_BOSCH else pcm_accel
@@ -1185,7 +1263,7 @@ class CarController(CarControllerBase):
                                                 steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, steer_maxed, CS,
                                                 lkas_state_change=lkas_state_change))
 
-      if self.CP.openpilotLongitudinalControl:
+      if self.CP.openpilotLongitudinalControl and not radar_still_stock:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
         if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD):
           can_sends.append(hondacan.create_radar_hud(self.packer, self.CAN.pt))

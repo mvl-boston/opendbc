@@ -83,15 +83,15 @@ class CarState(CarStateBase):
     self.radar_50hz_tick = False
 
     self.scm_ambient_light = 0
-    # CAN FD deferred radar disable (see carcontroller): the stock radar is assumed alive until it has
-    # been silent for a few frames, and the relay is detected open once the camera's STEERING_CONTROL
-    # stops being physically visible on the PT bus.
+    # Bosch radar deferred radar disable (see carcontroller): the stock radar is assumed alive until it
+    # has been silent for a few frames, and the relay is detected open once the camera's
+    # STEERING_CONTROL stops being physically visible on the PT bus (CAN FD and classic Bosch radar).
     self.stock_acc_counter = 0
     self.stock_acc_alive = False
     self.camera_steer_counter = 0
     self.camera_steer_seen = False
-    self.canfd_frames = 0
-    self.canfd_relay_open = False
+    self.bosch_relay_frames = 0
+    self.bosch_relay_open = False
 
     # Only radarless cars have a camera that emits HUD_OBJECTS to poll for secondary vehicle locations.
     # On CAN FD cars the radar owned HUD_OBJECTS and it is disabled, so there is nothing to track.
@@ -364,11 +364,17 @@ class CarState(CarStateBase):
       else:
         self.radar_50hz_tick_counter += 1
       self.radar_50hz_tick = (self.radar_50hz_tick_counter == 1)
+    else:
+      self.supp_tick = False
+      self.hud_tick = False
+      self.radar_5hz_tick = False
+      self.radar_50hz_tick = False
 
+    if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS):
       # Deferred radar disable (see carcontroller). The stock radar transmits ACC_CONTROL every 2
       # frames, so 4 missed frames means it has been silenced; assume alive until then so the
       # replacement stream never overlaps it.
-      self.canfd_frames += 1
+      self.bosch_relay_frames += 1
       if len(cp.vl_all.get("ACC_CONTROL", {}).get("COUNTER", [])) > 0:
         self.stock_acc_counter = 0
       else:
@@ -376,19 +382,15 @@ class CarState(CarStateBase):
       self.stock_acc_alive = self.stock_acc_counter < 4
 
       # While the comma relay is closed the camera's STEERING_CONTROL is physically visible on the PT
-      # bus; when the relay opens it disappears (openpilot's own 0xE4 TX is not parsed as RX). As a
-      # fallback, assume the relay is open after 5 s of controls in case the camera was never seen.
+      # bus (on classic Bosch the live radar forwards it from the radar bus); when the relay opens it
+      # disappears (openpilot's own 0xE4 TX is not parsed as RX). As a fallback, assume the relay is
+      # open after 5 s of controls in case the camera was never seen.
       if len(cp.vl_all.get("STEERING_CONTROL", {}).get("COUNTER", [])) > 0:
         self.camera_steer_counter = 0
         self.camera_steer_seen = True
       else:
         self.camera_steer_counter += 1
-      self.canfd_relay_open = (self.camera_steer_seen and self.camera_steer_counter >= 5) or self.canfd_frames >= 500
-    else:
-      self.supp_tick = False
-      self.hud_tick = False
-      self.radar_5hz_tick = False
-      self.radar_50hz_tick = False
+      self.bosch_relay_open = (self.camera_steer_seen and self.camera_steer_counter >= 5) or self.bosch_relay_frames >= 500
 
     if self.CP.enableBsm:
       # BSM messages are on B-CAN, requires a panda forwarding B-CAN messages to CAN 0
@@ -414,7 +416,7 @@ class CarState(CarStateBase):
       # the bridged stock camera LKAS_HUD must stay alive on the powertrain bus
       pt_messages.append(("LKAS_HUD", 10))
     cam_messages = []
-    if CP.carFingerprint in HONDA_BOSCH_CANFD:
+    if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS):
       # Radar-alive and relay-open detection for the deferred radar disable (see carcontroller).
       # Both messages intentionally go silent (the radar is disabled, the camera ends up behind the
       # open relay), so subscribe with NaN frequency to skip the alive/timeout checks.
