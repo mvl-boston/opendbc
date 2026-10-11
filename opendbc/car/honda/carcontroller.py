@@ -17,7 +17,7 @@ from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
 from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps
-from opendbc.car.honda.alphalong import op_long_active
+from opendbc.car.carlog import carlog
 
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
 from opendbc.sunnypilot.car.honda.gas_interceptor import GasInterceptorCarController
@@ -294,15 +294,15 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.lkas_button_send_remaining = 0
     self.last_lkas_button_frame = 0
     self.radar_disable_counter = 0
+    # Alpha longitudinal toggle (Bosch): CarParams.openpilotLongitudinalControl is fixed for the drive, so a
+    # toggle flip is applied by an onroad cycle. On radar cars the radar openpilot silenced has to be
+    # transmitting again before that cycle, or the VSA latches BRAKE_ERROR / CRUISE_FAULT for the drive
+    # when the ACC_CONTROL stream stops with card (see the handback in update()).
     self._params = Params()
-    self.op_long_active_prev = op_long_active(CP, self._params)
-    # Bosch radar handback (see alphalong.op_long_active and CarInterface.deinit). The UDS re-enable is
-    # paced over 100 Hz frames; keep trying long enough to survive one onroad cycle's safety switch.
-    self.radar_reenable_pending = 0
-    self.radar_reenable_counter = 0
-    if CP.flags & HondaFlags.BOSCH and not (CP.flags & HondaFlags.BOSCH_RADARLESS) and not self.op_long_active_prev:
-      # stock-long start: the radar may still be silenced from a previous onroad cycle of this ignition
-      self.radar_reenable_pending = 250
+    self.alpha_long_desired_prev = self._alpha_long_desired()
+    self.radar_handback_active = False
+    self.radar_handback_counter = 0
+    self.onroad_cycle_requested = False
 
     self.gasalpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
     self.gasfactor = 1.0 if (Params().get("HondaGasFactorParams") is None) else Params().get("HondaGasFactorParams")
@@ -475,20 +475,32 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       "60": 1.0 if (Params().get("HondaLatAccelFactor60Params") is None) else Params().get("HondaLatAccelFactor60Params")
     }
 
+  def _alpha_long_desired(self) -> bool | None:
+    """Longitudinal mode the toggles ask for, as CarParams would compute it on the next drive.
+
+    None until the toggle has been written at least once (replay, tests), in which case nothing is done.
+    HondaEnforceStockLongitudinal only exists in the sunnypilot fork; treat a missing key as off.
+    """
+    if self._params.get("AlphaLongitudinalEnabled") is None:
+      return None
+    desired = self._params.get_bool("AlphaLongitudinalEnabled")
+    try:
+      enforce_stock = self._params.get_bool("HondaEnforceStockLongitudinal")
+    except Exception:
+      enforce_stock = False
+    return desired and not enforce_stock
+
+  def _request_onroad_cycle(self):
+    self.onroad_cycle_requested = True
+    try:
+      self._params.put_bool("OnroadCycleRequested", True)
+      carlog.warning("Honda alpha long toggled: requesting onroad cycle")
+    except Exception:
+      # key only exists in the sunnypilot fork; without it the toggle applies on the next drive
+      carlog.warning("Honda alpha long toggled: OnroadCycleRequested unavailable, applies next drive")
+
   def update(self, CC, CC_SP, CS, now_nanos):
     MadsCarController.update(self, self.CP, CC, CC_SP)
-    op_long = op_long_active(self.CP, self._params)
-    if op_long != self.op_long_active_prev:
-      if not op_long:
-        # alpha long toggled off: hand longitudinal back to the stock radar (CarInterface.deinit does
-        # the paced handback when card drives it; this is the in-controller fallback)
-        self.radar_reenable_pending = 250
-        self.radar_reenable_counter = 0
-      else:
-        # toggled back on: openpilot owns ACC_CONTROL again, drop any pending handback
-        self.radar_reenable_pending = 0
-      self.radar_disable_counter = 0
-      self.op_long_active_prev = op_long
 
     gas_pedal_force = 0.0
     actuators = CC.actuators
@@ -626,30 +638,50 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     radar_bosch = self.CP.flags & HondaFlags.BOSCH and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS)
 
-    # Bosch radar handback when alpha long is off: only keep poking the radar while it is still silent,
-    # a live one must not be bounced through diagnostic sessions. CarInterface.deinit already did the
-    # paced handback (with an ACC_CONTROL bridge) when card drove the toggle; this covers the cases it
-    # could not (controller-observed toggle, radar still silent at a stock-long start).
-    if radar_bosch and self.radar_reenable_pending > 0:
-      if CS.stock_acc_seen and CS.stock_acc_alive:
-        # the radar is (back) on the bus; stock_acc_alive alone starts out True before it was ever seen
-        self.radar_reenable_pending = 0
-      elif not CS.stock_acc_alive:
-        # radar confirmed silent (4 frames without ACC_CONTROL)
-        if self.radar_reenable_counter % 50 == 0:
+    # Alpha longitudinal toggle. The toggle is only honoured while disengaged (the UI greys it out when
+    # engaged; re-checked here) and takes effect through an onroad cycle, since CarParams, the panda
+    # safety config and the LKAS bus are all fixed for the drive. Only a change of the toggle counts: a
+    # mismatch already present at start is never acted on, so a cycle can't be re-requested every drive.
+    if self.CP.alphaLongitudinalAvailable and self.frame % 10 == 0 and not self.onroad_cycle_requested:
+      desired = self._alpha_long_desired()
+      if desired is not None and desired != self.alpha_long_desired_prev:
+        if desired == self.CP.openpilotLongitudinalControl:
+          # flipped back before it was applied
+          self.alpha_long_desired_prev = desired
+        elif not (CC.enabled or CC.latActive or CC.longActive):
+          self.alpha_long_desired_prev = desired
+          if radar_bosch and self.CP.openpilotLongitudinalControl:
+            # the cycle is requested once the radar is back on the bus (below)
+            self.radar_handback_active = True
+            self.radar_handback_counter = 0
+          else:
+            self._request_onroad_cycle()
+
+    if radar_bosch and self.radar_handback_active:
+      # Hand longitudinal back to the stock radar before the onroad cycle. The deferred disable below is
+      # suspended (no tester present), so the radar's S3 session timeout (~5 s) brings it back even if
+      # the explicit re-enable is missed. openpilot's own (disengaged) ACC_CONTROL stream keeps going
+      # until the radar's one is seen (see the stock_acc_alive gate on create_acc_commands below): a gap
+      # of more than ~0.1 s latches a VSA fault for the rest of the drive.
+      # The first stock ACC_CONTROL trips the panda's relay check for this (BOSCH_LONG) safety mode,
+      # which only blocks TX until pandad drops to NO_OUTPUT for the cycle a few hundred ms later.
+      if CS.stock_acc_alive:
+        if not self.onroad_cycle_requested:
+          self._request_onroad_cycle()
+      else:
+        if self.radar_handback_counter % 50 == 0:
           # UDS extended diagnostic session, required before CommunicationControl
           can_sends.append((0x18DAB0F1, b'\x02\x10\x03\x00\x00\x00\x00\x00', self.CAN.pt))
-        elif self.radar_reenable_counter % 50 == 5:
+        elif self.radar_handback_counter % 50 == 5:
           # UDS CommunicationControl enableRxAndTx (0x80 suppresses the response), retried every 0.5 s
           can_sends.append((0x18DAB0F1, b'\x03\x28\x80\x03\x00\x00\x00\x00', self.CAN.pt))
-        if self.frame % 2 == 0:
-          # bridge a disengaged ACC_CONTROL stream so the VSA sees no comm-loss gap before the radar is back
-          can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, False, False, 0.0, 0.0, 0, self.CP, 0.0))
-        self.radar_reenable_counter += 1
-        self.radar_reenable_pending -= 1
+        self.radar_handback_counter += 1
+        if self.radar_handback_counter >= 1000 and not self.onroad_cycle_requested:
+          carlog.error("Honda Bosch radar handback: stock ACC_CONTROL not seen after 10 s, cycling anyway")
+          self._request_onroad_cycle()
 
     # Bosch radar (CAN FD and classic): deferred radar disable, then tester present to keep it disabled
-    if radar_bosch and op_long:
+    elif radar_bosch and self.CP.openpilotLongitudinalControl:
       if CS.stock_acc_alive:
         # The radar is still transmitting. It is silenced from here rather than from
         # CarInterface.init(), and only once the comma relay is confirmed open: init() ran while the
@@ -682,7 +714,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # mirrored onto both buses (re-packing would double-increment the counter and desync the buses).
     # While the stock radar is still transmitting (drive start, before the deferred disable above has
     # silenced it), it authors all of these itself: sending look-alikes too would double them up.
-    if (self.CP.flags & HondaFlags.BOSCH_CANFD) and op_long and not CS.stock_acc_alive:
+    if (self.CP.flags & HondaFlags.BOSCH_CANFD) and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
       if CC.enabled and not self.last_acc_enabled:
         self.radar_hud_pulse = 30  # ~3 s at 10 Hz, matching the stock 2-6 s engage burst
       self.last_acc_enabled = CC.enabled
@@ -1112,7 +1144,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                        np.clip(CS.out.vEgo + 5.0, 0.0, 100.0)]
         pcm_speed = float(np.interp(gas - brake, pcm_speed_BP, pcm_speed_V))
         pcm_accel = int(np.clip((accel / 1.44) / max_accel, 0.0, 1.0) * self.params.NIDEC_GAS_MAX)
-    if not op_long:
+    if not self.CP.openpilotLongitudinalControl:
       if self.frame % 2 == 0 and not (self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD)) and not (self.CP.flags & HondaFlags.NIDEC):
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
       # If using stock ACC, spam cancel command to kill gas when OP disengages.
@@ -1265,10 +1297,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # owns when it has disabled the radar (op longitudinal); in stock ACC the real system sends it and
     # the non-long safety config doesn't allowlist it.
     speed_control = 0 if self.CP.flags & HondaFlags.BOSCH else self.launch_active
-    if (self.CP.flags & HondaFlags.BOSCH_CANFD) and CS.hud_tick and op_long and not CS.stock_acc_alive:
+    if (self.CP.flags & HondaFlags.BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, actuators.accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
-                                                 op_long))
+                                                 self.CP.openpilotLongitudinalControl))
 
     # Classic Bosch radar: the radar look-alikes below (ACC_HUD, RADAR_HUD, legacy BRAKE_COMMAND) are
     # only openpilot's to send once the stock radar has been silenced by the deferred disable above.
@@ -1276,14 +1308,14 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     # Send dashboard UI commands.
     if self.frame % 10 == 0:
-      if op_long and not radar_still_stock:
+      if self.CP.openpilotLongitudinalControl and not radar_still_stock:
         if not (self.CP.flags & HondaFlags.BOSCH_CANFD):
           # On Nidec, this also controls longitudinal positive acceleration
           acc_hud_pcm_accel = self.new_accel if self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and \
                               not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL) else pcm_accel
           can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, acc_hud_pcm_accel,
                                                    hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
-                                                   op_long))
+                                                   self.CP.openpilotLongitudinalControl))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       reduced_steering = CS.out.steeringPressed
@@ -1312,9 +1344,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
       can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
                                                 steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, self.dashed_lanes,
-                                                steer_maxed, CS, lkas_state_change=lkas_state_change, alphalong=op_long))
+                                                steer_maxed, CS, lkas_state_change=lkas_state_change))
 
-      if op_long and not radar_still_stock:
+      if self.CP.openpilotLongitudinalControl and not radar_still_stock:
         # TODO: combining with create_acc_hud block above will change message order and will need replay logs regenerated
         if self.CP.flags & HondaFlags.BOSCH and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS) and not (self.CP.flags & HondaFlags.BOSCH_CANFD):
           can_sends.append(hondacan.create_radar_hud(self.packer, self.CAN.pt))
@@ -1329,7 +1361,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # (and are only allowed by panda safety) when the radar is disabled, i.e. openpilot longitudinal;
     # in stock ACC the real radar still owns LANE_PATH/HUD_OBJECTS, so don't author them.
     if ((self.frame % 2 == 0 and self.CP.flags & HondaFlags.BOSCH_RADARLESS) or
-        (CS.radar_50hz_tick and self.CP.flags & HondaFlags.BOSCH_CANFD and op_long
+        (CS.radar_50hz_tick and self.CP.flags & HondaFlags.BOSCH_CANFD and self.CP.openpilotLongitudinalControl
          and not CS.stock_acc_alive)):
       leads = hud_objects.leads_from_model(self.model, CS.out.vEgo)
       lead = leads[0]
@@ -1353,7 +1385,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       # CAN FD cars have no camera HUD_OBJECTS to poll (the disabled radar owned it), so there are no
       # secondary vehicle locations: author OP's lead in slot 0 with the other slots blank (tracks=None).
       tracks = CS.hud_object_tracker.snapshot() if CS.hud_object_tracker is not None else None
-      if op_long:
+      if self.CP.openpilotLongitudinalControl:
         # For OP long, replace lead car and forward rest of objects
         hud_msg = self.hud_object_author.create(self.packer, self.CAN.lkas, lead, tracks, mux, now_nanos * 1e-9,
                                                 extra_leads=leads[1:], canfd=canfd)

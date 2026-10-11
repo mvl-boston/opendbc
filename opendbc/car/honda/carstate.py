@@ -2,7 +2,6 @@ import math
 import numpy as np
 from collections import defaultdict
 
-from openpilot.common.params import Params
 from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs, DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
@@ -11,7 +10,6 @@ from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HondaFlags, Crui
                                                  GearShifter, CarControllerParams
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.honda.hud_objects import HudObjectTracker
-from opendbc.car.honda.alphalong import op_long_active
 
 from opendbc.sunnypilot.car.honda.carstate_ext import CarStateExt
 
@@ -100,7 +98,6 @@ class CarState(CarStateBase, CarStateExt):
     # Only radarless cars have a camera that emits HUD_OBJECTS to poll for secondary vehicle locations.
     # On CAN FD cars the radar owned HUD_OBJECTS and it is disabled, so there is nothing to track.
     self.hud_object_tracker = HudObjectTracker() if (self.CP.flags & HondaFlags.BOSCH_RADARLESS) else None
-    self._params = Params()
 
     self.abs_prior_FL = self.abs_prior_FR = self.abs_prior_RL = self.abs_prior_RR = 0
     self.abs_counter_prev = self.abs_checksum_prev = None
@@ -113,8 +110,6 @@ class CarState(CarStateBase, CarStateExt):
       cp_body = can_parsers[Bus.body]
     if self.CP.flags & HondaFlags.BOSCH_CANFD:
       cp_radar = can_parsers[Bus.radar]
-    # Bosch alpha long can be handed back to the stock system mid-drive (see alphalong.op_long_active)
-    op_long = op_long_active(self.CP, self._params)
 
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
@@ -197,7 +192,7 @@ class CarState(CarStateBase, CarStateExt):
       self.low_speed_alert = False
     ret.lowSpeedAlert = self.low_speed_alert
 
-    if op_long:
+    if self.CP.openpilotLongitudinalControl:
       if self.CP.flags & HondaFlags.BOSCH_RADARLESS:
         ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
       elif self.CP.flags & (HondaFlags.BOSCH_CANFD | HondaFlags.BOSCH_TJA_CONTROL) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
@@ -243,7 +238,7 @@ class CarState(CarStateBase, CarStateExt):
       if self.CP.flags & HondaFlags.BOSCH_RADARLESS:
         ret.cruiseState.nonAdaptive = cp_cam.vl["ACC_HUD"]["CRUISE_CONTROL_LABEL"] != 0
 
-      if not op_long:
+      if not self.CP.openpilotLongitudinalControl:
         # ACC_HUD is on camera bus on radarless cars
         acc_hud = cp_cam.vl["ACC_HUD"] if self.CP.flags & HondaFlags.BOSCH_RADARLESS else cp.vl["ACC_HUD"]
         ret.cruiseState.nonAdaptive = acc_hud["CRUISE_CONTROL_LABEL"] != 0
@@ -294,7 +289,7 @@ class CarState(CarStateBase, CarStateExt):
     if self.CP.flags & HondaFlags.BOSCH:
       # TODO: find the radarless AEB_STATUS bit and make sure ACCEL_COMMAND is correct to enable AEB alerts
       if not (self.CP.flags & HondaFlags.BOSCH_RADARLESS):
-        ret.stockAeb = (not op_long) and bool(cp.vl["ACC_CONTROL"]["AEB_STATUS"] and cp.vl["ACC_CONTROL"]["ACCEL_COMMAND"] < -1e-5)
+        ret.stockAeb = (not self.CP.openpilotLongitudinalControl) and bool(cp.vl["ACC_CONTROL"]["AEB_STATUS"] and cp.vl["ACC_CONTROL"]["ACCEL_COMMAND"] < -1e-5)
     else:
       ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE"] > 1e-5)
 
