@@ -638,7 +638,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     radar_bosch = self.CP.flags & HondaFlags.BOSCH and not (self.CP.flags & HondaFlags.BOSCH_RADARLESS)
 
-    # Alpha longitudinal toggle. The toggle is only honoured while disengaged (the UI greys it out when
+    # Alpha longitudinal toggle. The toggle is only honored while disengaged (the UI grays it out when
     # engaged; re-checked here) and takes effect through an onroad cycle, since CarParams, the panda
     # safety config and the LKAS bus are all fixed for the drive. Only a change of the toggle counts: a
     # mismatch already present at start is never acted on, so a cycle can't be re-requested every drive.
