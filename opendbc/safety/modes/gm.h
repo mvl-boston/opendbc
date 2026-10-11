@@ -13,6 +13,12 @@
     {.msg = {{0x1C4, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}}, \
     {.msg = {{0xC9, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}}, \
 
+#define GM_EV_COMMON_ADDR_CHECK \
+  {.msg = {{0xBD, 0, 7, 40U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}}, \
+
+#define GM_NON_ACC_ADDR_CHECK \
+  {.msg = {{0x3D1, 0, 8, 10U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}}, \
+
 static const LongitudinalLimits *gm_long_limits;
 
 enum {
@@ -28,65 +34,77 @@ typedef enum {
 } GmHardware;
 static GmHardware gm_hw = GM_ASCM;
 static bool gm_pcm_cruise = false;
+static bool gm_non_acc = false;
 
 static void gm_rx_hook(const CANPacket_t *msg) {
   const int GM_STANDSTILL_THRSLD = 10;  // 0.311kph
 
-  if (msg_matches(msg, 0x184U, 0U)) {
-    int torque_driver_new = ((msg->data[6] & 0x7U) << 8) | msg->data[7];
-    torque_driver_new = to_signed(torque_driver_new, 11);
-    // update array of samples
-    update_sample(&torque_driver, torque_driver_new);
-  }
-
-  // sample rear wheel speeds
-  if (msg_matches(msg, 0x34AU, 0U)) {
-    int left_rear_speed = (msg->data[0] << 8) | msg->data[1];
-    int right_rear_speed = (msg->data[2] << 8) | msg->data[3];
-    vehicle_moving = (left_rear_speed > GM_STANDSTILL_THRSLD) || (right_rear_speed > GM_STANDSTILL_THRSLD);
-  }
-
-  // ACC steering wheel buttons (GM_CAM is tied to the PCM)
-  if (msg_matches(msg, 0x1E1U, 0U) && !gm_pcm_cruise) {
-    int button = (msg->data[5] & 0x70U) >> 4;
-
-    // enter controls on falling edge of set or rising edge of resume (avoids fault)
-    bool set = (button != GM_BTN_SET) && (cruise_button_prev == GM_BTN_SET);
-    bool res = (button == GM_BTN_RESUME) && (cruise_button_prev != GM_BTN_RESUME);
-    if (set || res) {
-      controls_allowed = true;
+  if (msg->bus == 0U) {
+    if (msg->addr == 0x184U) {
+      int torque_driver_new = ((msg->data[6] & 0x7U) << 8) | msg->data[7];
+      torque_driver_new = to_signed(torque_driver_new, 11);
+      // update array of samples
+      update_sample(&torque_driver, torque_driver_new);
     }
 
-    // exit controls on cancel press
-    if (button == GM_BTN_CANCEL) {
-      controls_allowed = false;
+    // sample rear wheel speeds
+    if (msg->addr == 0x34AU) {
+      int left_rear_speed = (msg->data[0] << 8) | msg->data[1];
+      int right_rear_speed = (msg->data[2] << 8) | msg->data[3];
+      vehicle_moving = (left_rear_speed > GM_STANDSTILL_THRSLD) || (right_rear_speed > GM_STANDSTILL_THRSLD);
     }
 
-    cruise_button_prev = button;
-  }
+    // ACC steering wheel buttons (GM_CAM is tied to the PCM)
+    if ((msg->addr == 0x1E1U) && !gm_pcm_cruise) {
+      int button = (msg->data[5] & 0x70U) >> 4;
 
-  // Reference for brake pressed signals:
-  // https://github.com/commaai/openpilot/blob/master/selfdrive/car/gm/carstate.py
-  if (msg_matches(msg, 0xBEU, 0U) && (gm_hw == GM_ASCM)) {
-    brake_pressed = msg->data[1] >= 8U;
-  }
+      // enter controls on falling edge of set or rising edge of resume (avoids fault)
+      bool set = (button != GM_BTN_SET) && (cruise_button_prev == GM_BTN_SET);
+      bool res = (button == GM_BTN_RESUME) && (cruise_button_prev != GM_BTN_RESUME);
+      if (set || res) {
+        controls_allowed = true;
+      }
 
-  if (msg_matches(msg, 0xC9U, 0U) && (gm_hw == GM_CAM)) {
-    brake_pressed = GET_BIT(msg, 40U);
-  }
+      // exit controls on cancel press
+      if (button == GM_BTN_CANCEL) {
+        controls_allowed = false;
+      }
 
-  if (msg_matches(msg, 0x1C4U, 0U)) {
-    gas_pressed = msg->data[5] != 0U;
+      cruise_button_prev = button;
+    }
 
-    // enter controls on rising edge of ACC, exit controls when ACC off
-    if (gm_pcm_cruise) {
-      bool cruise_engaged = (msg->data[1] >> 5) != 0U;
+    // Reference for brake pressed signals:
+    // https://github.com/commaai/openpilot/blob/master/selfdrive/car/gm/carstate.py
+    if ((msg->addr == 0xBEU) && (gm_hw == GM_ASCM)) {
+      brake_pressed = msg->data[1] >= 8U;
+    }
+
+    if ((msg->addr == 0xC9U) && (gm_hw == GM_CAM)) {
+      brake_pressed = GET_BIT(msg, 40U);
+    }
+
+    if (msg->addr == 0x1C4U) {
+      gas_pressed = msg->data[5] != 0U;
+
+      // enter controls on rising edge of ACC, exit controls when ACC off
+      if (gm_pcm_cruise && !gm_non_acc) {
+        bool cruise_engaged = (msg->data[1] >> 5) != 0U;
+        pcm_cruise_check(cruise_engaged);
+      }
+    }
+
+    if (msg->addr == 0xBDU) {
+      regen_braking = (msg->data[0] >> 4) != 0U;
+    }
+
+    if (msg->addr == 0xC9U) {
+      acc_main_on = GET_BIT(msg, 29U);
+    }
+
+    if (msg->addr == 0x3D1U) {
+      bool cruise_engaged = GET_BIT(msg, 39U);
       pcm_cruise_check(cruise_engaged);
     }
-  }
-
-  if (msg_matches(msg, 0xBDU, 0U)) {
-    regen_braking = (msg->data[0] >> 4) != 0U;
   }
 }
 
@@ -167,18 +185,10 @@ static safety_config gm_init(uint16_t param) {
     .max_brake = 400,
   };
 
-  static const CanMsg GM_ASCM_TX_MSGS[] = {
-    {0x180, 0, 4, .check_relay = true},
-    {0x409, 0, 7, .check_relay = false},
-    {0x40A, 0, 7, .check_relay = false},
-    {0x2CB, 0, 8, .check_relay = true},
-    {0x370, 0, 6, .check_relay = false},
-    {0xA1, 1, 7, .check_relay = false},
-    {0x306, 1, 8, .check_relay = false},
-    {0x308, 1, 7, .check_relay = false},
-    {0x310, 1, 2, .check_relay = false},
-    {0x315, 2, 5, .check_relay = false},
-  };
+  static const CanMsg GM_ASCM_TX_MSGS[] = {{0x180, 0, 4, .check_relay = true}, {0x409, 0, 7, .check_relay = false}, {0x40A, 0, 7, .check_relay = false}, {0x2CB, 0, 8, .check_relay = true}, {0x370, 0, 6, .check_relay = false},  // pt bus
+                                           {0xA1, 1, 7, .check_relay = false}, {0x306, 1, 8, .check_relay = false}, {0x308, 1, 7, .check_relay = false}, {0x310, 1, 2, .check_relay = false},   // obs bus
+                                           {0x315, 2, 5, .check_relay = false}};  // ch bus
+
 
   static const LongitudinalLimits GM_CAM_LONG_LIMITS = {
     .max_gas = 1346 * GM_GAS_TO_CAN,
@@ -189,14 +199,10 @@ static safety_config gm_init(uint16_t param) {
 
 #ifdef ALLOW_DEBUG
   // block PSCMStatus (0x184); forwarded through openpilot to hide an alert from the camera
-  static const CanMsg GM_CAM_LONG_TX_MSGS[] = {
-    {0x180, 0, 4, .check_relay = true},
-    {0x315, 0, 5, .check_relay = true},
-    {0x2CB, 0, 8, .check_relay = true},
-    {0x370, 0, 6, .check_relay = true},
-    {0x184, 2, 8, .check_relay = true},
-  };
+  static const CanMsg GM_CAM_LONG_TX_MSGS[] = {{0x180, 0, 4, .check_relay = true}, {0x315, 0, 5, .check_relay = true}, {0x2CB, 0, 8, .check_relay = true}, {0x370, 0, 6, .check_relay = true},  // pt bus
+                                               {0x184, 2, 8, .check_relay = true}};  // camera bus
 #endif
+
 
   static RxCheck gm_rx_checks[] = {
     GM_COMMON_RX_CHECKS
@@ -204,14 +210,22 @@ static safety_config gm_init(uint16_t param) {
 
   static RxCheck gm_ev_rx_checks[] = {
     GM_COMMON_RX_CHECKS
-    {.msg = {{0xBD, 0, 7, 40U, .ignore_checksum = true, .ignore_counter = true, .ignore_quality_flag = true}, { 0 }, { 0 }}},
+    GM_EV_COMMON_ADDR_CHECK
   };
 
-  static const CanMsg GM_CAM_TX_MSGS[] = {
-    {0x180, 0, 4, .check_relay = true},
-    {0x1E1, 2, 7, .check_relay = false},
-    {0x184, 2, 8, .check_relay = true},
+  static RxCheck gm_non_acc_rx_checks[] = {
+    GM_COMMON_RX_CHECKS
+    GM_NON_ACC_ADDR_CHECK
   };
+
+  static RxCheck gm_non_acc_ev_rx_checks[] = {
+    GM_COMMON_RX_CHECKS
+    GM_EV_COMMON_ADDR_CHECK
+    GM_NON_ACC_ADDR_CHECK
+  };
+
+  static const CanMsg GM_CAM_TX_MSGS[] = {{0x180, 0, 4, .check_relay = true},  // pt bus
+                                          {0x1E1, 2, 7, .check_relay = false}, {0x184, 2, 8, .check_relay = true}};  // camera bus
 
   if (GET_FLAG(param, GM_PARAM_HW_CAM)) {
     gm_hw = GM_CAM;
@@ -222,6 +236,9 @@ static safety_config gm_init(uint16_t param) {
   }
 
   gm_pcm_cruise = (gm_hw == GM_CAM);
+
+  const uint16_t GM_PARAM_SP_NON_ACC = 1;
+  gm_non_acc = GET_FLAG(current_safety_param_sp, GM_PARAM_SP_NON_ACC);
 
   safety_config ret;
   if (gm_hw == GM_CAM) {
@@ -241,6 +258,15 @@ static safety_config gm_init(uint16_t param) {
   const bool gm_ev = GET_FLAG(param, GM_PARAM_EV);
   if (gm_ev) {
     SET_RX_CHECKS(gm_ev_rx_checks, ret);
+  }
+
+  if (gm_non_acc) {
+    SET_TX_MSGS(GM_CAM_TX_MSGS, ret);
+    if (gm_ev) {
+      SET_RX_CHECKS(gm_non_acc_ev_rx_checks, ret);
+    } else {
+      SET_RX_CHECKS(gm_non_acc_rx_checks, ret);
+    }
   }
 
   // ASCM does not forward any messages
