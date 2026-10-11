@@ -104,8 +104,16 @@ class CarInterface(CarInterfaceBase):
         # ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
         pass
       else:
-        ret.longitudinalTuning.kiBP = [0., 5., 35.]
-        ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
+        # The old [1.2, 0.8, 0.5] is the Nidec PCM speed-servo tune. The interceptor is a different
+        # plant: the plan accel goes straight onto the pedal through a 0.2 pedal/s rise limit, and the
+        # pedal -> accel response lags 0.5-1 s (longer across a DCT downshift). An integrator at 0.7-1.2
+        # on that loop winds up through the whole lag: ACURA_ILX route 2752303cce1f0aba|00000000, every
+        # tip-in ran the integral term to +0.5..+0.7 m/s2 on top of a 1.0-1.3 plan (25-70% of the peak
+        # pedal), which is what pulled the DCT down two gears, and the overshoot that followed ran it to
+        # -0.2..-0.3, which is what put the brake on against a -0.1..-0.2 plan. With ~1 s of effective
+        # loop delay, ki * delay must stay well under 1; 0.3 keeps the term within +-0.2 in replay.
+        ret.longitudinalTuning.kiBP = [0.]
+        ret.longitudinalTuning.kiV = [0.3]
 
     # Disable control if EPS mod detected
     for fw in car_fw:
