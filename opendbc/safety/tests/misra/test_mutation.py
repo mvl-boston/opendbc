@@ -12,6 +12,7 @@ ROOT = os.path.join(HERE, "../../../../")
 
 IGNORED_PATHS = (
   'opendbc/safety/main.c',
+  'opendbc/safety/can.h',
   'opendbc/safety/tests/',
   'opendbc/safety/board/',
 )
