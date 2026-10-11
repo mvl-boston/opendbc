@@ -9,15 +9,14 @@ ButtonType = structs.CarState.ButtonEvent.Type
 
 
 class CarState(CarStateBase):
-  def __init__(self, CP):
-    super().__init__(CP)
+  def __init__(self, CP, CP_SP):
+    super().__init__(CP, CP_SP)
     self.frame = 0
     self.eps_init_complete = False
     self.tsk_recovery_timer = 0
     self.CCP = CarControllerParams(CP)
     self.button_states = {button.event_type: False for button in self.CCP.BUTTONS}
     self.esp_hold_confirmation = False
-    self.esp_standstill = False
     self.upscale_lead_car_signal = False
     self.eps_stock_values = False
     self.acc_type = 0
@@ -46,7 +45,7 @@ class CarState(CarStateBase):
 
     return button_events
 
-  def update(self, can_parsers) -> structs.CarState:
+  def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     pt_cp = can_parsers[Bus.pt]
     cam_cp = can_parsers[Bus.cam]
     ext_cp = pt_cp if self.CP.networkLocation == NetworkLocation.fwdCamera else cam_cp
@@ -63,6 +62,7 @@ class CarState(CarStateBase):
 
   def update_mqb(self, pt_cp, cam_cp, ext_cp) -> structs.CarState:
     ret = structs.CarState()
+    ret_sp = structs.CarStateSP()
 
     if self.CP.transmissionType == TransmissionType.direct:
       ret.gearShifter = self.parse_gear_shifter(self.CCP.shifter_values.get(pt_cp.vl["Motor_EV_01"]["MO_Waehlpos"], None))
@@ -98,7 +98,7 @@ class CarState(CarStateBase):
                         pt_cp.vl["Gateway_72"]["ZV_HBFS_offen"],
                         pt_cp.vl["Gateway_72"]["ZV_HD_offen"]])
 
-    if self.CP.flags & VolkswagenFlags.HAS_BSM:
+    if self.CP.enableBsm:
       # Infostufe: BSM LED on, Warnung: BSM LED flashing
       ret.leftBlindspot = bool(ext_cp.vl["SWA_01"]["SWA_Infostufe_SWA_li"]) or bool(ext_cp.vl["SWA_01"]["SWA_Warnung_SWA_li"])
       ret.rightBlindspot = bool(ext_cp.vl["SWA_01"]["SWA_Infostufe_SWA_re"]) or bool(ext_cp.vl["SWA_01"]["SWA_Warnung_SWA_re"])
@@ -144,10 +144,11 @@ class CarState(CarStateBase):
     ret.lowSpeedAlert = self.update_low_speed_alert(ret.vEgo)
 
     self.frame += 1
-    return ret
+    return ret, ret_sp
 
-  def update_pq(self, pt_cp, cam_cp, ext_cp) -> structs.CarState:
+  def update_pq(self, pt_cp, cam_cp, ext_cp) -> tuple[structs.CarState, structs.CarStateSP]:
     ret = structs.CarState()
+    ret_sp = structs.CarStateSP()
 
     # vEgo obtained from Bremse_1 vehicle speed rather than Bremse_3 wheel speeds because Bremse_3 isn't present on NSF
     ret.vEgoRaw = pt_cp.vl["Bremse_1"]["BR1_Rad_kmh"] * CV.KPH_TO_MS
@@ -189,7 +190,7 @@ class CarState(CarStateBase):
 
     # Consume blind-spot monitoring info/warning LED states, if available.
     # Infostufe: BSM LED on, Warnung: BSM LED flashing
-    if self.CP.flags & VolkswagenFlags.HAS_BSM:
+    if self.CP.enableBsm:
       ret.leftBlindspot = bool(ext_cp.vl["SWA_1"]["SWA_Infostufe_SWA_li"]) or bool(ext_cp.vl["SWA_1"]["SWA_Warnung_SWA_li"])
       ret.rightBlindspot = bool(ext_cp.vl["SWA_1"]["SWA_Infostufe_SWA_re"]) or bool(ext_cp.vl["SWA_1"]["SWA_Warnung_SWA_re"])
 
@@ -234,10 +235,11 @@ class CarState(CarStateBase):
     ret.lowSpeedAlert = self.update_low_speed_alert(ret.vEgo)
 
     self.frame += 1
-    return ret
+    return ret, ret_sp
 
-  def update_meb(self, pt_cp, cam_cp, ext_cp) -> structs.CarState:
+  def update_meb(self, pt_cp, cam_cp, ext_cp) -> tuple[structs.CarState, structs.CarStateSP]:
     ret = structs.CarState()
+    ret_sp = structs.CarStateSP()
 
     self.parse_wheel_speeds(ret,
       pt_cp.vl["ESC_51"]["VL_Radgeschw"],
@@ -280,11 +282,7 @@ class CarState(CarStateBase):
     ret.espActive = bool(pt_cp.vl["ESP_21"]["ESP_Eingriff"])
 
     self.acc_type = ext_cp.vl["ACC_18"]["ACC_Typ"]
-    self.esp_standstill = bool(pt_cp.vl["ESC_50"]["Standstill"])
-    if self.CP.flags & VolkswagenFlags.MEB_GEN2:
-      self.esp_hold_confirmation = pt_cp.vl["VMM_02"]["HMS_Status"] == 1
-    else:
-      self.esp_hold_confirmation = self.esp_standstill
+    self.esp_hold_confirmation = bool(pt_cp.vl["ESC_50"]["Standstill"])
     self.travel_assist_available = bool(cam_cp.vl["TA_01"]["Travel_Assist_Available"])
     ret.stockFcw = bool(ext_cp.vl["AWV_03"]["FCW_Active"])
     ret.stockAeb = bool(ext_cp.vl["AWV_03"]["AEB_Active"])
@@ -307,7 +305,7 @@ class CarState(CarStateBase):
     ret.leftBlinker, ret.rightBlinker = self.update_blinker_from_stalk(240, pt_cp.vl["SMLS_01"]["BH_Blinker_li"],
                                                                             pt_cp.vl["SMLS_01"]["BH_Blinker_re"])
 
-    if self.CP.flags & VolkswagenFlags.HAS_BSM:
+    if self.CP.enableBsm:
       bsm_cp = pt_cp if self.CP.flags & VolkswagenFlags.MEB_GEN2 else ext_cp
       ret.leftBlindspot = (bool(bsm_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Info_Driver"]) or
                            bool(bsm_cp.vl["MEB_Side_Assist_01"]["Blind_Spot_Warn_Driver"]))
@@ -323,10 +321,11 @@ class CarState(CarStateBase):
     ret.lowSpeedAlert = self.update_low_speed_alert(ret.vEgo)
 
     self.frame += 1
-    return ret
+    return ret, ret_sp
 
-  def update_mlb(self, pt_cp, cam_cp, ext_cp, alt_cp) -> structs.CarState:
+  def update_mlb(self, pt_cp, cam_cp, ext_cp, alt_cp) -> tuple[structs.CarState, structs.CarStateSP]:
     ret = structs.CarState()
+    ret_sp = structs.CarStateSP()
 
     self.parse_wheel_speeds(ret,
       pt_cp.vl["ESP_03"]["ESP_VL_Radgeschw"],
@@ -364,7 +363,7 @@ class CarState(CarStateBase):
 
     # Consume blind-spot monitoring info/warning LED states, if available.
     # Infostufe: BSM LED on, Warnung: BSM LED flashing
-    if self.CP.flags & VolkswagenFlags.HAS_BSM:
+    if self.CP.enableBsm:
       ret.leftBlindspot = bool(ext_cp.vl["SWA_01"]["SWA_Infostufe_SWA_li"]) or bool(ext_cp.vl["SWA_01"]["SWA_Warnung_SWA_li"])
       ret.rightBlindspot = bool(ext_cp.vl["SWA_01"]["SWA_Infostufe_SWA_re"]) or bool(ext_cp.vl["SWA_01"]["SWA_Warnung_SWA_re"])
 
@@ -377,7 +376,7 @@ class CarState(CarStateBase):
     ret.standstill = ret.vEgoRaw == 0
 
     self.frame += 1
-    return ret
+    return ret, ret_sp
 
   def update_low_speed_alert(self, v_ego: float) -> bool:
     # Low speed steer alert hysteresis logic
@@ -412,7 +411,7 @@ class CarState(CarStateBase):
     return acc_fault and self.frame - self.tsk_recovery_timer >= recovery_frames
 
   @staticmethod
-  def get_can_parsers(CP):
+  def get_can_parsers(CP, CP_SP):
     if CP.flags & VolkswagenFlags.PQ:
       return CarState.get_can_parsers_pq(CP)
     elif CP.flags & VolkswagenFlags.MEB:
