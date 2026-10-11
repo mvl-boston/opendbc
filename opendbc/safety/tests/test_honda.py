@@ -734,11 +734,25 @@ class TestHondaBoschLongSafety(HondaButtonEnableBase, TestHondaBoschSafetyBase):
     not_tester_present = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\xAA\xAA\x00\x00\x00\x00\x00")
     self.assertFalse(self._tx(not_tester_present))
 
-    # the radar disable requests are only allowed on CAN FD
+    # the radar is silenced from CarController after the relay opens and re-enabled when alpha long is
+    # toggled off, so exactly the extended diagnostic session and the suppressed-response
+    # CommunicationControl disable / enable are allowed too
     ext_diag = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x10\x03\x00\x00\x00\x00\x00")
-    self.assertFalse(self._tx(ext_diag))
+    self.assertTrue(self._tx(ext_diag))
     comm_control_disable = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\x28\x83\x03\x00\x00\x00\x00")
-    self.assertFalse(self._tx(comm_control_disable))
+    self.assertTrue(self._tx(comm_control_disable))
+    comm_control_enable = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\x28\x80\x03\x00\x00\x00\x00")
+    self.assertTrue(self._tx(comm_control_enable))
+
+    # anything else stays blocked, including unsuppressed responses and non-zero trailing bytes
+    comm_control_unsuppressed = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\x28\x00\x03\x00\x00\x00\x00")
+    self.assertFalse(self._tx(comm_control_unsuppressed))
+    trailing_bytes = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x10\x03\x00\x00\x00\x00\x01")
+    self.assertFalse(self._tx(trailing_bytes))
+
+    # the diagnostics address is never allowed on the other buses
+    for bus in {0, 1, 2} - {self.PT_BUS}:
+      self.assertFalse(self._tx(libsafety_py.make_CANPacket(0x18DAB0F1, bus, b"\x02\x10\x03\x00\x00\x00\x00\x00")))
 
   def test_gas_safety_check(self):
     for controls_allowed in [True, False]:
@@ -960,24 +974,6 @@ class TestHondaBoschCANFDLongSafety(TestHondaBoschLongSafety, TestHondaBoschCANF
     super().setUp()
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch, HondaSafetyFlags.BOSCH_CANFD | HondaSafetyFlags.BOSCH_LONG)
     self.safety.init_tests()
-
-  def test_diagnostics(self):
-    # CAN FD silences the radar from CarController after the relay opens, so exactly the extended
-    # diagnostic session and the suppressed-response CommunicationControl disable are allowed too
-    tester_present = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x3E\x80\x00\x00\x00\x00\x00")
-    self.assertTrue(self._tx(tester_present))
-    ext_diag = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x10\x03\x00\x00\x00\x00\x00")
-    self.assertTrue(self._tx(ext_diag))
-    comm_control_disable = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\x28\x83\x03\x00\x00\x00\x00")
-    self.assertTrue(self._tx(comm_control_disable))
-
-    # anything else stays blocked, including re-enabling the radar and non-zero trailing bytes
-    comm_control_enable = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\x28\x80\x03\x00\x00\x00\x00")
-    self.assertFalse(self._tx(comm_control_enable))
-    not_tester_present = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x03\xAA\xAA\x00\x00\x00\x00\x00")
-    self.assertFalse(self._tx(not_tester_present))
-    trailing_bytes = libsafety_py.make_CANPacket(0x18DAB0F1, self.PT_BUS, b"\x02\x10\x03\x00\x00\x00\x00\x01")
-    self.assertFalse(self._tx(trailing_bytes))
 
 
 class TestHondaNidecHybridSafety(TestHondaNidecPcmSafety):
