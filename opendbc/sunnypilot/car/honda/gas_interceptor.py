@@ -27,8 +27,13 @@ class GasInterceptorCarController:
     can_sends = []
 
     if self.CP_SP.enableGasInterceptor:
-      # way too aggressive at low speed without this
-      gas_mult = np.interp(CS.out.vEgo, [0., 10.], [0.4, 1.0])
+      # way too aggressive at low speed without this. The multiplier is the inverse of the measured
+      # pedal -> accel gain relative to its value at 10 m/s: ACURA_ILX (routes 2752303cce1f0aba
+      # 0000000c / 00000000) ~13 m/s2 per unit pedal below 3 m/s, ~8 at 6 m/s, ~5 at 10 m/s and
+      # above. The old linear 0.4 -> 1.0 ramp sat 1.4-1.7x hot through 2-6 m/s, which is the
+      # clutch-just-engaged regime where every launch overshot (2.6 m/s2 against a 1.5 plan at
+      # 3 m/s); a scalar gasfactor cannot hold both that and the 10 m/s+ gain.
+      gas_mult = np.interp(CS.out.vEgo, [0., 3., 6., 10.], [0.35, 0.4, 0.6, 1.0])
       # send exactly zero if apply_gas is zero. Interceptor will send the max between read value and apply_gas.
       # This prevents unexpected pedal range rescaling
       # Sending non-zero gas when OP is not enabled will cause the PCM not to respond to throttle as expected
