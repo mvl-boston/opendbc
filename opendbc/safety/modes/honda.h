@@ -70,8 +70,7 @@ static HondaHw honda_hw = HONDA_NIDEC;
 
 
 static unsigned int honda_get_pt_bus(void) {
-  // Bosch (incl. CAN FD): F-CAN powertrain + SCM on bus 1. Radarless keeps bus 0.
-  return ((honda_hw == HONDA_BOSCH) && !honda_bosch_radarless) ? 1U : 0U;
+  return ((honda_hw == HONDA_BOSCH) && !honda_bosch_radarless && !honda_bosch_canfd) ? 1U : 0U;
 }
 
 static uint32_t honda_get_checksum(const CANPacket_t *msg) {
@@ -556,7 +555,7 @@ static safety_config honda_bosch_init(uint16_t param) {
   const uint16_t HONDA_PARAM_BOSCH_CANFD = 16;
   const uint16_t HONDA_PARAM_NO_ENGINE_DATA_MSG = 128;
 
-  // Bosch radarless has the powertrain bus on bus 0 (CAN FD uses bus 1 like other Bosch)
+  // Bosch radarless and CAN-FD have the powertrain bus on bus 0
   static RxCheck honda_bosch_pt0_rx_checks[] = {
     HONDA_COMMON_RX_CHECKS(0)
   };
@@ -605,18 +604,18 @@ static safety_config honda_bosch_init(uint16_t param) {
   safety_config ret;
   if (honda_no_engine_data_msg && honda_bosch_radarless) {
     SET_RX_CHECKS(honda_bosch_radarless_no_engine_data_rx_checks, ret);
-  } else if (honda_bosch_radarless) {
+  } else if (honda_bosch_radarless || honda_bosch_canfd) {
     if (honda_alt_brake_msg) {
       SET_RX_CHECKS(honda_bosch_pt0_alt_brake_rx_checks, ret);
     } else {
       SET_RX_CHECKS(honda_bosch_pt0_rx_checks, ret);
     }
   } else {
-    if (honda_alt_brake_msg) {
-      SET_RX_CHECKS(honda_bosch_pt1_alt_brake_rx_checks, ret);
-    } else {
-      SET_RX_CHECKS(honda_bosch_pt1_rx_checks, ret);
-    }
+   if (honda_alt_brake_msg) {
+     SET_RX_CHECKS(honda_bosch_pt1_alt_brake_rx_checks, ret);
+   } else {
+     SET_RX_CHECKS(honda_bosch_pt1_rx_checks, ret);
+   }
   }
 
   if (honda_bosch_radarless) {
