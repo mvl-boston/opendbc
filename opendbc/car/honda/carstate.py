@@ -103,12 +103,17 @@ class CarState(CarStateBase, CarStateExt):
     self.lowspeed_source = 0.0
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
-    cp = can_parsers[Bus.pt]
+    # CAN FD: F-CAN B (physical bus 1, CanBus.radar) carries SCM, kinematics, and powertrain;
+    # ACC-CAN (physical bus 0, CanBus.pt) carries steering/radar-side messages for relay detection.
+    cp_pt = can_parsers[Bus.pt]
+    cp = cp_pt
     cp_cam = can_parsers[Bus.cam]
     if self.CP.enableBsm:
       cp_body = can_parsers[Bus.body]
+    cp_radar = None
     if self.CP.flags & HondaFlags.BOSCH_CANFD:
       cp_radar = can_parsers[Bus.radar]
+      cp = cp_radar
 
     ret = structs.CarState()
     ret_sp = structs.CarStateSP()
@@ -361,7 +366,7 @@ class CarState(CarStateBase, CarStateExt):
       # frames, so 4 missed frames means it has been silenced; assume alive until then so the
       # replacement stream never overlaps it.
       self.canfd_frames += 1
-      if len(cp.vl_all.get("ACC_CONTROL", {}).get("COUNTER", [])) > 0:
+      if len(cp_pt.vl_all.get("ACC_CONTROL", {}).get("COUNTER", [])) > 0:
         self.stock_acc_counter = 0
       else:
         self.stock_acc_counter += 1
@@ -370,7 +375,7 @@ class CarState(CarStateBase, CarStateExt):
       # While the comma relay is closed the camera's STEERING_CONTROL is physically visible on the PT
       # bus; when the relay opens it disappears (openpilot's own 0xE4 TX is not parsed as RX). As a
       # fallback, assume the relay is open after 5 s of controls in case the camera was never seen.
-      if len(cp.vl_all.get("STEERING_CONTROL", {}).get("COUNTER", [])) > 0:
+      if len(cp_pt.vl_all.get("STEERING_CONTROL", {}).get("COUNTER", [])) > 0:
         self.camera_steer_counter = 0
         self.camera_steer_seen = True
       else:

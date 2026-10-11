@@ -872,9 +872,10 @@ class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLo
 
 class TestHondaBoschCANFDSafetyBase(TestHondaBoschSafetyBase):
   """Base class for CANFD Honda Bosch"""
-  PT_BUS = 0
+  # F-CAN B (bus 1): SCM, kinematics, powertrain. ACC-CAN (bus 0): steering/radar side.
+  PT_BUS = 1
   STEER_BUS = 0
-  BUTTONS_BUS = 0
+  BUTTONS_BUS = 1
 
   TX_MSGS = [[0xE4, 0], [0x296, 0], [0x296, 2], [0x33D, 0]]
   FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D]}

@@ -8,7 +8,7 @@ from enum import StrEnum
 
 from opendbc.car import Bus, structs
 from opendbc.can.parser import CANParser
-from opendbc.car.honda.values import (HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_BOSCH_CANFD, GearShifter)
+from opendbc.car.honda.values import (HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HondaFlags, HONDA_BOSCH_CANFD, GearShifter)
 from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
 from opendbc.car.common.conversions import Conversions as CV
 
@@ -20,6 +20,8 @@ class CarStateExt:
 
   def update(self, ret: structs.CarState, ret_sp: structs.CarStateSP, can_parsers: dict[StrEnum, CANParser]) -> None:
     cp = can_parsers[Bus.pt]
+    if self.CP.flags & HondaFlags.BOSCH_CANFD:
+      cp = can_parsers[Bus.radar]
     cp_cam = can_parsers[Bus.cam]
 
     if self.CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
