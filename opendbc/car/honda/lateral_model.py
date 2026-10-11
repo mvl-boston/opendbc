@@ -31,12 +31,46 @@ the summed output, which scales feedback and feedforward together (the highway l
 How it learns
 -------------
 Plant identification rather than tracking-error integration: the measured lateral accel is regressed
-on the wire torque that actually went to the EPS (delayed by the actuator delay, both low-passed at
-``FILTER_TAU`` so only the quasi-static content is fitted), with a normalized LMS update spread over
-the two neighboring speed bins. It identifies a bounded physical quantity, so it cannot drift the way
-an integrator of delay-lag error does, and it is indifferent to rate limiting, clipping and saturation
-because those all act on the wire torque it regresses against. The only unmodelled input is the
-driver, so learning pauses while ``steeringPressed`` and for ``PRESS_HOLDOFF`` afterwards.
+on the wire torque that actually went to the EPS (delayed by the actuator delay and passed through the
+plant lag), per speed bin, the sample spread over the two neighboring bins. It identifies a bounded
+physical quantity, so it cannot drift the way an integrator of delay-lag error does, and it is
+indifferent to rate limiting, clipping and saturation because those all act on the wire torque it
+regresses against. The only unmodelled input is the driver, so learning pauses while
+``steeringPressed`` and for ``PRESS_HOLDOFF`` afterwards.
+
+The speed table regresses *changes* over a ``GAIN_DIFF_WINDOW`` window (d lat_accel on d wire), not
+levels through the origin. The levels are not proportional on this steering: the wheel holds an angle
+with far less torque than it took to get there (route 00000177, 17 m/s: 9 deg and 0.63 m/s^2 held while
+the wire relaxed from 0.29 to 0.11), the road's crown and bank add lateral accel no wire paid for, and
+sub-threshold hand torque does the same, so a sample's lat_accel / wire ratio depends on where in a
+dwell it was taken and a through-origin fit of the levels reads a slope that is mostly offset: 1.3-1.5x
+the plant on every speed bin in that route offline, 2-3x on the device after a week of drives (2.2 at
+20 mph against a measured 0.87, pinned at ``GAIN_MAX`` from 40 mph), with the feedforward then
+delivering 40-75% of the torque a turn needed and the jerk bound, which is ``MAX_LAT_JERK / gain(v)``
+in torque, holding the wire to 2-4 m/s^3 at the car instead of 5. A difference cancels whatever is held
+over the window; what is left is the marginal response, which is what both the feedforward (torque for
+a change in desired lateral accel) and the jerk bound (lateral accel per unit of torque rate) are
+about. The same route reads 0.24 / 0.44 / 0.87 / 1.51 / 1.85 / 2.40 m/s^2 per unit from 5 to 18 m/s
+that way, stable from 0.5 to 2 s windows and within 10% between wind and unwind, against priors of
+0.1-0.25 / 0.45 / 0.8 / 1.35-1.9 / 1.9-2.4 / 2.1-2.4. The table is also held inside ``GAIN_ENVELOPE``
+of its priors at load and while learning: the priors were measured on the car, and anything that far
+from them is a poisoned table (the 2-3x above), not a Honda.
+
+A window counts only if the wire moved by ``GAIN_MIN_DELTA_TORQUE`` and every tick in it, and for
+``GAIN_SETTLE`` on either side of it, was active, unpressed, in the linear part of the wire
+(``GAIN_MAX_CLIP``) and in the anchor band both as measured and as the table predicts for the
+lag-modelled wire. The settle is about the lag model: it is a first-order lag at ``PLANT_TAU``, the
+car's is not exactly that (the routes fit 1.0-1.3 s), so a window at the start of a change reads the
+ratio high and one in its tail reads it low, by 2x either way on a plant 20% faster than the model;
+over a whole change the two cancel, over the part of one the anchor band admits they do not. Windows
+leading into a hard turn are its head and the ones coming out of it its tail (where the lagged wire
+also still carries torque the centering shape bent), so neither side may be within ``GAIN_SETTLE`` of
+a tick outside the band. The windows are fitted by least squares, sum(dx dy) / sum(dx^2) over
+exponentially weighted sums per bin (``GAIN_FIT_TAU`` of learning ticks), and the table tracks the fit
+at ``GAIN_TRACK_RATE``: the fit weights a window by dx^2, so the whole changes carry it and the short
+windows at the edges of the band do not, and it does not depend on the order the windows came in,
+which an LMS step per window does (the test plant, 0.8 s against the model's 1.0 s, reads 2.20 of 2.2
+by least squares and 1.7-2.07 by LMS depending on the step size).
 
 The two tables are trained on disjoint data so they cannot trade scale: the speed table learns only
 inside the anchor band (gentle curves, where shape == 1 by definition) and the shape table only above
@@ -47,10 +81,10 @@ measured it at 29-36 mph: 2.7 m/s^2 per unit of lagged wire torque below 0.3, 1.
 wire pinned at 433 counts. The tables persisted before this bound held 1.5-1.6 there, which put the
 feedforward *below* the linear one exactly where the car was undershooting with the wire pinned.
 
-The shape path uses its own short filter (``SHAPE_FILTER_TAU``) on the lag-aligned pair rather than the
-``FILTER_TAU`` one the speed table uses: hard-turn dwells between the driver's corrections last 0.5-1.5
-s (route 0000011f: 136 pinned, unpressed dwells, median 0.06 s, none over 1.5 s), and a 2 s filter with
-a quasi-static gate never admitted one (0 pinned samples in that route). The lag model does the work
+The shape path uses a short filter (``SHAPE_FILTER_TAU``) on the lag-aligned pair rather than the 2 s one
+the speed table once used: hard-turn dwells between the driver's corrections last 0.5-1.5 s (route
+0000011f: 136 pinned, unpressed dwells, median 0.06 s, none over 1.5 s), and a 2 s filter with a
+quasi-static gate never admitted one (0 pinned samples in that route). The lag model does the work
 instead; a trend gate on the filtered pair (``SHAPE_MAX_LEARN_JERK`` / ``SHAPE_MAX_LEARN_TORQUE_RATE``)
 drops the S-bend transitions where it is least exact. Sub-threshold hand torque does not bias the
 sample (pinned frames with |driver torque| 0-50 vs 200-300 counts measured 1.08 vs 1.14 m/s^2), and the
@@ -144,7 +178,17 @@ linearly to the part it does answer to. On the MDX 3G the steer rate a wire incr
 angle and lateral accel the car settles at, all stop depending on the wire above ~0.5-0.55 of
 STEER_MAX (215-240 of 433 counts; 233 is also the number the EPS faults above while braking): the same
 bend at the same speed (route 00000127 21:32:25 vs 00000058) reached the same 17.5 deg / 1.3 m/s^2 with
-the wire pinned at 433 as with the wire at 300-400. On the Acura Integra (route 00000139, STEER_MAX
+the wire pinned at 433 as with the wire at 300-400. Route 00000177 (657 s, the wire at 433 on 10% of the
+engaged ticks and in 233-433 on another 4%) settles the form of it: with the steer-rate plant fitted on
+the rows below a clamp and the residual rate looked at above it, the response is linear to ~195-216
+counts, a soft knee carries 10-30% of the linear slope from there to ~260-300, and from ~0.7 of STEER_MAX
+(303 counts) to 433 the marginal response is 0.00 +- 0.1 of the linear band with the hands off (the
+constrained per-band fit reads 1.0 / 0.3 / 0.24 / 0.24 / 0.02 / 0.02 / 0.02; at |angle| < 6 deg, where
+the self-aligning torque is small, 1.0 / 0.4 / 0.4 / 0.4 / 0 / 0 / 0, so it is the command level and
+not the angle). Everything above the knee together is worth ~0.02-0.05 of effective torque, 10-20
+counts of the linear band: the EPS acts on the equivalent of ~215-230 counts no matter what is
+commanded above that. It is a cutoff with a soft knee, not the Integra's long reduced slope. On the
+Acura Integra (route 00000139, STEER_MAX
 5120) the steer rate a wire increment buys is linear to ~2500-3000 counts and a few percent of that from
 there to 5120, in every steering-angle band including 0-4 deg where the self-aligning torque is
 negligible, so it is a function of the command level and not of the angle. The lateral accel in that
@@ -207,6 +251,22 @@ and the PR notes): the Integra's route 00000139 reads 1.0 to 0.6 of STEER_MAX an
 MDX's 00000127 1.0 to 0.5 and 0.3-0.4 to 0.7, the Integra's angle-PID drive 00000135 (R^2 0.12-0.25) is
 rejected by the fit gate and holds.
 
+A dead band comes alive only on evidence. A pinned wire fills every band at once, so the rows that make
+up most of the data above the knee say nothing about which band the response belongs to, and the
+non-increasing projection pools their noise upward: in route 00000177 the online fits (R^2 0.74-0.84)
+read 0.08-0.13 for the bands above 0.7 of STEER_MAX in a third to a half of the windows while forcing
+those bands dead cost the fit under 0.0007 of the steer-rate variance, i.e. nothing. That is how the
+MDX's table had reached "alive everywhere" by that drive: every band above the seed's dead start had
+been raised past ``WIRE_DEAD_GAIN`` one noisy window at a time, the bound was 1.0 and the wire ran to
+433 for 10% of the engaged ticks, through torque the EPS ignores. So a band below ``WIRE_DEAD_GAIN`` is
+raised only when the constrained fit with that band and the ones above it forced to zero explains at
+least ``WIRE_ALIVE_MIN_R2`` less of the steer-rate variance than the free fit, or costs at least
+``WIRE_ALIVE_MIN_SSE_RATIO`` of the free fit's residual (a likelihood-ratio test on the dead-band start;
+in that route 0.0063-0.0167 of the variance for the real 0.4-0.5 band against 0.0037 at most, 2% of the
+residual, for anything above 0.5). Lowering a band, and raising one that is already alive, work on the
+pooled fit as before: those moves cost at most the probe band's dead torque, the move this gates costs
+the bound.
+
 The first version of this learned one clamp level, from settled dwells of lateral accel and from a bank
 of clip candidates on the steer rate. The dwell bank counted zero samples on the Integra's drive (the
 torque controller never holds the wire), and a clamp cannot say what a reduced slope does.
@@ -240,6 +300,12 @@ GAIN_PRIOR = (0.10, 0.25, 0.45, 0.80, 1.90, 2.40, 2.10, 2.30, 2.60)
 GAIN_BINS_MS = tuple(mph * CV.MPH_TO_MS for mph in GAIN_BINS_MPH)
 GAIN_MIN = 0.10
 GAIN_MAX = 3.00
+# a bin stays within this factor of its prior, at load and while learning (see the module docstring): the priors are
+# measurements on the car, route 00000177's differential fit lands within 1.3x of every one of them, and the 2-3x the
+# level-based learner had drifted to was a poisoned table
+GAIN_ENVELOPE = 2.5
+GAIN_LO = tuple(max(p / GAIN_ENVELOPE, GAIN_MIN) for p in GAIN_PRIOR)
+GAIN_HI = tuple(min(p * GAIN_ENVELOPE, GAIN_MAX) for p in GAIN_PRIOR)
 GAIN_KEY_FMT = "HondaLatGain{slot:02d}Params"
 
 # Centering shape: the EPS's self-aligning / return torque grows with lateral acceleration, so the m/s^2
@@ -266,8 +332,6 @@ SHAPE_MAX_LEARN_JERK = 0.50                       # m/s^3, |filtered lat accel| 
 SHAPE_MAX_LEARN_TORQUE_RATE = 0.50                # normalized torque per second, same for the lagged wire
 
 # identification
-FILTER_TAU = 2.0                                  # s, common low-pass on wire torque and measured lat accel
-FILTER_ALPHA = DT_CTRL / (FILTER_TAU + DT_CTRL)
 SHAPE_FILTER_ALPHA = DT_CTRL / (SHAPE_FILTER_TAU + DT_CTRL)
 WIRE_DELAY = 0.30                                 # s, actuator delay applied to the wire before the plant lag
 # The car's lateral accel follows the wire as a first-order lag, not instantly: a lag of 1.0-1.3 s (after the
@@ -276,13 +340,28 @@ WIRE_DELAY = 0.30                                 # s, actuator delay applied to
 # honest; without it every turn entry read the gain low and every exit read it high.
 PLANT_TAU = 1.0
 PLANT_ALPHA = DT_CTRL / (PLANT_TAU + DT_CTRL)
-LEARN_RATE = 0.002                                # normalized LMS step per tick
-LEARN_NORM_EPS = 0.01                             # torque^2, keeps the normalized step finite near zero
-MIN_LEARN_TORQUE = 0.15                           # |filtered wire| needed for excitation
-MIN_LEARN_LAT_ACCEL = 0.15                        # m/s^2, |filtered lat accel| needed to be in a real curve
-# coarse quasi-static gate: neither filtered signal may be changing by more than this fraction of itself
-# per FILTER_TAU (guards the sign flips of an S-bend, where the lag model is least exact)
-MAX_LEARN_CHANGE = 0.50
+LEARN_NORM_EPS = 0.01                             # torque^2, keeps the shape table's normalized step finite near zero
+MIN_LEARN_TORQUE = 0.15                           # |filtered wire| needed for a shape sample
+# speed table: windowed differences of the SHAPE_FILTER_TAU pair (see the module docstring). The window is on the
+# lag-modelled wire, so a 1 s window straddles the plant's response to a change; 0.5-2 s read the same gain in route
+# 00000177 (a 1 s window's dx there is mostly 0.05-0.1, so the threshold below is as high as it can go: 0.1 leaves a
+# quarter of the windows, 0.15 a tenth)
+GAIN_DIFF_WINDOW = 1.0                            # s
+GAIN_DIFF_TICKS = max(int(round(GAIN_DIFF_WINDOW / DT_CTRL)), 1)
+GAIN_MIN_DELTA_TORQUE = 0.05                      # normalized effective torque
+# qualifying ticks needed on both sides of a window (see the module docstring): 2 PLANT_TAU, the lagged wire's memory
+# of a hard turn down to 13%, and past the head and tail of a change where the lag error is largest. Route 00000177
+# counts 36 s of windows at 2 s (50 at 1 s, 75 with none); the simulated drives with a hard turn every 90 s read the
+# gain within 1% with it and 15-40% low without
+GAIN_SETTLE = 2.0                                 # s
+GAIN_SETTLE_TICKS = int(round(GAIN_SETTLE / DT_CTRL))
+# least squares over the windows (see the module docstring): exponentially weighted sums with GAIN_FIT_TAU of learning
+# ticks of memory (about a town drive's worth), the table tracking the fit at GAIN_TRACK_RATE per learning tick (a
+# drive's 40-50 s of windows takes a bin most of the way, 3 s of them moves it 15%)
+GAIN_FIT_TAU = 30.0                               # s of learning ticks
+GAIN_FIT_ALPHA = DT_CTRL / (GAIN_FIT_TAU + DT_CTRL)
+GAIN_FIT_MIN_SXX = GAIN_MIN_DELTA_TORQUE ** 2     # the weighted mean dx^2 the fit needs before the table follows it
+GAIN_TRACK_RATE = 0.001                           # per learning tick, toward the fit
 MIN_LEARN_SPEED = 2.0                             # m/s, curvature from steering angle is meaningless below
 PRESS_HOLDOFF = 0.5                               # s, learning stays paused this long after steeringPressed
 
@@ -331,10 +410,10 @@ CEILING_MAX = 1.0
 # reporting (see the module docstring, "Reporting"): a request within this of the unit clip is the controller's own
 # saturation (latcontrol's check is steer_max - |output| < 1e-3), and a wire within this of the bound in force is at it
 REPORT_SATURATION_TOL = 1e-3
-# the speed table may not learn from a FILTER_TAU sample the response shape bent by more than this (normalized
-# torque): a shape that is too low would otherwise teach it the car's response per unit of a wire it never got,
-# and the table is the feedforward and the jerk bound (route 00000129: 0.77 m/s^2 per unit at 10 mph against
-# 0.4 measured, half the torque the turns needed)
+# the speed table may not learn from a window in which the response shape bent the lag-modelled wire by more than
+# this (normalized torque): a shape that is too low would otherwise teach it the car's response per unit of a wire
+# it never got, and the table is the feedforward and the jerk bound (route 00000129: 0.77 m/s^2 per unit at 10 mph
+# against 0.4 measured, half the torque the turns needed)
 GAIN_MAX_CLIP = 0.02
 
 # learning the response shape from the steer rate (see the module docstring)
@@ -364,6 +443,13 @@ WIRE_TOL = 0.03                                   # a band moves only while the 
 # per counted tick, toward the fit: a town drive counts ~100 s of ticks, so a drive with a clear knee gets most of the
 # way there and the next one settles it
 WIRE_LEARN_RATE = 0.0002
+# a dead band is raised only when forcing it and the bands above it to zero costs the fit at least this fraction of
+# the steer-rate variance (see the module docstring: 0.0063-0.0167 for a band that answers in route 00000177, at most
+# 0.0037 for the ones that do not), or at least this fraction of the free fit's own residual (a probe band the car
+# answers to on a fit that explains nearly everything: the simulated plants fit at R^2 0.998, where a half-alive
+# probe band is worth 0.003 of the variance but 3x the residual; in route 00000177 the noise bands were 0.02 of it)
+WIRE_ALIVE_MIN_R2 = 0.005
+WIRE_ALIVE_MIN_SSE_RATIO = 0.5
 
 
 def _clip(value, lo, hi):
@@ -422,8 +508,8 @@ class HondaLateralModel:
     self.lat_accel_factor = (
       float(lat_accel_factor) if lat_accel_factor and lat_accel_factor > 0.1 else DEFAULT_LAT_ACCEL_FACTOR
     )
-    self.gains = [_clip(_load(param_get, GAIN_KEY_FMT.format(slot=mph), prior), GAIN_MIN, GAIN_MAX)
-                  for mph, prior in zip(GAIN_BINS_MPH, GAIN_PRIOR, strict=True)]
+    self.gains = [_clip(_load(param_get, GAIN_KEY_FMT.format(slot=mph), prior), lo, hi)
+                  for mph, prior, lo, hi in zip(GAIN_BINS_MPH, GAIN_PRIOR, GAIN_LO, GAIN_HI, strict=True)]
     self.shapes = [_clip(_load(param_get, SHAPE_KEY_FMT.format(slot=_shape_slot(la)), prior), SHAPE_MIN, SHAPE_MAX)
                    for la, prior in zip(SHAPE_BINS_LAT_ACCEL, SHAPE_PRIOR, strict=True)]
     self._project_shapes()
@@ -440,12 +526,16 @@ class HondaLateralModel:
     self._project_wire_gains()
     self.wire_hist = deque([0.0] * max(int(round(WIRE_DELAY / DT_CTRL)), 1), maxlen=max(int(round(WIRE_DELAY / DT_CTRL)), 1))
     self.wire_lag = 0.0             # delayed effective wire through the plant lag: the lateral accel the wire has "earned" so far
-    self.clip_lag = 0.0             # what the response shape took off the delayed wire, through the same lag and filter
-    self.wire_filt = 0.0            # FILTER_TAU pair, speed table
-    self.lat_accel_filt = 0.0
-    self.clip_filt = 0.0
-    self.wire_fast = 0.0            # SHAPE_FILTER_TAU pair, shape table
+    self.clip_lag = 0.0             # what the response shape took off the delayed wire, through the same lag
+    self.wire_fast = 0.0            # SHAPE_FILTER_TAU pair: the shape table's sample, and the speed table's differences
     self.lat_accel_fast = 0.0
+    # speed table: the pair GAIN_DIFF_WINDOW ago, how many consecutive ticks have qualified for a window, and the
+    # per-bin least-squares sums of the windows (mean dx^2, mean dx dy)
+    self.gain_hist = deque(maxlen=GAIN_DIFF_TICKS + GAIN_SETTLE_TICKS + 1)
+    self.gain_clean_ticks = 0
+    self.gain_sxx = [0.0] * len(GAIN_BINS_MPH)
+    self.gain_sxy = [0.0] * len(GAIN_BINS_MPH)
+    self.gain_sw = [0.0] * len(GAIN_BINS_MPH)      # the sums' weight, so a fresh bin's mean dx^2 reads right from its first windows
     # response-shape learner: EW normal equations of steer_rate on [band regressors, angle, lat accel, 1]
     n = len(RATE_SCALE)
     self.rate_hist = deque([0.0] * RATE_DELAY_TICKS, maxlen=RATE_DELAY_TICKS)
@@ -652,17 +742,12 @@ class HondaLateralModel:
     self.clip_lag += PLANT_ALPHA * ((raw_delayed_wire - delayed_wire) - self.clip_lag)
     # measured lat accel in torque sign convention (right positive) so that lat_accel ~= gain * wire_lag
     measured = -current_curvature * v_ego * v_ego
-    # the filter's own step is its rate of change over one tick; scaled to FILTER_TAU it is the fraction
-    # of the signal still in transit, which is what the quasi-static gate below looks at
-    dx = FILTER_ALPHA * (self.wire_lag - self.wire_filt)
-    dy = FILTER_ALPHA * (measured - self.lat_accel_filt)
-    self.wire_filt += dx
-    self.lat_accel_filt += dy
-    self.clip_filt += FILTER_ALPHA * (self.clip_lag - self.clip_filt)
     dxf = SHAPE_FILTER_ALPHA * (self.wire_lag - self.wire_fast)
     dyf = SHAPE_FILTER_ALPHA * (measured - self.lat_accel_fast)
     self.wire_fast += dxf
     self.lat_accel_fast += dyf
+    xf = self.wire_fast
+    yf = self.lat_accel_fast
 
     self.press_holdoff = PRESS_HOLDOFF if steering_pressed else max(self.press_holdoff - DT_CTRL, 0.0)
     self.learning_gain = False
@@ -671,33 +756,55 @@ class HondaLateralModel:
     self.rate_counted = False
     self.learning = False
     if not (active and self.press_holdoff <= 0.0 and v_ego > MIN_LEARN_SPEED):
+      # a window never spans a press or a gap in control
+      self.gain_hist.clear()
+      self.gain_clean_ticks = 0
       return
 
     # plant: y = gain(v) * shape(|y|) * x, with shape == 1.0 through the anchor band. Gentle curves train
     # the speed table and only the speed table; harder turns train the shape, seeing the gain as known.
     # Both regress on what the EPS actually got, so a pinned wire is a valid sample for the shape; the speed
-    # table skips the samples the response shape bent (see GAIN_MAX_CLIP)
-    x = self.wire_filt
-    y = self.lat_accel_filt
-    steady = (abs(dx) * FILTER_TAU / DT_CTRL <= MAX_LEARN_CHANGE * abs(x)
-              and abs(dy) * FILTER_TAU / DT_CTRL <= MAX_LEARN_CHANGE * abs(y))
-    if (steady and abs(x) > MIN_LEARN_TORQUE and abs(y) > MIN_LEARN_LAT_ACCEL and np.sign(x) == np.sign(y)
-        and abs(y) <= SHAPE_ANCHOR_LAT_ACCEL and abs(self.clip_filt) <= GAIN_MAX_CLIP):
-      self.learning_gain = True
-      pos = float(np.interp(v_ego, GAIN_BINS_MS, range(len(GAIN_BINS_MS))))
-      lo = int(np.floor(pos))
-      hi = min(lo + 1, len(self.gains) - 1)
-      frac = pos - lo
-      for idx, weight in ((lo, 1.0 - frac), (hi, frac)):
-        if weight <= 0.0:
-          continue
-        err = y - self.gains[idx] * x
-        self.gains[idx] = _clip(self.gains[idx] + LEARN_RATE * weight * err * x / (x * x + LEARN_NORM_EPS), GAIN_MIN, GAIN_MAX)
+    # table skips the windows the response shape bent (see GAIN_MAX_CLIP).
+    # speed table: the change over the window, so whatever lateral accel is held without wire (the wheel
+    # parked by friction, crown, bank, a hand below the threshold) drops out and the marginal response is
+    # what is fitted (see the module docstring)
+    self.gain_hist.append((xf, yf))
+    # a tick qualifies when the measured lateral accel and the one the lag-modelled wire stands for are both in the
+    # anchor band: after a hard turn the lagged wire remembers torque the shape bent for about PLANT_TAU, and a window
+    # that includes that memory reads the car's response to a wire it never fully got (low). The window is taken
+    # GAIN_SETTLE back from the newest tick and needs GAIN_SETTLE of qualifying ticks on both sides of it: the ones
+    # before so that memory has decayed, the ones after so the window is not the head of a change that then left the
+    # anchor band (see the module docstring: a part of a change reads a lag error the whole of it cancels)
+    if (abs(self.clip_lag) <= GAIN_MAX_CLIP and abs(yf) <= SHAPE_ANCHOR_LAT_ACCEL
+        and abs(self.gain(v_ego) * xf) <= SHAPE_ANCHOR_LAT_ACCEL):
+      self.gain_clean_ticks += 1
+    else:
+      self.gain_clean_ticks = 0
+    if self.gain_clean_ticks > GAIN_DIFF_TICKS + 2 * GAIN_SETTLE_TICKS and len(self.gain_hist) > GAIN_DIFF_TICKS + GAIN_SETTLE_TICKS:
+      x0, y0 = self.gain_hist[0]
+      x1, y1 = self.gain_hist[GAIN_DIFF_TICKS]
+      dx = x1 - x0
+      dy = y1 - y0
+      if abs(dx) > GAIN_MIN_DELTA_TORQUE:
+        self.learning_gain = True
+        pos = float(np.interp(v_ego, GAIN_BINS_MS, range(len(GAIN_BINS_MS))))
+        lo = int(np.floor(pos))
+        hi = min(lo + 1, len(self.gains) - 1)
+        frac = pos - lo
+        for idx, weight in ((lo, 1.0 - frac), (hi, frac)):
+          if weight <= 0.0:
+            continue
+          a = GAIN_FIT_ALPHA * weight
+          self.gain_sxx[idx] += a * (dx * dx - self.gain_sxx[idx])
+          self.gain_sxy[idx] += a * (dx * dy - self.gain_sxy[idx])
+          self.gain_sw[idx] += a * (1.0 - self.gain_sw[idx])
+          if self.gain_sxx[idx] >= GAIN_FIT_MIN_SXX * self.gain_sw[idx]:
+            fit = self.gain_sxy[idx] / self.gain_sxx[idx]
+            self.gains[idx] = _clip(self.gains[idx] + GAIN_TRACK_RATE * weight * (fit - self.gains[idx]),
+                                    GAIN_LO[idx], GAIN_HI[idx])
 
     # shape: the short-filtered pair, admitted while neither is trending (the lag model has aligned them;
     # what is left out is the S-bend transition it is least exact in)
-    xf = self.wire_fast
-    yf = self.lat_accel_fast
     trending = (abs(dyf) / DT_CTRL > SHAPE_MAX_LEARN_JERK or abs(dxf) / DT_CTRL > SHAPE_MAX_LEARN_TORQUE_RATE)
     if (not trending and abs(xf) > MIN_LEARN_TORQUE and abs(yf) > SHAPE_ANCHOR_LAT_ACCEL and np.sign(xf) == np.sign(yf)):
       self.learning_shape = True
@@ -774,11 +881,9 @@ class HondaLateralModel:
       except np.linalg.LinAlgError:
         return none
       beta[:WIRE_BANDS] = _pava_nonincreasing(beta[:WIRE_BANDS])
-    for _ in range(WIRE_FIT_ITERS):
-      beta -= step * (A @ beta - b)
-      beta[:WIRE_BANDS] = _pava_nonincreasing(beta[:WIRE_BANDS])
+    beta = self._solve_bands(A, b, step, beta)
     self.rate_beta = beta
-    sse = self.rate_syy / w - 2.0 * float(b @ beta) + float(beta @ A @ beta)
+    sse = self._sse(A, b, beta)
     self.rate_r2 = 1.0 - sse / var_y
     k0 = float(beta[0])
     self.rate_slope = k0 / RATE_SCALE[0]
@@ -791,7 +896,35 @@ class HondaLateralModel:
     activity = np.diag(A)[:WIRE_BANDS]
     evidence = (activity >= WIRE_MIN_BAND_ACTIVITY) & (np.abs(self.wire_fit - np.array(self.wire_gains)) > WIRE_TOL)
     evidence[0] = False
+    # a dead band is raised only if the data cannot do without it: the fit with it and the bands above it forced to
+    # zero must explain measurably less of the steering (see the module docstring). Forcing from a higher band is a
+    # weaker restriction, so once one band fails the test every band above it does too
+    for k in range(1, WIRE_BANDS):
+      if evidence[k] and self.wire_gains[k] < WIRE_DEAD_GAIN and self.wire_fit[k] > self.wire_gains[k]:
+        dead = beta.copy()
+        dead[k:WIRE_BANDS] = 0.0
+        dead = self._solve_bands(A, b, step, dead, dead_from=k)
+        cost = self._sse(A, b, dead) - sse
+        if cost / var_y < WIRE_ALIVE_MIN_R2 and cost < WIRE_ALIVE_MIN_SSE_RATIO * sse:
+          for j in range(k, WIRE_BANDS):
+            if self.wire_gains[j] < WIRE_DEAD_GAIN and self.wire_fit[j] > self.wire_gains[j]:
+              evidence[j] = False
+          break
     return evidence
+
+  @staticmethod
+  def _solve_bands(A, b, step, beta, dead_from=None):
+    # projected gradient on the EW normal equations: non-increasing, non-negative band coefficients, optionally with the
+    # bands from dead_from upward held at zero
+    for _ in range(WIRE_FIT_ITERS):
+      beta = beta - step * (A @ beta - b)
+      beta[:WIRE_BANDS] = _pava_nonincreasing(beta[:WIRE_BANDS])
+      if dead_from is not None:
+        beta[dead_from:WIRE_BANDS] = 0.0
+    return beta
+
+  def _sse(self, A, b, beta):
+    return self.rate_syy / self.rate_weight - 2.0 * float(b @ beta) + float(beta @ A @ beta)
 
   def _project_shapes(self):
     # non-increasing in lateral accel, from the anchor's 1.0 down: a bin with no data of its own inherits
