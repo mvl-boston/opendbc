@@ -6,7 +6,7 @@ See the LICENSE.md file in the root directory for more details.
 """
 
 from opendbc.car import structs
-from opendbc.car.honda.values import HONDA_BOSCH_RADARLESS
+from opendbc.car.honda.values import HONDA_BOSCH_RADARLESS, HONDA_BOSCH
 
 
 class MadsCarController:
@@ -17,6 +17,6 @@ class MadsCarController:
     enable_mads = CC_SP.mads.available
 
     if enable_mads:
-      self.dashed_lanes = CC_SP.mads.enabled and not CC.latActive
+      self.dashed_lanes = CC_SP.mads.enabled and not CC.latActive if CP.carFingerprint in HONDA_BOSCH else CC_SP.mads.enabled
     else:
       self.dashed_lanes = CC.hudControl.lanesVisible if CP.carFingerprint in HONDA_BOSCH_RADARLESS else False
