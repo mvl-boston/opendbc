@@ -15,6 +15,7 @@ from opendbc.car.toyota.values import CAR as TOYOTA
 from opendbc.car.values import Platform
 from opendbc.car.volkswagen.values import CAR as VOLKSWAGEN
 from opendbc.car.body.values import CAR as COMMA
+from opendbc.car.byd.values import CAR as BYD
 from opendbc.car.psa.values import CAR as PSA
 from opendbc.car.mg.values import CAR as MG
 
@@ -28,39 +29,16 @@ non_tested_cars = [
   VOLKSWAGEN.VOLKSWAGEN_CRAFTER_MK2,  # need a route from an ACC-equipped Crafter
   SUBARU.SUBARU_FORESTER_HYBRID,
   VOLKSWAGEN.PORSCHE_MACAN_MK1,
-  # Honda/Acura test routes below expired, replace when CI bucket sync is fixed
-  HONDA.ACURA_INTEGRA, # need new route - expired
-  HONDA.ACURA_TLX_2G, # need new route - expired
-  HONDA.HONDA_CRV_SA, # need new route - expired
-  HONDA.ACURA_TLX_2G_MMR, # need to fix Integra bug causing error
-  HONDA.HONDA_PILOT_4G_MMR, # awaiting driver for testroute
+  HONDA.ACURA_TLX_2G,
 
   # These had their DSUs unplugged, need new routes
   # TOYOTA.LEXUS_ES  # hybrid
   TOYOTA.TOYOTA_COROLLA,
   TOYOTA.TOYOTA_RAV4H,
 
-  # port extensions
-  HYUNDAI.HYUNDAI_KONA_EV_NON_SCC,
-  HYUNDAI.HYUNDAI_BAYON_1ST_GEN_NON_SCC,
-  HYUNDAI.HYUNDAI_ELANTRA_2022_NON_SCC,
-  HYUNDAI.HYUNDAI_KONA_NON_SCC,
-  HYUNDAI.KIA_FORTE_2019_NON_SCC,
-  HYUNDAI.KIA_FORTE_2021_NON_SCC,
-  HYUNDAI.KIA_SELTOS_2023_NON_SCC,
-  HYUNDAI.GENESIS_G70_2021_NON_SCC,
-  HONDA.HONDA_CLARITY,
-  HONDA.ACURA_TLX_1G,
-  HONDA.ACURA_RLX_HYBRID,
-  GM.CHEVROLET_BOLT_NON_ACC,
-  GM.CHEVROLET_BOLT_NON_ACC_1ST_GEN,
-  GM.CHEVROLET_BOLT_NON_ACC_2ND_GEN,
-  GM.CHEVROLET_EQUINOX_NON_ACC_3RD_GEN,
-  GM.CHEVROLET_SUBURBAN_NON_ACC_11TH_GEN,
-  GM.CADILLAC_CT6_NON_ACC_1ST_GEN,
-  GM.CHEVROLET_TRAILBLAZER_NON_ACC_2ND_GEN,
-  GM.CHEVROLET_MALIBU_NON_ACC_9TH_GEN,
-  GM.CADILLAC_XT5_NON_ACC_1ST_GEN,
+  # These are on the 2-bit DAS_steeringControlType firmware, which is dashcam only, need new routes
+  TESLA.TESLA_MODEL_X,
+
 ]
 
 
@@ -159,16 +137,10 @@ routes = [
   CarTestRoute("a703d058f4e05aeb/00000008--f169423024", HONDA.HONDA_PASSPORT_4G),
   CarTestRoute("414af83891dbf72c/00000006--51fa6d99cd", HONDA.HONDA_NBOX_2G),
   CarTestRoute("ad9840558640c31d/0000001a--d6cd4871c2", HONDA.ACURA_MDX_4G_MMR),  # 2025 MDX
-  # CarTestRoute("ad9840558640c31d/000001f2--026c4f6275", HONDA.ACURA_TLX_2G_MMR), # need to fix Integra bug causing error
+  CarTestRoute("ad9840558640c31d/000001f2--026c4f6275", HONDA.ACURA_TLX_2G_MMR),
   CarTestRoute("619b464263ab23f2/00000025--ece505fdfc", HONDA.ACURA_MDX_4G),
-  # CarTestRoute("6b22f2fcd61fa86a/00000000--b3adfc8746", HONDA.ACURA_TLX_2G), # need new route - expired
-  # CarTestRoute("3f8ae015ce70365f/00000003--a22590d0e4", HONDA.ACURA_INTEGRA), # need new route - expired
-  CarTestRoute("ad9840558640c31d/00000026--538590661c", HONDA.ACURA_ADX),
-  # CarTestRoute("4991f6e1afbe5adb/00000005--713a39aaee", HONDA.HONDA_CRV_SA), # South Africa model  # need new route - expired
-  CarTestRoute("f0a3de7786dcc72c/0000001a--4336abf007", HONDA.HONDA_FIT_4G),
-  # port extensions
-  CarTestRoute("ad9840558640c31d/0000011e--b1ab30a633", HONDA.ACURA_MDX_3G),
-  CarTestRoute("21ea2d289932890b/00000134--3862dfe91d", HONDA.HONDA_ACCORD_9G),
+  CarTestRoute("f2d6180c6007adc2/00000041--75a01c0fb1", HONDA.ACURA_ADX),
+  CarTestRoute("023b97f3d8c08c33/00000007--18cc650bdd", HONDA.HONDA_PILOT_4G_MMR),
 
   CarTestRoute("87d7f06ade479c2e/2023-09-11--23-30-11", HYUNDAI.HYUNDAI_AZERA_6TH_GEN),
   CarTestRoute("66189dd8ec7b50e6/2023-09-20--07-02-12", HYUNDAI.HYUNDAI_AZERA_HEV_6TH_GEN),
@@ -189,6 +161,7 @@ routes = [
   CarTestRoute("de59124955b921d8/2023-06-24--00-12-50", HYUNDAI.KIA_CARNIVAL_4TH_GEN),
   CarTestRoute("409c9409979a8abc/2023-07-11--09-06-44", HYUNDAI.KIA_CARNIVAL_4TH_GEN),  # Chinese model
   CarTestRoute("e0e98335f3ebc58f/2021-03-07--16-38-29", HYUNDAI.KIA_CEED),
+  CarTestRoute("26064e18b24ae44c/00000000--4eb95fc137", HYUNDAI.KIA_CEED_PHEV),
   CarTestRoute("7653b2bce7bcfdaa/2020-03-04--15-34-32", HYUNDAI.KIA_OPTIMA_G4),
   CarTestRoute("018654717bc93d7d/2022-09-19--23-11-10", HYUNDAI.KIA_OPTIMA_G4_FL, segment=0),
   CarTestRoute("f9716670b2481438/2023-08-23--14-49-50", HYUNDAI.KIA_OPTIMA_H),
@@ -309,7 +282,6 @@ routes = [
   CarTestRoute("cd9cff4b0b26c435/2021-05-13--15-12-39", TOYOTA.TOYOTA_CHR),
   CarTestRoute("57858ede0369a261/2021-05-18--20-34-20", TOYOTA.TOYOTA_CHR),  # hybrid
   CarTestRoute("ea8fbe72b96a185c/2023-02-08--15-11-46", TOYOTA.TOYOTA_CHR_TSS2),
-  CarTestRoute("ea8fbe72b96a185c|2023-02-22--09-20-34", TOYOTA.TOYOTA_CHR_TSS2),  # openpilot longitudinal, with smartDSU
   CarTestRoute("6719965b0e1d1737/2023-02-09--22-44-05", TOYOTA.TOYOTA_CHR_TSS2),  # hybrid
   CarTestRoute("6719965b0e1d1737/2023-08-29--06-40-05", TOYOTA.TOYOTA_CHR_TSS2),  # hybrid, openpilot longitudinal, radar disabled
   CarTestRoute("14623aae37e549f3/2021-10-24--01-20-49", TOYOTA.TOYOTA_PRIUS_V),
@@ -381,20 +353,17 @@ routes = [
 
   CarTestRoute("6a7075a4fdd765ee/0000004e--1f612006dd", PSA.PSA_PEUGEOT_208),
 
+  CarTestRoute("148fa33c79475c93/00000002--bb5e1aa449", BYD.BYD_ATTO_3),
+
   CarTestRoute("bc095dc92e101734/000000db--ee9fe46e57", RIVIAN.RIVIAN_R1),
   CarTestRoute("c70d59e4150956fc/0000006e--48bfbfda01", RIVIAN.RIVIAN_R1), # GEN2
 
-  CarTestRoute("7dc058789994da80/00000112--adb970f6a8", TESLA.TESLA_MODEL_3),
-  CarTestRoute("c8a98e58647765ad/00000002--84e4746136", TESLA.TESLA_MODEL_Y),
-  CarTestRoute("2c912ca5de3b1ee9/0000025d--6eb6bcbca4", TESLA.TESLA_MODEL_Y, segment=4),
-  CarTestRoute("bdda168c0c35fad7/00000001--5c5a36ec06", TESLA.TESLA_MODEL_X), # openpilot longitudinal
+  CarTestRoute("79d0f04c82980004/00000003--fb0b5d9cfc", TESLA.TESLA_MODEL_3), # HW4 2025
+  CarTestRoute("aebd8f1d4ea16066/000002d8--5850d3ea5c", TESLA.TESLA_MODEL_Y), # openpilot longitudinal
 
   CarTestRoute("5d61e2f6e1f247f3/00000054--d3dfb01b34", MG.MG_5_EV),
 
   # Segments that test specific issues
   # Controls mismatch due to standstill threshold
   CarTestRoute("bec2dcfde6a64235/2022-04-08--14-21-32", HONDA.HONDA_CRV_HYBRID, segment=22),
-
-  # port extensions
-  CarTestRoute("dc7bf18c8af12e37/00000006--ea06255cd0", HYUNDAI.KIA_CEED_PHEV_2022_NON_SCC),
 ]
