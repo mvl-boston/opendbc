@@ -228,7 +228,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
       # without MADS, lat_active == enabled while moving, so this stays equivalent there.
       lkas_hud_values['SOLID_LANES'] = lat_active
 
-  if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
+  if (not (CP.flags & HondaFlags.BOSCH_EXT_HUD)) or CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
     lkas_hud_values['RDM_OFF'] = 1
     lkas_hud_values['LANE_ASSIST_BEEP_OFF'] = 1
 
