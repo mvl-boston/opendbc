@@ -258,14 +258,39 @@ read 0.08-0.13 for the bands above 0.7 of STEER_MAX in a third to a half of the 
 those bands dead cost the fit under 0.0007 of the steer-rate variance, i.e. nothing. That is how the
 MDX's table had reached "alive everywhere" by that drive: every band above the seed's dead start had
 been raised past ``WIRE_DEAD_GAIN`` one noisy window at a time, the bound was 1.0 and the wire ran to
-433 for 10% of the engaged ticks, through torque the EPS ignores. So a band below ``WIRE_DEAD_GAIN`` is
-raised only when the constrained fit with that band and the ones above it forced to zero explains at
-least ``WIRE_ALIVE_MIN_R2`` less of the steer-rate variance than the free fit, or costs at least
-``WIRE_ALIVE_MIN_SSE_RATIO`` of the free fit's residual (a likelihood-ratio test on the dead-band start;
-in that route 0.0063-0.0167 of the variance for the real 0.4-0.5 band against 0.0037 at most, 2% of the
-residual, for anything above 0.5). Lowering a band, and raising one that is already alive, work on the
-pooled fit as before: those moves cost at most the probe band's dead torque, the move this gates costs
-the bound.
+433 for 10% of the engaged ticks, through torque the EPS ignores.
+
+Learning down. The same pooling keeps a table like that from coming back: with every band persisted at
+0.11-0.15 the pooled fit reads 0.10-0.27 for every band from 0.4 to 0.8 (routes 00000177 / 00000181 /
+00000182), the noise floor of a non-negative estimate on collinear rows, so tracking the fit never takes
+a band below ``WIRE_DEAD_GAIN`` and the bound stays at 1.0 drive after drive. Where the response stops is
+decided instead by the response above each cut: the constrained fit is re-solved with the bands from
+the cut up forced to zero (``_solve_bands`` with ``dead_from``), and the steer-rate variance that costs,
+over what those bands' joint regressor would explain at the first band's slope, square-rooted, is the
+mean response per unit of wire above the cut relative to the linear band -- as the data see it jointly,
+free of the pooling. The cuts are scanned from the lowest active band up; a dead band comes alive only
+above ``WIRE_ALIVE_SLOPE``, an alive band goes dead only below ``WIRE_DEAD_SLOPE`` (and only once the
+window has filled well past the first fit, ``WIRE_DEMOTE_MIN_SAMPLES``: the fits in the 10 s after
+``RATE_MIN_SAMPLES`` read the response above the knee at a third of its settled value), and between the
+two it holds. Forcing from a higher cut is a weaker restriction, so the first cut that settles settles
+every band above it: those are demoted toward zero at ``WIRE_DEMOTE_RATE`` (10x the learning rate, since
+a town drive counts only 25-40 s of ticks in all), and the fit with them forced to zero, no longer
+pooled with them, is what the bands below track. The statistic is a mean over the range above the cut
+weighted by where the wire was, so when the wire runs far above a knee it is diluted by the dead range
+(a simulated hard clamp at 0.55 reads 0.26-0.33 above 0.4, where the band is fully alive, and 0.13-0.20
+above 0.5, where half of it is; a linear EPS reads 0.60-0.87 above every cut, a 0.3 slope above its knee
+0.14-0.18 and a clamp 0.00 above it). The probe bound is what takes the dilution out: once the bound is
+down, the band above the ceiling is the top one the wire reaches and the test for it is its own
+coefficient. The MDX 3G's routes read, above 0.4 / 0.5 / 0.6 / 0.7 of STEER_MAX: 00000177 0.06-0.13 /
+0.04-0.07 / 0.03-0.07 / 0.00-0.06, 00000181 (the driver's hand below the press threshold on the
+windups) 0.09-0.19 / 0.11-0.18 / 0.10-0.16 / 0.07-0.14, 00000182 0.02-0.10 / 0.03-0.12 / 0.00-0.14 /
+0.00-0.14; the pinned residuals put the knee at 0.51 of STEER_MAX in 177 and 181 and 0.44 in 182, with
+the bands above delivering 0.06-0.11 per unit, i.e. a soft knee inside the 0.4-0.5 band. Replayed from
+the flat table each of the three brings the bound down within the drive (to 0.6, 0.9 and 0.5); chained
+with the learned shape carried over, 182 takes the 0.4-0.5 band down and 177 raises it again as the
+probe band (0.24-0.25), the ceiling walking between 0.4 and 0.5 -- the band is half alive and that is
+what the data say -- with the bound at 0.5-0.6 above the knee either way, and 181 walks one band up per
+drive on the driver's help, which the next clean drive undoes.
 
 The first version of this learned one clamp level, from settled dwells of lateral accel and from a bank
 of clip candidates on the steer rate. The dwell bank counted zero samples on the Integra's drive (the
@@ -443,13 +468,25 @@ WIRE_TOL = 0.03                                   # a band moves only while the 
 # per counted tick, toward the fit: a town drive counts ~100 s of ticks, so a drive with a clear knee gets most of the
 # way there and the next one settles it
 WIRE_LEARN_RATE = 0.0002
-# a dead band is raised only when forcing it and the bands above it to zero costs the fit at least this fraction of
-# the steer-rate variance (see the module docstring: 0.0063-0.0167 for a band that answers in route 00000177, at most
-# 0.0037 for the ones that do not), or at least this fraction of the free fit's own residual (a probe band the car
-# answers to on a fit that explains nearly everything: the simulated plants fit at R^2 0.998, where a half-alive
-# probe band is worth 0.003 of the variance but 3x the residual; in route 00000177 the noise bands were 0.02 of it)
-WIRE_ALIVE_MIN_R2 = 0.005
-WIRE_ALIVE_MIN_SSE_RATIO = 0.5
+# Where the response stops is decided by the mean response of the wire above a cut (see the module docstring,
+# "Learning down"): the steer-rate variance the fit loses with the bands from that cut up forced to zero, over what
+# their joint regressor would explain at the first band's slope, square-rooted -- the response per unit of wire above
+# the cut relative to the linear band, as the data sees it jointly, free of the pooling. A dead band comes alive only
+# above WIRE_ALIVE_SLOPE, an alive band goes dead only below WIRE_DEAD_SLOPE, and between the two it holds. The
+# simulated plants read 0.60-0.87 above every cut of a linear EPS (the top band on 3% of the samples included, with
+# 3 deg/s of noise), 0.14-0.18 above the knee of a 0.3 slope, 0.00 above a clamp and 0.13-0.20 across the band a
+# clamp halves; the MDX 3G's routes read 0.02-0.19 above 0.4 of STEER_MAX, 0.03-0.18 above 0.5 and 0.00-0.16 above
+# 0.6 and 0.7, a soft knee at 0.44-0.51 (the mean over a pinned range is diluted by the dead part of it; the probe
+# bound takes the dilution out, see the module docstring)
+WIRE_ALIVE_SLOPE = 0.20
+WIRE_DEAD_SLOPE = 0.10
+# per counted tick toward zero while the verdict holds: 10x the learning rate, so a band persisted at 0.15 (the noise
+# floor the pooled fit reads for a dead band) is dead after ~6 s of verdicts. A town drive counts only 25-40 s of
+# ticks in all (route 00000181: 26 s), so the verdicts of one drive have to be enough
+WIRE_DEMOTE_RATE = 0.002
+# an alive band is only demoted on a window that has filled well past the first fit: the fits in the 10 s after
+# RATE_MIN_SAMPLES read the response above the knee at a third of its settled value in route 00000182
+WIRE_DEMOTE_MIN_SAMPLES = 2 * RATE_MIN_SAMPLES
 
 
 def _clip(value, lo, hi):
@@ -549,7 +586,8 @@ class HondaLateralModel:
     self.rate_r2 = 0.0                        # telemetry: share of the steer-rate variance the last fit explained
     self.rate_slope = 0.0                     # telemetry: fitted deg/s per unit of wire in the first band
     self.wire_fit = np.array(self.wire_gains)  # telemetry: the last fit's shape, relative to the first band
-    self.wire_evidence = np.zeros(WIRE_BANDS, dtype=bool)   # bands the last fit disagrees with, on enough data
+    self.wire_evidence = np.zeros(WIRE_BANDS, dtype=bool)   # bands the last fit moves, on enough data
+    self.wire_demote = np.zeros(WIRE_BANDS, dtype=bool)     # ... of which these go toward zero (the dead start and up)
     self.rate_counted = False       # the learner took a sample this tick
     self.press_holdoff = 0.0
     # telemetry for the last update() call
@@ -857,7 +895,11 @@ class HondaLateralModel:
     if self.wire_evidence.any():
       self.learning_wire = True
       for k in range(1, WIRE_BANDS):
-        if self.wire_evidence[k]:
+        if not self.wire_evidence[k]:
+          continue
+        if self.wire_demote[k]:
+          self.wire_gains[k] -= WIRE_DEMOTE_RATE * self.wire_gains[k]
+        else:
           self.wire_gains[k] += WIRE_LEARN_RATE * (float(self.wire_fit[k]) - self.wire_gains[k])
       self._project_wire_gains()
 
@@ -892,24 +934,46 @@ class HondaLateralModel:
     # not fit); a band is informed only if the window holds samples with the wire in or above it
     if k0 <= 0.0 or self.rate_r2 < RATE_MIN_R2:
       return none
-    self.wire_fit = np.clip(beta[:WIRE_BANDS] / k0, WIRE_GAIN_MIN, WIRE_GAIN_MAX)
     activity = np.diag(A)[:WIRE_BANDS]
-    evidence = (activity >= WIRE_MIN_BAND_ACTIVITY) & (np.abs(self.wire_fit - np.array(self.wire_gains)) > WIRE_TOL)
-    evidence[0] = False
-    # a dead band is raised only if the data cannot do without it: the fit with it and the bands above it forced to
-    # zero must explain measurably less of the steering (see the module docstring). Forcing from a higher band is a
-    # weaker restriction, so once one band fails the test every band above it does too
+    # Where does the response stop? The pooled fit cannot say: a pinned wire fills every band at once, so the bands
+    # above the knee are collinear there and the non-increasing projection pools them with the knee into one value
+    # (0.10-0.27 of the first band in routes 00000177 / 00000181 / 00000182, the same number for every band from 0.4
+    # to 0.8), which raises a dead band and lowers an alive one toward it. The mean response above each cut decides
+    # instead (see the module docstring, "Learning down"): the dead start is the lowest active band that is dead and
+    # not shown alive, or alive and shown dead. Forcing from a higher band is a weaker restriction, so the first band
+    # that settles settles every band above it, and the fit with those bands forced to zero, no longer pooled with
+    # them, is the estimate for the bands below
+    dead_from = WIRE_BANDS
+    forced = beta
     for k in range(1, WIRE_BANDS):
-      if evidence[k] and self.wire_gains[k] < WIRE_DEAD_GAIN and self.wire_fit[k] > self.wire_gains[k]:
-        dead = beta.copy()
-        dead[k:WIRE_BANDS] = 0.0
-        dead = self._solve_bands(A, b, step, dead, dead_from=k)
-        cost = self._sse(A, b, dead) - sse
-        if cost / var_y < WIRE_ALIVE_MIN_R2 and cost < WIRE_ALIVE_MIN_SSE_RATIO * sse:
-          for j in range(k, WIRE_BANDS):
-            if self.wire_gains[j] < WIRE_DEAD_GAIN and self.wire_fit[j] > self.wire_gains[j]:
-              evidence[j] = False
-          break
+      if activity[k] < WIRE_MIN_BAND_ACTIVITY:
+        break                     # the wire never got here (nor above: the activity is non-increasing in the band)
+      dead = beta.copy()
+      dead[k:WIRE_BANDS] = 0.0
+      dead = self._solve_bands(A, b, step, dead, dead_from=k)
+      cost = self._sse(A, b, dead) - sse
+      slope = float(np.sqrt(max(cost, 0.0) / (k0 * k0 * A[k:WIRE_BANDS, k:WIRE_BANDS].sum())))
+      if self.wire_gains[k] < WIRE_DEAD_GAIN:
+        if slope > WIRE_ALIVE_SLOPE:
+          continue                # a dead band the data cannot do without: it is raised below
+      elif not (self.rate_samples >= WIRE_DEMOTE_MIN_SAMPLES and slope < WIRE_DEAD_SLOPE):
+        continue
+      dead_from = k
+      forced = dead
+      break
+    k0 = float(forced[0])
+    if k0 <= 0.0:
+      return none
+    self.wire_fit = np.clip(forced[:WIRE_BANDS] / k0, WIRE_GAIN_MIN, WIRE_GAIN_MAX)
+    self.wire_fit[dead_from:] = 0.0
+    self.wire_demote = np.zeros(WIRE_BANDS, dtype=bool)
+    self.wire_demote[dead_from:] = True
+    gains = np.array(self.wire_gains)
+    # the bands below the dead start track the fit (a dead band among them was shown alive above); the ones from it
+    # up are demoted toward zero at their own rate while they carry anything
+    evidence = (activity >= WIRE_MIN_BAND_ACTIVITY) & (np.abs(self.wire_fit - gains) > WIRE_TOL)
+    evidence[dead_from:] = (activity[dead_from:] >= WIRE_MIN_BAND_ACTIVITY) & (gains[dead_from:] > 0.0)
+    evidence[0] = False
     return evidence
 
   @staticmethod
