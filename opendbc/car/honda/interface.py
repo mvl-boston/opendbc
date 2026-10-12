@@ -391,7 +391,15 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.ACURA_MDX_3G:
       stock_cp.autoResumeSng = True
       stock_cp.minEnableSpeed = -1
-      stock_cp.steerActuatorDelay = 0.35
+      # lagd runs the planner and the torque controller at steerActuatorDelay + 0.2 until it has 5 valid 60 s blocks
+      # above 15 m/s, which this car's town drives never give it (routes 00000181 / 00000182: 20% calibrated the whole
+      # drive, lateralDelay 0.55 in force). Its one estimated block reads 0.73 s; the desired-to-actual lateral accel
+      # cross-correlation on routes 00000177 / 00000181 reads 0.64-0.67 s on the well-correlated blocks, and the steer
+      # plant fits 0.15-0.25 s of dead time plus a 0.8-1.0 s first order. 0.5 puts the delay in force at 0.70 s.
+      # Both exits the driver reported as overshoot (181 @ 21:15:33 ET, 182 @ 08:27:27 ET) are the loop ringing at a
+      # ~4 s period against a saturated, under-compensated plant: the car 0.7 s behind a planner reversal of
+      # ~3 m/s^2 in under 2 s, the request pinned the other way for 2-2.5 s, the car swinging past and back
+      stock_cp.steerActuatorDelay = 0.5
       stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 433], [0, 433]]
       CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
 
