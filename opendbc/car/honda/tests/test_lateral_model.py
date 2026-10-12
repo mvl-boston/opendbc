@@ -740,6 +740,33 @@ class TestHondaLateralEpsWireShape(unittest.TestCase):
     self.assertAlmostEqual(model.wire_gains[2], 0.5, delta=0.15)
     self.assertAlmostEqual(model.ceiling, 0.6)
 
+  def test_learns_down_from_a_table_pinned_alive_everywhere(self):
+    # the MDX 3G's table after many drives: every band at 0.11-0.15, above WIRE_DEAD_GAIN, the bound at 1.0 and the
+    # wire running to STEER_MAX through torque the EPS ignores. The pooled fit reads the noise floor for those bands
+    # and cannot take them down; the response above each cut can, within one drive
+    v = 15.0
+    flat = (0.15, 0.15, 0.13, 0.12, 0.11, 0.11)
+    model = make_model(wire_params(flat))
+    self.assertEqual(model.wire_limit, 1.0)
+    drive_steer(model, v, 150.0, sweep_wire, steer_plant(0.55), noise=3.0)
+    self.assertLess(max(model.wire_gains[3:]), WIRE_DEAD_GAIN)
+    self.assertGreater(model.wire_gains[1], 0.8)                    # and the band that answers is raised, not held
+    self.assertLessEqual(model.ceiling, 0.6)
+    self.assertLessEqual(model.wire_limit, 0.7)
+    # the same table on a car with a reduced slope above the knee: the bands above it are raised toward the slope,
+    # none is taken dead, the bound stays at 1.0
+    model = make_model(wire_params(flat))
+    drive_steer(model, v, 150.0, sweep_wire, steer_plant(0.55, slope=0.3), noise=3.0)
+    self.assertGreaterEqual(min(model.wire_gains), WIRE_DEAD_GAIN)
+    for k in range(3, WIRE_BANDS):
+      self.assertAlmostEqual(model.wire_gains[k], 0.3, delta=0.12, msg=f"band {k}")
+    self.assertEqual(model.wire_limit, 1.0)
+    # ... and on a linear car every band is raised back toward 1.0 (at WIRE_LEARN_RATE: 0.11 reaches 0.86 in 150 s)
+    model = make_model(wire_params(flat))
+    drive_steer(model, v, 150.0, sweep_wire, steer_plant(None), noise=3.0)
+    self.assertGreaterEqual(min(model.wire_gains), 0.8)
+    self.assertEqual(model.wire_limit, 1.0)
+
   def test_holds_the_seed_on_the_car_it_was_measured_on(self):
     v = 15.0
     model = make_model({CEILING_KEY: 0.55})
