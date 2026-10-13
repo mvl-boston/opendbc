@@ -58,8 +58,6 @@ class CarControllerParams:
         steer_max = 3840  # TODO: determine if there is a dead zone at the top end
       elif CP.carFingerprint == CAR.ACURA_RDX_3G:
         steer_max = 4095  # TODO: determine if there is a dead zone at the top end
-      elif CP.carFingerprint == CAR.ACURA_RDX_3G_MMR:
-        steer_max = 4076
       elif CP.carFingerprint == CAR.ACURA_ADX:
         steer_max = 5000
       elif CP.carFingerprint == CAR.HONDA_CRV_6G:
@@ -75,7 +73,7 @@ class CarControllerParams:
                                  CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID, CAR.HONDA_FIT, CAR.HONDA_FIT_4G, CAR.HONDA_FREED,
                                  CAR.HONDA_HRV, CAR.HONDA_HRV_3G, CAR.HONDA_ODYSSEY, CAR.HONDA_ODYSSEY_5G_MMR,
                                  CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G, CAR.HONDA_RIDGELINE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G,
-                                 CAR.HONDA_E, CAR.HONDA_E_ADVANCE, CAR.ACURA_TLX_2G_MMR):
+                                 CAR.HONDA_E, CAR.HONDA_E_ADVANCE, CAR.ACURA_TLX_2G_MMR, CAR.ACURA_RDX_3G_MMR):
         steer_max = 4096  # TODO: determine if there is a dead zone at the top end
       else:
         steer_max = 3840
