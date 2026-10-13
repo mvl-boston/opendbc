@@ -470,7 +470,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     gas_pedal_force = 0.0
     actuators = CC.actuators
     hud_control = CC.hudControl
-    if self.CP.carFingerprint in HONDA_BOSCH:
+    if self.CP.flags & HondaFlags.BOSCH:
       hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if 0 < CS.out.vCruise < 255 else 255
     else:
       hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if hud_control.speedVisible else 255
