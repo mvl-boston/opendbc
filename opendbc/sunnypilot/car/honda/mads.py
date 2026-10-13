@@ -6,7 +6,6 @@ See the LICENSE.md file in the root directory for more details.
 """
 
 from opendbc.car import structs
-from opendbc.car.honda.values import HONDA_BOSCH_RADARLESS, HONDA_BOSCH
 
 
 class MadsCarController:
