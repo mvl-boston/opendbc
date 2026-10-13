@@ -186,12 +186,8 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
                     lkas_state_change=None):
   commands = []
 
-  if CP.carFingerprint in HONDA_BOSCH:
-    solid_lanes = hud_control.lanesVisible and not steer_maxed
-    dashed_lanes = lat_active
-  else:
-    solid_lanes = lat_active and not steer_maxed
-    dashed_lanes = hud_control.lanesVisible
+  solid_lanes = lat_active and not steer_maxed
+  dashed_lanes = hud_control.lanesVisible
 
   lkas_hud_values = {
     'LKAS_READY': 1,
@@ -238,9 +234,9 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
   # New HUD concept for selected Bosch cars, overwrites some of the above
   # TODO: make global across all Honda if feedback is favorable
   # Try all Bosch A, didn't work on Nidec, and caused LKAS error in Bosch B/C
-  if CP.carFingerprint in HONDA_BOSCH and CP.carFingerprint not in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
-    lkas_hud_values['DASHED_LANES'] = steering_available
-    lkas_hud_values['SOLID_LANES'] = lat_active
+  # if CP.carFingerprint in HONDA_BOSCH and CP.carFingerprint not in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
+  #   lkas_hud_values['DASHED_LANES'] = steering_available
+  #   lkas_hud_values['SOLID_LANES'] = lat_active
 
   if CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
     commands.append(packer.make_can_msg('LKAS_HUD_A', bus, lkas_hud_values))
