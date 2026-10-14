@@ -17,7 +17,7 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
-from opendbc.car.honda.lateral_model import HondaLateralModel, clamp_shape
+from opendbc.car.honda.lateral_model import HondaLateralModel
 from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -132,22 +132,6 @@ NIDEC_SPEED_BANDS = (
 # 0.1 s), so without the hold the wire toggled 433 <-> 233 for the whole turn.
 MDX_BRAKE_STEER_LIMIT = 233
 MDX_BRAKE_STEER_LIMIT_HOLD = int(1.0 / DT_CTRL)
-
-# EPS wire response shape seeds (see lateral_model.py): the marginal response per unit of wire torque in the
-# bands 0.4-0.5, 0.5-0.6, 0.6-0.7, 0.7-0.8, 0.8-0.9, 0.9-1.0 of STEER_MAX, relative to the band below 0.4, for
-# the cars it has been measured on; every other car starts linear and learns it.
-# Integra (route 3792d010590cb83a|00000139, STEER_MAX 5120): the steer rate a wire increment buys is linear
-# to ~2500-3000 counts and 3-20% of that from there to 5120 at every steering angle (a function of the command
-# level, not of the angle); the constrained per-band fit over the drive reads (1.0, 0.2-0.3, 0.03-0.1, 0.03,
-# 0.03, 0.03) and the online learner from the linear prior reaches (0.94, 0.29, 0.21, ...) in the one drive. The
-# seed keeps every band alive (the wire still runs to 5120, through the inverse shape at twice the wire per
-# unit above 0.6) and leaves it to the learner to mark the top bands dead when more drives read them at 0.03.
-# The MDX 3G is seeded in __init__ from its measured clamp (233 of 433 counts, the number the EPS faults
-# above while braking): full response to 0.5, 0.38 of it over 0.5-0.6, nothing above (the per-band fit on
-# route 00000127 reads 0.4, 0.2, 0.2, 0.02, ...).
-WIRE_SEEDS = {
-  CAR.ACURA_INTEGRA: (1.0, 0.3, 0.1, 0.1, 0.1, 0.1),
-}
 
 # the low/high nodes keep the param keys the two-band scheme persisted, so learned state survives
 NIDEC_GAS_FACTOR_KEYS: dict[str, str] = {band: f"HondaGasFactor{band}Params" for band, _ in NIDEC_GAS_BANDS}
@@ -461,16 +445,12 @@ class CarController(CarControllerBase):
     self.launch_ceiling_ticks = 0
 
     # speed-dependent lateral plant model (see lateral_model.py): identifies m/s^2 per unit wire torque
-    # online and adds a feedforward correction to the torque controller's request. The EPS wire response
-    # shape is learned per car; the MDX 3G is seeded as a clamp at the value its routes measured (the same
-    # 233 counts the EPS faults above while braking), the Integra at its measured shape (WIRE_SEEDS), every
-    # other car starts linear until it shows otherwise.
-    if CP.carFingerprint == CAR.ACURA_MDX_3G:
-      wire_prior = clamp_shape(MDX_BRAKE_STEER_LIMIT / self.params.STEER_MAX)
-    else:
-      wire_prior = WIRE_SEEDS.get(CP.carFingerprint)
+    # online and adds a feedforward correction to the torque controller's request. Every table starts from
+    # the car's own torque tune (a linear plant at latAccelFactor, a linear EPS) and is learned on the car;
+    # nothing is seeded per car. The MDX 3G's brake-steer fault bound (MDX_BRAKE_STEER_LIMIT) is a safety
+    # limit, not a plant model, and stays.
     self.lat_model = HondaLateralModel(CP.lateralTuning.torque.latAccelFactor if CP.lateralTuning.which() == 'torque' else 0.0,
-                                       Params().get, wire_prior=wire_prior)
+                                       Params().get)
 
     self.latFactors = {
       "05": 1.0 if (Params().get("HondaLatAccelFactor05Params") is None) else Params().get("HondaLatAccelFactor05Params"),
