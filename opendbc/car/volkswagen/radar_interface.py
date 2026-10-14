@@ -19,8 +19,8 @@ SIGNAL_SETS = tuple(
 
 
 class RadarInterface(RadarInterfaceBase):
-  def __init__(self, CP):
-    super().__init__(CP)
+  def __init__(self, CP, CP_SP):
+    super().__init__(CP, CP_SP)
 
     # With the MEB gateway harness, we do not have access to the raw points from the radar.
     # However, the camera publishes decent, albeit filtered, tracks. Two for each lane; left, center, and right.

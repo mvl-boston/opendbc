@@ -1,7 +1,17 @@
-from opendbc.car.crc import CRC8J1850
+def checksum(data, poly, xor_output):
+  crc = 0
+  for byte in data:
+    crc ^= byte
+    for _ in range(8):
+      if crc & 0x80:
+        crc = (crc << 1) ^ poly
+      else:
+        crc <<= 1
+      crc &= 0xFF
+  return crc ^ xor_output
 
 
-def create_lka_steering(packer, frame, acm_lka_hba_cmd, apply_torque, enabled, active):
+def create_lka_steering(packer, frame, acm_lka_hba_cmd, apply_torque, enabled, active, mads):
   # forward auto high beam and speed limit status and nothing else
   values = {s: acm_lka_hba_cmd[s] for s in (
     "ACM_hbaSysState",
@@ -13,10 +23,10 @@ def create_lka_steering(packer, frame, acm_lka_hba_cmd, apply_torque, enabled, a
   values |= {
     "ACM_lkaHbaCmd_Counter": frame % 15,  # 0-14 counter (15 states), so % 15 is correct despite the 4-bit field
     "ACM_lkaStrToqReq": apply_torque,
-    "ACM_lkaActToi": active,
+    "ACM_lkaActToi": mads.lat_active,
 
-    "ACM_lkaLaneRecogState": 3 if enabled else 0,
-    "ACM_lkaSymbolState": 3 if enabled else 0,
+    "ACM_lkaLaneRecogState": 3 if mads.lka_icon_states else 0,
+    "ACM_lkaSymbolState": 3 if mads.lka_icon_states else 0,
 
     # static values
     "ACM_lkaElkRequest": 0,
@@ -28,6 +38,8 @@ def create_lka_steering(packer, frame, acm_lka_hba_cmd, apply_torque, enabled, a
     #"ACM_lkaHandsoffDisplayWarning": 1,  # TODO: we can send this when openpilot wants you to pay attention
   }
 
+  data = packer.make_can_msg("ACM_lkaHbaCmd", 0, values)[1]
+  values["ACM_lkaHbaCmd_Checksum"] = checksum(data[1:], 0x1D, 0x63)
   return packer.make_can_msg("ACM_lkaHbaCmd", 0, values)
 
 
@@ -46,6 +58,8 @@ def create_wheel_touch(packer, sccm_wheel_touch, enabled):
     values["SCCM_WheelTouch_HandsOn"] = 1
     values["SCCM_WheelTouch_CapacitiveValue"] = 100  # only need to send this value, but both are set for consistency
 
+  data = packer.make_can_msg("SCCM_WheelTouch", 2, values)[1]
+  values["SCCM_WheelTouch_Checksum"] = checksum(data[1:], 0x1D, 0x97)
   return packer.make_can_msg("SCCM_WheelTouch", 2, values)
 
 
@@ -58,11 +72,14 @@ def create_longitudinal(packer, frame, accel, enabled):
     "ACM_VehicleHoldRequest": 0,
   }
 
+  data = packer.make_can_msg("ACM_longitudinalRequest", 0, values)[1]
+  values["ACM_longitudinalRequest_Checksum"] = checksum(data[1:], 0x1D, 0x12)
   return packer.make_can_msg("ACM_longitudinalRequest", 0, values)
 
 
 def create_adas_status(packer, vdm_adas_status, interface_status):
   values = {s: vdm_adas_status[s] for s in (
+    "VDM_AdasStatus_Checksum",
     "VDM_AdasStatus_Counter",
     "VDM_AdasDecelLimit",
     "VDM_AdasDriverAccelPriorityStatus",
@@ -78,12 +95,6 @@ def create_adas_status(packer, vdm_adas_status, interface_status):
   if interface_status is not None:
     values["VDM_AdasInterfaceStatus"] = interface_status
 
+  data = packer.make_can_msg("VDM_AdasSts", 2, values)[1]
+  values["VDM_AdasStatus_Checksum"] = checksum(data[1:], 0x1D, 0xD1)
   return packer.make_can_msg("VDM_AdasSts", 2, values)
-
-
-def rivian_checksum(address: int, sig, d: bytearray) -> int:
-  # CRC-8 with the little-endian CAN address prepended to the payload.
-  crc = 0
-  for byte in address.to_bytes(2, "little") + d[1:]:
-    crc = CRC8J1850[crc ^ byte]
-  return crc

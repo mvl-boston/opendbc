@@ -452,6 +452,7 @@ def compile_mutated_library(preprocessed_source, sites, output_so):
   prelude = """
     static int __mutation_active_id = -1;
     void mutation_set_active_mutant(int id) { __mutation_active_id = id; }
+    int mutation_get_active_mutant(void) { return __mutation_active_id; }
   """
   marker_re = re.compile(r'^\s*#\s+\d+\s+"[^\n]*\n?', re.MULTILINE)
   instrumented = prelude + marker_re.sub("", instrumented)
@@ -606,9 +607,9 @@ def main():
 
     # TODO: fix these surviving mutants and delete this block
     known_survivors = {
-      ("opendbc/safety/lateral.h", 188, "boundary"),
-      ("opendbc/safety/lateral.h", 218, "boundary"),
-      ("opendbc/safety/lateral.h", 219, "boundary"),
+      ("opendbc/safety/lateral.h", 190, "boundary"),
+      ("opendbc/safety/lateral.h", 220, "boundary"),
+      ("opendbc/safety/lateral.h", 221, "boundary"),
     }
     survivors = [r for r in survivors if (str(r.site.origin_file.relative_to(ROOT)), r.site.origin_line, r.site.mutator) not in known_survivors]
 
