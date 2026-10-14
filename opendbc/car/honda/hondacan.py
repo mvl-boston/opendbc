@@ -232,12 +232,6 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     lkas_hud_values['RDM_OFF'] = 1
     lkas_hud_values['LANE_ASSIST_BEEP_OFF'] = 1
 
-  # New HUD concept for selected Bosch cars, overwrites some of the above
-  # TODO: make global across all Honda if feedback is favorable
-  if CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
-    lkas_hud_values['DASHED_LANES'] = steering_available and lat_active
-    lkas_hud_values['SOLID_LANES'] = lat_active
-
   if CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
     commands.append(packer.make_can_msg('LKAS_HUD_A', bus, lkas_hud_values))
     commands.append(packer.make_can_msg('LKAS_HUD_B', bus, lkas_hud_values))
