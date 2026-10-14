@@ -16,6 +16,69 @@ FUNCTIONAL_ADDR_29BIT = 0x18DB33F1
 # ISO-TP single frame carrying CLEAR_DTC_REQUEST (0x14 ClearDiagnosticInformation, all groups)
 CLEAR_DTC_ISOTP_SF = bytes([len(CLEAR_DTC_REQUEST)]) + CLEAR_DTC_REQUEST + b'\x00' * (7 - len(CLEAR_DTC_REQUEST))
 
+# Legislated OBD-II (SAE J1979) services. Emissions-related DTCs and the MIL live behind these on the
+# powertrain ECUs; a UDS 0x14 alone is not guaranteed to touch them.
+OBD_READ_STORED_DTC_REQUEST = b'\x03'    # Mode 03: request stored (confirmed) emissions DTCs
+OBD_READ_STORED_DTC_RESPONSE = b'\x43'
+OBD_CLEAR_DTC_REQUEST = b'\x04'          # Mode 04: clear emissions DTCs, freeze frame, readiness, and the MIL
+OBD_CLEAR_DTC_RESPONSE = b'\x44'
+OBD_CLEAR_DTC_ISOTP_SF = bytes([len(OBD_CLEAR_DTC_REQUEST)]) + OBD_CLEAR_DTC_REQUEST + b'\x00' * (7 - len(OBD_CLEAR_DTC_REQUEST))
+
+_DTC_PREFIX = ('P', 'C', 'B', 'U')
+
+
+def decode_obd_dtcs(dat: bytes) -> list[str]:
+  """Decode the payload of an OBD-II Mode 03 response (after the 0x43 service byte) into DTC strings.
+  ISO 15765-4 responses carry a DTC count byte first; older ECUs omit it. Both forms are handled by
+  reading 2-byte DTCs from whichever end lines up."""
+  if len(dat) % 2 == 1:
+    dat = dat[1:]  # leading count byte
+  dtcs = []
+  for i in range(0, len(dat) - 1, 2):
+    hi, lo = dat[i], dat[i + 1]
+    if hi == 0 and lo == 0:
+      continue
+    dtcs.append(f"{_DTC_PREFIX[hi >> 6]}{(hi >> 4) & 0x3}{hi & 0xF:X}{lo:02X}")
+  return dtcs
+
+
+def read_stored_dtcs(can_recv, can_send, bus, addrs, timeout=0.3, functional_addr=FUNCTIONAL_ADDR_29BIT) -> dict[int, list[str]]:
+  """Broadcast an OBD-II Mode 03 request and collect the stored emissions DTCs reported by the given
+  physical ECU addresses. Best-effort: ECUs that do not implement Mode 03 simply do not answer."""
+  results: dict[int, list[str]] = {}
+  try:
+    query = IsoTpParallelQuery(can_send, can_recv, bus, list(addrs), [OBD_READ_STORED_DTC_REQUEST], [OBD_READ_STORED_DTC_RESPONSE],
+                               functional_addrs=[functional_addr])
+    for (addr, _), dat in query.get_data(timeout).items():
+      results[addr] = decode_obd_dtcs(dat)
+  except Exception:
+    carlog.exception("read stored DTCs exception")
+  return results
+
+
+def clear_all_faults(can_recv, can_send, buses, dtc_read_bus=None, dtc_read_addrs=(), functional_addr=FUNCTIONAL_ADDR_29BIT):
+  """Clear every stored fault reachable from the given buses at startup.
+
+  1. If dtc_read_addrs is given, read and log the stored emissions DTCs first (OBD-II Mode 03) so the
+     code that produced a dash warning on the previous drive is preserved in the log before it is wiped.
+  2. Broadcast OBD-II Mode 04 (clears emissions DTCs, freeze frames, readiness monitors and the MIL) and
+     UDS 0x14 ClearDiagnosticInformation for all groups (clears manufacturer/UDS DTCs on the ADAS,
+     brake, gateway, ... modules) on every bus using the functional address. No responses are awaited.
+
+  WARNING: this erases genuine fault codes on ALL ECUs, including safety-relevant modules, and resets the
+  emissions readiness monitors (a smog check will read "not ready" until the drive cycles complete)."""
+  if dtc_read_addrs and dtc_read_bus is not None:
+    stored = read_stored_dtcs(can_recv, can_send, dtc_read_bus, dtc_read_addrs, functional_addr=functional_addr)
+    for addr, dtcs in stored.items():
+      carlog.warning(f"stored DTCs on {hex(addr)} before clear: {dtcs if dtcs else 'none'}")
+    if not stored:
+      carlog.warning("stored DTCs before clear: no ECU answered OBD-II Mode 03")
+
+  for bus in buses:
+    carlog.warning(f"clear all faults (OBD-II Mode 04 + UDS 0x14, functional) on bus {bus} ...")
+    can_send([CanData(functional_addr, OBD_CLEAR_DTC_ISOTP_SF, bus),
+              CanData(functional_addr, CLEAR_DTC_ISOTP_SF, bus)])
+
 
 def clear_all_dtcs(can_send, buses, functional_addr=FUNCTIONAL_ADDR_29BIT):
   """Broadcast UDS 0x14 ClearDiagnosticInformation (all DTC groups) to every ECU on the given buses
