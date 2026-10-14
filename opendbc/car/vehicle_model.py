@@ -27,17 +27,15 @@ class VehicleModel:
       CP: Car Parameters
     """
     # for math readability, convert long names car params into short names
-    # Tire stiffness and rotational inertia are already divided by vehicle mass, which cancels out of the model.
-    # Use unit mass to preserve the standard bicycle-model equations below.
-    self.m: float = 1.0
-    self.j: float = CP.rotationalInertiaPerMass
+    self.m: float = CP.mass
+    self.j: float = CP.rotationalInertia
     self.l: float = CP.wheelbase
     self.aF: float = CP.centerToFront
     self.aR: float = CP.wheelbase - CP.centerToFront
-    self.chi: float = 0.  # no rear steering
+    self.chi: float = CP.steerRatioRear
 
-    self.cF_orig: float = CP.tireStiffnessFrontPerMass
-    self.cR_orig: float = CP.tireStiffnessRearPerMass
+    self.cF_orig: float = CP.tireStiffnessFront
+    self.cR_orig: float = CP.tireStiffnessRear
     self.update_params(1.0, CP.steerRatio)
 
   def update_params(self, stiffness_factor: float, steer_ratio: float) -> None:
@@ -180,12 +178,12 @@ def create_dyn_state_matrices(u: float, VM: VehicleModel) -> tuple[np.ndarray, n
     A tuple with the 2x2 A matrix, and 2x2 B matrix
 
   Parameters in the vehicle model:
-    cF: Tire stiffness front per unit mass [N/(rad*kg)]
-    cR: Tire stiffness rear per unit mass [N/(rad*kg)]
+    cF: Tire stiffness Front [N/rad]
+    cR: Tire stiffness Rear [N/rad]
     aF: Distance from CG to front wheels [m]
     aR: Distance from CG to rear wheels [m]
-    m: Unit mass (1); stiffness and inertia are mass-normalized
-    j: Rotational inertia per unit mass [m^2]
+    m: Mass [kg]
+    j: Rotational inertia [kg m^2]
     sR: Steering ratio [-]
     chi: Steer ratio rear [-]
   """

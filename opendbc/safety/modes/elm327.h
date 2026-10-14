@@ -29,7 +29,6 @@ static bool elm327_tx_hook(const CANPacket_t *msg) {
       tx = false;
     }
   }
-
   return tx;
 }
 
