@@ -6,18 +6,28 @@ import numpy as np
 from opendbc.car import DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.lateral_model import (CEILING_KEY, CEILING_MAX, DEFAULT_LAT_ACCEL_FACTOR, FF_CORRECTION_MAX,
-                                             FF_SATURATION_FADE, GAIN_BINS_MPH, GAIN_BINS_MS, GAIN_DIFF_WINDOW, GAIN_ENVELOPE,
-                                             GAIN_HI, GAIN_KEY_FMT, GAIN_LO, GAIN_MAX,
-                                             GAIN_MIN, GAIN_PRIOR, MAX_LAT_ACCEL, MAX_LAT_JERK_DOWN, MAX_LAT_JERK_UP, PRESS_HOLDOFF,
-                                             RATE_MIN_R2, SHAPE_ANCHOR_LAT_ACCEL, SHAPE_BINS_LAT_ACCEL, SHAPE_KEY_FMT, SHAPE_MAX,
-                                             SHAPE_MIN, WIRE_BANDS, WIRE_CUTS, WIRE_DEAD_GAIN, WIRE_INVERT_MIN_GAIN, WIRE_KEY_FMT,
-                                             WIRE_PROBE, WIRE_RATE_MAX, HondaLateralModel, clamp_shape)
+                                             FF_SATURATION_FADE, GAIN_BINS_MPH, GAIN_BINS_MS, GAIN_DIFF_WINDOW, GAIN_KEY_FMT,
+                                             GAIN_MAX, GAIN_MAX_WIRE, GAIN_MIN, GAIN_OVER_RATIO, MAX_LAT_ACCEL, MAX_LAT_JERK_DOWN,
+                                             MAX_LAT_JERK_UP, PLANT_TAU, PRESS_HOLDOFF, RATE_MIN_R2, SHAPE_ANCHOR_LAT_ACCEL,
+                                             SHAPE_BINS_LAT_ACCEL, SHAPE_KEY_FMT, SHAPE_MAX, SHAPE_MIN, WIRE_BANDS, WIRE_BOUND_HOLD_FITS,
+                                             WIRE_CUTS, WIRE_DEAD_GAIN, WIRE_DELAY, WIRE_INVERT_MIN_GAIN, WIRE_KEY_FMT, WIRE_PROBE,
+                                             WIRE_RATE_MAX, HondaLateralModel, clamp_shape)
 from opendbc.car.lateral import ISO_LATERAL_ACCEL, ISO_LATERAL_JERK
 
 
 def make_model(params=None):
   store = dict(params or {})
   return HondaLateralModel(DEFAULT_LAT_ACCEL_FACTOR, store.get)
+
+
+# a table a town drive leaves: lateral accel is v^2 * curvature, so a unit of torque buys little of it at low speed (the
+# Civic 2022's reads 0.1-0.5 below 15 mph, 1.0 at 20 mph against its 3.1 tune)
+TOWN_GAINS = {GAIN_KEY_FMT.format(slot=5): 0.15, GAIN_KEY_FMT.format(slot=10): 0.3, GAIN_KEY_FMT.format(slot=15): 0.7,
+              GAIN_KEY_FMT.format(slot=20): 1.0}
+
+
+def make_town_model(params=None):
+  return make_model({**TOWN_GAINS, **(params or {})})
 
 
 def step(model, request, wire, v_ego, desired_la, actual_la, lat_active=True, steer_control_active=True, pressed=False,
@@ -27,21 +37,45 @@ def step(model, request, wire, v_ego, desired_la, actual_la, lat_active=True, st
                       angle, rate)
 
 
-PLANT_LAG_SIM = 0.8   # s; the routes fit 1.0-1.3 s, deliberately not the model's PLANT_TAU so the tests see a mismatch
+# The plant the identification tests run on has the model's own actuator delay and lag, so a fit that is off reads an
+# estimator fault and not a timing one. A plant faster than PLANT_TAU is a different thing: in 1 s windows it is
+# not told apart from a friction band, and the table reads high by about its speed advantage
+# (test_a_faster_plant_reads_high_by_its_speed_advantage_and_the_shape_carries_the_turn).
+PLANT_LAG_SIM = PLANT_TAU
+PLANT_DELAY_TICKS_SIM = max(int(round(WIRE_DELAY / DT_CTRL)), 1)
 
 
-def drive(model, v_ego, gain_true, seconds, wire_fn, pressed=False, lat_active=True, shape_true=None):
-  """Constant-speed drive on a first-order plant lat_accel = gain_true * shape_true(|lat_accel|) * wire
-  (PLANT_LAG_SIM lag). Torque sign convention: right positive; curvature is left positive, so measured
-  curvature = -lat_accel / v^2."""
-  la = 0.0
-  a = np.exp(-DT_CTRL / PLANT_LAG_SIM)
+class Plant:
+  """First-order plant lat_accel = gain_true * shape_true(|lat_accel|) * wire, behind the actuator delay."""
+
+  def __init__(self, gain_true, lag=PLANT_LAG_SIM, shape_true=None, delay_ticks=PLANT_DELAY_TICKS_SIM):
+    self.gain_true = gain_true
+    self.shape_true = shape_true
+    self.a = np.exp(-DT_CTRL / lag)
+    self.delay_line = deque([0.0] * delay_ticks, maxlen=delay_ticks)
+    self.la = 0.0
+
+  def target(self, wire):
+    s = 1.0 if self.shape_true is None else self.shape_true(abs(self.la))
+    return self.gain_true * s * wire
+
+  def tick(self, wire):
+    self.delay_line.append(float(wire))
+    self.la = self.a * self.la + (1 - self.a) * self.target(self.delay_line[0])
+    return self.la
+
+
+def drive(model, v_ego, gain_true, seconds, wire_fn, pressed=False, lat_active=True, shape_true=None, lag=PLANT_LAG_SIM):
+  """Constant-speed open-loop drive on a Plant. The desired lateral accel fed to the model is what the wire is
+  asking of this plant, the way the planner's desired leads the wire in the car. Torque sign convention: right
+  positive; curvature is left positive, so measured curvature = -lat_accel / v^2."""
+  plant = Plant(gain_true, lag, shape_true)
   for k in range(int(seconds / DT_CTRL)):
     wire = wire_fn(k * DT_CTRL)
-    s = 1.0 if shape_true is None else shape_true(abs(la))
-    la = a * la + (1 - a) * gain_true * s * wire
-    step(model, wire, wire, v_ego, -la, -la, pressed=pressed, lat_active=lat_active)
-  return la
+    ref = plant.target(wire)
+    la = plant.tick(wire)
+    step(model, wire, wire, v_ego, -ref, -la, pressed=pressed, lat_active=lat_active)
+  return plant.la
 
 
 def centering_shape(lat_accel):
@@ -51,15 +85,22 @@ def centering_shape(lat_accel):
 
 
 class TestHondaLateralModel(unittest.TestCase):
-  def test_prior_and_interpolation(self):
+  def test_prior_is_the_cars_lat_accel_factor_at_every_speed(self):
+    # no per-car table: the prior is the torque controller's own linear plant, so a fresh model corrects nothing
     model = make_model()
-    for mph, prior in zip(GAIN_BINS_MPH, GAIN_PRIOR, strict=True):
-      self.assertAlmostEqual(model.gain(mph * CV.MPH_TO_MS), prior)
-    # linear between bins, clamped outside
-    mid = 12.5 * CV.MPH_TO_MS
-    self.assertAlmostEqual(model.gain(mid), 0.5 * (GAIN_PRIOR[1] + GAIN_PRIOR[2]))
-    self.assertAlmostEqual(model.gain(0.0), GAIN_PRIOR[0])
-    self.assertAlmostEqual(model.gain(60.0), GAIN_PRIOR[-1])
+    for v in (0.0, 3.0, 12.5 * CV.MPH_TO_MS, 20.0, 60.0):
+      self.assertAlmostEqual(model.gain(v), DEFAULT_LAT_ACCEL_FACTOR)
+    step(model, -0.3, 0.0, 8.0, 0.5, 0.0)
+    self.assertEqual(model.ff_correction, 0.0)
+    model = HondaLateralModel(3.1, {}.get)
+    self.assertAlmostEqual(model.gain(10.0), 3.1)
+    self.assertAlmostEqual(HondaLateralModel(6.0, {}.get).gain(30.0), 6.0)   # ACURA_MDX_4G_MMR's tune fits under GAIN_MAX
+    self.assertAlmostEqual(HondaLateralModel(0.0, {}.get).gain(10.0), DEFAULT_LAT_ACCEL_FACTOR)
+    # a persisted table interpolates linearly between bins and is clamped outside
+    model = make_model({GAIN_KEY_FMT.format(slot=10): 1.0, GAIN_KEY_FMT.format(slot=15): 2.0})
+    self.assertAlmostEqual(model.gain(12.5 * CV.MPH_TO_MS), 1.5)
+    self.assertAlmostEqual(model.gain(0.0), DEFAULT_LAT_ACCEL_FACTOR)
+    self.assertAlmostEqual(model.gain(60.0), DEFAULT_LAT_ACCEL_FACTOR)
 
   def test_persisted_values_load_and_clip(self):
     params = {GAIN_KEY_FMT.format(slot=30): 1.23, GAIN_KEY_FMT.format(slot=70): 9.0, GAIN_KEY_FMT.format(slot=5): -1.0}
@@ -67,12 +108,12 @@ class TestHondaLateralModel(unittest.TestCase):
     self.assertAlmostEqual(model.gain(30 * CV.MPH_TO_MS), 1.23)
     self.assertAlmostEqual(model.gain(70 * CV.MPH_TO_MS), GAIN_MAX)
     self.assertAlmostEqual(model.gain(5 * CV.MPH_TO_MS), GAIN_MIN)
-    self.assertAlmostEqual(model.gain(40 * CV.MPH_TO_MS), GAIN_PRIOR[GAIN_BINS_MPH.index(40)])
-    # a persisted table is held inside GAIN_ENVELOPE of the priors: the device's 2.2 at 20 mph loads as 2.0
-    model = make_model({GAIN_KEY_FMT.format(slot=20): 2.2, GAIN_KEY_FMT.format(slot=40): 0.5})
-    self.assertAlmostEqual(model.gain(20 * CV.MPH_TO_MS), GAIN_HI[GAIN_BINS_MPH.index(20)])
-    self.assertAlmostEqual(model.gain(20 * CV.MPH_TO_MS), GAIN_ENVELOPE * GAIN_PRIOR[GAIN_BINS_MPH.index(20)])
-    self.assertAlmostEqual(model.gain(40 * CV.MPH_TO_MS), GAIN_LO[GAIN_BINS_MPH.index(40)])
+    self.assertAlmostEqual(model.gain(40 * CV.MPH_TO_MS), DEFAULT_LAT_ACCEL_FACTOR)
+    # no envelope around the prior: a persisted table far from the car's tune is kept (the Civic 2022 measures 5.5-6
+    # m/s^2 per unit at 60-70 mph against a tune of 3.1), the learners are what take a poisoned one back
+    model = make_model({GAIN_KEY_FMT.format(slot=20): 0.4, GAIN_KEY_FMT.format(slot=60): 6.0})
+    self.assertAlmostEqual(model.gain(20 * CV.MPH_TO_MS), 0.4)
+    self.assertAlmostEqual(model.gain(60 * CV.MPH_TO_MS), 6.0)
     self.assertEqual(set(model.learned_values()), set(HondaLateralModel.param_keys()))
     self.assertEqual(len(model.param_keys()), len(GAIN_BINS_MPH) + len(SHAPE_BINS_LAT_ACCEL) + WIRE_BANDS - 1 + 1)
     self.assertTrue(CEILING_KEY in model.learned_values())
@@ -119,12 +160,12 @@ class TestHondaLateralModel(unittest.TestCase):
     self.assertEqual(SHAPE_MAX, 1.0)
 
   def test_feedforward_correction_low_speed_adds_torque_into_the_turn(self):
-    model = make_model()
+    model = make_town_model()
     v = 8.0
     desired_la = 0.5   # left turn: positive lateral accel, positive curvature, negative torque
     out = step(model, -desired_la / DEFAULT_LAT_ACCEL_FACTOR, 0.0, v, desired_la, 0.0)
     expected = -desired_la / model.gain(v) + desired_la / DEFAULT_LAT_ACCEL_FACTOR
-    self.assertLess(expected, -0.3)   # the car needs a lot more than latAccelFactor says at 8 m/s
+    self.assertLess(expected, -0.25)   # the car needs a lot more than latAccelFactor says at 8 m/s
     self.assertAlmostEqual(model.ff_correction, expected)
     self.assertAlmostEqual(out, -desired_la / DEFAULT_LAT_ACCEL_FACTOR + expected)
     # mirror image to the right
@@ -139,7 +180,7 @@ class TestHondaLateralModel(unittest.TestCase):
     self.assertLess(abs(model.ff_correction), 0.15)
 
   def test_feedforward_correction_is_bounded(self):
-    model = make_model()
+    model = make_town_model()
     step(model, -1.0, 0.0, 6.0, 2.5, 0.0)
     self.assertAlmostEqual(model.ff_correction, -FF_CORRECTION_MAX)
 
@@ -160,7 +201,7 @@ class TestHondaLateralModel(unittest.TestCase):
     self.assertFalse(model.learning)
 
   def test_output_is_clipped_to_unit_torque(self):
-    model = make_model()
+    model = make_town_model()
     out = step(model, -0.9, 0.0, 8.0, 1.0, 0.0)
     self.assertEqual(out, -1.0)
     # applied_correction is what the clip let through, so request + applied_correction == output always
@@ -177,28 +218,88 @@ class TestHondaLateralModel(unittest.TestCase):
     self.assertEqual(model.applied_correction, 0.0)
 
   def test_identifies_plant_gain(self):
-    # a plant well off the prior but inside GAIN_ENVELOPE of it on both bins the speed interpolates between
+    # a plant well off the prior on both bins the speed interpolates between
     model = make_model()
     v = 15.6
     g_true = 1.2
     self.assertNotAlmostEqual(model.gain(v), g_true, delta=0.5)
-    # alternate a held torque left/right so both signs settle well inside each dwell; gentle enough to sit in the
-    # anchor band, where the speed table is defined, both as the car measures it (|la| ~0.36) and as the table's
-    # prior predicts it (2.1 * 0.3 = 0.64). The plant's lag is not the model's (PLANT_LAG_SIM), so the windows at
-    # the start of each change read high and the ones in its tail low; the least-squares fit of the windows must
-    # still read the plant
+    # alternate a held torque left/right so both signs settle well inside each dwell; gentle enough to sit inside
+    # the first wire band and the anchor band, where the speed table is defined (|la| ~0.36)
     drive(model, v, g_true, 240.0, lambda t: 0.3 if (t // 15.0) % 2 == 0 else -0.3)
     self.assertAlmostEqual(model.gain(v), g_true, delta=0.1)
     self.assertFalse(model.learning_gain)   # a wire held for 15 s is not a sample
-    self.assertGreater(max(model.gain_sxx), 0.0)
+    self.assertGreater(model.gain_sxx.max(), 0.0)
+    self.assertEqual(model.friction, (0.0, 0.0, 0.0))   # a frictionless plant reads no band
 
-  def test_identification_ignores_saturation_and_rate_limits(self):
-    # regressing on the actual wire means a pinned wire is still a valid sample for the speed table
+  def test_a_faster_plant_reads_high_by_its_speed_advantage_and_the_shape_carries_the_turn(self):
+    # the routes fit lateral accel lags of 0.6-1.1 s against PLANT_TAU. In 1 s windows a plant faster than the model
+    # is not told apart from a friction band (both make the head of a change read more than its tail), so the
+    # friction bank takes a band and the table reads high by about the plant's speed advantage; the shape, learned
+    # against the table, takes it back out of the hard turns. This is the known cost of the window length, bounded here
+    v = 15.6
+    g_true = 1.2
+    for lag, bound in ((0.8, 1.25), (0.6, 1.6)):
+      model = make_model()
+      drive(model, v, g_true, 240.0, lambda t: 0.3 if (t // 15.0) % 2 == 0 else -0.3, lag=lag)
+      self.assertGreater(model.gain(v), g_true - 0.05, msg=f"lag {lag}")
+      self.assertLess(model.gain(v), bound * g_true, msg=f"lag {lag}")
+    # and a slower one reads a little low, no band
+    model = make_model()
+    drive(model, v, g_true, 240.0, lambda t: 0.3 if (t // 15.0) % 2 == 0 else -0.3, lag=1.2)
+    self.assertAlmostEqual(model.gain(v), g_true, delta=0.12)
+    self.assertEqual(model.friction, (0.0, 0.0, 0.0))
+    # the centering plant 20% faster than the model: the table reads high, the shape low, and their product in the
+    # hard turn is the car's
+    model = make_model()
+    v = 20.0
+    g_true = model.gain(v)
+
+    def wire_fn(t):
+      mag = (0.3, -0.3, 0.45, -0.3, 0.85, -0.3)[int(t // 15.0) % 6]
+      return mag if (t // 90.0) % 2 == 0 else -mag
+    la_hard = 1.0
+    for _ in range(100):
+      la_hard = g_true * 0.85 * centering_shape(la_hard)
+    drive(model, v, g_true, 885.0, wire_fn, shape_true=centering_shape, lag=0.8)
+    self.assertLess(model.gain(v), 1.4 * g_true)
+    self.assertAlmostEqual(model.effective_gain(v, la_hard), g_true * centering_shape(la_hard), delta=0.15)
+
+  def test_closed_loop_feedback_does_not_bias_the_table(self):
+    # the car's lateral accel wanders (crown, wind, the lane line) and the controller's P term answers it: the wire
+    # moves because the lateral accel moved, against it. A least-squares fit of the windows reads that as a weak
+    # plant (the wire moved, the lateral accel it was answering did not follow); the fit on the planner's desired
+    # lateral accel as the instrument does not, since the wandering is not in it
+    v = 15.6
+    g_true = 1.2
+    rng = np.random.default_rng(3)
+    model = make_model()
+    plant = Plant(g_true)
+    disturbance = 0.0
+    wire = 0.0
+    for k in range(int(600.0 / DT_CTRL)):
+      t = k * DT_CTRL
+      desired = 0.3 if (t // 15.0) % 2 == 0 else -0.3                     # m/s^2, the planner's request
+      disturbance += 0.02 * (rng.standard_normal() * 0.6 - disturbance)   # slow lateral accel the road adds
+      measured = plant.la + disturbance
+      wire = float(np.clip(0.9 * wire + 0.1 * (desired / 1.8 + 1.5 * (desired - measured) / 1.8), -0.4, 0.4))   # FF + P
+      plant.tick(wire)
+      step(model, wire, wire, v, -desired, -measured)
+    self.assertGreater(model.gain_sw.sum(), 0.3)
+    self.assertAlmostEqual(model.gain(v), g_true, delta=0.15)
+
+  def test_speed_table_learns_inside_the_first_wire_band_only(self):
+    # the speed table is the response to the wire up to the first cut, where every Honda answers linearly; above it
+    # the EPS response shape is the wire learner's business, and a pinned wire is not a speed-table sample (a table
+    # regressed on a wire the car did not act on is how route 00000129 read 2-3x the measured gain)
     model = make_model()
     v = 6.0
     g_true = 0.6
-    self.assertNotAlmostEqual(model.gain(v), g_true, delta=0.15)
+    before = list(model.gains)
     drive(model, v, g_true, 200.0, lambda t: 1.0 if (t // 20.0) % 2 == 0 else -1.0)
+    self.assertEqual(model.gains, before)
+    self.assertEqual(model.gain_sw.sum(), 0.0)
+    # inside the band the same plant is read
+    drive(model, v, g_true, 360.0, lambda t: GAIN_MAX_WIRE - 0.05 if (t // 15.0) % 2 == 0 else -(GAIN_MAX_WIRE - 0.05))
     self.assertAlmostEqual(model.gain(v), g_true, delta=0.1)
 
   def test_identification_pauses_while_pressed_and_for_holdoff(self):
@@ -244,15 +345,17 @@ class TestHondaLateralModel(unittest.TestCase):
     la = 0.0
     held = 0.0
     a = np.exp(-DT_CTRL / PLANT_LAG_SIM)
+    delay_line = deque([0.0] * PLANT_DELAY_TICKS_SIM, maxlen=PLANT_DELAY_TICKS_SIM)
     for k in range(int(300.0 / DT_CTRL)):
       t = k * DT_CTRL
       wire = (0.15, 0.3)[int(t // 10.0) % 2] * (1.0 if (t // 40.0) % 2 == 0 else -1.0)
+      delay_line.append(wire)
       # the friction-held part: a third of the peak lateral accel stays with the wheel's side while the wire drops
-      target = g_true * wire
+      target = g_true * delay_line[0]
       held = np.sign(target) * max(abs(held) if np.sign(held) == np.sign(target) else 0.0, 0.3 * abs(target))
       target = np.sign(target) * max(abs(target), abs(held))
       la = a * la + (1 - a) * target
-      step(model, wire, wire, v, -la, -la)
+      step(model, wire, wire, v, -g_true * wire, -la)
     self.assertAlmostEqual(model.gain(v), g_true, delta=0.15)
 
   def test_gains_stay_bounded(self):
@@ -266,10 +369,10 @@ class TestHondaLateralModel(unittest.TestCase):
   def test_learning_is_local_in_speed(self):
     model = make_model()
     drive(model, 12.0, 2.2, 200.0, lambda t: 0.5 if (t // 15.0) % 2 == 0 else -0.5)
-    for mph, prior in zip(GAIN_BINS_MPH, GAIN_PRIOR, strict=True):
+    for mph in GAIN_BINS_MPH:
       if mph in (20, 30):
         continue
-      self.assertAlmostEqual(model.gain(mph * CV.MPH_TO_MS), prior)
+      self.assertAlmostEqual(model.gain(mph * CV.MPH_TO_MS), DEFAULT_LAT_ACCEL_FACTOR)
 
   def test_gentle_curves_train_the_gain_table_only(self):
     # inside the anchor band the shape is 1.0 by definition, so a wrong gain is corrected in the speed
@@ -319,8 +422,7 @@ class TestHondaLateralModel(unittest.TestCase):
     for _ in range(100):
       la_pinned = g_true * 1.0 * centering_shape(la_pinned)
     self.assertGreater(la_pinned, 1.0)
-    la = 0.0
-    a = np.exp(-DT_CTRL / PLANT_LAG_SIM)
+    plant = Plant(g_true, shape_true=centering_shape)
     n_shape = 0
     n_gain = 0
     for k in range(int(240.0 / DT_CTRL)):
@@ -330,8 +432,9 @@ class TestHondaLateralModel(unittest.TestCase):
       if cycle > 4.0:                                   # 2 s straight between turns
         wire = 0.0
       pressed = (cycle % 1.5) < 0.4 and cycle <= 4.0
-      la = a * la + (1 - a) * g_true * centering_shape(abs(la)) * wire
-      step(model, wire, wire, v, -la, -la, pressed=pressed)
+      ref = plant.target(wire)
+      la = plant.tick(wire)
+      step(model, wire, wire, v, -ref, -la, pressed=pressed)
       n_shape += model.learning_shape
       n_gain += model.learning_gain
     self.assertGreater(n_shape, 200)
@@ -394,7 +497,7 @@ class TestHondaLateralModel(unittest.TestCase):
   def test_correction_does_not_oppose_a_saturated_request(self):
     # model gain above latAccelFactor: the correction wants to take torque away
     params = {GAIN_KEY_FMT.format(slot=30): 2.6, GAIN_KEY_FMT.format(slot=40): 2.6}
-    model = make_model(params)
+    model = make_town_model(params)
     v = 30 * CV.MPH_TO_MS
     desired_la = 1.8
     out = step(model, -0.5, 0.0, v, desired_la, 0.0)
@@ -429,11 +532,13 @@ def drive_through_limit(model, v_ego, g_true, seconds, wire_fn, plant):
   la = 0.0
   last = 0.0
   a = np.exp(-DT_CTRL / PLANT_LAG_SIM)
+  delay_line = deque([0.0] * PLANT_DELAY_TICKS_SIM, maxlen=PLANT_DELAY_TICKS_SIM)
   for k in range(int(seconds / DT_CTRL)):
     req = wire_fn(k * DT_CTRL)
     last = model.limit(req, last, v_ego)
-    la = a * la + (1 - a) * plant(g_true, last, la)
-    step(model, req, last, v_ego, -la, -la)
+    delay_line.append(last)
+    la = a * la + (1 - a) * plant(g_true, delay_line[0], la)
+    step(model, req, last, v_ego, -g_true * req, -la)       # the planner asks for the request's lateral accel
   return la
 
 
@@ -482,20 +587,33 @@ def drive_steer(model, v_ego, seconds, wire_fn, plant, pressed=False, noise=0.0,
   last = 0.0
   delay_line = deque([0.0] * int(round(RATE_DELAY_SIM / DT_CTRL)), maxlen=int(round(RATE_DELAY_SIM / DT_CTRL)))
   angles = []
+  la_per_wire = np.radians(RATE_GAIN_SIM / CENTERING_SIM) * v_ego * v_ego / (STEER_RATIO_SIM * WHEELBASE_SIM)
   for k in range(int(seconds / DT_CTRL)):
-    last = model.limit(wire_fn(k * DT_CTRL), last, v_ego)
+    req = wire_fn(k * DT_CTRL)
+    last = model.limit(req, last, v_ego)
     delayed = delay_line[0]
     delay_line.append(last)
     rate = plant(delayed, angle)
     angle += rate * DT_CTRL
     la = np.radians(angle) * v_ego * v_ego / (STEER_RATIO_SIM * WHEELBASE_SIM)
-    step(model, last, last, v_ego, -la, -la, pressed=pressed, angle=angle, rate=rate + noise * rng.standard_normal())
+    step(model, last, last, v_ego, -la_per_wire * req, -la, pressed=pressed, angle=angle, rate=rate + noise * rng.standard_normal())
     angles.append(angle)
   return np.array(angles)
 
 
 def wire_params(gains):
   return {WIRE_KEY_FMT.format(slot=int(round(cut * 100))): g for cut, g in zip(WIRE_CUTS[1:], gains, strict=True)}
+
+
+def judge(model, ceiling, v_ego=15.0):
+  """Give the model this drive's verdict at every speed class: the EPS stops answering at `ceiling` (a band's start),
+  as the steer-rate fit and its witness would have it after WIRE_BOUND_HOLD_FITS; then refresh the bound for v_ego.
+  The persisted shape alone never bounds the wire (see the module docstring, "Where the wire is bounded")."""
+  band = WIRE_BANDS if ceiling >= CEILING_MAX else int(round((ceiling - WIRE_CUTS[0]) / 0.1)) + 1
+  model.class_judged[:] = True
+  model.class_bound[:] = band
+  model.class_bound_pending[:] = band
+  model.limit(0.0, 0.0, v_ego)
 
 
 class TestHondaLateralEpsWireShape(unittest.TestCase):
@@ -515,18 +633,18 @@ class TestHondaLateralEpsWireShape(unittest.TestCase):
     self.assertAlmostEqual(model.effective_wire(0.45), 0.45)
     self.assertAlmostEqual(model.effective_wire(0.65), 0.5 + 0.3 * 0.15)
     self.assertAlmostEqual(model.effective_wire(-1.0), -(0.5 + 0.3 * 0.2))
-    self.assertAlmostEqual(model.ceiling, 0.7)                      # the first dead band starts at 0.7
+    self.assertAlmostEqual(model.shape_dead_start, 0.7)             # the first dead band starts at 0.7 ...
+    self.assertEqual(model.ceiling, CEILING_MAX)                    # ... which bounds nothing until this drive's verdict is in
+    self.assertEqual(model.wire_limit, 1.0)
+    judge(model, 0.7)
+    self.assertAlmostEqual(model.ceiling, 0.7)
     self.assertAlmostEqual(model.wire_limit, 0.7 + WIRE_PROBE)
     self.assertEqual(set(model.learned_values()), set(HondaLateralModel.param_keys()))
     self.assertEqual(len(model.param_keys()), len(GAIN_BINS_MPH) + len(SHAPE_BINS_LAT_ACCEL) + WIRE_BANDS - 1 + 1)
     self.assertAlmostEqual(model.learned_values()[CEILING_KEY], 0.7)
-    # a car-specific seed is used only when nothing is persisted
-    seeded = HondaLateralModel(DEFAULT_LAT_ACCEL_FACTOR, {}.get, wire_prior=(1.0, 0.3, 0.1, 0.1, 0.1, 0.1))
-    self.assertEqual(seeded.wire_gains, [1.0, 1.0, 0.3, 0.1, 0.1, 0.1, 0.1])
-    self.assertEqual(seeded.wire_limit, 1.0)                         # alive everywhere: the wire runs to full scale
-    persisted = HondaLateralModel(DEFAULT_LAT_ACCEL_FACTOR, wire_params((1.0, 1.0, 1.0, 1.0, 1.0, 1.0)).get,
-                                  wire_prior=(1.0, 0.3, 0.1, 0.1, 0.1, 0.1))
-    self.assertTrue(persisted.wire_linear)
+    # no car-specific seed: a fresh model is linear whatever the tune, and a persisted linear shape stays so
+    self.assertTrue(HondaLateralModel(1.8, {}.get).wire_linear)
+    self.assertTrue(HondaLateralModel(1.8, wire_params((1.0, 1.0, 1.0, 1.0, 1.0, 1.0)).get).wire_linear)
 
   def test_persisted_ceiling_is_read_as_a_clamp_when_no_shape_is_persisted(self):
     # the previous version persisted one clamp level; the MDX's 0.538 carries over as a shape
@@ -535,6 +653,9 @@ class TestHondaLateralEpsWireShape(unittest.TestCase):
     self.assertAlmostEqual(model.wire_gains[2], 0.38)
     self.assertEqual(model.wire_gains[3:], [0.0] * (WIRE_BANDS - 3))
     self.assertAlmostEqual(model.effective_wire(0.9), 0.538)
+    self.assertAlmostEqual(model.shape_dead_start, 0.6)
+    self.assertEqual(model.wire_limit, 1.0)                         # the shape alone is not a bound
+    judge(model, 0.6)
     self.assertAlmostEqual(model.ceiling, 0.6)
     self.assertAlmostEqual(model.wire_limit, 0.7)
     self.assertEqual(clamp_shape(0.55), (1.0, 0.5, 0.0, 0.0, 0.0, 0.0))
@@ -555,7 +676,10 @@ class TestHondaLateralEpsWireShape(unittest.TestCase):
     self.assertAlmostEqual(model.wire_from_effective(0.55 + 0.05), 0.7)
     self.assertAlmostEqual(model.effective_wire(0.7), 0.55 + 0.2 * 0.1)   # and delivers less than asked: reported as limiting
     self.assertEqual(WIRE_INVERT_MIN_GAIN, 0.5)
-    # beyond: the dead band starts at 0.7, the wire is bounded at it plus the probe
+    # beyond: the dead bands are walked through at the floor's slope to the unit wire until this drive's verdict is in
+    # for the speed; with it the dead band starts at 0.7 and the wire is bounded at it plus the probe
+    self.assertAlmostEqual(model.wire_from_effective(0.9), 1.0)
+    judge(model, 0.7)
     self.assertAlmostEqual(model.wire_from_effective(0.9), 0.7 + WIRE_PROBE)
     self.assertAlmostEqual(model.wire_from_effective(-0.9), -(0.7 + WIRE_PROBE))
     self.assertAlmostEqual(model.wire_from_effective(-0.55), -0.6)
@@ -576,13 +700,20 @@ class TestHondaLateralEpsWireShape(unittest.TestCase):
   def test_limit_holds_the_wire_to_the_dead_band_plus_the_probe(self):
     model = make_model({CEILING_KEY: 0.55})
     v = 15.0
+    # the persisted clamp alone: the dead bands are walked through to the unit wire (the shortfall is the reporting's)
     wire = run_limit(model, v, lambda k: 1.0, 400)
+    self.assertAlmostEqual(wire[-1], 1.0)
+    self.assertFalse(model.ceiling_limited)
+    # with this drive's verdict at the speed: bounded at the dead band plus the probe
+    judge(model, 0.6, v)
+    wire = run_limit(model, v, lambda k: 1.0, 400, last=1.0)
     self.assertAlmostEqual(wire[-1], 0.6 + WIRE_PROBE)
     self.assertTrue(model.ceiling_limited)
     wire = run_limit(model, v, lambda k: -1.0, 400)
     self.assertAlmostEqual(wire[-1], -(0.6 + WIRE_PROBE))
     # inside the linear part nothing changes
     model = make_model({CEILING_KEY: 0.55})
+    judge(model, 0.6, v)
     wire = run_limit(model, v, lambda k: 0.5, 400)
     self.assertAlmostEqual(wire[-1], 0.5)
     self.assertFalse(model.ceiling_limited)
@@ -619,8 +750,10 @@ class TestHondaLateralEpsWireShape(unittest.TestCase):
     linear = make_model()
     self.assertEqual(linear.reported_torque(1.0, 1.0, 1.0, 1.0), 1.0)
     self.assertAlmostEqual(linear.reported_torque(0.6, 0.6, 0.55, 1.0), 0.55)
-    # the MDX's clamp: wire bounded at the dead band plus the probe (0.7), eff 0.538; request at the clip is saturation
+    # the MDX's clamp with the drive's verdict in: wire bounded at the dead band plus the probe (0.7), eff 0.538;
+    # request at the clip is saturation
     mdx = make_model({CEILING_KEY: 0.538})
+    judge(mdx, 0.6)
     self.assertAlmostEqual(mdx.wire_limit, 0.7)
     self.assertAlmostEqual(mdx.reported_torque(0.9, 0.9, 0.7, mdx.wire_limit), 0.538)
     self.assertEqual(mdx.reported_torque(1.0, 1.0, 0.7, mdx.wire_limit), 1.0)
@@ -661,6 +794,7 @@ class TestHondaLateralEpsWireShape(unittest.TestCase):
     # a band below the inversion floor: the wire goes in at the floor's rate, the shortfall is left to the reporting,
     # and the jerk budget is not stalled by it (the wire reaches the dead band's probe bound in finite time)
     model = make_model(wire_params((1.0, 0.5, 0.2, 0.0, 0.0, 0.0)))
+    judge(model, 0.7, v)
     wire = run_limit(model, v, lambda k: 1.0, 600)
     self.assertAlmostEqual(wire[-1], 0.7 + WIRE_PROBE)
     self.assertTrue(model.ceiling_limited)
@@ -675,24 +809,29 @@ class TestHondaLateralEpsWireShape(unittest.TestCase):
     self.assertGreater(model.rate_samples, 0)
     self.assertGreater(model.rate_r2, 0.5)
     self.assertAlmostEqual(model.wire_fit[1], 1.0, delta=0.1)       # 0.4-0.5: full response
-    self.assertAlmostEqual(model.wire_fit[2], 0.5, delta=0.15)      # 0.5-0.6: half the band answers
+    # 0.5-0.6: half the band answers. The dead start is decided by the mean response above each cut, so a band the
+    # knee falls inside reads half (the fit) or dead (the wire swept to full scale and the dead range above
+    # averaged it down): either side of the knee, never above it
+    self.assertLessEqual(model.wire_fit[2], 0.5 + 0.15)
     self.assertLess(max(model.wire_fit[3:]), 0.1)                   # above: nothing
     self.assertLess(model.wire_gains[3], 0.8)
-    # a longer stretch settles it; the dead band starts at 0.6 and the wire is bounded at 0.7
+    # a longer stretch settles it; the dead band starts at the knee's band or the one under it, and the wire is
+    # bounded a probe band above that. With no lateral accel evidence on the bands (the speed table has no windows
+    # on a wire that never sits inside its band) the demotion runs at the learning rate
     drive_steer(model, v, 900.0, sweep_wire, steer_plant(0.55))
     self.assertAlmostEqual(model.wire_gains[1], 1.0, delta=0.1)
-    self.assertAlmostEqual(model.wire_gains[2], 0.5, delta=0.15)
+    self.assertLessEqual(model.wire_gains[2], 0.5 + 0.15)
     self.assertLess(max(model.wire_gains[3:]), WIRE_DEAD_GAIN)
-    self.assertAlmostEqual(model.ceiling, 0.6)
-    self.assertAlmostEqual(model.wire_limit, 0.7)
-    self.assertAlmostEqual(model.learned_values()[CEILING_KEY], 0.6)
+    self.assertTrue(round(model.ceiling, 6) in (0.5, 0.6))
+    self.assertAlmostEqual(model.wire_limit, model.ceiling + WIRE_PROBE)
+    self.assertAlmostEqual(model.learned_values()[CEILING_KEY], model.ceiling)
     self.assertAlmostEqual(model.learned_values()[WIRE_KEY_FMT.format(slot=60)], model.wire_gains[2])
     # a higher clamp is found where it is
     model = make_model()
     drive_steer(model, v, 1200.0, sweep_wire, steer_plant(0.75))
     self.assertAlmostEqual(model.wire_gains[3], 1.0, delta=0.1)
-    self.assertAlmostEqual(model.wire_gains[4], 0.5, delta=0.15)
-    self.assertAlmostEqual(model.ceiling, 0.8)
+    self.assertLessEqual(model.wire_gains[4], 0.5 + 0.15)
+    self.assertTrue(round(model.ceiling, 6) in (0.7, 0.8))
 
   def test_learns_a_reduced_slope_and_keeps_the_wire_alive_above_the_knee(self):
     # the reading of the Integra's 525-532 s the user's plot suggests: not a cutoff but a reduced slope above the
@@ -701,9 +840,33 @@ class TestHondaLateralEpsWireShape(unittest.TestCase):
     v = 15.0
     model = make_model()
     drive_steer(model, v, 1200.0, sweep_wire, steer_plant(0.55, slope=0.3))
-    self.assertAlmostEqual(model.wire_gains[1], 1.0, delta=0.1)
-    self.assertAlmostEqual(model.wire_gains[2], 0.65, delta=0.15)   # half the band at 1.0, half at 0.3
+    self.assertAlmostEqual(model.wire_fit[1], 1.0, delta=0.1)
+    self.assertAlmostEqual(model.wire_fit[2], 0.65, delta=0.15)     # half the band at 1.0, half at 0.3
     for k in range(3, WIRE_BANDS):
+      self.assertAlmostEqual(model.wire_fit[k], 0.3, delta=0.12, msg=f"band {k}")
+    # the steer rate alone takes the bands to the slope only as far as the inverse's floor (WIRE_INVERT_MIN_GAIN):
+    # below it the inverse would be making up torque on the word of one sensor, and the lateral accel has not
+    # spoken (the speed table has no windows on a wire that never sits inside its band, so the delivery floor is
+    # unknown)
+    self.assertAlmostEqual(model.wire_gains[1], 1.0, delta=0.1)
+    self.assertAlmostEqual(model.wire_gains[2], 0.65, delta=0.15)
+    for k in range(3, WIRE_BANDS):
+      self.assertAlmostEqual(model.wire_gains[k], WIRE_INVERT_MIN_GAIN, delta=0.02, msg=f"band {k}")
+    self.assertFalse(model.wire_floor_known.any())
+    self.assertEqual(model.ceiling, CEILING_MAX)
+    self.assertEqual(model.wire_limit, 1.0)
+    # with the speed table settled by a gentle stretch inside its band first, the lateral accel reads the delivery
+    # of the bands above the knee, the floor is known, and the bands follow the slope through the inverse's floor.
+    # The floor is the mean delivery above each cut as the data force it, so it reads low where the wire rarely
+    # goes (the top bands of a sweep): a floor, not an estimate; the steer rate carries the bands to the slope
+    model = make_model()
+    drive_steer(model, v, 300.0, lambda t: 0.3 * np.sin(2 * np.pi * t / 20.0), steer_plant(0.55, slope=0.3))
+    self.assertTrue(any(model.gain_settled(i) for i in range(len(GAIN_BINS_MPH))))
+    drive_steer(model, v, 1200.0, sweep_wire, steer_plant(0.55, slope=0.3))
+    self.assertTrue(model.wire_floor_known[3:].all())
+    self.assertGreater(model.wire_floor[3], 0.1)
+    for k in range(3, WIRE_BANDS):
+      self.assertLessEqual(model.wire_floor[k], 0.45, msg=f"floor {k}")
       self.assertAlmostEqual(model.wire_gains[k], 0.3, delta=0.12, msg=f"band {k}")
     self.assertGreaterEqual(min(model.wire_gains), WIRE_DEAD_GAIN)
     self.assertEqual(model.ceiling, CEILING_MAX)
@@ -725,12 +888,14 @@ class TestHondaLateralEpsWireShape(unittest.TestCase):
       self.assertEqual(model.wire_limit, 1.0)
 
   def test_recovers_from_a_persisted_shape_that_is_too_low(self):
-    # the probe band shows the learner torque in the dead band; a car that answers to it has no dead band there
+    # the persisted shape bounds nothing on its own, and a car that answers above it has no dead band there
     v = 15.0
     model = make_model({CEILING_KEY: 0.45})
-    self.assertAlmostEqual(model.wire_limit, 0.6)
+    self.assertAlmostEqual(model.shape_dead_start, 0.5)
+    self.assertEqual(model.wire_limit, 1.0)
     drive_steer(model, v, 1200.0, sweep_wire, steer_plant(None))
-    self.assertGreaterEqual(model.wire_limit, 0.9)
+    self.assertEqual(model.wire_limit, 1.0)
+    self.assertEqual(model.ceiling, CEILING_MAX)
     self.assertGreaterEqual(min(model.wire_gains), 0.8)
     # and on a car with a clamp above the persisted one it climbs to the clamp (route 00000129 left the MDX 3G at
     # 0.416 against a measured 0.50-0.58)
@@ -767,7 +932,7 @@ class TestHondaLateralEpsWireShape(unittest.TestCase):
     self.assertGreaterEqual(min(model.wire_gains), 0.8)
     self.assertEqual(model.wire_limit, 1.0)
 
-  def test_holds_the_seed_on_the_car_it_was_measured_on(self):
+  def test_holds_a_persisted_shape_on_the_car_it_was_measured_on(self):
     v = 15.0
     model = make_model({CEILING_KEY: 0.55})
     before = list(model.wire_gains)
@@ -824,47 +989,161 @@ class TestHondaLateralEpsWireShape(unittest.TestCase):
     self.assertAlmostEqual(model.wire_limit, model.ceiling + WIRE_PROBE)
     self.assertLess(model.wire_limit, 0.75)
 
+  def test_bound_is_per_speed_class_and_a_town_verdict_never_bounds_the_highway(self):
+    # the Civic 2022 answers to 0.2-0.25 per unit above 0.4 of STEER_MAX at 13-18 m/s and its authority differs by
+    # speed; a bound learned at one speed is applied at that speed and below (the assist is no larger in town than on
+    # the highway), never above. Speed classes: to 20 mph, 30-40, 50 and up
+    town, mid, hwy = 10.0, 15.0, 25.0
+    model = make_model(wire_params((1.0, 0.0, 0.0, 0.0, 0.0, 0.0)))
+    for v in (town, mid, hwy):
+      model.limit(0.0, 0.0, v)
+      self.assertEqual(model.wire_limit, 1.0, msg=f"v={v}")   # the persisted shape alone bounds nothing
+    # the town class's verdict: dead from 0.5
+    model.class_judged[0] = True
+    model.class_bound[0] = model.class_bound_pending[0] = 2
+    model.limit(0.0, 0.0, town)
+    self.assertAlmostEqual(model.ceiling, 0.5)
+    self.assertAlmostEqual(model.wire_limit, 0.6)
+    for v in (mid, hwy):
+      model.limit(0.0, 0.0, v)
+      self.assertEqual(model.wire_limit, 1.0, msg=f"v={v}")
+    # the highway class's verdict, dead from 0.7 (band 4), is borrowed by the class below that has none, and not by
+    # the town class that has its own
+    model.class_judged[2] = True
+    model.class_bound[2] = model.class_bound_pending[2] = 4
+    model.limit(0.0, 0.0, mid)
+    self.assertAlmostEqual(model.ceiling, 0.7)
+    self.assertAlmostEqual(model.wire_limit, 0.7 + WIRE_PROBE)
+    model.limit(0.0, 0.0, hwy)
+    self.assertAlmostEqual(model.wire_limit, 0.7 + WIRE_PROBE)
+    model.limit(0.0, 0.0, town)
+    self.assertAlmostEqual(model.wire_limit, 0.6)
+    # a class whose dead verdict is still in its hold defers to the class above meanwhile
+    model.class_judged[1] = True
+    model.class_bound_pending[1] = 2
+    model.limit(0.0, 0.0, mid)
+    self.assertAlmostEqual(model.wire_limit, 0.7 + WIRE_PROBE)
+    model.class_judged[2] = False
+    model.limit(0.0, 0.0, mid)
+    self.assertEqual(model.wire_limit, 1.0)
+
+  def test_bound_needs_a_witness_holds_before_it_applies_and_lifts_at_once(self):
+    # the steer rate's dead start alone is one sensor's word: the bound needs the lateral accel at the speed (the
+    # class's own delivery floor, known and dead) or the persisted shape (the band already dead) to agree, on the
+    # first band from the dead start up both call dead, over WIRE_BOUND_HOLD_FITS fits; and it goes the moment the
+    # steer rate stops saying so
+    model = make_model()
+    c = 1
+    for _ in range(WIRE_BOUND_HOLD_FITS + 1):
+      model._judge_bound(c, 3)
+    self.assertEqual(model.class_bound[c], WIRE_BANDS)             # no witness: no bound
+    # the persisted shape dead from 0.7 (band 4) while the steer rate says 0.6 (band 3): the bound is band 4
+    model = make_model(wire_params((1.0, 0.5, 0.3, 0.0, 0.0, 0.0)))
+    for _ in range(WIRE_BOUND_HOLD_FITS - 1):
+      model._judge_bound(c, 3)
+      self.assertEqual(model.class_bound[c], WIRE_BANDS)
+      self.assertEqual(model.class_bound_pending[c], 4)
+    model._judge_bound(c, 3)
+    self.assertEqual(model.class_bound[c], 4)
+    model.class_judged[c] = True
+    model.limit(0.0, 0.0, 15.0)
+    self.assertAlmostEqual(model.ceiling, 0.7)
+    self.assertAlmostEqual(model.wire_limit, 0.8)
+    # a knee inside a band has the fits alternate between it and the band above: both support the higher one
+    model._judge_bound(c, 4)
+    model._judge_bound(c, 3)
+    self.assertEqual(model.class_bound[c], 4)
+    # lifted when the steer rate no longer reads a dead start, as far as the persisted shape has the bands alive: the
+    # alive reading raises the band first, and the bound follows it (lifted on the steer rate's word alone the wire
+    # runs into the band above at once and the band is read diluted by it and dead again)
+    model._judge_bound(c, WIRE_BANDS)
+    self.assertEqual(model.class_bound[c], 4)
+    model.wire_gains[4:] = [0.1, 0.1, 0.1]
+    model._project_wire_gains()
+    model._judge_bound(c, WIRE_BANDS)
+    self.assertEqual(model.class_bound[c], WIRE_BANDS)
+    model.limit(0.0, 0.0, 15.0)
+    self.assertEqual(model.wire_limit, 1.0)
+    # the lateral accel's floor at the class is the other witness: known and dead at band 3 on a linear persisted shape
+    model = make_model()
+    model.wire_floor_known[3:] = True
+    model.wire_floor[3:] = 0.0
+    model.deliv_floor_class[c, 3:] = 0.0
+    for _ in range(WIRE_BOUND_HOLD_FITS):
+      model._judge_bound(c, 3)
+    self.assertEqual(model.class_bound[c], 3)
+    # ... and a floor another class read does not stand in for this one's
+    model = make_model()
+    model.wire_floor_known[3:] = True
+    model.wire_floor[3:] = 0.0
+    model.deliv_floor_class[2, 3:] = 0.0
+    for _ in range(WIRE_BOUND_HOLD_FITS):
+      model._judge_bound(c, 3)
+    self.assertEqual(model.class_bound[c], WIRE_BANDS)
+
   def test_shape_regresses_on_the_wire_the_eps_acted_on_and_the_speed_table_skips_it(self):
     # a car that clamps at 0.5: pinned it delivers g_true * 0.5. With the shape known, the speed table must read
-    # g_true from the changes between the dwells the shape did not bend and leave the pinned ones alone
+    # g_true from the changes between the dwells inside the first band and leave the pinned ones alone
     v = 12.0
     g_true = 1.2
-    wire_fn = levels_fn((0.25, 0.45, 1.0), 10.0, 30.0)
+    wire_fn = levels_fn((0.15, 0.35, 1.0), 10.0, 30.0)
     model = make_model({CEILING_KEY: 0.5})
     drive_through_limit(model, v, g_true, 600.0, wire_fn, clamp_plant(0.5))
     self.assertAlmostEqual(model.gain(v), g_true, delta=0.1)
     self.assertEqual(model.rate_r2, 0.0)        # no steering sensor fed: the shape learner has nothing to fit
     self.assertEqual(model.wire_gains, make_model({CEILING_KEY: 0.5}).wire_gains)
-    # without the shape the wire runs to 1.0 and the car still delivers g_true * 0.5: the table's own prediction for
-    # that wire is outside the anchor band, so the pinned dwells and the changes into them are not its samples
-    # either. The gentle changes still read the plant; the unwinds from the pinned dwells, whose lagged wire is 40%
-    # torque the car never got, read it low, and the fit lands a little under until the wire shape is learned
+    # without the shape the wire runs to 1.0 and the car still delivers g_true * 0.5: the wire is outside the first
+    # band, so the pinned dwells and the changes into them are not its samples either, and the gentle changes alone
+    # read the plant
     model = make_model()
     la = 0.0
     last = 0.0
     a = np.exp(-DT_CTRL / PLANT_LAG_SIM)
+    delay_line = deque([0.0] * PLANT_DELAY_TICKS_SIM, maxlen=PLANT_DELAY_TICKS_SIM)
     pinned_samples = 0
     for k in range(int(600.0 / DT_CTRL)):
       req = wire_fn(k * DT_CTRL)
       last = model.limit(req, last, v)
-      la = a * la + (1 - a) * clamp_plant(0.5)(g_true, last, la)
-      step(model, req, last, v, -la, -la)
-      pinned_samples += model.learning_gain and abs(model.wire_lag) > 0.6
+      delay_line.append(last)
+      la = a * la + (1 - a) * clamp_plant(0.5)(g_true, delay_line[0], la)
+      step(model, req, last, v, -g_true * req, -la)
+      pinned_samples += model.learning_gain and abs(model.wire_lag) > GAIN_MAX_WIRE
     self.assertEqual(pinned_samples, 0)
     self.assertAlmostEqual(model.gain(v), g_true, delta=0.15)
 
   def test_speed_table_does_not_learn_from_a_bent_sample(self):
     # a persisted shape below the car's: the gain must not be regressed on the wire the shape left, which would
-    # read the car's response per unit of a wire it never got (route 00000129: 2-3x the measured gain)
+    # read the car's response per unit of a wire it never got (route 00000129: 2-3x the measured gain). What the
+    # table does take from it is the over-delivery floor: the car delivering more than GAIN_OVER_RATIO times what
+    # the table predicts for the wire it was given lifts the table to that secant / GAIN_OVER_RATIO, so the
+    # feedforward is not starved while the wire learner takes the shape back
     v = 12.0
     g_true = 1.2
     model = make_model({CEILING_KEY: 0.4})
     drive(model, v, g_true, 200.0, levels_fn((1.0,), 20.0, 20.0))
-    self.assertEqual(model.gain(v), make_model().gain(v))
+    self.assertEqual(model.gain_sw.sum(), 0.0)                        # not a window sample
+    secant = g_true * 1.0 / 0.4                                       # 3.0: the response per unit of the wire the shape left
+    self.assertLess(model.gain(v), secant / GAIN_OVER_RATIO + 0.05)
+    self.assertLess(model.gain(v), 0.75 * secant)
     # a wire inside the linear part trains it as before
     model = make_model({CEILING_KEY: 0.4})
-    drive(model, v, g_true, 200.0, levels_fn((0.3,), 20.0, 20.0))
+    drive(model, v, g_true, 300.0, levels_fn((0.3,), 20.0, 20.0))
     self.assertAlmostEqual(model.gain(v), g_true, delta=0.1)
+
+  def test_over_delivery_lifts_a_starved_table(self):
+    # route 0000005a: a table poisoned to 0.9 at 30-50 mph on a car that measures 2.2-2.6, the wire bounded at 0.7
+    # by a dead band the car does not have. Before the windows settle (the drive is short, the wire mostly pinned)
+    # the car delivering more than GAIN_OVER_RATIO times the table's prediction is itself the evidence
+    v = 15.6
+    g_true = 2.4
+    params = {GAIN_KEY_FMT.format(slot=30): 0.9, GAIN_KEY_FMT.format(slot=40): 0.9}
+    model = make_model(params)
+    drive(model, v, g_true, 120.0, levels_fn((0.35,), 20.0, 20.0))
+    self.assertGreater(model.gain(v), 1.4)                            # past 2.4 / 1.5 = 1.6 within two minutes ...
+    self.assertLessEqual(model.gain(v), g_true + 0.1)                 # ... the windows from the changes already adding to it
+    # and the windows carry it the rest of the way
+    drive(model, v, g_true, 480.0, levels_fn((0.35,), 20.0, 20.0))
+    self.assertAlmostEqual(model.gain(v), g_true, delta=0.25)
 
 
 def run_limit(model, v_ego, request_fn, ticks, last=0.0):
@@ -888,26 +1167,32 @@ class TestHondaLateralWireLimits(unittest.TestCase):
     # linear gain, and caps the plant gain at ISO_LATERAL_ACCEL. It has no STEER_DELTA to evaluate for
     # Honda, so the same measurement is made here against limit() itself: at every speed bin and between
     # bins, with the priors and with the tables saturated at GAIN_MAX, using the model's own gain as the
-    # linear plant. Symmetric 5 m/s^3 is the planner's own bound (drive_helpers.clip_curvature).
+    # linear plant. Symmetric 5 m/s^3 is the planner's own bound (drive_helpers.clip_curvature). A unit of
+    # torque at GAIN_MAX is more than ISO_LATERAL_ACCEL (the Civic 2022 measures 5.5-7 m/s^2 per unit at 60-70
+    # mph), so the cap is on the wire limit() lets through, held for a long request
     ticks = int(round(0.5 / DT_CTRL))
     for params in (None, {GAIN_KEY_FMT.format(slot=mph): GAIN_MAX for mph in GAIN_BINS_MPH}):
       speeds = list(GAIN_BINS_MS) + [0.5 * (a + b) for a, b in zip(GAIN_BINS_MS[:-1], GAIN_BINS_MS[1:], strict=True)]
       for v in speeds + [0.0, 45.0]:
         model = make_model(params)
         g = model.gain(v)
-        self.assertLessEqual(g * 1.0, ISO_LATERAL_ACCEL + 1e-9)               # test_max_lateral_accel
+        held = run_limit(model, v, lambda k: 1.0, 2000)
+        self.assertLessEqual(g * abs(held[-1]), ISO_LATERAL_ACCEL + 1e-9)     # test_max_lateral_accel
 
         up = run_limit(model, v, lambda k: 1.0, ticks)
         up_jerk = g * abs(up[-1]) / 0.5
         self.assertLessEqual(up_jerk, ISO_LATERAL_JERK + 1e-9, msg=f"v={v:.1f} up {up_jerk:.3f}")
 
-        down = run_limit(model, v, lambda k: 0.0, ticks, last=1.0)
-        down_jerk = g * (1.0 - down[-1]) / 0.5
+        # from the lock the limiter itself lets the car reach (a wire beyond the accel bound is the test's own
+        # fiction on a GAIN_MAX table; limit() takes it back to the bound in one tick, as the safety does)
+        lock = abs(held[-1])
+        down = run_limit(model, v, lambda k: 0.0, ticks, last=lock)
+        down_jerk = g * (lock - down[-1]) / 0.5
         self.assertLessEqual(down_jerk, ISO_LATERAL_JERK + 1e-9, msg=f"v={v:.1f} down {down_jerk:.3f}")
 
         # a full reversal from lock to lock is a down leg then an up leg and may not go faster than either
-        rev = run_limit(model, v, lambda k: -1.0, ticks, last=1.0)
-        rev_jerk = g * (1.0 - rev[-1]) / 0.5
+        rev = run_limit(model, v, lambda k: -1.0, ticks, last=lock)
+        rev_jerk = g * (lock - rev[-1]) / 0.5
         self.assertLessEqual(rev_jerk, ISO_LATERAL_JERK + 1e-9, msg=f"v={v:.1f} reversal {rev_jerk:.3f}")
 
   def test_any_request_sequence_stays_inside_iso_per_tick(self):
@@ -978,7 +1263,7 @@ class TestHondaLateralWireLimits(unittest.TestCase):
     # little lateral accel that the ISO jerk bound is much looser than that, so only the wire-rate
     # backstop remains, at 0.1 s
     v = 10.0 * CV.MPH_TO_MS
-    model = make_model()
+    model = make_town_model()
     self.assertLess(model.gain(v), MAX_LAT_JERK_DOWN / WIRE_RATE_MAX)     # jerk bound looser than backstop here
     first = model.limit(0.0, -1.0, v)
     self.assertTrue(model.rate_limited)
@@ -1004,15 +1289,28 @@ class TestHondaLateralWireLimits(unittest.TestCase):
     self.assertAlmostEqual(wire[0], per_tick)
 
   def test_lateral_accel_bound_holds_for_any_learned_gain(self):
-    # the accel bound never lets the wire command more than MAX_LAT_ACCEL, and with the gain table clipped at
-    # GAIN_MAX a unit of torque cannot exceed it anyway
-    self.assertLessEqual(GAIN_MAX * 1.0, MAX_LAT_ACCEL)
+    # the accel bound never lets the wire command more than MAX_LAT_ACCEL of what the car delivers. With the table
+    # at GAIN_MAX a unit of torque would be well over it, so the wire is held at MAX_LAT_ACCEL / gain
+    self.assertGreater(GAIN_MAX, MAX_LAT_ACCEL)
     params = {GAIN_KEY_FMT.format(slot=mph): 9.0 for mph in GAIN_BINS_MPH}
     model = make_model(params)
     v = 30.0
+    self.assertEqual(model.gain(v), GAIN_MAX)
     wire = run_limit(model, v, lambda k: 1.0, 2000)
-    self.assertLessEqual(model.gain(v) * abs(wire[-1]), MAX_LAT_ACCEL + 1e-9)
+    self.assertAlmostEqual(model.gain(v) * abs(wire[-1]), MAX_LAT_ACCEL)
+    self.assertTrue(model.accel_limited)
+    # the bound is on what the car delivers, through the centering shape: a car that answers a unit of torque with
+    # half the lateral accel in hard turns needs twice the wire for the same 3 m/s^2, and gets it
+    shaped = make_model({**params, **{SHAPE_KEY_FMT.format(slot=int(round(la * 10))): 0.5 for la in SHAPE_BINS_LAT_ACCEL}})
+    self.assertEqual(shaped.shape(MAX_LAT_ACCEL), 0.5)
+    wire_shaped = run_limit(shaped, v, lambda k: 1.0, 2000)
+    self.assertAlmostEqual(wire_shaped[-1], 2.0 * wire[-1])
+    self.assertAlmostEqual(shaped.effective_gain(v, MAX_LAT_ACCEL) * wire_shaped[-1], MAX_LAT_ACCEL)
+    # a table that fits under the bound at a unit of torque is never accel-limited
+    model = make_model()
+    wire = run_limit(model, v, lambda k: 1.0, 2000)
     self.assertAlmostEqual(wire[-1], 1.0)
+    self.assertFalse(model.accel_limited)
 
   def test_unbound_request_passes_through_bit_exact(self):
     v = 15.0
