@@ -366,19 +366,15 @@ class CarInterface(CarInterfaceBase):
       if communication_control is not None:
         # explicit CommunicationControl request (deinit path; the live handback lives in CarController)
         disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=BOSCH_RADAR_DIAG_ADDR, com_cont_req=communication_control)
-      elif CP.carFingerprint in HONDA_BOSCH_CANFD:
-        # CAN FD additionally clears DTCs here, before the radar goes quiet:
-        #
-        # The brake module latches a radar lost-communication DTC when the radar goes silent for more
-        # than ~0.1 s at cutover, and the DTC matures over trips (Honda two-trip detection): once it is
-        # confirmed from a previous drive, the very next comm-loss detection trips
-        # BRAKE_MODULE.CRUISE_FAULT ~0.16 s after the radar is silenced. Broadcast-clear stored DTCs on
-        # all ECUs (powertrain and camera buses) every drive so the maturation counter is reset, and
-        # clear the radar's own stored DTCs so codes accumulated while it was disabled don't re-fault a
-        # later drive. Clearing must precede the radar silence because a DTC clear can take an ECU
-        # several hundred ms to process.
-        # NOTE: ELM327 safety mode allows the 29-bit functional diagnostic address on every bus, so the
-        # broadcast needs no TX allowlist entry in the car safety mode.
+      else:
+        # Clear matured radar comm-loss DTCs before CarController's deferred disable silences the radar.
+        # CAN FD trips BRAKE_MODULE.CRUISE_FAULT; classic Bosch (e.g. ACURA_RDX_3G_MMR) trips
+        # STANDSTILL.BRAKE_ERROR_1/2, which masks cruiseState.available for the whole drive. Honda
+        # two-trip detection means a single bad alpha-long cutover on a prior drive can make the very
+        # next key-on fault at the first radar silence.
+        # Broadcast-clear stored DTCs every drive so the maturation counter is reset, and clear the
+        # radar's own stored DTCs before it is silenced. ELM327 safety mode allows the functional
+        # diagnostic address on every bus, so this needs no TX allowlist entry in the car safety mode.
         clear_all_dtcs(can_send, [CanBus(CP).pt, CanBus(CP).camera])
         clear_ecu_dtcs(can_recv, can_send, bus=CanBus(CP).pt, addr=BOSCH_RADAR_DIAG_ADDR)
 

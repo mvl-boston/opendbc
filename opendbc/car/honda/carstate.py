@@ -189,7 +189,11 @@ class CarState(CarStateBase):
       self.low_speed_alert = False
     ret.lowSpeedAlert = self.low_speed_alert
 
-    if self.CP.openpilotLongitudinalControl:
+    # Alpha-long-capable classic Bosch (stock ACC) still needs BRAKE_ERROR surfaced so the startup
+    # accFault grace timer below can mask stale faults from a prior alpha-long cutover.
+    bosch_radar_alpha = (self.CP.alphaLongitudinalAvailable and
+                         self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD))
+    if self.CP.openpilotLongitudinalControl or bosch_radar_alpha:
       if self.CP.carFingerprint in HONDA_BOSCH_RADARLESS:
         ret.accFaulted = bool(cp.vl["CRUISE_FAULT_STATUS"]["CRUISE_FAULT"])
       elif (self.CP.carFingerprint in (CAR.ACURA_MDX_4G, *HONDA_BOSCH_CANFD)) and (self.CP.flags & HondaFlags.BOSCH_ALT_BRAKE):
