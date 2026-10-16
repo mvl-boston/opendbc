@@ -1,6 +1,6 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH_ALT_RADAR, CAR)
+from opendbc.car.honda.values import (HondaFlags, CAR)
 from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
 
 # CAN bus layout with relay
