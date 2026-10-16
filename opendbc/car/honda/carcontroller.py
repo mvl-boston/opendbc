@@ -1288,17 +1288,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         steer_maxed = steer_maxed or not CS.steer_control_active
 
       lkas_state_change = None
-      if self.CP.flags & HondaFlags.BOSCH_CANFD:
-        # The stock camera holds LKAS_STATE_CHANGE low and pulses it high for ~3s around HUD state
-        # changes; holding it high permanently (the default below) suppresses the dash lane lines.
-        # The key must contain exactly the signals that change the LKAS_HUD payload, nothing more:
-        # steer_maxed used to be in here (via SOLID_LANES) and its 10Hz flicker during city-speed
-        # steering re-triggered the pulse continuously, keeping LKAS_STATE_CHANGE high whenever a
-        # real lane path was being sent - which suppressed the dash lane lines entirely.
-        # latActive drives SOLID_LANES (under sunnypilot MADS the lateral control stays engaged
-        hud_key = (bool(CC.latActive), bool(self.dashed_lanes), bool(alert_steer_required), bool(CS.out.steerFaultPermanent))
-        # when ACC disengages, and the dash LKAS indication follows it); dashed_lanes (MADS armed,
-        # from MadsCarController) drives DASHED_LANES so parked LKAS presses get cluster feedback.
+      if self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
+        # Hold for 3 seconds on transitions to fade in lanes
+        hud_key = CC.latActive and not steer_maxed
         if hud_key != self.lkas_hud_key:
           self.lkas_hud_key = hud_key
           self.lkas_state_change_frames = 30  # 3s at the 10Hz LKAS_HUD rate, matching stock pulse length
