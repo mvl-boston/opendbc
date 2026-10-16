@@ -184,9 +184,7 @@ class CarInterface(CarInterfaceBase):
           CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
 
     elif candidate == CAR.ACURA_MDX_4G_MMR:
-      ret.steerActuatorDelay = 0.3
-      ret.lateralTuning.pid.kf = 0.000035
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
+      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.ACURA_TLX_2G_MMR:
       ret.steerActuatorDelay = 0.15
