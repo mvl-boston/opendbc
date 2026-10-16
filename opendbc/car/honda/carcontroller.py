@@ -1290,7 +1290,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       lkas_state_change = None
       if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
         # Hold for 3 seconds on transitions to fade in lanes
-        hud_key =  lat_active and not CC.steer_maxed
+        hud_key = CC.lat_active and not steer_maxed
         if hud_key != self.lkas_hud_key:
           self.lkas_hud_key = hud_key
           self.lkas_state_change_frames = 30  # 3s at the 10Hz LKAS_HUD rate, matching stock pulse length
