@@ -1288,7 +1288,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         steer_maxed = steer_maxed or not CS.steer_control_active
 
       lkas_state_change = None
-      if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
+      if self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
         # Hold for 3 seconds on transitions to fade in lanes
         hud_key = CC.latActive and not steer_maxed
         if hud_key != self.lkas_hud_key:
