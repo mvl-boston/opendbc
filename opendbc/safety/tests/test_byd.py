@@ -14,13 +14,9 @@ from opendbc.safety.tests.common import away_round
 STEERING_MODULE_ADAS = 0x1E2
 LKAS_HUD_ADAS = 0x316
 PCM_BUTTONS = 0x3B0
-
-
 def safety_max_can(max_angle_float, can_offset=0):
   # Matches C: max_angle_can = (int)(max_angle * 10 + 1.) which is floor(max_angle * 10) + 1
   return int(max_angle_float * 10 + 1.) + can_offset
-
-
 class TestBydSafety(common.CarSafetyTest, common.AngleSteeringSafetyTest):
   DBC = "byd_atto3"
   SAFETY_MODEL = CarParams.SafetyModel.byd
@@ -212,7 +208,5 @@ class TestBydSafety(common.CarSafetyTest, common.AngleSteeringSafetyTest):
 
         # Recover
         self.assertTrue(self._tx(self._angle_cmd_msg(0, True)))
-
-
 if __name__ == "__main__":
   unittest.main()
