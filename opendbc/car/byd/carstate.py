@@ -18,8 +18,8 @@ GEAR_MAP = {
 
 
 class CarState(CarStateBase):
-  def __init__(self, CP):
-    super().__init__(CP)
+  def __init__(self, CP, CP_SP=None):
+    super().__init__(CP, CP_SP)
     self.lkas_hud = {}
 
   def update(self, can_parsers) -> structs.CarState:
@@ -81,10 +81,11 @@ class CarState(CarStateBase):
     # forward stock LKAS HUD
     self.lkas_hud = copy.copy(cp_cam.vl["LKAS_HUD_ADAS"])
 
-    return ret
+    ret_sp = structs.CarStateSP()
+    return ret, ret_sp
 
   @staticmethod
-  def get_can_parsers(CP):
+  def get_can_parsers(CP, CP_SP=None):
     return {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 0),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], [], 2),
