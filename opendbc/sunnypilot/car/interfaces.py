@@ -12,19 +12,13 @@ from collections.abc import Callable
 
 from opendbc.car import structs
 from opendbc.car.can_definitions import CanRecvCallable, CanSendCallable
-from opendbc.car.chrysler.values import ChryslerFlags
-from opendbc.car.ford.values import FordFlags
-from opendbc.car.gm.values import GMFlags
-from opendbc.car.honda.values import HondaFlags
 from opendbc.car.hyundai.values import HyundaiFlags
 from opendbc.car.subaru.values import SubaruFlags
-from opendbc.car.toyota.values import ToyotaFlags
-from opendbc.car.volkswagen.values import VolkswagenFlags
 from opendbc.car.toyota.values import ToyotaSafetyFlags
+from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP, HondaSafetyFlagsSP
 from opendbc.sunnypilot.car.hyundai.enable_radar_tracks import enable_radar_tracks as hyundai_enable_radar_tracks
 from opendbc.sunnypilot.car.hyundai.longitudinal.helpers import LongitudinalTuningType
 from opendbc.sunnypilot.car.hyundai.values import HyundaiFlagsSP
-from opendbc.sunnypilot.car.rivian.values import RivianFlagsSP
 from opendbc.sunnypilot.car.subaru.values_ext import SubaruFlagsSP, SubaruSafetyFlagsSP
 from opendbc.sunnypilot.car.tesla.values import MadsScreenButtonType, TeslaFlagsSP, TeslaSafetyFlagsSP
 from opendbc.sunnypilot.car.toyota.values import ToyotaFlagsSP
@@ -83,27 +77,6 @@ class NanoFFModel:
     return pred
 
 
-# upstream detects BSM per brand into each brand's HAS_BSM flag
-BSM_FLAGS = {
-  "chrysler": ChryslerFlags.HAS_BSM,
-  "ford": FordFlags.HAS_BSM,
-  "gm": GMFlags.HAS_BSM,
-  "honda": HondaFlags.HAS_BSM,
-  "hyundai": HyundaiFlags.HAS_BSM,
-  "subaru": SubaruFlags.HAS_BSM,
-  "toyota": ToyotaFlags.HAS_BSM,
-  "volkswagen": VolkswagenFlags.HAS_BSM,
-}
-
-
-def has_bsm(CP: structs.CarParams, CP_SP: structs.CarParamsSP | None) -> bool:
-  if CP.brand == "tesla":
-    return True
-  if CP.brand == "rivian":
-    return CP_SP is not None and bool(CP_SP.flags & RivianFlagsSP.LONGITUDINAL_HARNESS_UPGRADE)
-  return CP.brand in BSM_FLAGS and bool(CP.flags & BSM_FLAGS[CP.brand])
-
-
 def setup_interfaces(CI, CP: structs.CarParams, CP_SP: structs.CarParamsSP,
                      params_list: list[dict[str, str]] | None = None,
                      can_recv: CanRecvCallable | None = None, can_send: CanSendCallable | None = None) -> None:
@@ -117,6 +90,7 @@ def setup_interfaces(CI, CP: structs.CarParams, CP_SP: structs.CarParamsSP,
   _initialize_tesla_mads_screen_button(CP, CP_SP, params_dict)
   _initialize_radar_tracks(CP, CP_SP, can_recv, can_send)
   _initialize_stop_and_go(CP, CP_SP, params_dict)
+  _initialize_honda(CP, CP_SP, params_dict)
   _initialize_toyota(CP, CP_SP, params_dict)
 
 
@@ -179,6 +153,16 @@ def _initialize_stop_and_go(CP: structs.CarParams, CP_SP: structs.CarParamsSP, p
       CP_SP.flags |= SubaruFlagsSP.STOP_AND_GO_MANUAL_PARKING_BRAKE.value
     if stop_and_go or stop_and_go_manual_parking_brake:
       CP_SP.safetyParam |= SubaruSafetyFlagsSP.STOP_AND_GO
+
+
+def _initialize_honda(CP: structs.CarParams, CP_SP: structs.CarParamsSP, params_dict: dict[str, str]) -> None:
+  if CP.brand == 'honda':
+    honda_stock_long = int(params_dict.get("HondaEnforceStockLongitudinal", 0)) == 1
+
+    if honda_stock_long:
+      CP.openpilotLongitudinalControl = False
+      CP_SP.flags |= HondaFlagsSP.STOCK_LONGITUDINAL.value
+      CP_SP.safetyParam |= HondaSafetyFlagsSP.STOCK_LONGITUDINAL
 
 
 def _initialize_toyota(CP: structs.CarParams, CP_SP: structs.CarParamsSP, params_dict: dict[str, str]) -> None:

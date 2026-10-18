@@ -22,13 +22,54 @@
     ],
     "package": "Technology Plus Package or AcuraWatch Plus"
   },
-  "Acura ILX 2019": {
+  "Acura ILX 2019-22": {
     "platform": "ACURA_ILX",
     "make": "Acura",
     "brand": "honda",
     "model": "ILX",
     "year": [
-      "2019"
+      "2019",
+      "2020",
+      "2021",
+      "2022"
+    ],
+    "package": "All"
+  },
+  "Acura Integra 2023-26": {
+    "platform": "ACURA_INTEGRA",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "Integra",
+    "year": [
+      "2023",
+      "2024",
+      "2025",
+      "2026"
+    ],
+    "package": "All"
+  },
+  "Acura MDX 2014-16": {
+    "platform": "ACURA_MDX_3G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX",
+    "year": [
+      "2014",
+      "2015",
+      "2016"
+    ],
+    "package": "Advance Package"
+  },
+  "Acura MDX 2017-20": {
+    "platform": "ACURA_MDX_3G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX",
+    "year": [
+      "2017",
+      "2018",
+      "2019",
+      "2020"
     ],
     "package": "All"
   },
@@ -55,6 +96,19 @@
     ],
     "package": "All except Type S"
   },
+  "Acura MDX Hybrid 2017-20": {
+    "platform": "ACURA_MDX_3G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "MDX Hybrid",
+    "year": [
+      "2017",
+      "2018",
+      "2019",
+      "2020"
+    ],
+    "package": "All"
+  },
   "Acura RDX 2016-18": {
     "platform": "ACURA_RDX",
     "make": "Acura",
@@ -79,7 +133,7 @@
     ],
     "package": "All"
   },
-  "Acura RDX 2022-24": {
+  "Acura RDX 2022-26": {
     "platform": "ACURA_RDX_3G_MMR",
     "make": "Acura",
     "brand": "honda",
@@ -87,27 +141,55 @@
     "year": [
       "2022",
       "2023",
-      "2024"
+      "2024",
+      "2025",
+      "2026"
     ],
     "package": "All"
   },
-  "Acura TLX 2021-22": {
+  "Acura TLX 2015-17": {
+    "platform": "ACURA_TLX_1G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "TLX",
+    "year": [
+      "2015",
+      "2016",
+      "2017"
+    ],
+    "package": "Advance Package"
+  },
+  "Acura TLX 2018-20": {
+    "platform": "ACURA_TLX_1G",
+    "make": "Acura",
+    "brand": "honda",
+    "model": "TLX",
+    "year": [
+      "2018",
+      "2019",
+      "2020"
+    ],
+    "package": "All"
+  },
+  "Acura TLX 2021-23": {
     "platform": "ACURA_TLX_2G",
     "make": "Acura",
     "brand": "honda",
     "model": "TLX",
     "year": [
       "2021",
-      "2022"
+      "2022",
+      "2023"
     ],
     "package": "All"
   },
-  "Acura TLX 2025": {
+  "Acura TLX 2024-25": {
     "platform": "ACURA_TLX_2G_MMR",
     "make": "Acura",
     "brand": "honda",
     "model": "TLX",
     "year": [
+      "2024",
       "2025"
     ],
     "package": "All"
@@ -1004,6 +1086,17 @@
     ],
     "package": "Driver Alert Package II"
   },
+  "Honda Accord 2016-17": {
+    "platform": "HONDA_ACCORD_9G",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Accord",
+    "year": [
+      "2016",
+      "2017"
+    ],
+    "package": "Honda Sensing"
+  },
   "Honda Accord 2018-22": {
     "platform": "HONDA_ACCORD",
     "make": "Honda",
@@ -1018,7 +1111,7 @@
     ],
     "package": "All"
   },
-  "Honda Accord 2023-25": {
+  "Honda Accord 2023-26": {
     "platform": "HONDA_ACCORD_11G",
     "make": "Honda",
     "brand": "honda",
@@ -1026,7 +1119,18 @@
     "year": [
       "2023",
       "2024",
-      "2025"
+      "2025",
+      "2026"
+    ],
+    "package": "All"
+  },
+  "Honda Accord Hybrid 2017": {
+    "platform": "HONDA_ACCORD_9G",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Accord Hybrid",
+    "year": [
+      "2017"
     ],
     "package": "All"
   },
@@ -1278,6 +1382,27 @@
       "2020"
     ],
     "package": "Honda Sensing"
+  },
+  "Honda Fit (Taiwan) 2021": {
+    "platform": "HONDA_FIT_4G",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Fit (Taiwan)",
+    "year": [
+      "2021"
+    ],
+    "package": "All"
+  },
+  "Honda Fit (Taiwan) 2024-25": {
+    "platform": "HONDA_FIT_4G",
+    "make": "Honda",
+    "brand": "honda",
+    "model": "Fit (Taiwan)",
+    "year": [
+      "2024",
+      "2025"
+    ],
+    "package": "All"
   },
   "Honda Freed 2020": {
     "platform": "HONDA_FREED",
@@ -2088,16 +2213,6 @@
     ],
     "package": "Smart Cruise Control (SCC)"
   },
-  "Kia Ceed Plug-in Hybrid 2021": {
-    "platform": "KIA_CEED_PHEV",
-    "make": "Kia",
-    "brand": "hyundai",
-    "model": "Ceed Plug-in Hybrid",
-    "year": [
-      "2021"
-    ],
-    "package": "Smart Cruise Control (SCC)"
-  },
   "Kia Ceed Plug-in Hybrid Non-SCC 2022": {
     "platform": "KIA_CEED_PHEV_2022_NON_SCC",
     "make": "Kia",
@@ -2479,16 +2594,6 @@
     "make": "Kia",
     "brand": "hyundai",
     "model": "Sportage Hybrid",
-    "year": [
-      "2023"
-    ],
-    "package": "Smart Cruise Control (SCC)"
-  },
-  "Kia Sportage Plug-in Hybrid 2023": {
-    "platform": "KIA_SPORTAGE_5TH_GEN",
-    "make": "Kia",
-    "brand": "hyundai",
-    "model": "Sportage Plug-in Hybrid",
     "year": [
       "2023"
     ],
@@ -3381,16 +3486,6 @@
     ],
     "package": "Adaptive Cruise Control (ACC) & Lane Assist"
   },
-  "Tesla Model 3 (with HW2.5) 2019": {
-    "platform": "TESLA_MODEL_3",
-    "make": "Tesla",
-    "brand": "tesla",
-    "model": "Model 3 (with HW2.5)",
-    "year": [
-      "2019"
-    ],
-    "package": "All"
-  },
   "Tesla Model 3 (with HW3) 2019-23": {
     "platform": "TESLA_MODEL_3",
     "make": "Tesla",
@@ -3426,7 +3521,7 @@
     ],
     "package": "All"
   },
-  "Tesla Model Y (with HW3) 2020-24": {
+  "Tesla Model Y (with HW3) 2020-23": {
     "platform": "TESLA_MODEL_Y",
     "make": "Tesla",
     "brand": "tesla",
@@ -3435,18 +3530,16 @@
       "2020",
       "2021",
       "2022",
-      "2023",
-      "2024"
+      "2023"
     ],
     "package": "All"
   },
-  "Tesla Model Y (with HW4) 2023-25": {
+  "Tesla Model Y (with HW4) 2024-25": {
     "platform": "TESLA_MODEL_Y",
     "make": "Tesla",
     "brand": "tesla",
     "model": "Model Y (with HW4)",
     "year": [
-      "2023",
       "2024",
       "2025"
     ],
