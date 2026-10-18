@@ -26,12 +26,10 @@ class CarInterface(CarInterfaceBase):
       ret.flags |= SubaruFlags.SEND_INFOTAINMENT.value
 
     if ret.flags & SubaruFlags.PREGLOBAL:
-      if 0x25c in fingerprint[0]:
-        ret.flags |= SubaruFlags.HAS_BSM.value
+      ret.enableBsm = 0x25c in fingerprint[0]
       ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.subaruPreglobal)]
     else:
-      if 0x228 in fingerprint[0]:
-        ret.flags |= SubaruFlags.HAS_BSM.value
+      ret.enableBsm = 0x228 in fingerprint[0]
       ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.subaru)]
       if ret.flags & SubaruFlags.GLOBAL_GEN2:
         ret.safetyConfigs[0].safetyParam |= SubaruSafetyFlags.GEN2.value

@@ -8,7 +8,7 @@ from typing import Any
 from collections.abc import Callable
 from functools import cache
 
-from opendbc.car import DT_CTRL, apply_hysteresis, gen_empty_fingerprint, scale_rot_inertia_per_mass, scale_tire_stiffness_per_mass
+from opendbc.car import DT_CTRL, apply_hysteresis, gen_empty_fingerprint, scale_rot_inertia, scale_tire_stiffness, STD_CARGO_KG
 from opendbc.car import structs
 from opendbc.car.can_definitions import CanData, CanRecvCallable, CanSendCallable
 from opendbc.car.common.basedir import BASEDIR
@@ -116,9 +116,12 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
     dbc_names = {bus: cp.dbc_name for bus, cp in self.can_parsers.items()}
     self.CC: CarControllerBase = self.CarController(dbc_names, CP, CP_SP)
 
-  def apply(self, c: structs.CarControl, c_sp: structs.CarControlSP, now_nanos: int | None = None) -> tuple[structs.CarControl.Actuators, list[CanData]]:
+  def apply(self, c: structs.CarControl, c_sp: structs.CarControlSP, now_nanos: int | None = None,
+            model=None) -> tuple[structs.CarControl.Actuators, list[CanData]]:
     if now_nanos is None:
       now_nanos = int(time.monotonic() * 1e9)
+    # modelV2 for cars that render it; set as an attr to avoid touching every CarController.update
+    self.CC.model = model
     return self.CC.update(c, c_sp, self.CS, now_nanos)
 
   @staticmethod
@@ -142,6 +145,7 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
     ret = CarInterfaceBase.get_std_params(candidate)
 
     platform = PLATFORMS[candidate]
+    ret.mass = platform.config.specs.mass
     ret.wheelbase = platform.config.specs.wheelbase
     ret.steerRatio = platform.config.specs.steerRatio
     ret.centerToFront = ret.wheelbase * platform.config.specs.centerToFrontRatio
@@ -152,10 +156,13 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
 
     ret = cls._get_params(ret, candidate, fingerprint, car_fw, alpha_long, is_release, docs)
 
+    # Vehicle mass is published curb weight plus assumed payload such as a human driver; notCars have no assumed payload
+    if not ret.notCar:
+      ret.mass = ret.mass + STD_CARGO_KG
+
     # Set params dependent on values set by the car interface
-    ret.rotationalInertiaPerMass = scale_rot_inertia_per_mass(ret.wheelbase)
-    ret.tireStiffnessFrontPerMass, ret.tireStiffnessRearPerMass = scale_tire_stiffness_per_mass(ret.wheelbase, ret.centerToFront,
-                                                                                              ret.tireStiffnessFactor)
+    ret.rotationalInertia = scale_rot_inertia(ret.mass, ret.wheelbase)
+    ret.tireStiffnessFront, ret.tireStiffnessRear = scale_tire_stiffness(ret.mass, ret.wheelbase, ret.centerToFront, ret.tireStiffnessFactor)
 
     return ret
 
@@ -239,6 +246,7 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
 
     ret.pcmCruise = True     # openpilot's state is tied to the PCM's cruise state on most cars
     ret.minEnableSpeed = -1. # enable is done by stock ACC, so ignore this
+    ret.steerRatioRear = 0.  # no rear steering, at least on the listed cars aboveA
     ret.openpilotLongitudinalControl = False
     ret.stopAccel = -2.0
     ret.longitudinalTuning.kiBP = [0.]
@@ -396,6 +404,7 @@ class CarControllerBase(ABC):
     self.CP_SP = CP_SP
     self.frame = 0
     self.secoc_key: bytes = b"00" * 16
+    self.model = None
 
   @abstractmethod
   def update(self, CC: structs.CarControl, CC_SP: structs.CarControlSP, CS: CarStateBase, now_nanos: int) -> tuple[structs.CarControl.Actuators, list[CanData]]:

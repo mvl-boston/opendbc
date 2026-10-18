@@ -90,8 +90,7 @@ class CarInterface(CarInterfaceBase):
 
     # BSM: Side_Detect_L_Stat, Side_Detect_R_Stat
     # TODO: detect bsm in car_fw?
-    if 0x3A6 in fingerprint[CAN.main] and 0x3A7 in fingerprint[CAN.main]:
-      ret.flags |= FordFlags.HAS_BSM.value
+    ret.enableBsm = 0x3A6 in fingerprint[CAN.main] and 0x3A7 in fingerprint[CAN.main]
 
     # LCA can steer down to zero
     ret.minSteerSpeed = 0.
