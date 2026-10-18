@@ -1,7 +1,7 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS,
-                                      HONDA_BOSCH_CANFD, CAR)
+                                      HONDA_BOSCH_CANFD, CAR, HONDA_BOSCH_ALT_RADAR)
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -227,7 +227,7 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
       # without MADS, lat_active == enabled while moving, so this stays equivalent there.
       lkas_hud_values['SOLID_LANES'] = lat_active
 
-  if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
+  if (not (CP.flags & HondaFlags.BOSCH_EXT_HUD)) or CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
     lkas_hud_values['RDM_OFF'] = 1
     lkas_hud_values['LANE_ASSIST_BEEP_OFF'] = 1
 
