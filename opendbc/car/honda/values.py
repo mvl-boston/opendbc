@@ -43,19 +43,29 @@ class CarControllerParams:
   def __init__(self, CP):
     if CP.carFingerprint in (CAR.HONDA_CRV, CAR.HONDA_CRV_EU, CAR.ACURA_RDX):
       self.STEER_MAX = 1000  # TODO: determine if there is a dead zone at the top end
-    elif CP.carFingerprint in (CAR.ACURA_ILX, CAR.HONDA_CRV_5G, CAR.ACURA_RDX_3G, CAR.ACURA_TLX_2G_MMR, CAR.ACURA_MDX_4G,
-                               CAR.ACURA_ADX):
+    elif CP.carFingerprint in (CAR.ACURA_ILX, CAR.HONDA_CRV_5G, CAR.ACURA_TLX_2G_MMR):
       self.STEER_MAX = 3840  # TODO: determine if there is a dead zone at the top end (ACURA_ILX)
-    elif CP.carFingerprint in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.HONDA_CIVIC_2022, CAR.HONDA_ACCORD,
+    elif CP.carFingerprint == CAR.ACURA_RDX_3G:
+      self.STEER_MAX = 4095  # TODO: determine if there is a dead zone at the top end
+    elif CP.carFingerprint in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.HONDA_ACCORD,
                                CAR.HONDA_CRV_HYBRID, CAR.HONDA_FIT, CAR.HONDA_FREED, CAR.HONDA_HRV, CAR.HONDA_HRV_3G,
                                CAR.HONDA_ODYSSEY, CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G,
                                CAR.HONDA_E, CAR.HONDA_E_ADVANCE, CAR.HONDA_PRELUDE_6G):
       # TODO: determine if there is a dead zone at the top end (except HONDA_FREED, HONDA_HRV, HONDA_HRV_3G)
       self.STEER_MAX = 4096
+    elif CP.carFingerprint == CAR.HONDA_CIVIC_2022:
+      self.STEER_MAX = 5120  # TODO: determine if there is a dead zone at the top end
+    elif CP.carFingerprint == CAR.HONDA_CRV_6G:
+      self.STEER_MAX = 5100
+    elif CP.carFingerprint == CAR.ACURA_RDX_3G_MMR:
+      self.STEER_MAX = 4076
+    elif CP.carFingerprint in (CAR.HONDA_ACCORD_11G, CAR.ACURA_MDX_4G, CAR.ACURA_MDX_4G_MMR,
+                               CAR.HONDA_PASSPORT_4G, CAR.HONDA_PILOT_4G_MMR):
+      self.STEER_MAX = 12789
+    elif CP.carFingerprint == CAR.ACURA_ADX:
+      self.STEER_MAX = 5000
     elif CP.carFingerprint == CAR.HONDA_ODYSSEY_TWN:
       self.STEER_MAX = 32767  # TODO: determine if there is a dead zone at the top end
-    elif CP.carFingerprint == CAR.HONDA_PILOT_4G_MMR:
-      self.STEER_MAX = 3628
     else:
       # Odyssey MMR uses up to 2560 for LKA; higher RDM commands are nonlinear and also apply brake drag.
       self.STEER_MAX = 2560
@@ -300,11 +310,7 @@ class CAR(Platforms):
   # Mid-Model Refresh has more powerful EPS
   HONDA_PILOT_4G_MMR = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Pilot 2026", "All")],
-    CarSpecs(wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=19.2),
-  )
-  HONDA_PILOT_4G_MMR = HondaBoschCANFDPlatformConfig( # Mid-Model Refresh has more powerful EPS
-    [HondaCarDocs("Honda Pilot 2026", "All")],
-    CarSpecs(mass=4528 * CV.LB_TO_KG, wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=17.5),
+    CarSpecs(wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=17.5),
   )
   HONDA_PASSPORT_4G = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Passport 2026", "All")],
@@ -312,15 +318,9 @@ class CAR(Platforms):
   )
   HONDA_PRELUDE_6G = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda Prelude 2026", "All")],
-    CarSpecs(wheelbase=2.605, steerRatio=13.65, centerToFrontRatio=0.37),
-    {Bus.pt: 'honda_bosch_radarless_generated'},
-    flags=HondaFlags.BOSCH_RADARLESS,
-  )
-  HONDA_PRELUDE_6G = HondaBoschPlatformConfig(
-    [HondaCarDocs("Honda Prelude 2026", "All")],
     # Shares the Civic e:HEV platform and the radarless Bosch messaging. 63/37 front/rear weight distribution.
     # steerRatio from liveParameters, converged at 13.65 on a EU-market car (variable ratio rack, 14.9 on-center)
-    CarSpecs(mass=1480, wheelbase=2.605, steerRatio=13.65, centerToFrontRatio=0.37),
+    CarSpecs(wheelbase=2.605, steerRatio=13.65, centerToFrontRatio=0.37),
     {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS,
   )
@@ -354,7 +354,7 @@ class CAR(Platforms):
   )
   ACURA_ADX = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura ADX 2025-26", "All")],
-    CarSpecs(wheelbase=2.65, steerRatio=17.6, centerToFrontRatio=0.43),
+    CarSpecs(wheelbase=2.65, steerRatio=16.6, centerToFrontRatio=0.43),
     {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS
   )
@@ -364,13 +364,13 @@ class CAR(Platforms):
       # TODO: add 2022-2023 fingerprints
       HondaCarDocs("Honda Fit (Taiwan) 2024-25", "All"),
     ],
-    CarSpecs(mass=1229, wheelbase=2.53, steerRatio=19.7, centerToFrontRatio=0.39, minSteerSpeed=23. * CV.KPH_TO_MS),
+    CarSpecs(wheelbase=2.53, steerRatio=19.7, centerToFrontRatio=0.39, minSteerSpeed=23. * CV.KPH_TO_MS),
     {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS | HondaFlags.LKAS_MINSPEED_CUTOFF
   )
   ACURA_INTEGRA = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura Integra 2023-26", "All")],
-    CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=15.5),
+    CarSpecs(wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=15.5),
     {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS
   )
@@ -447,7 +447,7 @@ class CAR(Platforms):
       HondaCarDocs("Honda Pilot 2016-22", min_steer_speed=12. * CV.MPH_TO_MS),
       HondaCarDocs("Honda Passport 2019-25", "All", min_steer_speed=12. * CV.MPH_TO_MS),
     ],
-    CarSpecs(mass=4278 * CV.LB_TO_KG, wheelbase=2.86, centerToFrontRatio=0.428, steerRatio=16.0, tireStiffnessFactor=0.444),  # as spec
+    CarSpecs(wheelbase=2.86, centerToFrontRatio=0.428, steerRatio=16.0, tireStiffnessFactor=0.444),  # as spec
     radar_dbc_dict('acura_ilx_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
@@ -470,7 +470,7 @@ class CAR(Platforms):
       HondaCarDocs("Honda Accord 2016-17"),
       HondaCarDocs("Honda Accord Hybrid 2017", "All"),
     ],
-    CarSpecs(mass=3343 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=17.5, centerToFrontRatio=0.37),  # as spec
+    CarSpecs(wheelbase=2.78, steerRatio=17.5, centerToFrontRatio=0.37),  # as spec
     radar_dbc_dict('honda_accord_2017_can_ext_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
@@ -486,7 +486,7 @@ class CAR(Platforms):
       HondaCarDocs("Acura MDX 2017-20", "All"),
       HondaCarDocs("Acura MDX Hybrid 2017-20", "All"),
     ],
-    CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
+    CarSpecs(wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
     radar_dbc_dict('acura_mdx_3g_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
@@ -495,7 +495,7 @@ class CAR(Platforms):
       HondaCarDocs("Acura TLX 2015-17", "Advance Package"),
       HondaCarDocs("Acura TLX 2018-20", "All"),
     ],
-    CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=17.0, centerToFrontRatio=0.40, tireStiffnessFactor=0.18),
+    CarSpecs(wheelbase=2.78, steerRatio=17.0, centerToFrontRatio=0.40, tireStiffnessFactor=0.18),
     radar_dbc_dict('acura_mdx_3g_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
@@ -503,7 +503,7 @@ class CAR(Platforms):
     # 2017 RLX Sport Hybrid. Don't add to cardocs: the EPS is on a separate steer bus; a
     # pre-flashed red panda bridges steer messages onto the powertrain bus this code sees
     [],
-    CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.43, steerRatio=18.3),
+    CarSpecs(wheelbase=2.85, centerToFrontRatio=0.43, steerRatio=18.3),
     radar_dbc_dict('acura_rlx_2017_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
