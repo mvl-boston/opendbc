@@ -154,7 +154,6 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate in (CAR.HONDA_CRV_6G):
       ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5100], [0, 5100]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
       ret.wheelSpeedFactor = 1.025
 
