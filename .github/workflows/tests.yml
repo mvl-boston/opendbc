@@ -157,8 +157,12 @@ jobs:
         path: /tmp/comma_download_cache
         key: car_models-${{ hashFiles('opendbc_repo/opendbc/car/tests/test_models.py', 'opendbc_repo/opendbc/car/tests/routes.py') }}-${{ matrix.job }}
     - name: Test car models
-      timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 8 }}
-      run: source .venv/bin/activate && MAX_EXAMPLES=1 opendbc/car/tests/test_models.py
+      timeout-minutes: ${{ contains(runner.name, 'nsc') && (steps.routes-cache.outputs.cache-hit == 'true') && 2 || 6 }}
+      run: |
+        source .venv/bin/activate
+        cd opendbc_repo
+        export PYTHONPATH="$PWD"
+        MAX_EXAMPLES=1 python opendbc/car/tests/test_models.py
       env:
         NUM_JOBS: 4
         JOB_ID: ${{ matrix.job }}
