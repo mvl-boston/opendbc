@@ -6,7 +6,7 @@ from opendbc.car.honda.values import HondaSafetyFlags
 from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
 from opendbc.car.structs import CarParams
-from opendbc.safety.tests.common import MAX_WRONG_COUNTERS
+from opendbc.safety.tests.common import CANPackerSafety, MAX_WRONG_COUNTERS
 from opendbc.safety.tests.gas_interceptor_common import GasInterceptorSafetyTest
 
 from opendbc.sunnypilot.car.honda.values_ext import HondaSafetyFlagsSP
@@ -727,7 +727,6 @@ class TestHondaBoschRadarlessSafetyBase(TestHondaBoschSafetyBase):
   FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x33D, 0x6CD5554, 0xF31AA54, 0x6CD5557]}
   # STEERING_CONTROL, LANE_PATH, LKAS_HUD_2, HUD_OBJECTS
   RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x33D, 0x6CD5554, 0xF31AA54, 0x6CD5557)}
-
 
   def test_buttons_fwd(self):
     # SCM_BUTTONS (0x296) forwards to the camera unless OP's replacement button stream is flowing
