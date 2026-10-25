@@ -33,7 +33,7 @@ class TestHondaSteerThresholdLearner(unittest.TestCase):
     learner, store = self.make_learner()
     base = 300.0
     t = 0.0
-    for i in range(INCIDENT_COUNT - 1):
+    for _ in range(INCIDENT_COUNT - 1):
       self.press_edge(learner, base, t)
       t += 0.2
       self.press_edge(learner, base, t, above=False)
@@ -97,6 +97,16 @@ class TestHondaSteerThresholdLearner(unittest.TestCase):
   def test_load_sanitizes_factor(self):
     learner, _ = self.make_learner(factor=99.0)
     self.assertEqual(learner.factor, 5.0)
+
+  def test_unknown_param_key_uses_default(self):
+    class UnknownKeyName(Exception):
+      pass
+
+    def get_param(_key):
+      raise UnknownKeyName()
+
+    learner = HondaSteerThresholdLearner(get_param)
+    self.assertEqual(learner.factor, 1.0)
 
 
 if __name__ == "__main__":

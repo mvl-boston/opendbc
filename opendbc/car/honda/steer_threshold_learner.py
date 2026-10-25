@@ -24,13 +24,36 @@ FACTOR_MIN = 1.0
 FACTOR_MAX = 5.0
 
 
+def _is_unknown_param_key(exc: BaseException) -> bool:
+  return exc.__class__.__name__ == "UnknownKeyName"
+
+
+def _load_factor(get_param) -> float:
+  try:
+    raw = get_param(PARAM_KEY)
+  except Exception as exc:
+    if not _is_unknown_param_key(exc):
+      raise
+    raw = None
+  factor = FACTOR_DEFAULT if raw is None else float(raw)
+  return max(FACTOR_MIN, min(FACTOR_MAX, factor))
+
+
+def _store_factor(put_param, factor: float) -> None:
+  if put_param is None:
+    return
+  try:
+    put_param(PARAM_KEY, factor)
+  except Exception as exc:
+    if not _is_unknown_param_key(exc):
+      raise
+
+
 class HondaSteerThresholdLearner:
   def __init__(self, get_param, put_param=None):
     self._get_param = get_param
     self._put_param = put_param
-    raw = get_param(PARAM_KEY)
-    self.factor = FACTOR_DEFAULT if raw is None else float(raw)
-    self.factor = max(FACTOR_MIN, min(FACTOR_MAX, self.factor))
+    self.factor = _load_factor(get_param)
     self._incident_times: deque[float] = deque()
     self._prev_instant = False
 
@@ -50,7 +73,10 @@ class HondaSteerThresholdLearner:
       if len(self._incident_times) >= INCIDENT_COUNT:
         self.factor = min(self.factor * FACTOR_STEP, FACTOR_MAX)
         self._incident_times.clear()
-        if self._put_param is not None:
-          self._put_param(PARAM_KEY, self.factor)
+        _store_factor(self._put_param, self.factor)
 
     self._prev_instant = instant
+
+  @staticmethod
+  def param_keys():
+    return (PARAM_KEY,)
