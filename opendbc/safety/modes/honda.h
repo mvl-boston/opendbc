@@ -397,13 +397,13 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   // disableRxAndTx request. The corresponding enable stays blocked: re-enabling the radar into OP's
   // ACC_CONTROL stream would double up control messages while driving.
   if (msg->addr == 0x18DAB0F1U) {
-    const uint32_t first_bytes = GET_BYTES(msg, 0, 4);
+    const uint32_t first_bytes = GET_BYTES_LE(msg, 0, 4);
     bool allowed = (first_bytes == 0x00803E02U);
     if (honda_bosch_canfd) {
       allowed = allowed || (first_bytes == 0x00031002U);  // 02 10 03: extended diagnostic session
       allowed = allowed || (first_bytes == 0x03832803U);  // 03 28 83 03: CommunicationControl disable rx/tx
     }
-    if (!allowed || (GET_BYTES(msg, 4, 4) != 0x0U)) {
+    if (!allowed || (GET_BYTES_LE(msg, 4, 4) != 0x0U)) {
       tx = false;
     }
   }
@@ -582,10 +582,12 @@ static safety_config honda_bosch_init(uint16_t param) {
     {0x6CD5557, 0, 8, .check_relay = true}
   };
 
-  // Bosch canfd
+  // 0x296 on bus 2: OP takes over SCM_BUTTONS towards the camera to auto-disable stock LKAS and to block
+  // the driver's LKAS button while engaged (the physical SCM_BUTTONS is blocked from forwarding, see fwd hook)
   static CanMsg HONDA_CANFD_TX_MSGS[] = {
     {0xE4, 0, 5, .check_relay = true},
     {0x296, 0, 4, .check_relay = false},
+    {0x296, 2, 4, .check_relay = false},
     {0x33D, 0, 8, .check_relay = true},
   };
 
