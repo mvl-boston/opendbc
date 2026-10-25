@@ -289,7 +289,7 @@ which is how the torque controller drives, is enough). It keeps exponentially we
 ticks with the delayed wire above ``RATE_MIN_WIRE`` at road speed (``RATE_MIN_SPEED``), unpressed, per
 speed class (``SPEED_CLASSES``: the EPS's authority is not the same at every speed, see below). The
 angle and lateral-accel terms carry the centering, so a plant that saturates with lateral accel rather
-than torque is explained by them and not by the bands. Every ``RATE_SCORE_INTERVAL`` ticks the class's
+than torque is explained by them and not by the bands. Every ``FIT_INTERVAL`` counted ticks the class's
 system is solved under ``beta_0 >= beta_1 >= ... >= 0`` (projected gradient with a pool-adjacent-violators
 projection, warm-started from the last solution). Unconstrained, the band coefficients are
 ill-conditioned: a wire that is pinned at 1.0 for part of a turn makes the top band an indicator of
@@ -408,6 +408,23 @@ the shape there learns from the gaps between (and the delivery fit from its own,
 below ~10 m/s the fit degrades (large angles, the centering terms least exact) and nothing is learned
 there, the town class taking its bound from the class above; one shape is persisted for all speeds, the
 best over them, and the bound is what carries the per-speed knowledge within a drive.
+
+Compute budget
+--------------
+This runs inside the car controller's 100 Hz loop on the device, and ``selfdrived`` paces itself on the
+``carState`` that loop publishes: when the loop averages more than ~11 ms over a second, ``selfdrivedLagging``
+soft-disables with "TAKE CONTROL IMMEDIATELY / System Lagging". The constrained fits are what costs here:
+each is a handful of projected-gradient solves (``WIRE_FIT_ITERS`` steps of a 10x10 normal system plus the
+pool-adjacent-violators projection in Python), one for the full system and one per band forced dead, and
+the delivery fit does that per speed class. Solved whole, every 5 counted ticks, a pinned wire ran the
+model at ~30x its idle cost for as long as the turn lasted, and the loop dropped to 88-93 Hz (route
+000001cc, 2:23:59 PM ET, wire at the 0.6 bound at 18.6 m/s for 1.5 s). The fits are therefore scheduled:
+a fit is due every ``FIT_INTERVAL`` counted ticks (the normal equations have ``RATE_TAU`` of memory, so
+anything faster re-solves the same system), and a due fit is a generator that does exactly one solve per
+tick (``_step_fits``), the queue serving one solve per tick in all. Peak and mean cost are both bounded
+that way; the verdict arrives a few ticks after it is due, from a snapshot of the system taken when the
+fit started, and the learners between fits track the last complete one as before. The bound's hold is
+in fits (``WIRE_BOUND_HOLD_FITS``), derived from the interval so it stays ~10 s of counted ticks.
 
 Persisting the tables needs the ``HondaLatGainNNParams``, ``HondaLatShapeNNParams``,
 ``HondaLatWireNNParams`` and ``HondaLatCeilingParams`` keys registered in openpilot's
@@ -617,7 +634,10 @@ RATE_MIN_WIRE = 0.25                              # normalized, |delayed wire| f
 # drive 00000135 the 5-10 m/s rows alone read "linear" against knees the 10-20 m/s rows show
 RATE_MIN_SPEED = 10.0                             # m/s
 RATE_MIN_SAMPLES = int(round(10.0 / DT_CTRL))     # counted ticks before the first fit (MDX town route 00000127: 14 s above 10 m/s)
-RATE_SCORE_INTERVAL = 5                           # ticks between fits
+# counted ticks between fits (steer-rate per class, and the delivery fit), see the module docstring, "Compute budget":
+# the systems have RATE_TAU of memory, and a fit is a queue of solves done one per tick, so the interval must exceed
+# the longest fit (the delivery fit: up to WIRE_BANDS solves per speed class)
+FIT_INTERVAL = int(round(1.0 / DT_CTRL))
 RATE_MIN_RATE_STD = 2.0                           # deg/s, steer-rate spread over the samples before they are fitted
 # the fit has to explain a fair share of the steering before its shape is evidence: routes 00000139 and 00000127
 # fit at 0.46 / 0.76, the angle-PID drive 00000135 at 0.12-0.25 with a knee within 20% of its STEER_MAX
@@ -663,7 +683,7 @@ WIRE_DEMOTE_MIN_SAMPLES = 2 * RATE_MIN_SAMPLES
 # Civic 2022 delivers 0.2-0.25 per unit above 0.4 of STEER_MAX at 13-18 m/s, route 00000052, and about the same at
 # 24-32 m/s, route 0000005a, so for it the bound costs nothing at any speed; a car whose assist is bounded in torque
 # at one speed and not another is what this is for)
-WIRE_BOUND_HOLD_FITS = RATE_MIN_SAMPLES // RATE_SCORE_INTERVAL
+WIRE_BOUND_HOLD_FITS = RATE_MIN_SAMPLES // FIT_INTERVAL
 
 # Delivery fit (see the module docstring, "Two-way reachability"): the second, independent estimate of the response
 # shape, from the lateral accel rather than the steer rate. Over GAIN_DIFF_WINDOW windows at road speed with the
@@ -828,6 +848,11 @@ class HondaLateralModel:
     self.class_bound_pending = np.full(nc, WIRE_BANDS, dtype=int)
     self.class_bound_fits = np.zeros(nc, dtype=int)
     self.rate_counted = False       # the learner took a sample this tick
+    # the fits are scheduled (see the module docstring, "Compute budget"): one is due every FIT_INTERVAL counted ticks
+    # and runs as a generator doing one solve per tick, the queue serving one solve per tick in all
+    self.fit_jobs = deque()                   # (kind, generator): the fits in progress, the first one running
+    self.rate_fit_sample = np.zeros(nc, dtype=int)   # class_rate_samples at each class's last scheduled fit
+    self.deliv_fit_sample = 0                 # deliv_samples at the last scheduled delivery fit
     # delivery fit: EW normal equations of (|lat accel| / gain(v) - first band's raw wire) on [bands above the first, 1],
     # kept per speed bin with the lateral accel undivided, so the fit is always read in the table's current unit and
     # only against the bins that have settled (see the module docstring, "Two-way reachability")
@@ -1109,6 +1134,9 @@ class HondaLateralModel:
     self.rate_counted = False
     self.deliv_counted = False
     self.learning = False
+    # one solve of whatever fit is in progress, on every tick: a fit works on a snapshot of its system, so a press or
+    # a gap in control does not invalidate it, and finishing it keeps the queue short
+    self._step_fits()
     if not (active and self.press_holdoff <= 0.0 and v_ego > MIN_LEARN_SPEED):
       # a window never spans a press or a gap in control
       self.gain_hist.clear()
@@ -1244,10 +1272,26 @@ class HondaLateralModel:
     self.rate_syy[c] += alpha * (y * y - self.rate_syy[c])
     self.rate_weight[c] += alpha * (1.0 - self.rate_weight[c])
     self.class_rate_samples[c] += 1
-    if self.class_rate_samples[c] >= RATE_MIN_SAMPLES and self.class_rate_samples[c] % RATE_SCORE_INTERVAL == 0:
-      # a fitting tick: the class's verdict replaces its last one, so a fit that stops qualifying stops moving the shape
-      self.wire_evidence[c] = self._fit_wire(c)
+    if (self.class_rate_samples[c] >= RATE_MIN_SAMPLES and self.class_rate_samples[c] - self.rate_fit_sample[c] >= FIT_INTERVAL
+        and not self._fit_queued(('wire', c))):
+      # a fit is due: the class's verdict replaces its last one when it completes, so a fit that stops qualifying
+      # stops moving the shape
+      self.rate_fit_sample[c] = self.class_rate_samples[c]
+      self.fit_jobs.append((('wire', c), self._fit_wire(c)))
     self._track_wire_fits()
+
+  def _fit_queued(self, kind):
+    return any(k == kind for k, _ in self.fit_jobs)
+
+  def _step_fits(self):
+    # one solve of the fit at the head of the queue (see the module docstring, "Compute budget"); a fit that has
+    # finished its last solve completes on its next step and leaves the queue
+    if not self.fit_jobs:
+      return
+    try:
+      next(self.fit_jobs[0][1])
+    except StopIteration:
+      self.fit_jobs.popleft()
 
   def _track_wire_fits(self):
     # The persisted shape follows the classes jointly: it is the response where the car answers best, so a band's
@@ -1340,8 +1384,9 @@ class HondaLateralModel:
         self.deliv_xtb[idx] += alpha * weight * x * bands[0]
         self.deliv_w[idx] += alpha * weight
     self.deliv_samples += 1
-    if self.deliv_samples % RATE_SCORE_INTERVAL == 0:
-      self._fit_delivery()
+    if self.deliv_samples - self.deliv_fit_sample >= FIT_INTERVAL and not self._fit_queued('delivery'):
+      self.deliv_fit_sample = self.deliv_samples
+      self.fit_jobs.append(('delivery', self._fit_delivery()))
     # the floor: a band the lateral accel shows delivering more than the shape says is raised toward it, where it
     # shows the band alive (a band delivering less than WIRE_FLOOR_ALIVE is demoted on the steer rate's word, see
     # _identify_wire, and is not raised off the dead gain by the same number: the MDX 3G's 0.13-0.19 above its knee
@@ -1442,10 +1487,11 @@ class HondaLateralModel:
     return fit is not None and abs(self.gains[idx] - fit) <= GAIN_SETTLED_TOL * abs(fit)
 
   def _fit_delivery(self):
+    # a generator: one projected-gradient solve per step, the floor published when it completes (see _step_fits)
     n = WIRE_BANDS - 1
     floor = np.zeros(WIRE_BANDS)
     known = np.zeros(WIRE_BANDS, dtype=bool)
-    self.deliv_floor_class[:] = np.nan
+    floor_class = np.full((len(SPEED_CLASSES), WIRE_BANDS), np.nan)
     for c, bins in enumerate(SPEED_CLASSES):
       # the effective torque the lateral accel stands for, in the table's unit (the first band's), less the first
       # band's share of the raw wire, which delivers at 1.0 by definition; only the bins whose unit is a measurement
@@ -1463,6 +1509,7 @@ class HondaLateralModel:
       b = b / w
       step = 1.0 / float(np.linalg.eigvalsh(A)[-1])
       beta = self._solve_delivery(A, b, step, self.deliv_beta[c].copy())
+      yield
       self.deliv_beta[c] = beta
       sse = float(beta @ A @ beta) - 2.0 * float(b @ beta)
       # The pooled fit splits a pinned wire's delivery among the bands it fills together (they are collinear there,
@@ -1481,15 +1528,17 @@ class HondaLateralModel:
         forced = beta.copy()
         forced[j:n] = 0.0
         forced = self._solve_delivery(A, b, step, forced, dead_from=j)
+        yield
         cost = max(float(forced @ A @ forced) - 2.0 * float(b @ forced) - sse, 0.0)
         g[j] = min(float(np.sqrt(cost / A[j:n, j:n].sum())) / DELIVERY_SCALE[j], 1.0)
       g = _pava_nonincreasing(g)
-      self.deliv_floor_class[c, 1:] = np.where(active, g, np.nan)
+      floor_class[c, 1:] = np.where(active, g, np.nan)
       # the floor is the best class, band by band
       floor[1:] = np.where(active, np.maximum(floor[1:], g), floor[1:])
       known[1:] |= active
     floor[0] = 1.0
     floor[1:] = np.where(known[1:], floor[1:], 1.0)
+    self.deliv_floor_class = floor_class
     self.wire_floor = floor
     self.wire_floor_known = known
 
@@ -1507,12 +1556,16 @@ class HondaLateralModel:
     return beta
 
   def _fit_wire(self, c):
+    # a generator: one projected-gradient solve per step, the class's evidence published when it completes (see
+    # _step_fits); the system is a snapshot taken at the first step
     none = np.zeros(WIRE_BANDS, dtype=bool)
     w = self.rate_weight[c]
-    var_y = self.rate_syy[c] / w - (self.rate_sy[c] / w) ** 2
+    yy = self.rate_syy[c] / w
+    var_y = yy - (self.rate_sy[c] / w) ** 2
     # no steering going on over the samples: nothing to explain
     if var_y < RATE_MIN_RATE_STD * RATE_MIN_RATE_STD:
-      return none
+      self.wire_evidence[c] = none
+      return
     A = self.rate_xtx[c] / w + RATE_RIDGE * np.eye(len(RATE_SCALE))
     b = self.rate_xty[c] / w
     # least squares under beta_0 >= beta_1 >= ... >= beta_{n-1} >= 0 on the band coefficients (all in the same units:
@@ -1524,11 +1577,13 @@ class HondaLateralModel:
       try:
         beta = np.linalg.solve(A, b)
       except np.linalg.LinAlgError:
-        return none
+        self.wire_evidence[c] = none
+        return
       beta[:WIRE_BANDS] = _pava_nonincreasing(beta[:WIRE_BANDS])
     beta = self._solve_bands(A, b, step, beta)
+    yield
     self.rate_beta[c] = beta
-    sse = self._sse(c, A, b, beta)
+    sse = self._sse(yy, A, b, beta)
     self.class_rate_r2[c] = 1.0 - sse / var_y
     k0 = float(beta[0])
     self.rate_slope = k0 / RATE_SCALE[0]
@@ -1536,7 +1591,8 @@ class HondaLateralModel:
     # are something else (the driver below the press threshold, a sign convention error, a drive the delay model does
     # not fit); a band is informed only if the window holds samples with the wire in or above it
     if k0 <= 0.0 or self.class_rate_r2[c] < RATE_MIN_R2:
-      return none
+      self.wire_evidence[c] = none
+      return
     activity = np.diag(A)[:WIRE_BANDS]
     # Where does the response stop? The pooled fit cannot say: a pinned wire fills every band at once, so the bands
     # above the knee are collinear there and the non-increasing projection pools them with the knee into one value
@@ -1560,7 +1616,8 @@ class HondaLateralModel:
       dead = beta.copy()
       dead[k:WIRE_BANDS] = 0.0
       dead = self._solve_bands(A, b, step, dead, dead_from=k)
-      cost = self._sse(c, A, b, dead) - sse
+      yield
+      cost = self._sse(yy, A, b, dead) - sse
       slope = float(np.sqrt(max(cost, 0.0) / (k0 * k0 * A[k:WIRE_BANDS, k:WIRE_BANDS].sum())))
       if self.wire_gains[k] < WIRE_DEAD_GAIN:
         if slope > WIRE_ALIVE_SLOPE:
@@ -1572,7 +1629,8 @@ class HondaLateralModel:
       break
     k0 = float(forced[0])
     if k0 <= 0.0:
-      return none
+      self.wire_evidence[c] = none
+      return
     self.class_judged[c] = True
     self.class_dead_from[c] = dead_from
     fit = np.clip(forced[:WIRE_BANDS] / k0, WIRE_GAIN_MIN, WIRE_GAIN_MAX)
@@ -1587,7 +1645,7 @@ class HondaLateralModel:
     evidence = (activity >= WIRE_MIN_BAND_ACTIVITY) & (np.abs(fit - gains) > WIRE_TOL)
     evidence[dead_from:] = (activity[dead_from:] >= WIRE_MIN_BAND_ACTIVITY) & (gains[dead_from:] > 0.0)
     evidence[0] = False
-    return evidence
+    self.wire_evidence[c] = evidence
 
   def _judge_bound(self, c, dead_from):
     # The class's bound: the dead start, with a second witness: the lateral accel at this speed (the class's own
@@ -1641,8 +1699,10 @@ class HondaLateralModel:
         beta[dead_from:WIRE_BANDS] = 0.0
     return beta
 
-  def _sse(self, c, A, b, beta):
-    return self.rate_syy[c] / self.rate_weight[c] - 2.0 * float(b @ beta) + float(beta @ A @ beta)
+  @staticmethod
+  def _sse(yy, A, b, beta):
+    # yy: the mean square of the steer rate over the fit's samples (a snapshot, like A and b)
+    return yy - 2.0 * float(b @ beta) + float(beta @ A @ beta)
 
   def _project_shapes(self):
     # non-increasing in lateral accel, from the anchor's 1.0 down: a bin with no data of its own inherits

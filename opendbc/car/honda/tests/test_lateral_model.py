@@ -6,9 +6,10 @@ import numpy as np
 from opendbc.car import DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.lateral_model import (CEILING_KEY, CEILING_MAX, DEFAULT_LAT_ACCEL_FACTOR, FF_CORRECTION_MAX,
-                                             FF_SATURATION_FADE, GAIN_BINS_MPH, GAIN_BINS_MS, GAIN_DIFF_WINDOW, GAIN_KEY_FMT,
-                                             GAIN_MAX, GAIN_MAX_WIRE, GAIN_MIN, GAIN_OVER_RATIO, MAX_LAT_ACCEL, MAX_LAT_JERK_DOWN,
-                                             MAX_LAT_JERK_UP, PLANT_TAU, PRESS_HOLDOFF, RATE_MIN_R2, SHAPE_ANCHOR_LAT_ACCEL,
+                                             FF_SATURATION_FADE, FIT_INTERVAL, GAIN_BINS_MPH, GAIN_BINS_MS, GAIN_DIFF_WINDOW,
+                                             GAIN_KEY_FMT, GAIN_MAX, GAIN_MAX_WIRE, GAIN_MIN, GAIN_OVER_RATIO, MAX_LAT_ACCEL,
+                                             MAX_LAT_JERK_DOWN, MAX_LAT_JERK_UP, PLANT_TAU, PRESS_HOLDOFF, RATE_MIN_R2,
+                                             RATE_MIN_SAMPLES, SHAPE_ANCHOR_LAT_ACCEL,
                                              SHAPE_BINS_LAT_ACCEL, SHAPE_KEY_FMT, SHAPE_MAX, SHAPE_MIN, WIRE_BANDS, WIRE_BOUND_HOLD_FITS,
                                              WIRE_CUTS, WIRE_DEAD_GAIN, WIRE_DELAY, WIRE_INVERT_MIN_GAIN, WIRE_KEY_FMT, WIRE_PROBE,
                                              WIRE_RATE_MAX, HondaLateralModel, clamp_shape)
@@ -1153,6 +1154,69 @@ def run_limit(model, v_ego, request_fn, ticks, last=0.0):
     last = model.limit(request_fn(k), last, v_ego)
     wire.append(last)
   return np.array(wire)
+
+
+class TestHondaLateralComputeBudget(unittest.TestCase):
+  def test_fits_run_one_solve_per_tick_and_complete(self):
+    # Route 000001cc (2:23:59 PM ET): the wire at the bound through a bend had both fits solving whole every 5 counted
+    # ticks, the car controller's loop fell to 88-93 Hz and selfdrived soft-disabled on selfdrivedLagging. The fits
+    # are scheduled: due every FIT_INTERVAL counted ticks, one projected-gradient solve per tick in all, and they
+    # still complete and read the plant (see the module docstring, "Compute budget")
+    v = 15.0
+    model = make_model()
+    solves = {'n': 0}
+    per_tick = []
+    starts = {'wire': 0, 'delivery': 0}
+    orig_bands, orig_delivery, orig_update = model._solve_bands, model._solve_delivery, model.update
+    orig_fit_wire, orig_fit_delivery = model._fit_wire, model._fit_delivery
+
+    def solve_bands(*args, **kwargs):
+      solves['n'] += 1
+      return orig_bands(*args, **kwargs)
+
+    def solve_delivery(*args, **kwargs):
+      solves['n'] += 1
+      return orig_delivery(*args, **kwargs)
+
+    def update(*args, **kwargs):
+      before = solves['n']
+      out = orig_update(*args, **kwargs)
+      per_tick.append(solves['n'] - before)
+      return out
+
+    def fit_wire(c):
+      starts['wire'] += 1
+      return orig_fit_wire(c)
+
+    def fit_delivery():
+      starts['delivery'] += 1
+      return orig_fit_delivery()
+
+    model._solve_bands, model._solve_delivery, model.update = solve_bands, solve_delivery, update
+    model._fit_wire, model._fit_delivery = fit_wire, fit_delivery
+    # a gentle stretch settles the speed table so the delivery fit runs too, then the sweep pins the wire
+    drive_steer(model, v, 300.0, lambda t: 0.3 * np.sin(2 * np.pi * t / 20.0), steer_plant(0.55, slope=0.3))
+    self.assertTrue(any(model.gain_settled(i) for i in range(len(GAIN_BINS_MPH))))
+    drive_steer(model, v, 300.0, sweep_wire, steer_plant(0.55, slope=0.3))
+    self.assertGreater(model.rate_samples, RATE_MIN_SAMPLES)
+    self.assertGreater(starts['wire'], 1)
+    self.assertGreater(starts['delivery'], 0)
+    self.assertLessEqual(starts['wire'], model.rate_samples // FIT_INTERVAL + 1)
+    self.assertGreater(sum(per_tick), 0)
+    self.assertLessEqual(max(per_tick), 1)                          # never more than one solve on a tick
+    # the fits completed and read the plant: the steer rate fitted (and judged the class), the lateral accel's floor
+    # is known on the bands the sweep visits, and the shape follows the slope as in the unscheduled version
+    self.assertGreater(model.rate_r2, 0.5)
+    self.assertTrue(model.class_judged.any())
+    self.assertTrue(model.wire_floor_known[3:].all())
+    self.assertAlmostEqual(model.wire_gains[1], 1.0, delta=0.1)
+    self.assertLess(model.wire_gains[3], 0.8)
+    # the queue drains while the wheel is held (a fit works on its snapshot), and nothing new is scheduled
+    drive_steer(model, v, 1.0, sweep_wire, steer_plant(0.55, slope=0.3), pressed=True)
+    self.assertEqual(len(model.fit_jobs), 0)
+    n = starts['wire'] + starts['delivery']
+    drive_steer(model, v, 5.0, sweep_wire, steer_plant(0.55, slope=0.3), pressed=True)
+    self.assertEqual(starts['wire'] + starts['delivery'], n)
 
 
 class TestHondaLateralWireLimits(unittest.TestCase):
