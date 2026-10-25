@@ -544,6 +544,9 @@ class TestHondaNidecStockLongitudinalSafety(HondaPcmEnableBase, TestHondaNidecSa
   def test_brake_safety_check(self):
     pass
 
+  def test_block_aeb(self):
+    pass
+
 
 class TestHondaNidecPcmRlxBridgeSafety(TestHondaNidecPcmAltSafety):
   """
