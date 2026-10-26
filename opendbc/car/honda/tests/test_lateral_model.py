@@ -6,10 +6,11 @@ import numpy as np
 from opendbc.car import DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.lateral_model import (CEILING_KEY, CEILING_MAX, DEFAULT_LAT_ACCEL_FACTOR, FF_CORRECTION_MAX,
-                                             FF_SATURATION_FADE, FIT_INTERVAL, GAIN_BINS_MPH, GAIN_BINS_MS, GAIN_DIFF_WINDOW,
+                                             FF_SATURATION_FADE, FIT_INTERVAL, FRICTION_FIRST_INTERVAL, GAIN_BINS_MPH, GAIN_BINS_MS,
+                                             GAIN_DIFF_WINDOW,
                                              GAIN_KEY_FMT, GAIN_MAX, GAIN_MAX_WIRE, GAIN_MIN, GAIN_OVER_RATIO, MAX_LAT_ACCEL,
                                              MAX_LAT_JERK_DOWN, MAX_LAT_JERK_UP, PLANT_TAU, PRESS_HOLDOFF, RATE_MIN_R2,
-                                             RATE_MIN_SAMPLES, SHAPE_ANCHOR_LAT_ACCEL,
+                                             RATE_MIN_SAMPLES, SHAPE_ANCHOR_LAT_ACCEL, SPEED_CLASSES,
                                              SHAPE_BINS_LAT_ACCEL, SHAPE_KEY_FMT, SHAPE_MAX, SHAPE_MIN, WIRE_BANDS, WIRE_BOUND_HOLD_FITS,
                                              WIRE_CUTS, WIRE_DEAD_GAIN, WIRE_DELAY, WIRE_INVERT_MIN_GAIN, WIRE_KEY_FMT, WIRE_PROBE,
                                              WIRE_RATE_MAX, HondaLateralModel, clamp_shape)
@@ -1217,6 +1218,52 @@ class TestHondaLateralComputeBudget(unittest.TestCase):
     n = starts['wire'] + starts['delivery']
     drive_steer(model, v, 5.0, sweep_wire, steer_plant(0.55, slope=0.3), pressed=True)
     self.assertEqual(starts['wire'] + starts['delivery'], n)
+
+  def test_friction_selection_is_scheduled(self):
+    # Route 0000008a (Civic 2022, a straight at 20 m/s): the speed table's windows qualified tick after tick and the
+    # friction selection scored the whole candidate bank on each of them; the loop ran at 89-95 Hz and selfdrived
+    # soft-disabled on selfdrivedLagging. The selection is due every FIT_INTERVAL windows of a class and runs as one
+    # queued solve, never more than one per tick; the table still identifies the plant and the class is still judged
+    v = 15.6
+    g_true = 1.2
+    model = make_model()
+    scores = {'n': 0, 'judged_at': None}
+    per_tick = []
+    orig_scores, orig_update = model._friction_scores, model.update
+
+    def friction_scores(c):
+      scores['n'] += 1
+      return orig_scores(c)
+
+    def update(*args, **kwargs):
+      before = scores['n']
+      out = orig_update(*args, **kwargs)
+      per_tick.append(scores['n'] - before)
+      if scores['judged_at'] is None and model.friction_judged[1]:   # 35 mph is the 30-40 mph class
+        scores['judged_at'] = int(model.class_gain_samples[1])
+      return out
+
+    model._friction_scores, model.update = friction_scores, update
+    # small changes riding on larger ones: windows of both sizes, so both splits can judge the band
+    drive(model, v, g_true, 240.0, lambda t: 0.3 * np.sin(2 * np.pi * t / 10.0) + 0.04 * np.sin(2 * np.pi * t / 4.0))
+    windows = int(model.class_gain_samples[1])
+    self.assertGreater(windows, 10 * FIT_INTERVAL)
+    self.assertGreater(scores['n'], 0)
+    self.assertLessEqual(max(per_tick), 1)                          # one scoring on a tick at most
+    # scored every FRICTION_FIRST_INTERVAL windows until the class was judged, every FIT_INTERVAL after
+    self.assertIsNotNone(scores['judged_at'])
+    self.assertLessEqual(scores['n'], scores['judged_at'] // FRICTION_FIRST_INTERVAL
+                         + (windows - scores['judged_at']) // FIT_INTERVAL + 2 * len(SPEED_CLASSES))
+    self.assertGreater(scores['n'], (windows - scores['judged_at']) // FIT_INTERVAL - 1)
+    self.assertTrue(model.friction_judged[1])
+    self.assertEqual(model.friction, (0.0, 0.0, 0.0))               # a frictionless plant reads no band
+    self.assertAlmostEqual(model.gain(v), g_true, delta=0.1)
+    # the queue drains while the wheel is held, and nothing new is scheduled
+    drive(model, v, g_true, 2.0, lambda t: 0.3, pressed=True)
+    self.assertEqual(len(model.fit_jobs), 0)
+    n = scores['n']
+    drive(model, v, g_true, 5.0, lambda t: 0.3, pressed=True)
+    self.assertEqual(scores['n'], n)
 
 
 class TestHondaLateralWireLimits(unittest.TestCase):

@@ -425,6 +425,12 @@ tick (``_step_fits``), the queue serving one solve per tick in all. Peak and mea
 that way; the verdict arrives a few ticks after it is due, from a snapshot of the system taken when the
 fit started, and the learners between fits track the last complete one as before. The bound's hold is
 in fits (``WIRE_BOUND_HOLD_FITS``), derived from the interval so it stays ~10 s of counted ticks.
+The speed table's friction selection is the same kind of cost on the other regime: scoring every
+candidate in every bin over both splits is a few dozen array reductions, and the window path ran it on
+every qualifying tick of a gentle stretch (route 0000008a, Civic 2022: the loop at 89-95 Hz on a
+straight at 20 m/s, the alert flickering with the windows). It is scheduled the same way, per speed
+class every ``FIT_INTERVAL`` of its windows, and the per-tick path reads only the two bins around the
+speed (``_bin_fit``). What the window path still does on every qualifying tick is the sums' update.
 
 Persisting the tables needs the ``HondaLatGainNNParams``, ``HondaLatShapeNNParams``,
 ``HondaLatWireNNParams`` and ``HondaLatCeilingParams`` keys registered in openpilot's
@@ -638,6 +644,10 @@ RATE_MIN_SAMPLES = int(round(10.0 / DT_CTRL))     # counted ticks before the fir
 # the systems have RATE_TAU of memory, and a fit is a queue of solves done one per tick, so the interval must exceed
 # the longest fit (the delivery fit: up to WIRE_BANDS solves per speed class)
 FIT_INTERVAL = int(round(1.0 / DT_CTRL))
+# windows between scorings of the speed table's friction candidates while a speed class is unjudged (see
+# _schedule_friction); FIT_INTERVAL once it is. Judged within 20 windows of the first judgable one, the dwell drives
+# of the tests latch the same candidate they did when every window scored
+FRICTION_FIRST_INTERVAL = FIT_INTERVAL // 10
 RATE_MIN_RATE_STD = 2.0                           # deg/s, steer-rate spread over the samples before they are fitted
 # the fit has to explain a fair share of the steering before its shape is evidence: routes 00000139 and 00000127
 # fit at 0.46 / 0.76, the angle-PID drive 00000135 at 0.12-0.25 with a knee within 20% of its STEER_MAX
@@ -853,6 +863,9 @@ class HondaLateralModel:
     self.fit_jobs = deque()                   # (kind, generator): the fits in progress, the first one running
     self.rate_fit_sample = np.zeros(nc, dtype=int)   # class_rate_samples at each class's last scheduled fit
     self.deliv_fit_sample = 0                 # deliv_samples at the last scheduled delivery fit
+    # the friction selection is scheduled the same way: per class, every FIT_INTERVAL of its windows
+    self.class_gain_samples = np.zeros(nc, dtype=int)   # windows (learning ticks of the speed table) per class
+    self.friction_fit_sample = np.zeros(nc, dtype=int)  # class_gain_samples at each class's last scheduled selection
     # delivery fit: EW normal equations of (|lat accel| / gain(v) - first band's raw wire) on [bands above the first, 1],
     # kept per speed bin with the lateral accel undivided, so the fit is always read in the table's current unit and
     # only against the bins that have settled (see the module docstring, "Two-way reachability")
@@ -1201,7 +1214,7 @@ class HondaLateralModel:
           self.gain_srr[idx, c] += a * dr * dr
           self.gain_sry[idx, c] += a * dr * dy
           self.gain_sw[idx, c] += a
-        self._select_friction(lo, hi)
+        self._schedule_friction(lo, hi)
         for idx, weight in ((lo, 1.0 - frac), (hi, frac)):
           fit = self.gain_fit(idx)
           if weight > 0.0 and fit is not None:
@@ -1445,17 +1458,38 @@ class HondaLateralModel:
     with np.errstate(invalid='ignore', divide='ignore'):
       return (np.nan_to_num(mismatch) * w).sum(axis=1) / w.sum(axis=1)
 
-  def _select_friction(self, *bins):
-    # the candidate under which the small and the large windows agree, with hysteresis, for the classes these bins are in
+  def _schedule_friction(self, *bins):
+    # The selection scores every candidate's fit in every bin over four window groups, twice (one per split): a few
+    # dozen array reductions, which on the device is milliseconds, and the window path runs it on every qualifying
+    # tick of a gentle stretch (the Civic 2022's route 0000008a: the loop at 89-95 Hz and selfdrivedLagging on a
+    # straight at 20 m/s while the windows qualified, nothing else running). The sums it reads have GAIN_FIT_TAU of
+    # memory and the choice has hysteresis, so it is a fit like the others (see the module docstring, "Compute
+    # budget"): due every FIT_INTERVAL windows of a class, one solve, queued behind whatever is in progress
     for c in {self.bin_class[b] for b in bins}:
-      scores = self._friction_scores(c)
-      if np.isnan(scores).all():
-        continue
-      cur = self.friction_idx[c]
-      best = int(np.nanargmin(scores))
-      if not self.friction_judged[c] or scores[best] <= scores[cur] - GAIN_FRICTION_MARGIN:
-        self.friction_idx[c] = best
-      self.friction_judged[c] = True
+      self.class_gain_samples[c] += 1
+      # an unjudged class is scored more often: its first verdict latches (the hysteresis holds it after), and it should
+      # come from the windows the first judgable tick had, as it did when every tick scored, not from the next second's
+      due = FIT_INTERVAL if self.friction_judged[c] else FRICTION_FIRST_INTERVAL
+      if (self.class_gain_samples[c] - self.friction_fit_sample[c] >= due
+          and not self._fit_queued(('friction', c))):
+        self.friction_fit_sample[c] = self.class_gain_samples[c]
+        self.fit_jobs.append((('friction', c), self._fit_friction(c)))
+
+  def _fit_friction(self, c):
+    # a generator of one solve: the class's candidate scores on the window sums as they stand (see _step_fits)
+    self._select_friction(c)
+    yield
+
+  def _select_friction(self, c):
+    # the candidate under which the small and the large windows agree, with hysteresis, for this speed class
+    scores = self._friction_scores(c)
+    if np.isnan(scores).all():
+      return
+    cur = self.friction_idx[c]
+    best = int(np.nanargmin(scores))
+    if not self.friction_judged[c] or scores[best] <= scores[cur] - GAIN_FRICTION_MARGIN:
+      self.friction_idx[c] = best
+    self.friction_judged[c] = True
 
   def _class_friction_idx(self, c):
     # a class that has not had both window sizes yet uses the nearest class that has (the band is a torque, and the
@@ -1473,10 +1507,24 @@ class HondaLateralModel:
     not answer (telemetry; the speed table is the response to the part of a change beyond it)."""
     return tuple(GAIN_FRICTIONS[self._class_friction_idx(c)] for c in range(len(SPEED_CLASSES)))
 
+  def _bin_fit(self, f, idx):
+    # one bin's window fit under one friction candidate: _fits()[f, idx] without pricing the whole bank, since the window
+    # path reads the two bins around the speed on every qualifying tick
+    sw = float(self.gain_sw[idx].sum())
+    if sw < 1e-12:
+      return None
+    sxx = float(self.gain_sxx[f, idx].sum())
+    srx = float(self.gain_srx[f, idx].sum())
+    srr = float(self.gain_srr[idx].sum())
+    if not (sxx > 0.0 and srx > 0.0 and srx * srx >= GAIN_IV_MIN_CORR * GAIN_IV_MIN_CORR * srr * sxx):
+      return None
+    if float(self.gain_sxx[0, idx].sum()) < GAIN_FIT_MIN_SXX * sw:
+      return None
+    return float(self.gain_sry[idx].sum()) / srx
+
   def gain_fit(self, idx):
     """The window fit for a speed bin under its class's friction band, or None while it is not a measurement."""
-    fit = self._fits()[self._class_friction_idx(self.bin_class[idx]), idx]
-    return None if np.isnan(fit) else float(fit)
+    return self._bin_fit(self._class_friction_idx(self.bin_class[idx]), idx)
 
   def gain_settled(self, idx):
     """Whether a speed bin's gain is a measurement: the window fit carries GAIN_SETTLED_WEIGHT and the table has
