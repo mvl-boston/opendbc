@@ -16,7 +16,7 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
-from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps
+from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
@@ -142,9 +142,18 @@ NIDEC_SPEED_ALPHA_KEYS["high"] = "HondaSpeedAlphaParams"
 # The speed factor is m/s of PCM_SPEED lead per m/s2 of requested accel; the servo's dv gain
 # was identified at 0.33-0.46 (m/s2)/(m/s) on the MDX (speedfactor 2.2-3.0), and a gain above
 # 1 (m/s2)/(m/s), i.e. a factor below 1.0, is not a plausible comfort-tuned ACC servo.
+# The upper bound is a loop-gain bound, not a plant bound: nidec_pid's integral correction rides
+# the same factor onto the wire, so the error loop's gain is k_i * sf * dv_gain behind ~0.9 s of
+# servo dead time, and an integral loop goes unstable at k_i*sf*gain*lag ~ pi/2. The CR-V 2015
+# (route a6354c3dcf16e7cf/25: dv gain 0.14 small-signal, 0.08 large-signal, the weakest servo
+# identified so far) needs a factor of ~7-12; with its persisted factor at 23-43 the highway hold
+# loop (k_i 0.5) was past that bound and limit-cycled at ~6 s: every aEgo overshoot wound the
+# integrator to -0.1..-0.25, which became -5..-10 m/s of lead, a 2-3 s fuel cut at -0.5 m/s2, and
+# -17 kph in 30 s against a +0.1 m/s2 plan. 16 keeps that loop inside the bound for a 0.14 gain
+# (1.0 rad) and leaves headroom above the weakest measured plant; it binds only on poison.
 NIDEC_SPEED_FACTOR_DEFAULT = 4.0
 NIDEC_SPEED_FACTOR_MIN = 1.0
-NIDEC_SPEED_FACTOR_MAX = 99.0
+NIDEC_SPEED_FACTOR_MAX = 16.0
 # zero-accel servo offset, m/s; measured -0.18..+0.46 per speed band on the MDX
 NIDEC_SPEED_ALPHA_MAX = 1.5
 # speed-channel ceiling, m/s2; every Nidec PCM sustains at least this on its speed channel
@@ -435,6 +444,11 @@ class CarController(CarControllerBase):
     if len(CC.orientationNED) == 3:
       self.pitch = CC.orientationNED[1]
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
+    # Nidec: within this margin of the displayed set speed the PCM's own governor owns the
+    # acceleration (see nidec_set_speed_governed), so no longitudinal learner may read the
+    # response there. The gas channel has always been protected here; the CR-V showed the
+    # speed channel needs it too.
+    set_speed_governed = nidec_set_speed_governed(CS.out.vEgo, CS.out.cruiseState.speed)
 
     # wind brake from air resistance decel at high speed
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
@@ -461,13 +475,18 @@ class CarController(CarControllerBase):
           gas_error = self.accel - CS.out.aEgo
           wind_learn_speed = 1000
           wind_adjust = 1 + wind_brake / wind_learn_speed
-          self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
+          # windfactor is the one gas-side learner that was not protected near the set speed: at
+          # the governor the gas error is permanently positive (plan +0.7, car 0) and it climbed
+          # toward its 3.0 clip, which also pushes the Nidec brake threshold (brake_last - wind_brake)
+          # out to ~-2 m/s2 of plan before any brake is applied
+          if not set_speed_governed:
+            self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
           gas_pedal_force = self.accel
           if gas_pedal_force <= 0.0: # don't reduce windfactor while braking, allow increases
             self.windfactor = max(self.windfactor, self.windfactor_before_brake)
           else:
             self.windfactor_before_brake = self.windfactor
-          if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
+          if not set_speed_governed:
             # drop to max values when not near speed limit
             self.gas_factors = dict(self.gas_factors_nomaxspeed)
             self.gas_alphas = dict(self.gas_alphas_nomaxspeed)
@@ -855,6 +874,16 @@ class CarController(CarControllerBase):
         dv_lead = sf_eff * accel_lag
         dv_sat = float(np.clip(sf_eff * self.sat_accel, NIDEC_DV_SAT_MIN, NIDEC_DV_SAT_MAX))
         in_sat = dv_lead > dv_sat
+        # The knee has a mirror image: below -NIDEC_DV_SAT_MIN of lead the servo is at its coast
+        # floor (PCM_SPEED has no brake authority), so a negative command that the coast cannot
+        # deliver undershoots forever and err*accel_lag, both negative, is POSITIVE speed-factor
+        # growth with nothing to falsify it. On the MDX the servo is linear to -2.5 m/s and the
+        # error changes sign, so this never bound there; on the CR-V 2015 the coast floor is
+        # -0.4 m/s2 for every lead from -1 to -40 m/s and the lead-following decels at -0.3..-0.7
+        # were the largest growth term (closed-loop bench on that plant: 4 -> 20-52 without the
+        # mirror, 7.5 with it from 4, 23 or 43; MDX-like plant 2.58 either way). Same remedy as
+        # the positive knee: reductions only (see the ratchet below).
+        in_coast = nidec_speed_channel_pinned(dv_lead, dv_sat) and not in_sat
 
         # average_factor learner: direct measurement (system ID), not tracking-error integration.
         # average_factor models the PCM's one-pole smoothing of our PCM_GAS commands, and
@@ -930,8 +959,12 @@ class CarController(CarControllerBase):
         # (sat_accel fell 1.01 -> 0.86 between routes 33 and 34 while cruise tracking was clean).
         # lag_learn_ok / gas_pinned are the lagged frame's: a brake or launch frame a lag ago is
         # what the car is answering now, whatever this frame looks like.
+        # The set-speed governor is the one place where a pinned wire plus a settled undershoot is
+        # NOT the ceiling: the PCM holds ~3% under the displayed CRUISE_SPEED whatever the lead
+        # (CR-V route 25: dv +11, gas 198, plan +0.7, aEgo 0.0 for 20 s at 116-117 kph / 120 set).
+        # That stretch read as lead_maxed direct proof and took sat_accel 0.69 -> 0.37.
         lead_maxed = dv_lead > NIDEC_DV_SAT_MAX
-        if lag_learn_ok and gas_pinned and (self.a_ego_filt < self.sat_accel) and \
+        if lag_learn_ok and gas_pinned and (self.a_ego_filt < self.sat_accel) and (not set_speed_governed) and \
              (lead_maxed or ((dv_lead >= NIDEC_DV_SAT_MIN) and (speedfactor_error_f > 0.1))) and \
              (not CS.out.gasPressed) and (CC.longActive) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
           self.sat_deficit_frames += 1
@@ -950,8 +983,11 @@ class CarController(CarControllerBase):
         # recovery windows are excluded like launch windows: the undershoot there is gas-channel
         # dead time, not speed-servo response, and it was double-billed — growing/bleeding
         # sf and alpha (sf_low fell 1.27 -> 0.60 across routes 33/34, mostly in these windows).
-        # Both the frame being answered (lag_learn_ok) and this one have to be clean.
-        if lag_learn_ok and CC.longActive and (CS.out.vEgo > 1e-5) and (not self.launch_active) and (self.gas_recovery_ticks == 0):
+        # Both the frame being answered (lag_learn_ok) and this one have to be clean. Near the set
+        # speed the PCM's governor answers, not the servo (alpha rode to its cap there on CR-V
+        # route 25 while the plan asked +0.7 against a car the PCM was holding at 0).
+        if lag_learn_ok and CC.longActive and (CS.out.vEgo > 1e-5) and (not self.launch_active) and (self.gas_recovery_ticks == 0) and \
+             (not set_speed_governed):
           if (speedfactor_error > 0) and (dv_lead > NIDEC_DV_SAT_MAX):
             # beyond DV_SAT_MAX surplus lead provably does nothing, so undershoot there is not
             # growth fuel (that loop is what rode speedfactor to ~511): bleed toward the clip
@@ -980,7 +1016,7 @@ class CarController(CarControllerBase):
               alpha_delta = 0.0
             self.speed_alphas[band] = float(np.clip(self.speed_alphas[band] + alpha_delta,
                                                     -NIDEC_SPEED_ALPHA_MAX, NIDEC_SPEED_ALPHA_MAX))
-        if max_speedcontrol or in_sat: # only allow learning reductions
+        if max_speedcontrol or in_sat or in_coast: # only allow learning reductions
           # speed-channel saturation is a speed-channel condition. gasfactor/gas_alpha used to
           # be ratcheted here too, which made "pcm_speed at its clip" (68% of low-speed accel
           # frames on route 51, with speedfactor_low pinned at its clamp) forbid the gas target
@@ -1129,7 +1165,7 @@ class CarController(CarControllerBase):
           if (self.apply_brake_last > 0) and (apply_brake == 0) and CC.longActive and (not self.launch_active):
             self.gas_recovery_ticks = 200
 
-          if CS.out.vEgo < CS.out.cruiseState.speed - 2.:
+          if not set_speed_governed:
             self.gas_factors_nomaxspeed = dict(self.gas_factors)
             self.gas_alphas_nomaxspeed = dict(self.gas_alphas)
           else:
