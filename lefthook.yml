@@ -10,7 +10,7 @@ output:
   - skips          # Print "skip" (i.e. no files matched)
 
 test:
-  parallel: true
+  parallel: false
   commands:
     # *** static analysis
     ruff:
@@ -26,5 +26,5 @@ test:
       run: opendbc/safety/tests/misra/test_misra.sh
 
     # *** tests ***
-    pytest:
-      run: pytest -n8
+    unittest:
+      run: unittest-parallel -j4
