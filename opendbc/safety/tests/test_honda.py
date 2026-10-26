@@ -415,6 +415,16 @@ class TestHondaNidecGasInterceptorSafety(GasInterceptorSafetyTest, HondaButtonEn
   def setUp(self):
     super().setUp()
     self.safety.set_current_safety_param_sp(HondaSafetyFlagsSP.GAS_INTERCEPTOR)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, self.SAFETY_PARAM)
+    self.safety.init_tests()
+
+  def _driver_gas_on(self):
+    self._rx(self._interceptor_user_gas(self.INTERCEPTOR_THRESHOLD + 1))
+
+  def _driver_gas_off(self):
+    self._rx(self._interceptor_user_gas(0))
+
+
 class TestHondaNidecPcmAltSafety(TestHondaNidecPcmSafety):
   """
     Covers the Honda Nidec safety mode with alt SCM messages
@@ -444,6 +454,14 @@ class TestHondaNidecAltGasInterceptorSafety(GasInterceptorSafetyTest, HondaButto
   def setUp(self):
     super().setUp()
     self.safety.set_current_safety_param_sp(HondaSafetyFlagsSP.GAS_INTERCEPTOR)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, self.SAFETY_PARAM)
+    self.safety.init_tests()
+
+  def _driver_gas_on(self):
+    self._rx(self._interceptor_user_gas(self.INTERCEPTOR_THRESHOLD + 1))
+
+  def _driver_gas_off(self):
+    self._rx(self._interceptor_user_gas(0))
 
   def _acc_state_msg(self, main_on):
     values = {"MAIN_ON": main_on, "COUNTER": self.cnt_acc_state % 4}
@@ -466,6 +484,7 @@ class TestHondaNidecStockLongitudinalSafety(HondaPcmEnableBase, TestHondaNidecSa
     super().setUp()
     self.safety.set_current_safety_param_sp(HondaSafetyFlagsSP.STOCK_LONGITUDINAL)
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, 0)
+    self.safety.init_tests()
 
   # Nidec doesn't disengage on falling edge of cruise. See comment in safety_honda.h
   def test_disable_control_allowed_from_cruise(self):
@@ -518,6 +537,7 @@ class TestHondaNidecPcmRlxBridgeSafety(TestHondaNidecPcmAltSafety):
     super().setUp()
     self.safety.set_current_safety_param_sp(HondaSafetyFlagsSP.NIDEC_HYBRID)
     self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, self.SAFETY_PARAM)
+    self.safety.init_tests()
 
   def _send_brake_msg(self, brake, aeb_req=0, bus=0):
     values = {"COMPUTER_BRAKE_HYBRID": brake, "AEB_REQ_1": aeb_req}
@@ -913,5 +933,9 @@ class TestHondaNidecHybridSafety(TestHondaNidecPcmSafety):
   def setUp(self):
     super().setUp()
     self.safety.set_current_safety_param_sp(HondaSafetyFlagsSP.NIDEC_HYBRID)
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec, self.SAFETY_PARAM)
+    self.safety.init_tests()
+
+
 if __name__ == "__main__":
   unittest.main()
