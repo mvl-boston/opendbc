@@ -309,7 +309,8 @@ class CAR(Platforms):
     [HondaCarDocs("Honda Pilot 2023-25", "All")],
     CarSpecs(wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=17.5),
   )
-  HONDA_PILOT_4G_MMR = HondaBoschCANFDPlatformConfig( # Mid-Model Refresh has more powerful EPS
+  # Mid-Model Refresh has more powerful EPS
+  HONDA_PILOT_4G_MMR = HondaBoschCANFDPlatformConfig(
     [HondaCarDocs("Honda Pilot 2026", "All")],
     CarSpecs(wheelbase=2.89, centerToFrontRatio=0.442, steerRatio=17.5),
   )
@@ -353,6 +354,12 @@ class CAR(Platforms):
     [HondaCarDocs("Acura TLX 2024-25", "All")],
     CarSpecs(wheelbase=2.87, centerToFrontRatio=0.43, steerRatio=13.7),
   )
+  ACURA_ADX = HondaBoschPlatformConfig(
+    [HondaCarDocs("Acura ADX 2025-26", "All")],
+    CarSpecs(wheelbase=2.65, steerRatio=16.6, centerToFrontRatio=0.43),
+    {Bus.pt: 'honda_bosch_radarless_generated'},
+    flags=HondaFlags.BOSCH_RADARLESS
+  )
   HONDA_FIT_4G = HondaBoschPlatformConfig(
     [
       HondaCarDocs("Honda Fit (Taiwan) 2021", "All"),
@@ -366,12 +373,6 @@ class CAR(Platforms):
   ACURA_INTEGRA = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura Integra 2023-26", "All")],
     CarSpecs(wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=15.5),
-    {Bus.pt: 'honda_bosch_radarless_generated'},
-    flags=HondaFlags.BOSCH_RADARLESS
-  )
-  ACURA_ADX = HondaBoschPlatformConfig(
-    [HondaCarDocs("Acura ADX 2025-26", "All")],
-    CarSpecs(wheelbase=2.65, steerRatio=16.6, centerToFrontRatio=0.43),
     {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS
   )
