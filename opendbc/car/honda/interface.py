@@ -60,8 +60,8 @@ class CarInterface(CarInterfaceBase):
 
       ret.pcmCruise = True
 
-    if candidate == CAR.HONDA_CRV_5G:
-      ret.enableBsm = 0x12f8bfa7 in fingerprint[CAN.radar]
+    if candidate == CAR.HONDA_CRV_5G and 0x12f8bfa7 in fingerprint[CAN.radar]:
+      ret.flags |= HondaFlags.HAS_BSM.value
 
     # Detect Bosch cars with new HUD msgs
     if any(0x33DA in f for f in fingerprint.values()):
@@ -82,7 +82,6 @@ class CarInterface(CarInterfaceBase):
       # Traditional autos, direct-drive EVs and eCVTs, gearshift position in GEARBOX_AUTO
       ret.transmissionType = TransmissionType.automatic
 
-    ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0], [0]]
     ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kpBP = [[0.], [0.]]
     ret.lateralTuning.pid.kf = 0.00006  # conservative feed-forward
     ret.steerActuatorDelay = 0.1
@@ -121,81 +120,64 @@ class CarInterface(CarInterfaceBase):
         ret.dashcamOnly = True
 
     if candidate == CAR.HONDA_CIVIC:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[1.1], [0.33]]
 
-    elif candidate in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL):
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+    elif candidate in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.ACURA_INTEGRA):
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
 
-    elif candidate in (CAR.HONDA_CIVIC_2022, CAR.ACURA_INTEGRA):
-      ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5120], [0, 5120]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
-
-    elif candidate == CAR.HONDA_PRELUDE_6G:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+    elif candidate in (CAR.HONDA_CIVIC_2022, CAR.HONDA_PRELUDE_6G):
+      ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
+      ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
     elif candidate == CAR.HONDA_ACCORD:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
 
     elif candidate == CAR.HONDA_ACCORD_11G:
       ret.steerActuatorDelay = 0.3
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kf = 0.000035
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     elif candidate == CAR.ACURA_ILX:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
 
     elif candidate in (CAR.HONDA_CRV, CAR.HONDA_CRV_EU, CAR.HONDA_CRV_SA):
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 1000], [0, 1000]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
       ret.wheelSpeedFactor = 1.025
 
     elif candidate == CAR.HONDA_CRV_5G:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.64], [0.192]]
       ret.wheelSpeedFactor = 1.025
 
     elif candidate == CAR.HONDA_CRV_HYBRID:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
       ret.wheelSpeedFactor = 1.025
 
     elif candidate in (CAR.HONDA_CRV_6G):
       ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5100], [0, 5100]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
       ret.wheelSpeedFactor = 1.025
 
     elif candidate == CAR.HONDA_FIT:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.05]]
 
     elif candidate == CAR.HONDA_FREED:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.05]]
 
     elif candidate in (CAR.HONDA_HRV, CAR.HONDA_HRV_3G):
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
       if candidate == CAR.HONDA_HRV:
+        ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.16], [0.025]]
         ret.wheelSpeedFactor = 1.025
+      else:
+        ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]  # TODO: can probably use some tuning
 
     elif candidate == CAR.ACURA_RDX:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 1000], [0, 1000]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
 
     elif candidate == CAR.ACURA_RDX_3G:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
 
     elif candidate == CAR.ACURA_RDX_3G_MMR:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
       if not ret.openpilotLongitudinalControl:
@@ -203,36 +185,32 @@ class CarInterface(CarInterfaceBase):
         ret.minSteerSpeed = 70. * CV.KPH_TO_MS
 
     elif candidate == CAR.HONDA_ODYSSEY:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.28], [0.08]]
 
     elif candidate == CAR.HONDA_ODYSSEY_TWN:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 32767], [0, 32767]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.28], [0.08]]
 
     elif candidate in (CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G):
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      # ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.38], [0.11]] replace w Marco tune below
+      ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
+      ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
     elif candidate == CAR.ACURA_MDX_4G_MMR:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.steerActuatorDelay = 0.3
+      ret.lateralTuning.pid.kf = 0.000035
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     elif candidate == CAR.HONDA_RIDGELINE:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.38], [0.11]]
 
     elif candidate in (CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G):
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
 
     elif candidate in (CAR.HONDA_E, CAR.HONDA_E_ADVANCE):
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]] # TODO: can probably use some tuning
 
     elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
       ret.steerActuatorDelay = 0.15
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
       if not ret.openpilotLongitudinalControl:
@@ -241,13 +219,14 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate == CAR.ACURA_MDX_4G:
       ret.steerActuatorDelay = 0.3
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kf = 0.000035
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     elif candidate == CAR.ACURA_TLX_2G_MMR:
       ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      # try Marco tune below
+      ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
+      ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
     # TODO-SP: remove when https://github.com/commaai/opendbc/pull/2687 is merged
     elif candidate in (
@@ -263,22 +242,20 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate == CAR.HONDA_FIT_4G:
       ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     elif candidate == CAR.ACURA_ADX:
       ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5000], [0, 5000]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpBP, ret.lateralTuning.pid.kpV = [[0, 10], [0.05, 0.5]]
+      ret.lateralTuning.pid.kiBP, ret.lateralTuning.pid.kiV = [[0, 10], [0.0125, 0.125]]
 
     elif candidate in (CAR.HONDA_PASSPORT_4G, CAR.HONDA_PILOT_4G_MMR):
       ret.steerActuatorDelay = 0.3
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kf = 0.000035
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     else:
       ret.steerActuatorDelay = 0.15
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3840], [0, 3840]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
 
     if candidate == CAR.HONDA_PILOT_4G:
@@ -298,7 +275,7 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RADARLESS.value
     if candidate == CAR.ACURA_INTEGRA:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NO_ENGINE_DATA_MSG.value
-    if ret.flags & HondaFlags.BOSCH_CANFD:
+    if candidate in HONDA_BOSCH_CANFD:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_CANFD.value
     if candidate == CAR.ACURA_RLX_HYBRID:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RLX_STEER_BRIDGE.value
@@ -348,36 +325,23 @@ class CarInterface(CarInterfaceBase):
 
     if candidate == CAR.HONDA_CIVIC:
       if ret.flags & HondaFlagsSP.EPS_MODIFIED:
-        # stock request input values:     0x0000, 0x00DE, 0x014D, 0x01EF, 0x0290, 0x0377, 0x0454, 0x0610, 0x06EE
-        # stock request output values:    0x0000, 0x0917, 0x0DC5, 0x1017, 0x119F, 0x140B, 0x1680, 0x1680, 0x1680
-        # modified request output values: 0x0000, 0x0917, 0x0DC5, 0x1017, 0x119F, 0x140B, 0x1680, 0x2880, 0x3180
-        # stock filter output values:     0x009F, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108
-        # modified filter output values:  0x009F, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0108, 0x0400, 0x0480
-        # note: max request allowed is 4096, but request is capped at 3840 in firmware, so modifications result in 2x max
-        stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2560, 8000], [0, 2560, 3840]]
-        CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
+        stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.1]]
 
     elif candidate in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL):
       if ret.flags & HondaFlagsSP.EPS_MODIFIED:
-        stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2564, 8000], [0, 2564, 3840]]
-        CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
+        stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.09]]  # 2.5x Modded EPS
 
     elif candidate == CAR.HONDA_CIVIC_2022:
       if ret.flags & HondaFlagsSP.EPS_MODIFIED:
-        stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2564, 8000], [0, 2564, 3840]]
-        CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
+        stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.09]]  # 2.5x Modded EPS
 
     elif candidate == CAR.HONDA_ACCORD:
       if ret.flags & HondaFlagsSP.EPS_MODIFIED:
-        CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
+        stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.09]]
 
     elif candidate == CAR.HONDA_CRV_5G:
       if ret.flags & HondaFlagsSP.EPS_MODIFIED:
-        # stock request input values:     0x0000, 0x00DB, 0x01BB, 0x0296, 0x0377, 0x0454, 0x0532, 0x0610, 0x067F
-        # stock request output values:    0x0000, 0x0500, 0x0A15, 0x0E6D, 0x1100, 0x1200, 0x129A, 0x134D, 0x1400
-        # modified request output values: 0x0000, 0x0500, 0x0A15, 0x0E6D, 0x1100, 0x1200, 0x1ACD, 0x239A, 0x2800
-        stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2560, 10000], [0, 2560, 3840]]
-        CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
+        stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.21], [0.07]]
 
     elif candidate == CAR.HONDA_CLARITY:
       stock_cp.autoResumeSng = True
@@ -386,14 +350,11 @@ class CarInterface(CarInterfaceBase):
         for fw in car_fw:
           if fw.ecu == "eps" and b"-" not in fw.fwVersion and b"," in fw.fwVersion:
             stock_cp.lateralTuning.pid.kf = 0.00004
-            stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 5760, 15360], [0, 2560, 3840]]
-            CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
+            stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.1575], [0.05175]]
           elif fw.ecu == "eps" and b"-" in fw.fwVersion and b"," in fw.fwVersion:
-            stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 5760, 10240], [0, 2560, 3840]]
-            CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
+            stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.1]]
       else:
-        stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 2560], [0, 2560]]
-        CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
+        stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.8], [0.24]]
 
     elif candidate == CAR.ACURA_MDX_3G:
       stock_cp.autoResumeSng = True
@@ -403,9 +364,6 @@ class CarInterface(CarInterfaceBase):
       # drive, lateralDelay 0.55 in force). Its one estimated block reads 0.73 s; the desired-to-actual lateral accel
       # cross-correlation on routes 00000177 / 00000181 reads 0.64-0.67 s on the well-correlated blocks, and the steer
       # plant fits 0.15-0.25 s of dead time plus a 0.8-1.0 s first order. 0.5 puts the delay in force at 0.70 s.
-      # Both exits the driver reported as overshoot (181 @ 21:15:33 ET, 182 @ 08:27:27 ET) are the loop ringing at a
-      # ~4 s period against a saturated, under-compensated plant: the car 0.7 s behind a planner reversal of
-      # ~3 m/s^2 in under 2 s, the request pinned the other way for 2-2.5 s, the car swinging past and back
       stock_cp.steerActuatorDelay = 0.5
       stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 433], [0, 433]]
       CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
@@ -414,21 +372,21 @@ class CarInterface(CarInterfaceBase):
       stock_cp.autoResumeSng = True
       stock_cp.minEnableSpeed = -1
       stock_cp.steerActuatorDelay = 0.3
-      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 830], [0, 830]]
-      CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
+      stock_cp.lateralTuning.pid.kiBP, stock_cp.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
+      stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
 
     elif candidate == CAR.HONDA_ACCORD_9G:
       stock_cp.steerActuatorDelay = 0.3
-      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 239], [0, 239]]
-      CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
+      stock_cp.lateralTuning.pid.kiBP, stock_cp.lateralTuning.pid.kpBP = [[0.,20], [0.,20]]
+      stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.4,0.3], [0,0]]
 
     elif candidate == CAR.ACURA_RLX_HYBRID:
       # STEERING_CONTROL is bridged to the EPS on the steer bus by a pre-flashed red panda.
       stock_cp.autoResumeSng = True
       stock_cp.minEnableSpeed = -1
       stock_cp.steerActuatorDelay = 0.3
-      stock_cp.lateralParams.torqueBP, stock_cp.lateralParams.torqueV = [[0, 32767], [0, 32767]]
-      CarInterfaceBase.configure_torque_tune(candidate, stock_cp.lateralTuning)
+      stock_cp.lateralTuning.pid.kf = 0.000035
+      stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.115], [0.052]]
 
     if candidate in HONDA_BOSCH:
       pass
