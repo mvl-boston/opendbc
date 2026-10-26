@@ -19,7 +19,7 @@ from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
 from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
 from opendbc.car.honda.lateral_model import HondaLateralModel
-from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps
+from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
 LongCtrlState = structs.CarControl.Actuators.LongControlState
