@@ -11,12 +11,13 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.can import CANPacker
 from opendbc.car import ACCELERATION_DUE_TO_GRAVITY, Bus, DT_CTRL, rate_limit, make_tester_present_msg, structs
 from opendbc.car.honda import hondacan
-from opendbc.car.honda.values import CAR, CruiseButtons, HondaFlags, CarControllerParams, CruiseSettings
+from opendbc.car.honda.values import CAR, HONDA_BOSCH, CruiseButtons, HondaFlags, CarControllerParams, CruiseSettings
 from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
 from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
+from opendbc.car.honda.lateral_model import HondaLateralModel
 
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
 from opendbc.sunnypilot.car.honda.gas_interceptor import GasInterceptorCarController
@@ -142,6 +143,14 @@ NIDEC_SPEED_BANDS = (
   ("high", 16.0),
 )
 
+# MDX 3G: steer torque bound (CAN counts) while any brake is commanded. The EPS faults above it, so the
+# bound applies instantly on the same tick the brake command goes non-zero, however small. It is only
+# released MDX_BRAKE_STEER_LIMIT_HOLD after the brake command returns to zero: the Nidec brake command
+# flickers 0 <-> on at low speed (route 0000010e: 469 clipped runs, median 2-3 ticks long, median gap
+# 0.1 s), so without the hold the wire toggled 433 <-> 233 for the whole turn.
+MDX_BRAKE_STEER_LIMIT = 233
+MDX_BRAKE_STEER_LIMIT_HOLD = int(1.0 / DT_CTRL)
+
 # the low/high nodes keep the param keys the two-band scheme persisted, so learned state survives
 NIDEC_GAS_FACTOR_KEYS: dict[str, str] = {band: f"HondaGasFactor{band}Params" for band, _ in NIDEC_GAS_BANDS}
 NIDEC_GAS_FACTOR_KEYS["low"] = "HondaGasFactorLowParams"
@@ -263,8 +272,13 @@ class HondaParamWriter:
 
       # block=True keeps the pacing on the disk op itself rather than on a handoff to the
       # C++ async queue, which would re-create the burst
-      self._params.put(key, value, block=True)
-      self._written[key] = value
+      # a key that is not registered in this openpilot build must not take the writer thread
+      # down with it (every other learned value would silently stop persisting)
+      try:
+        self._params.put(key, value, block=True)
+        self._written[key] = value
+      except Exception:
+        pass
       time.sleep(self.PARAM_WRITE_SPACING)
 
 class CarController(CarControllerBase, MadsCarController, GasInterceptorCarController, IntelligentCruiseButtonManagementInterface,
@@ -298,6 +312,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.gas = 0.0
     self.brake = 0.0
     self.last_torque = 0.0
+    self.steer_limit = 1.0                 # normalized |torque| bound in force this tick (1.0, or the MDX brake limit)
+    self.brake_steer_limit_frames = 0
     self.bosch_last_gas = 0
     self.last_applied_brake = 0.0
 
@@ -461,6 +477,14 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.launch_err_n = 0
     self.launch_ceiling_ticks = 0
 
+    # speed-dependent lateral plant model (see lateral_model.py): identifies m/s^2 per unit wire torque
+    # online and adds a feedforward correction to the torque controller's request. Every table starts from
+    # the car's own torque tune (a linear plant at latAccelFactor, a linear EPS) and is learned on the car;
+    # nothing is seeded per car. The MDX 3G's brake-steer fault bound (MDX_BRAKE_STEER_LIMIT) is a safety
+    # limit, not a plant model, and stays.
+    self.lat_model = HondaLateralModel(CP.lateralTuning.torque.latAccelFactor if CP.lateralTuning.which() == 'torque' else 0.0,
+                                       Params().get)
+
     self.latFactors = {
       "05": 1.0 if (Params().get("HondaLatAccelFactor05Params") is None) else Params().get("HondaLatAccelFactor05Params"),
       "10": 1.0 if (Params().get("HondaLatAccelFactor10Params") is None) else Params().get("HondaLatAccelFactor10Params"),
@@ -590,13 +614,38 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     if CS.out.gasPressed or not CC.longActive:
       self.nidec_pid.reset()
 
-    # *** rate limit steer ***
-    limited_torque = rate_limit(actuators.torque, self.last_torque, -self.params.STEER_DELTA_DOWN * DT_CTRL,
-                                self.params.STEER_DELTA_UP * DT_CTRL)
-    if (self.CP.carFingerprint == CAR.ACURA_MDX_3G) and \
-        (self.apply_brake_last > 0 or self.new_accel < 1e-5): # lower steer limits while braking
-      brake_limit = float(233.0 / self.params.STEER_MAX)
-      limited_torque = float(np.clip(limited_torque, -brake_limit, brake_limit))
+    # *** add the plant model's feedforward correction, then bound the wire ***
+    # self.last_torque is what actually went to the EPS last tick (wire limits + MDX brake clip
+    # applied); the model regresses measured lateral accel on it to identify the car's gain.
+    # steeringAngleDeg / steeringRateDeg share the wire's sign (a positive actuators.torque turns the angle
+    # positive); the response-shape learner regresses on them
+    steer_torque = self.lat_model.update(actuators.torque, self.last_torque, CC.latActive, CS.steer_control_active,
+                                         CS.out.steeringPressed, CS.out.vEgo, actuators.curvature, CC.currentCurvature,
+                                         CS.out.steeringAngleDeg, CS.out.steeringRateDeg)
+    # ISO 11270 lateral jerk / lateral accel, applied in lateral-accel space through the identified speed
+    # gain (see lateral_model.limit). This replaces the fixed STEER_DELTA torque rate, which was the same
+    # jerk target evaluated with one linear gain for every speed: at town speeds it held the wheel's
+    # return to center to a fraction of the ISO rate, on the highway it allowed more than the ISO rate.
+    # The result is the wire: the request (effective torque) mapped through the inverse of the EPS's learned
+    # response shape, bounded where the EPS stops answering.
+    limited_torque = self.lat_model.limit(steer_torque, self.last_torque, CS.out.vEgo)
+    # MDX brake steer limit: 233 counts is an EPS fault boundary while the brake is commanded, so it
+    # clips the rate-limited output on the same tick the brake command goes non-zero (a wire above 233
+    # for even the rate limiter's descent is not acceptable). Only while the brake is actually
+    # commanded: the coast half (gas command zero) pinned the wire at 233/433 through most coasting
+    # low-speed turns in route 0000010e. Held for MDX_BRAKE_STEER_LIMIT_HOLD after the brake command
+    # returns to zero, so the flickering low-speed brake command does not toggle the wire 433 <-> 233
+    # (the buzz-then-let-go felt in hard low-speed turns); the rate limiter slews the release.
+    if self.CP.carFingerprint == CAR.ACURA_MDX_3G:
+      if self.apply_brake_last > 0:
+        self.brake_steer_limit_frames = MDX_BRAKE_STEER_LIMIT_HOLD
+      elif self.brake_steer_limit_frames > 0:
+        self.brake_steer_limit_frames -= 1
+    brake_steer_limit = float(MDX_BRAKE_STEER_LIMIT / self.params.STEER_MAX) if self.brake_steer_limit_frames > 0 else 1.0
+    # the bound in force on the wire: the brake clip or the learned dead band (plus its probe band), whichever
+    # is lower; steer_maxed below reports against it
+    self.steer_limit = min(brake_steer_limit, self.lat_model.wire_limit)
+    limited_torque = float(np.clip(limited_torque, -self.steer_limit, self.steer_limit))
     self.last_torque = limited_torque if CS.steer_control_active else 0.0
 
     # *** apply brake hysteresis ***
@@ -1384,18 +1433,34 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                                        self.last_button_frame, self.CAN))
 
     new_actuators = actuators.as_builder()
-    new_actuators.torque = self.last_torque
+    # request plus only the limiting that actually happened (brake clip, rate limiter, steer_control_active, and
+    # the part of the wire the EPS does not answer to), in effective torque, NOT the raw wire torque: controlsd
+    # freezes the torque controller's integrator whenever this differs from the request by >0.01, and torqued
+    # fits latAccelFactor to it (see lateral_model.py, "Reporting"). The effective wire torque is
+    # actuatorsOutput.torque + actuatorsOutput.brake; the raw wire is on the CAN. steer_torque is the model
+    # output before the brake clip, so the clip is reported (route 00000114 09:22:58: 4.3 s of wire at 232
+    # reported as unlimited). With the request at the unit clip and the wire at the bound in force (the EPS
+    # ceiling, the MDX brake limit, or STEER_MAX) the request is reported as-is: that is saturation, and
+    # reporting it as limiting kept controlsd's steer_limited_by_safety set, which stops the steerSaturated
+    # ("turn exceeds steering limit") alert from ever counting on a car with a learned response shape.
+    new_actuators.torque = self.lat_model.reported_torque(actuators.torque, steer_torque, self.last_torque, self.steer_limit)
+    # actuatorsOutput gas/brake/speed: lateral model gain at this speed (m/s^2 per unit torque), feedforward
+    # correction actually added this tick, and the start of the wire band the EPS no longer answers to
+    # (normalized, 0.4-1.0) plus 2.0 while identification ran this tick (was long-channel telemetry)
+    steer_gas = float(self.lat_model.gain_now)
+    steer_brake = float(self.lat_model.applied_correction)
+    steer_speed = float(self.lat_model.ceiling) + (2.0 if self.lat_model.learning else 0.0)
     if self.CP.flags & HondaFlags.BOSCH:
-      new_actuators.speed = float(self.gasalpha)
+      new_actuators.speed = steer_speed
       new_actuators.accel = self.accel
-      new_actuators.gas = float(self.gasfactor)
-      new_actuators.brake = float(self.windfactor)
+      new_actuators.gas = steer_gas
+      new_actuators.brake = steer_brake
       new_actuators.torqueOutputCan = apply_torque
     else:
-      new_actuators.speed = float(self.nidec_pid_factor)
+      new_actuators.speed = steer_speed
       new_actuators.accel = float(self.accel)
-      new_actuators.gas = float(self.average_factor)
-      new_actuators.brake = float(self.sat_accel)
+      new_actuators.gas = steer_gas
+      new_actuators.brake = steer_brake
       new_actuators.torqueOutputCan = float(self.speed_factors["low"])
 
     if self.frame % 6000 == 0:
@@ -1426,6 +1491,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           learned_values[NIDEC_SPEED_FACTOR_KEYS[band]] = self.speed_factors[band]
           learned_values[NIDEC_SPEED_ALPHA_KEYS[band]] = self.speed_alphas[band]
         self.param_writer.put_many(learned_values)
+
+    if self.frame % 6000 == 3000:
+      self.param_writer.put_many(self.lat_model.learned_values())
 
     if self.frame % 12000 == 30 and (self.CP.flags & HondaFlags.NIDEC):
       self.param_writer.put_many({

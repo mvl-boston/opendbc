@@ -36,8 +36,8 @@ class CarControllerParams:
   BOSCH_GAS_LOOKUP_V = [0, 1600]
 
   STEER_STEP = 1  # 100 Hz
-  STEER_DELTA_UP = 3  # min/max in 0.33s for all Honda
-  STEER_DELTA_DOWN = 3
+  # No STEER_DELTA_UP/DOWN: the steer torque rate is bounded by ISO 11270 lateral jerk through the
+  # identified lateral plant model instead (opendbc/car/honda/lateral_model.py, HondaLateralModel.limit).
   STEER_GLOBAL_MIN_SPEED = 3 * CV.MPH_TO_MS
 
   def __init__(self, CP):
@@ -372,7 +372,7 @@ class CAR(Platforms):
   )
   ACURA_INTEGRA = HondaBoschPlatformConfig(
     [HondaCarDocs("Acura Integra 2023-26", "All")],
-    CarSpecs(wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=15.5),
+    CarSpecs(mass=3338.8 * CV.LB_TO_KG, wheelbase=2.5, centerToFrontRatio=0.5, steerRatio=15.5),
     {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS
   )
@@ -488,7 +488,7 @@ class CAR(Platforms):
       HondaCarDocs("Acura MDX 2017-20", "All"),
       HondaCarDocs("Acura MDX Hybrid 2017-20", "All"),
     ],
-    CarSpecs(wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
+    CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
     radar_dbc_dict('acura_mdx_3g_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
@@ -497,7 +497,7 @@ class CAR(Platforms):
       HondaCarDocs("Acura TLX 2015-17", "Advance Package"),
       HondaCarDocs("Acura TLX 2018-20", "All"),
     ],
-    CarSpecs(wheelbase=2.78, steerRatio=17.0, centerToFrontRatio=0.40, tireStiffnessFactor=0.18),
+    CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=17.0, centerToFrontRatio=0.40, tireStiffnessFactor=0.18),
     radar_dbc_dict('acura_mdx_3g_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
@@ -505,7 +505,7 @@ class CAR(Platforms):
     # 2017 RLX Sport Hybrid. Don't add to cardocs: the EPS is on a separate steer bus; a
     # pre-flashed red panda bridges steer messages onto the powertrain bus this code sees
     [],
-    CarSpecs(wheelbase=2.85, centerToFrontRatio=0.43, steerRatio=18.3),
+    CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.43, steerRatio=18.3),
     radar_dbc_dict('acura_rlx_2017_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
@@ -536,7 +536,7 @@ STEER_THRESHOLD = {
   CAR.HONDA_ODYSSEY_5G_MMR: 600,
   # port extensions
   CAR.HONDA_ACCORD_9G: 30,
-  CAR.ACURA_MDX_3G: 400,
+  CAR.ACURA_MDX_3G: 300,
   CAR.ACURA_TLX_1G: 200,
   CAR.ACURA_RLX_HYBRID: 2400,
 }

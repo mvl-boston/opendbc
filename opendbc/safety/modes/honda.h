@@ -591,7 +591,9 @@ static safety_config honda_bosch_init(uint16_t param) {
     {0x33D, 0, 8, .check_relay = true},
   };
 
-  // Bosch canfd w/ gas and brakes
+  // The radar look-alikes (0x310, 0x6CD5558, 0x6CD5559, 0xF31AA52, 0xF31AA5C, 0x1A45AA4E) are consumed by both
+  // the camera (behind the relay on the camera bus, 2) and the powertrain (radar bus, 0). openpilot TX is not
+  // forwarded across the open relay, so each is sent on both buses; the control messages stay on bus 0.
   static CanMsg HONDA_CANFD_LONG_TX_MSGS[] = {
     {0xE4, 0, 5, .check_relay = true},
     {0x1DF, 0, 8, .check_relay = true},

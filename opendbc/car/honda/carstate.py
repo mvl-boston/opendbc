@@ -1,4 +1,5 @@
 import math
+import time
 import numpy as np
 from collections import defaultdict
 
@@ -6,10 +7,12 @@ from opendbc.can import CANDefine, CANParser
 from opendbc.car import Bus, create_button_events, structs, DT_CTRL
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.hondacan import CanBus
+from openpilot.common.params import Params
 from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HondaFlags, CruiseButtons, CruiseSettings, \
                                                  GearShifter, CarControllerParams
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.honda.hud_objects import HudObjectTracker
+from opendbc.car.honda.steer_threshold_learner import HondaSteerThresholdLearner
 
 from opendbc.sunnypilot.car.honda.carstate_ext import CarStateExt
 
@@ -101,6 +104,10 @@ class CarState(CarStateBase, CarStateExt):
     self.abs_prior_FL = self.abs_prior_FR = self.abs_prior_RL = self.abs_prior_RR = 0
     self.abs_counter_prev = self.abs_checksum_prev = None
     self.lowspeed_source = 0.0
+
+    params = Params()
+    self.steer_threshold_learner = HondaSteerThresholdLearner(params.get, params.put)
+    self._steer_base_threshold = STEER_THRESHOLD.get(self.CP.carFingerprint, 1200)
 
   def update(self, can_parsers) -> tuple[structs.CarState, structs.CarStateSP]:
     cp = can_parsers[Bus.pt]
@@ -230,7 +237,8 @@ class CarState(CarStateBase, CarStateExt):
     ret.gasPressed = cp.vl["POWERTRAIN_DATA"]["PEDAL_GAS"] > 1e-5
 
     ret.steeringTorque = cp.vl[self.steer_status_msg]["STEER_TORQUE_SENSOR"]
-    ret.steeringPressed = abs(ret.steeringTorque) > STEER_THRESHOLD.get(self.CP.carFingerprint, 1200)
+    self.steer_threshold_learner.update(ret.steeringTorque, self._steer_base_threshold, self.steer_control_active, time.monotonic())
+    ret.steeringPressed = abs(ret.steeringTorque) > self.steer_threshold_learner.effective_threshold(self._steer_base_threshold)
 
     if self.CP.flags & HondaFlags.BOSCH:
       # The PCM always manages its own cruise control state, but doesn't publish it
