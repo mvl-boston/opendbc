@@ -515,6 +515,11 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     if len(CC.orientationNED) == 3:
       self.pitch = CC.orientationNED[1]
     hill_brake = math.sin(self.pitch) * ACCELERATION_DUE_TO_GRAVITY
+    # Nidec: within this margin of the displayed set speed the PCM's own governor owns the
+    # acceleration (see nidec_set_speed_governed), so no longitudinal learner may read the
+    # response there. The gas channel has always been protected here; the CR-V showed the
+    # speed channel needs it too.
+    set_speed_governed = nidec_set_speed_governed(CS.out.vEgo, CS.out.cruiseState.speed)
 
     # wind brake from air resistance decel at high speed
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
