@@ -41,31 +41,33 @@ class CarControllerParams:
   STEER_GLOBAL_MIN_SPEED = 3 * CV.MPH_TO_MS
 
   def __init__(self, CP):
-    if CP.carFingerprint in (CAR.HONDA_CRV, CAR.HONDA_CRV_EU, CAR.ACURA_RDX):
-      self.STEER_MAX = 1000  # TODO: determine if there is a dead zone at the top end
-    elif CP.carFingerprint in (CAR.ACURA_ILX, CAR.HONDA_CRV_5G, CAR.ACURA_TLX_2G_MMR):
-      self.STEER_MAX = 3840  # TODO: determine if there is a dead zone at the top end (ACURA_ILX)
-    elif CP.carFingerprint == CAR.ACURA_RDX_3G:
-      self.STEER_MAX = 4095  # TODO: determine if there is a dead zone at the top end
-    elif CP.carFingerprint in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.HONDA_ACCORD,
-                               CAR.HONDA_CRV_HYBRID, CAR.HONDA_FIT, CAR.HONDA_FREED, CAR.HONDA_HRV, CAR.HONDA_HRV_3G,
-                               CAR.HONDA_ODYSSEY, CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G,
-                               CAR.HONDA_E, CAR.HONDA_E_ADVANCE, CAR.HONDA_PRELUDE_6G):
-      # TODO: determine if there is a dead zone at the top end (except HONDA_FREED, HONDA_HRV, HONDA_HRV_3G)
+    if CP.carFingerprint in (CAR.ACURA_TLX_1G, CAR.HONDA_ACCORD_9G):
+      self.STEER_MAX = 239
+    elif CP.carFingerprint == CAR.ACURA_MDX_3G:
+      self.STEER_MAX = 433
+    elif CP.carFingerprint in (CAR.HONDA_CRV, CAR.HONDA_CRV_EU, CAR.HONDA_CRV_SA, CAR.ACURA_RDX):
+      self.STEER_MAX = 1000
+    elif CP.carFingerprint == CAR.ACURA_ILX:
+      self.STEER_MAX = 3840
+    elif CP.carFingerprint in (CAR.ACURA_RDX_3G, CAR.ACURA_RDX_3G_MMR):
       self.STEER_MAX = 4096
-    elif CP.carFingerprint == CAR.HONDA_CIVIC_2022:
-      self.STEER_MAX = 5120  # TODO: determine if there is a dead zone at the top end
+    elif CP.carFingerprint in (CAR.HONDA_CIVIC_2022, CAR.ACURA_INTEGRA):
+      self.STEER_MAX = 5120
     elif CP.carFingerprint == CAR.HONDA_CRV_6G:
       self.STEER_MAX = 5100
-    elif CP.carFingerprint == CAR.ACURA_RDX_3G_MMR:
-      self.STEER_MAX = 4076
     elif CP.carFingerprint in (CAR.HONDA_ACCORD_11G, CAR.ACURA_MDX_4G, CAR.ACURA_MDX_4G_MMR,
                                CAR.HONDA_PASSPORT_4G, CAR.HONDA_PILOT_4G_MMR):
       self.STEER_MAX = 12789
     elif CP.carFingerprint == CAR.ACURA_ADX:
       self.STEER_MAX = 5000
-    elif CP.carFingerprint == CAR.HONDA_ODYSSEY_TWN:
-      self.STEER_MAX = 32767  # TODO: determine if there is a dead zone at the top end
+    elif CP.carFingerprint in (CAR.ACURA_RLX_HYBRID, CAR.HONDA_ODYSSEY_TWN):
+      self.STEER_MAX = 32767
+    elif CP.carFingerprint in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.HONDA_ACCORD,
+                               CAR.HONDA_CRV_HYBRID, CAR.HONDA_CRV_5G, CAR.HONDA_FIT, CAR.HONDA_FIT_4G, CAR.HONDA_FREED,
+                               CAR.HONDA_HRV, CAR.HONDA_HRV_3G, CAR.HONDA_ODYSSEY, CAR.HONDA_ODYSSEY_5G_MMR,
+                               CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G,
+                               CAR.HONDA_E, CAR.HONDA_E_ADVANCE, CAR.HONDA_PRELUDE_6G, CAR.ACURA_TLX_2G_MMR):
+      self.STEER_MAX = 4096
     else:
       # Odyssey MMR uses up to 2560 for LKA; higher RDM commands are nonlinear and also apply brake drag.
       self.STEER_MAX = 2560
