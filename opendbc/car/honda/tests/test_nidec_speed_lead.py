@@ -1,6 +1,36 @@
 import unittest
 
-from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps
+from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
+
+
+class TestNidecSpeedChannelPinned(unittest.TestCase):
+  def test_positive_knee(self):
+    self.assertTrue(nidec_speed_channel_pinned(11.0, 10.0))
+    self.assertFalse(nidec_speed_channel_pinned(5.0, 7.0))
+
+  def test_coast_floor_mirror(self):
+    self.assertTrue(nidec_speed_channel_pinned(-3.0, 10.0))
+    self.assertFalse(nidec_speed_channel_pinned(-2.0, 10.0))
+    self.assertFalse(nidec_speed_channel_pinned(0.0, 10.0))
+
+  def test_crv_coast_growth_case_from_route_25(self):
+    # CR-V 2015 route a6354c3dcf16e7cf/25: plan -0.5 m/s2 on a -0.45 coast floor. The undershoot is
+    # permanent and err*accel is positive growth; it must be read as pinned once the lead is past
+    # the coast knee, which with the default factor (4) it is not and with a grown one (6) it is.
+    accel_lag = -0.5
+    self.assertFalse(nidec_speed_channel_pinned(4.0 * accel_lag, 10.0))
+    self.assertTrue(nidec_speed_channel_pinned(6.0 * accel_lag, 10.0))
+
+
+class TestNidecSetSpeedGoverned(unittest.TestCase):
+  def test_crv_route_25_hold_zone(self):
+    # 116.5 kph actual against a 120 kph display: the PCM, not the wire, held the car
+    self.assertTrue(nidec_set_speed_governed(32.4, 33.3))
+    self.assertTrue(nidec_set_speed_governed(33.3, 33.3))
+
+  def test_below_margin_is_servo_territory(self):
+    self.assertFalse(nidec_set_speed_governed(30.0, 33.3))
+    self.assertFalse(nidec_set_speed_governed(31.2, 33.3))
 
 
 class TestNidecSpeedLead(unittest.TestCase):
