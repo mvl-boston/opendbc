@@ -1,7 +1,7 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS,
-                                      HONDA_BOSCH_CANFD, CAR)
+                                      HONDA_BOSCH_CANFD, CAR, HONDA_BOSCH_ALT_RADAR)
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -186,12 +186,8 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
                     lkas_state_change=None):
   commands = []
 
-  if CP.carFingerprint in HONDA_BOSCH:
-    solid_lanes = hud_control.lanesVisible and not steer_maxed
-    dashed_lanes = lat_active
-  else:
-    solid_lanes = lat_active and not steer_maxed
-    dashed_lanes = hud_control.lanesVisible
+  solid_lanes = lat_active and not steer_maxed
+  dashed_lanes = hud_control.lanesVisible
 
   lkas_hud_values = {
     'LKAS_READY': 1,
@@ -231,16 +227,9 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
       # without MADS, lat_active == enabled while moving, so this stays equivalent there.
       lkas_hud_values['SOLID_LANES'] = lat_active
 
-  if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
+  if (not (CP.flags & HondaFlags.BOSCH_EXT_HUD)) or CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
     lkas_hud_values['RDM_OFF'] = 1
     lkas_hud_values['LANE_ASSIST_BEEP_OFF'] = 1
-
-  # New HUD concept for selected Bosch cars, overwrites some of the above
-  # TODO: make global across all Honda if feedback is favorable
-  # Try all Bosch A, didn't work on Nidec, and caused LKAS error in Bosch B/C
-  if CP.carFingerprint in HONDA_BOSCH and CP.carFingerprint not in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
-    lkas_hud_values['DASHED_LANES'] = steering_available
-    lkas_hud_values['SOLID_LANES'] = lat_active
 
   if CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
     commands.append(packer.make_can_msg('LKAS_HUD_A', bus, lkas_hud_values))
