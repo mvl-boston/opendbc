@@ -300,10 +300,11 @@ class HudObjectAuthor:
           emit = emit % MAX_OBJECT_ID + 1
         self._extra_emit[slot] = emit
       in_use.add(emit)
-      d_rel, y_rel = self._extra_smooth[slot].update(ex.dRel, LAT_SCALE * ex.yRel, ex.vRel, emit, now)
+      lat_scale = LAT_SCALE * lane_path.curve_boost(ex.dRel)
+      d_rel, y_rel = self._extra_smooth[slot].update(ex.dRel, lat_scale * ex.yRel, ex.vRel, emit, now)
       rendered.append((ex.dRel, ex.yRel))
       out[slot] = {"d_rel": d_rel, "y_rel": y_rel, "object_id": emit, "is_lead_car": 0,
-                   "car_type": CAR_TYPE_CAR, "rotation": lead_rotation(y_rel / LAT_SCALE)}
+                   "car_type": CAR_TYPE_CAR, "rotation": lead_rotation(y_rel / lat_scale)}
     return out
 
   def _gate_lead(self, lead: ModelLead, now: float) -> ModelLead:
@@ -343,7 +344,7 @@ class HudObjectAuthor:
     self._prev_op_id = op_id
     return self._lead_id
 
-  def create(self, packer, bus, lead, tracks, mux: int, now: float, extra_leads=None):
+  def create(self, packer, bus, lead, tracks, mux: int, now: float, extra_leads=None, canfd: bool = False):
     """`lead` = carControlSP.leadOne; `tracks` = the camera's HudObject snapshot (may be None); `mux` = the shared
     LANE_PATH/HUD_OBJECTS multiplexor for this frame. Returns one packed HUD_OBJECTS frame for the slot the mux lands
     on (OP's lead in slot 0, else a forwarded camera adjacent car — including in slot 0 when OP has no lead — else
@@ -363,9 +364,9 @@ class HudObjectAuthor:
     if lead.status:
       in_use.add(lead_id)
 
-    # scale the lateral by the lane-gain correction at the lead's distance so the marker tracks the
-    # lane rendering (LAT_SCALE was tuned against the previous, flatter lane gain law)
-    lat_scale = LAT_SCALE * lane_path.curve_boost(lead.dRel)
+    # CAN FD only: scale the lateral by the lane-gain correction at the lead's distance so the marker
+    # tracks the lane rendering (LAT_SCALE was tuned against the radarless, flatter lane gain law)
+    lat_scale = LAT_SCALE * (lane_path.curve_boost(lead.dRel) if canfd else 1.0)
     d_rel, y_rel = self._smoother.update(lead.dRel, lat_scale * lead.yRel, lead.vRel, lead_id, now)
 
     # extra distinct leadsV3 entries only render where the camera provides no cars to forward

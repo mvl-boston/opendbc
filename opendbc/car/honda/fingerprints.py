@@ -1329,10 +1329,12 @@ FW_VERSIONS = {
   CAR.ACURA_TLX_2G: {
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'36802-TGV-A060\x00\x00',
+      b'36802-TGZ-A020\x00\x00',
     ],
     (Ecu.fwdCamera, 0x18dab5f1, None): [
       b'36161-TGV-A030\x00\x00',
       b'36161-TGV-A040\x00\x00',
+      b'36161-TGZ-A020\x00\x00',
     ],
   },
   CAR.ACURA_TLX_1G: {
@@ -1414,7 +1416,7 @@ FW_VERSIONS = {
     ],
     (Ecu.shiftByWire, 0x18da0bf1, None): [
       b'54008-TRX-A710\x00\x00',
-      b'54008-TZ5-A710\x00\x00', # unknown
+      b'54008-TZ5-A710\x00\x00',
       b'54008-TZ5-A911\x00\x00',
       b'54008-TZ5-A910\x00\x00',
       b'77959-TZ5-A110\x00\x00', # unknown
