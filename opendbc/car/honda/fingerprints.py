@@ -136,6 +136,7 @@ FW_VERSIONS = {
       b'36802-TWA-A070\x00\x00',
       b'36802-TWA-A080\x00\x00',
       b'36802-TWA-A210\x00\x00',
+      b'36802-TWA-A220\x00\x00',
       b'36802-TWA-A330\x00\x00',
       b'36802-TWB-H060\x00\x00',
     ],
@@ -417,6 +418,7 @@ FW_VERSIONS = {
       b'36802-TLA-A050\x00\x00',
       b'36802-TLA-A060\x00\x00',
       b'36802-TLA-A070\x00\x00',
+      b'36802-TLA-A080\x00\x00',
       b'36802-TMC-Q040\x00\x00',
       b'36802-TMC-Q070\x00\x00',
       b'36802-TNY-A030\x00\x00',
@@ -626,6 +628,26 @@ FW_VERSIONS = {
       b'8S302-TYA-A020\x00\x00',
     ],
   },
+  CAR.ACURA_RLX_HYBRID: {
+    (Ecu.fwdRadar, 0x18dab0f1, None): [
+      b'36161-TY3-A030\x00\x00',
+    ],
+    (Ecu.shiftByWire, 0x18da0bf1, None): [
+      b'54008-TY3-J010\x00\x00',
+    ],
+    (Ecu.srs, 0x18da53f1, None): [
+      b'77959-TY3-L130\x00\x00',
+    ],
+    (Ecu.gateway, 0x18daeff1, None): [
+      b'38897-TY3-A020\x00\x00',
+    ],
+    (Ecu.hud, 0x18da61f1, None): [
+      b'78209-TY3-A110\x00\x00',
+    ],
+    (Ecu.eps, 0x18da30f1, None): [
+      b'39990-TY3-J030\x00\x00',
+    ],
+  },
   CAR.HONDA_ODYSSEY: {
     (Ecu.gateway, 0x18daeff1, None): [
       b'38897-THR-A010\x00\x00',
@@ -743,6 +765,7 @@ FW_VERSIONS = {
   },
   CAR.HONDA_PILOT: {
     (Ecu.shiftByWire, 0x18da0bf1, None): [
+      b'54008-T6Z-A610\x00\x00',
       b'54008-TG7-A520\x00\x00',
       b'54008-TG7-A530\x00\x00',
     ],
@@ -762,6 +785,7 @@ FW_VERSIONS = {
       b'28101-5EZ-A500\x00\x00',
       b'28101-5EZ-A600\x00\x00',
       b'28101-5EZ-A700\x00\x00',
+      b'28101-5EZ-A800\x00\x00',
       b'28103-5EY-A110\x00\x00',
       b'28103-5EZ-A010\x00\x00',
     ],
@@ -778,6 +802,7 @@ FW_VERSIONS = {
       b'39990-TG7-A070\x00\x00',
       b'39990-TGS-A230\x00\x00',
       b'39990-TGS-A320\x00\x00',
+      b'39990-TGS-A410\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'36161-TG7-A310\x00\x00',
@@ -799,6 +824,7 @@ FW_VERSIONS = {
       b'36161-TGS-A130\x00\x00',
       b'36161-TGS-A220\x00\x00',
       b'36161-TGS-A320\x00\x00',
+      b'36161-TGS-A610\x00\x00',
       b'36161-TGT-A030\x00\x00',
       b'36161-TGT-A130\x00\x00',
     ],
@@ -823,6 +849,7 @@ FW_VERSIONS = {
       b'57114-TG8-A630\x00\x00',
       b'57114-TG8-A730\x00\x00',
       b'57114-TGS-A530\x00\x00',
+      b'57114-TGS-A710\x00\x00',
       b'57114-TGT-A530\x00\x00',
     ],
   },
@@ -1005,12 +1032,15 @@ FW_VERSIONS = {
       b'39990-3M0-G610\x00\x00',
       b'39990-3M0-J030\x00\x00',
       b'39990-3W0-A030\x00\x00',
+      b'39990-3W0-A110\x00\x00',
     ],
     (Ecu.gateway, 0x18daeff1, None): [
       b'38897-3M0-M110\x00\x00',
       b'38897-3M0-M210\x00\x00',
+      b'38897-3M0-T610\x00\x00',
       b'38897-3M0-Z010\x00\x00',
       b'38897-3W1-A010\x00\x00',
+      b'38897-3W1-A620\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-3M0-K840\x00\x00',
@@ -1018,31 +1048,39 @@ FW_VERSIONS = {
       b'77959-3N1-Z840\x00\x00',
       b'77959-3V0-A820\x00\x00',
       b'77959-3V0-A910\x00\x00',
+      b'77959-3W0-A820\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'8S102-3M1-T050\x00\x00',
       b'8S102-3M3-T050\x00\x00',
       b'8S102-3M6-P030\x00\x00',
+      b'8S102-3M6-PA10\x00\x00',
       b'8S102-3M6-PA20\x00\x00',
       b'8S102-3W0-A060\x00\x00',
       b'8S102-3W0-AB10\x00\x00',
       b'8S102-3W0-AB20\x00\x00',
+      b'8S102-3W0-A240\x00\x00',
     ],
     (Ecu.vsa, 0x18da28f1, None): [
       b'57114-3M6-M010\x00\x00',
       b'57114-3N1-T020\x00\x00',
       b'57114-3W0-A040\x00\x00',
+      b'57114-3W0-A110\x00\x00',
     ],
     (Ecu.transmission, 0x18da1ef1, None): [
       b'28101-6EH-A010\x00\x00',
       b'28101-6EH-A110\x00\x00',
+      b'28101-6EH-A520\x00\x00',
       b'28101-6JC-M310\x00\x00',
+      b'28101-6JH-M010\x00\x00',
       b'28101-6JH-M110\x00\x00',
     ],
     (Ecu.electricBrakeBooster, 0x18da2bf1, None): [
       b'39494-3L4-P030\x00\x00',
+      b'39494-T20-A010\x00\x00',
       b'46114-3W0-A020\x00\x00',
       b'46114-3W0-A050\x00\x00',
+      b'46114-3W0-A110\x00\x00',
     ],
   },
   CAR.ACURA_ILX: {
@@ -1121,6 +1159,7 @@ FW_VERSIONS = {
       b'38897-T60-A110\x00\x00',
       b'38897-T61-A320\x00\x00',
       b'38897-T61-Z110\x00\x00',
+      b'38897-T64-A220\x00\x00',
     ],
     (Ecu.srs, 0x18da53f1, None): [
       b'77959-T20-A970\x00\x00',
@@ -1135,6 +1174,7 @@ FW_VERSIONS = {
       b'77959-T56-A920\x00\x00',
       b'77959-T60-A920\x00\x00',
       b'77959-T61-A920\x00\x00',
+      b'77959-T64-A930\x00\x00',
       b'77959-T65-A920\x00\x00',
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
@@ -1171,6 +1211,7 @@ FW_VERSIONS = {
       b'57114-T50-JC20\x00\x00',
       b'57114-T54-TJ20\x00\x00',
       b'57114-T56-AG30\x00\x00',
+      b'57114-T56-AH30\x00\x00',
       b'57114-T60-AA20\x00\x00',
       b'57114-T61-AJ30\x00\x00',
     ],
@@ -1180,6 +1221,7 @@ FW_VERSIONS = {
       b'28101-65H-A020\x00\x00',
       b'28101-65H-A120\x00\x00',
       b'28101-65J-N010\x00\x00',
+      b'28101-6J4-A110\x00\x00',
     ],
   },
   CAR.HONDA_PILOT_4G: {
@@ -1362,6 +1404,7 @@ FW_VERSIONS = {
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'36161-TYS-A020\x00\x00',
+      b'36161-TYT-A220\x00\x00',
       b'36161-TZ6-A340\x00\x00', # unknown
       b'36161-TZ6-A640\x00\x00', # unknown
       b'36161-TZ6-A730\x00\x00',
@@ -1380,6 +1423,7 @@ FW_VERSIONS = {
       b'77959-TZ5-A220\x00\x00',
     ],
     (Ecu.gateway, 0x18daeff1, None): [
+      b'38897-TYR-A010\x00\x00',
       b'38897-TYR-A011\x00\x00', # unknown
       b'38897-TZ5-A110\x00\x00', # unknown
       b'38897-TRX-A220\x00\x00',
@@ -1392,17 +1436,6 @@ FW_VERSIONS = {
       b'28101-5NC-A770\x00\x00',
       b'28101-5NC-A740\x00\x00', # unknown
       b'28103-5NC-B210\x00\x00', # unknown
-    ],
-  },
-  CAR.ACURA_MDX_3G_MMR: {
-    (Ecu.vsa, 0x18da28f1, None): [
-      b'57114-TRX-H130\x00\x00',
-    ],
-    (Ecu.fwdRadar, 0x18dab0f1, None): [
-      b'36161-TYT-A220\x00\x00',
-    ],
-    (Ecu.srs, 0x18da53f1, None): [
-      b'77959-TRX-A011\x00\x00',
     ],
   },
   CAR.HONDA_CLARITY: { # from Sunnypilot

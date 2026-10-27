@@ -19,6 +19,15 @@ MUX_CYCLE = tuple(idx + bank * 16 for bank in range(4) for idx in range(1, NUM_I
 OFFSET_UNAVAILABLE = 2047  # camera's "no point" sentinel (12-bit signed max)
 OFFSET_VALID_MAX = 2046    # clamp real offsets below the sentinel
 
+# Slew-rate limit on the displayed path: the model's lane prediction can jump frame-to-frame when it
+# is uncertain, and the dash lanes jump with it. Cap how far each displayed offset may move per
+# update so a full swing from center (0) to full scale (OFFSET_VALID_MAX, max turn) takes
+# SLEW_FULL_SCALE_SECONDS. The carcontroller refits the path at 50 Hz on both the radarless
+# (frame % 2 == 0) and CAN FD (radar 50 Hz tick) paths.
+SLEW_UPDATE_RATE_HZ = 50.0
+SLEW_FULL_SCALE_SECONDS = 2.0  # center -> max turn takes this long
+SLEW_MAX_STEP = OFFSET_VALID_MAX / (SLEW_FULL_SCALE_SECONDS * SLEW_UPDATE_RATE_HZ)  # raw units per update
+
 D_NEAR = 2.0
 D_MAX = 100.0
 LOOKAHEAD = np.linspace(D_NEAR, D_MAX, NUM_PTS)               # look-ahead distance of each offset
@@ -179,6 +188,22 @@ class LanePathFitter:
   def __init__(self):
     self._left_on = False
     self._right_on = False
+    self._displayed = None  # slewed float copy of the 40 raw offsets currently on the dash
+
+  def _slew(self, offsets):
+    """Rate-limit the displayed offsets toward the new fit (SLEW_MAX_STEP per update) so the dash
+    lane can't jump when the model's prediction jumps. An all-sentinel fit (path short of D_MAX)
+    draws nothing, so pass it through and reset; likewise start at the fit when nothing was drawn
+    (no visible jump either way)."""
+    if offsets[0] == OFFSET_UNAVAILABLE:
+      self._displayed = None
+      return offsets
+    target = np.asarray(offsets, dtype=float)
+    if self._displayed is None:
+      self._displayed = target
+    else:
+      self._displayed = self._displayed + np.clip(target - self._displayed, -SLEW_MAX_STEP, SLEW_MAX_STEP)
+    return [int(v) for v in np.round(self._displayed)]
 
   def update(self, model, v_ego, lead_d) -> DashLane:
     """`model` = modelV2 (None when invalid); `v_ego` m/s; `lead_d` lead distance m (0 = none). Returns a DashLane.
@@ -192,10 +217,12 @@ class LanePathFitter:
     if model is not None:
       x, y, left_on, right_on = select_lane_render(model, self._left_on, self._right_on)
     if x is None:
+      self._displayed = None
       return blank
     self._left_on, self._right_on = left_on, right_on
 
     reach = float(np.clip(max(v_ego / DASH_PATH_FULL_LEN_SPEED, lead_d / DASH_PATH_LEAD_FULL_DIST, DASH_PATH_MIN_REACH), 0.0, 1.0))
     if round(reach * LANE_LENGTH_MAX_VALUE) <= 0:
+      self._displayed = None
       return blank
-    return DashLane(encode_lane_path(x, y), reach, left_on, right_on, v_ego=v_ego)
+    return DashLane(self._slew(encode_lane_path(x, y)), reach, left_on, right_on, v_ego=v_ego)
