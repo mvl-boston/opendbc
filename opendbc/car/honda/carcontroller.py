@@ -122,14 +122,18 @@ NIDEC_SPEED_BANDS = (
 )
 
 # the low/high nodes keep the param keys the two-band scheme persisted, so learned state survives
-NIDEC_GAS_FACTOR_KEYS = {band: f"HondaGasFactor{band}Params" for band, _ in NIDEC_GAS_BANDS}
-NIDEC_GAS_FACTOR_KEYS.update({"low": "HondaGasFactorLowParams", "high": "HondaGasFactorParams"})
-NIDEC_GAS_ALPHA_KEYS = {band: f"HondaGasAlpha{band}Params" for band, _ in NIDEC_GAS_BANDS}
-NIDEC_GAS_ALPHA_KEYS.update({"low": "HondaGasAlphaLowParams", "high": "HondaGasAlphaParams"})
-NIDEC_SPEED_FACTOR_KEYS = {band: f"HondaSpeedFactor{band}Params" for band, _ in NIDEC_SPEED_BANDS}
-NIDEC_SPEED_FACTOR_KEYS.update({"low": "HondaSpeedFactorLowParams", "high": "HondaSpeedFactorParams"})
-NIDEC_SPEED_ALPHA_KEYS = {band: f"HondaSpeedAlpha{band}Params" for band, _ in NIDEC_SPEED_BANDS}
-NIDEC_SPEED_ALPHA_KEYS.update({"low": "HondaSpeedAlphaLowParams", "high": "HondaSpeedAlphaParams"})
+NIDEC_GAS_FACTOR_KEYS: dict[str, str] = {band: f"HondaGasFactor{band}Params" for band, _ in NIDEC_GAS_BANDS}
+NIDEC_GAS_FACTOR_KEYS["low"] = "HondaGasFactorLowParams"
+NIDEC_GAS_FACTOR_KEYS["high"] = "HondaGasFactorParams"
+NIDEC_GAS_ALPHA_KEYS: dict[str, str] = {band: f"HondaGasAlpha{band}Params" for band, _ in NIDEC_GAS_BANDS}
+NIDEC_GAS_ALPHA_KEYS["low"] = "HondaGasAlphaLowParams"
+NIDEC_GAS_ALPHA_KEYS["high"] = "HondaGasAlphaParams"
+NIDEC_SPEED_FACTOR_KEYS: dict[str, str] = {band: f"HondaSpeedFactor{band}Params" for band, _ in NIDEC_SPEED_BANDS}
+NIDEC_SPEED_FACTOR_KEYS["low"] = "HondaSpeedFactorLowParams"
+NIDEC_SPEED_FACTOR_KEYS["high"] = "HondaSpeedFactorParams"
+NIDEC_SPEED_ALPHA_KEYS: dict[str, str] = {band: f"HondaSpeedAlpha{band}Params" for band, _ in NIDEC_SPEED_BANDS}
+NIDEC_SPEED_ALPHA_KEYS["low"] = "HondaSpeedAlphaLowParams"
+NIDEC_SPEED_ALPHA_KEYS["high"] = "HondaSpeedAlphaParams"
 
 
 def band_weights(bands, v_ego):
@@ -1147,20 +1151,18 @@ class CarController(CarControllerBase):
                                                      CS.scm_ambient_light, self.CP.carFingerprint, bus=self.CAN.camera))
 
     new_actuators = actuators.as_builder()
+    new_actuators.torque = self.last_torque
     if self.CP.carFingerprint in HONDA_BOSCH:
       new_actuators.speed = float(self.gasalpha)
       new_actuators.accel = self.accel
       new_actuators.gas = float(self.gasfactor)
       new_actuators.brake = float(self.windfactor)
+      new_actuators.torqueOutputCan = apply_torque
     else:
       new_actuators.speed = float(self.nidec_pid_factor)
       new_actuators.accel = float(self.accel)
       new_actuators.gas = float(self.average_factor)
       new_actuators.brake = float(self.sat_accel)
-    new_actuators.torque = self.last_torque
-    if self.CP.carFingerprint in HONDA_BOSCH:
-      new_actuators.torqueOutputCan = apply_torque
-    else:
       new_actuators.torqueOutputCan = float(self.speed_factors["low"])
 
     if self.frame % 6000 == 0:

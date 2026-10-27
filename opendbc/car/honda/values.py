@@ -461,13 +461,13 @@ class CAR(Platforms):
   )
   ACURA_TLX_1G = HondaNidecPlatformConfig(
     [], # don't add to cardocs since custom steering board
-    CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=15.1, centerToFrontRatio=0.40),  # as spec
+    CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=17.0, centerToFrontRatio=0.40, tireStiffnessFactor=0.18),
     radar_dbc_dict('acura_mdx_3g_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   HONDA_CLARITY = HondaNidecPlatformConfig(
     [HondaCarDocs("Honda Clarity 2018-21", min_steer_speed=12. * CV.MPH_TO_MS)],
-    CarSpecs(mass=1834, wheelbase=2.75, centerToFrontRatio=0.4, steerRatio=16.5),
+    CarSpecs(mass=1838, wheelbase=2.75, centerToFrontRatio=0.4, steerRatio=16.5),
     radar_dbc_dict('honda_clarity_hybrid_2018_can_generated'),
     flags=HondaFlags.HAS_ALL_DOOR_STATES,
   )
@@ -504,6 +504,7 @@ STEER_THRESHOLD = {
   CAR.ACURA_MDX_3G: 400,
   CAR.ACURA_MDX_3G_MMR: 30,
   CAR.ACURA_TLX_1G: 30,
+  CAR.ACURA_RLX_HYBRID: 2400,
 }
 
 
