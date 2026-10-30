@@ -354,7 +354,7 @@ _LEAD_SPOOF_TEMPLATES = {
   0x2C8: bytes.fromhex("7ef6164081007bf3"),
 }
 _LEAD_SPOOF_FRAME_IDX_BIT = {0x280: 27, 0x281: 28, 0x282: 11, 0x283: 12, 0x2C8: 12}
-_LEAD_SPOOF_RANGE_RAW = round((50. + 3.0) / 0.05712)  # 50 m ahead
+_LEAD_SPOOF_RANGE_RAW = round((80. + 3.0) / 0.05712)  # 80 m ahead, beyond the longest ACC following gap below 72 kph
 _LEAD_SPOOF_AZIMUTH_CENTER = 1024
 _LEAD_SPOOF_VREL_CENTER = 864  # zero relative velocity
 
