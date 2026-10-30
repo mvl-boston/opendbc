@@ -65,6 +65,17 @@ static unsigned int honda_abs_prev_counter_checksum = 0xFFU;
 // counts down on each stock SCM_BUTTONS rx, topped up on each OP SCM_BUTTONS tx to the camera:
 // the stock buttons are only blocked from forwarding while OP's replacement stream is actually flowing
 static int honda_op_buttons_fresh = 0;
+// lead spoof: >0 while OP injects a phantom camera object toward the radar, so the camera's real slot-0 frames are blocked.
+// OP sends the phantom every 7 frames, so a real lead is hidden at most ~80 ms after OP stops injecting
+#define HONDA_LEAD_SPOOF_TIMEOUT 8
+#define HONDA_LEAD_SPOOF_MAX_SPEED 7200U  // 72 kph in ENGINE_DATA 0.01 kph units
+static bool honda_lead_spoof = false;
+static int honda_lead_spoof_timeout = 0;
+static bool honda_lead_spoof_speed_ok = false;
+
+static bool honda_is_lead_spoof_addr(int addr) {
+  return (addr == 0x280) || (addr == 0x281) || (addr == 0x282) || (addr == 0x283) || (addr == 0x2C8);
+}
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
 static HondaHw honda_hw = HONDA_NIDEC;
 
@@ -250,6 +261,16 @@ static void honda_rx_hook(const CANPacket_t *msg) {
       }
     }
   }
+
+  if (honda_lead_spoof) {
+    if (msg->addr == 0x158U) {
+      const unsigned int speed_raw = (((unsigned int)msg->data[0]) << 8) | msg->data[1];
+      honda_lead_spoof_speed_ok = speed_raw < HONDA_LEAD_SPOOF_MAX_SPEED;
+    }
+    if ((msg->addr == 0x17CU) && (honda_lead_spoof_timeout > 0)) {
+      honda_lead_spoof_timeout--;
+    }
+  }
 }
 
 static bool honda_tx_hook(const CANPacket_t *msg) {
@@ -415,6 +436,16 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     }
   }
 
+  if (honda_is_lead_spoof_addr(msg->addr)) {
+    bool spoof_allowed = honda_lead_spoof && (controls_allowed || controls_allowed_lateral) && honda_lead_spoof_speed_ok;
+    if (!spoof_allowed) {
+      tx = false;
+    } else if (msg->addr == 0x280U) {
+      honda_lead_spoof_timeout = HONDA_LEAD_SPOOF_TIMEOUT;
+    } else {
+    }
+  }
+
   return tx;
 }
 
@@ -545,6 +576,21 @@ static safety_config honda_bosch_init(uint16_t param) {
     {0x33DB, 0, 8, .check_relay = true},
   };
 
+  static CanMsg HONDA_BOSCH_LEAD_SPOOF_TX_MSGS[] = {
+    {0xE4, 0, 5, .check_relay = true},
+    {0xE5, 0, 8, .check_relay = true},
+    {0x296, 1, 4, .check_relay = false},
+    {0x33D, 0, 5, .check_relay = true},
+    {0x33D, 0, 8, .check_relay = true},
+    {0x33DA, 0, 5, .check_relay = true},
+    {0x33DB, 0, 8, .check_relay = true},
+    {0x280, 0, 8, .check_relay = false},
+    {0x281, 0, 8, .check_relay = false},
+    {0x282, 0, 8, .check_relay = false},
+    {0x283, 0, 8, .check_relay = false},
+    {0x2C8, 0, 8, .check_relay = false},
+  };
+
   // Bosch w/ gas and brakes
   static CanMsg HONDA_BOSCH_LONG_TX_MSGS[] = {
     {0xE4, 1, 5, .check_relay = true},
@@ -618,6 +664,7 @@ static safety_config honda_bosch_init(uint16_t param) {
   const uint16_t HONDA_PARAM_RADARLESS = 8;
   const uint16_t HONDA_PARAM_BOSCH_CANFD = 16;
   const uint16_t HONDA_PARAM_NO_ENGINE_DATA_MSG = 128;
+  const uint16_t HONDA_PARAM_LEAD_SPOOF = 256;
 
   // Bosch radarless and CAN-FD have the powertrain bus on bus 0
   static RxCheck honda_bosch_pt0_rx_checks[] = {
@@ -650,6 +697,9 @@ static safety_config honda_bosch_init(uint16_t param) {
   honda_bosch_radarless = GET_FLAG(param, HONDA_PARAM_RADARLESS);
   honda_bosch_canfd = GET_FLAG(param, HONDA_PARAM_BOSCH_CANFD);
   honda_no_engine_data_msg = GET_FLAG(param, HONDA_PARAM_NO_ENGINE_DATA_MSG);
+  honda_lead_spoof = GET_FLAG(param, HONDA_PARAM_LEAD_SPOOF) && !honda_bosch_radarless && !honda_bosch_canfd;
+  honda_lead_spoof_timeout = 0;
+  honda_lead_spoof_speed_ok = false;
   honda_abs_prev_fl = 0U;
   honda_abs_prev_fr = 0U;
   honda_abs_prev_rl = 0U;
@@ -664,6 +714,8 @@ static safety_config honda_bosch_init(uint16_t param) {
   const uint16_t HONDA_PARAM_BOSCH_LONG = 2;
   honda_bosch_long = GET_FLAG(param, HONDA_PARAM_BOSCH_LONG);
 #endif
+  // the radar must stay the ACC/AEB brain, so no spoofing under openpilot longitudinal
+  honda_lead_spoof = honda_lead_spoof && !honda_bosch_long;
 
   safety_config ret;
   if (honda_no_engine_data_msg && honda_bosch_radarless) {
@@ -697,6 +749,8 @@ static safety_config honda_bosch_init(uint16_t param) {
   } else {
     if (honda_bosch_long) {
       SET_TX_MSGS(HONDA_BOSCH_LONG_TX_MSGS, ret);
+    } else if (honda_lead_spoof) {
+      SET_TX_MSGS(HONDA_BOSCH_LEAD_SPOOF_TX_MSGS, ret);
     } else {
       SET_TX_MSGS(HONDA_BOSCH_TX_MSGS, ret);
     }
@@ -743,6 +797,11 @@ static bool honda_bosch_fwd_hook(int bus_num, int addr) {
   // CAN FD: the radar disable handshake happens after the relay is open, so block the radar's UDS
   // responses from forwarding to the camera (the camera doesn't need them)
   if (honda_bosch_canfd && (bus_num == 0) && (addr == 0x18DAF1B0)) {
+    block_msg = true;
+  }
+
+  // while OP injects the phantom, keep the camera's real slot-0 frames from reaching the radar
+  if (honda_lead_spoof && (honda_lead_spoof_timeout > 0) && (bus_num == 2) && honda_is_lead_spoof_addr(addr)) {
     block_msg = true;
   }
 

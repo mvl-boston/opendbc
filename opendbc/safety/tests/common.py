@@ -1025,6 +1025,10 @@ class SafetyTest(SafetyTestBase):
             if attr == 'TestVolkswagenMqbLongSafety' and current_test.startswith('TestHondaBoschCANFD'):
               tx = list(filter(lambda m: m[0] not in [0x30c, ], tx))
 
+            # the lead spoof phantom reuses Bosch-A camera object addrs that other platforms use for unrelated messages
+            if current_test == 'TestHondaBoschLeadSpoofSafety':
+              tx = list(filter(lambda m: m[0] not in [0x280, 0x281, 0x282, 0x283, 0x2C8], tx))
+
             # TODO: Temporary, should be fixed in panda firmware, safety_honda.h
             if attr.startswith('TestHonda'):
               # exceptions for common msgs across different hondas

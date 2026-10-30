@@ -659,6 +659,64 @@ class TestHondaBoschAltBrakeSafety(HondaPcmEnableBase, TestHondaBoschAltBrakeSaf
   """
     Covers the Honda Bosch safety mode with stock longitudinal and an alternate brake message
   """
+class TestHondaBoschLeadSpoofSafety(HondaPcmEnableBase, TestHondaBoschSafetyBase):
+  """
+    Covers the Honda Bosch lead spoof: a phantom camera object toward the radar keeps low-speed TJA steering engaged
+  """
+  SAFETY_PARAM = HondaSafetyFlags.LEAD_SPOOF
+
+  LEAD_SPOOF_ADDRS = (0x280, 0x281, 0x282, 0x283, 0x2C8)
+  LEAD_SPOOF_TIMEOUT = 8
+  TX_MSGS = TestHondaBoschSafetyBase.TX_MSGS + [[addr, 0] for addr in LEAD_SPOOF_ADDRS]
+
+  def _allow_spoof(self):
+    self.safety.set_controls_allowed(1)
+    self._rx(self._speed_msg(30))
+
+  def test_lead_spoof_tx_allowed(self):
+    self._allow_spoof()
+    for addr in self.LEAD_SPOOF_ADDRS:
+      self.assertTrue(self._tx(common.make_msg(0, addr, 8)), f"{addr=:#x} tx blocked")
+
+  def test_lead_spoof_tx_blocked_when_not_engaged(self):
+    self._allow_spoof()
+    self.safety.set_controls_allowed(0)
+    for addr in self.LEAD_SPOOF_ADDRS:
+      self.assertFalse(self._tx(common.make_msg(0, addr, 8)), f"{addr=:#x} tx allowed while disengaged")
+
+  def test_lead_spoof_tx_blocked_above_max_speed(self):
+    self._allow_spoof()
+    self._rx(self._speed_msg(80))
+    self.assertFalse(self._tx(common.make_msg(0, 0x280, 8)))
+    self._rx(self._speed_msg(70))
+    self.assertTrue(self._tx(common.make_msg(0, 0x280, 8)))
+
+  def test_lead_spoof_fwd_suppression(self):
+    self._allow_spoof()
+    for addr in self.LEAD_SPOOF_ADDRS:
+      self.assertEqual(0, self.safety.safety_fwd_hook(2, addr), f"{addr=:#x} suppressed before injection")
+
+    self.assertTrue(self._tx(common.make_msg(0, 0x280, 8)))
+    for addr in self.LEAD_SPOOF_ADDRS:
+      self.assertEqual(-1, self.safety.safety_fwd_hook(2, addr), f"{addr=:#x} not suppressed while injecting")
+
+    for _ in range(self.LEAD_SPOOF_TIMEOUT - 1):
+      self._rx(self._powertrain_data_msg())
+    self.assertEqual(-1, self.safety.safety_fwd_hook(2, 0x280))
+    self._rx(self._powertrain_data_msg())
+    for addr in self.LEAD_SPOOF_ADDRS:
+      self.assertEqual(0, self.safety.safety_fwd_hook(2, addr), f"{addr=:#x} still suppressed after decay")
+
+  def test_lead_spoof_reinjection(self):
+    self._allow_spoof()
+    self.assertTrue(self._tx(common.make_msg(0, 0x280, 8)))
+    for _ in range(self.LEAD_SPOOF_TIMEOUT):
+      self._rx(self._powertrain_data_msg())
+    self.assertEqual(0, self.safety.safety_fwd_hook(2, 0x280))
+    self.assertTrue(self._tx(common.make_msg(0, 0x280, 8)))
+    self.assertEqual(-1, self.safety.safety_fwd_hook(2, 0x280))
+
+
 class TestHondaBoschLongSafety(HondaButtonEnableBase, TestHondaBoschSafetyBase):
   """
     Covers the Honda Bosch safety mode with longitudinal control
