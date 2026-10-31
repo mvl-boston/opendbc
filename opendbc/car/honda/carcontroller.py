@@ -284,6 +284,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.lkas_hud_key = None
     self.lkas_state_change_frames = 0
     self.tja_control = bool(CP.flags & HondaFlags.BOSCH_TJA_CONTROL)
+    self.lead_spoof = bool(CP.flags & HondaFlags.BOSCH_LEAD_SPOOF) and not CP.openpilotLongitudinalControl
+    self.spoof_frame_idx = 0
+    self.spoof_lifecycle = 0
     self.param_writer = HondaParamWriter()
 
     self.braking = False
@@ -706,6 +709,12 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
 
     # Send steering command.
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
+
+    if self.lead_spoof and CC.latActive and not CS.camera_lead_present and CS.out.vEgo < hondacan.LEAD_SPOOF_MAX_SPEED:
+      if self.frame % 7 == 0:
+        self.spoof_frame_idx = (self.spoof_frame_idx + 1) & 0xF
+        self.spoof_lifecycle = (self.spoof_lifecycle + 2) & 0xFFF
+        can_sends.extend(hondacan.create_lead_spoof(self.CAN, self.spoof_frame_idx, self.spoof_lifecycle))
 
     wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
 

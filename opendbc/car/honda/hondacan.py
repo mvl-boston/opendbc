@@ -342,6 +342,49 @@ def create_canfd_5hz_radar_messages(packer, bus, radar_ref_cntr, lane_path_lengt
   return commands
 
 
+LEAD_SPOOF_MSGS = (0x280, 0x281, 0x282, 0x283, 0x2C8)
+LEAD_SPOOF_MAX_SPEED = 20.  # m/s, matches the panda's 72 kph gate
+
+# real captured camera slot-0 frames (2021 TLX), so every unknown/reserved bit matches a genuine object
+_LEAD_SPOOF_TEMPLATES = {
+  0x280: bytes.fromhex("047422ab94c00238"),
+  0x281: bytes.fromhex("00020db67cfefe3d"),
+  0x282: bytes.fromhex("10bb80007d7e25b2"),
+  0x283: bytes.fromhex("9bb68de080c0113a"),
+  0x2C8: bytes.fromhex("7ef6164081007bf3"),
+}
+_LEAD_SPOOF_FRAME_IDX_BIT = {0x280: 27, 0x281: 28, 0x282: 11, 0x283: 12, 0x2C8: 12}
+_LEAD_SPOOF_RANGE_RAW = round((80. + 3.0) / 0.05712)  # 80 m ahead, beyond the longest ACC following gap below 72 kph
+_LEAD_SPOOF_AZIMUTH_CENTER = 1024
+_LEAD_SPOOF_VREL_CENTER = 864  # zero relative velocity
+
+
+def _set_be(dat: bytearray, start: int, length: int, value: int) -> None:
+  bp = start
+  for k in range(length):
+    b = (value >> (length - 1 - k)) & 1
+    byte, off = bp // 8, bp % 8
+    dat[byte] = (dat[byte] & ~(1 << off)) | (b << off)
+    bp = bp + 15 if bp % 8 == 0 else bp - 1
+
+
+def create_lead_spoof(CAN, frame_idx: int, lifecycle: int):
+  msgs = []
+  for addr in LEAD_SPOOF_MSGS:
+    dat = bytearray(_LEAD_SPOOF_TEMPLATES[addr])
+    _set_be(dat, _LEAD_SPOOF_FRAME_IDX_BIT[addr], 4, frame_idx & 0xF)
+    if addr == 0x280:
+      _set_be(dat, 15, 4, 7)
+      _set_be(dat, 23, 12, _LEAD_SPOOF_RANGE_RAW)
+      _set_be(dat, 39, 11, _LEAD_SPOOF_AZIMUTH_CENTER)
+    elif addr == 0x282:
+      _set_be(dat, 7, 12, lifecycle & 0xFFF)
+    elif addr == 0x2C8:
+      _set_be(dat, 7, 11, _LEAD_SPOOF_VREL_CENTER)
+    msgs.append((addr, bytes(dat), CAN.radar))
+  return msgs
+
+
 def honda_checksum(address: int, sig, d: bytearray) -> int:
   s = 0
   extended = address > 0x7FF

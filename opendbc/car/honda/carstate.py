@@ -57,6 +57,9 @@ class CarState(CarStateBase, CarStateExt):
     self.cruise_setting = 0
     self.v_cruise_pcm_prev = 0
 
+    self.lead_spoof = bool(CP.flags & HondaFlags.BOSCH_LEAD_SPOOF) and not CP.openpilotLongitudinalControl
+    self.camera_lead_present = True
+
     # When available we use cp.vl["CAR_SPEED"]["ROUGH_CAR_SPEED_2"] to populate vEgoCluster
     # However, on cars without a digital speedometer this is not always present (HRV, FIT, CRV 2016, ILX and RDX)
     self.dash_speed_seen = False
@@ -397,6 +400,10 @@ class CarState(CarStateBase, CarStateExt):
 
     if self.hud_object_tracker is not None:
       self.hud_object_tracker.update(cp_cam)
+
+    if self.lead_spoof:
+      cam_obj = cp_cam.vl["BOSCH_A_S00_F0"]
+      self.camera_lead_present = cam_obj["STATUS"] != 0xF and cam_obj["RANGE_RAW"] != 0xFFF
 
     return ret, ret_sp
 
