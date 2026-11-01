@@ -20,11 +20,16 @@ The first lines must look like:
 
 Option B - download helper batch file
 -------------------------------------
-Open this RAW link in the browser, Save As download-cpu-health-check.bat:
+Save this ONE file, double-click it (downloads everything):
 
-  https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows/download-cpu-health-check.bat
+  https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows/download-cpu-tools.bat
 
-Double-click it. It fetches the .ps1 and .bat for you.
+Optional (includes LibreHardwareMonitor ~2 MB up front):
+
+  download-cpu-tools.bat all
+
+Legacy names download-cpu-health-check.bat and download-cpu-temp-check.bat
+call the same downloader.
 
 Option C - GitHub Raw button
 ----------------------------
