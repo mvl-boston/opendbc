@@ -1,15 +1,4 @@
-﻿﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-  Download CPU health + temperature scripts from GitHub raw (not HTML pages).
-
-.PARAMETER TargetDir
-  Folder to write files (default: directory containing this script).
-
-.PARAMETER IncludeLibreHardwareMonitor
-  Also download and extract LibreHardwareMonitor (~2 MB) for cpu-temp-check.
-#>
-[CmdletBinding()]
+﻿#Requires -Version 5.1
 param(
     [string] $TargetDir = $PSScriptRoot,
     [switch] $IncludeLibreHardwareMonitor
@@ -34,7 +23,8 @@ $Files = @(
 
 function Test-ScriptNotHtml {
     param([string] $Path)
-    $head = (Get-Content -LiteralPath $Path -TotalCount 8) -join [Environment]::NewLine
+    $lines = Get-Content -LiteralPath $Path -TotalCount 8
+    $head = $lines -join [Environment]::NewLine
     if ($head -match '<!DOCTYPE|<html|githubassets|/assets/') {
         throw ('File looks like a web page, not a script: {0}' -f $Path)
     }

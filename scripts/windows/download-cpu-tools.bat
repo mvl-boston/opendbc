@@ -28,7 +28,12 @@ set "RAW=https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu
 REM Always refresh the helper .ps1 first (fixes stale local copies)
 echo Updating download-cpu-tools.ps1 from GitHub...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-  "Invoke-WebRequest -Uri '%RAW%/download-cpu-tools.ps1' -OutFile '%~dp0download-cpu-tools.ps1' -UseBasicParsing"
+  "$ErrorActionPreference='Stop';" ^
+  "$u='%RAW%/download-cpu-tools.ps1';" ^
+  "$o='%~dp0download-cpu-tools.ps1';" ^
+  "Invoke-WebRequest -Uri $u -OutFile $o -UseBasicParsing;" ^
+  "$l=Get-Content -LiteralPath $o -TotalCount 1;" ^
+  "if ($l -notmatch '#Requires') { throw 'Downloaded ps1 is not valid (HTML or corrupt). Use the raw GitHub link.' }"
 if errorlevel 1 (
   echo Failed to download download-cpu-tools.ps1. Check internet or firewall.
   pause
