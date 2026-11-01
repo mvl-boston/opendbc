@@ -421,13 +421,7 @@ class CAR(Platforms):
   ACURA_MDX_3G = HondaNidecPlatformConfig(
     [], # don't add to cardocs since custom steering board # TODO: find remaining fingerprints
     CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
-    radar_dbc_dict('acura_mdx_2016_can_generated'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
-  )
-  ACURA_MDX_3G_MMR = HondaNidecPlatformConfig(
-    [], # don't add to cardocs since custom steering board
-    CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
-    radar_dbc_dict('acura_ilx_2016_can_generated'),
+    radar_dbc_dict('acura_mdx_3g_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_RLX_HYBRID = HondaNidecPlatformConfig(
@@ -462,7 +456,7 @@ class CAR(Platforms):
   ACURA_TLX_1G = HondaNidecPlatformConfig(
     [], # don't add to cardocs since custom steering board
     CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=17.0, centerToFrontRatio=0.40, tireStiffnessFactor=0.18),
-    radar_dbc_dict('acura_mdx_2016_can_generated'),
+    radar_dbc_dict('acura_mdx_3g_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   HONDA_CLARITY = HondaNidecPlatformConfig(
@@ -503,7 +497,6 @@ STEER_THRESHOLD = {
   CAR.HONDA_ODYSSEY_5G_MMR: 600,
   CAR.HONDA_ACCORD_9G: 30,
   CAR.ACURA_MDX_3G: 400,
-  CAR.ACURA_MDX_3G_MMR: 400,
   CAR.ACURA_TLX_1G: 200,
   CAR.ACURA_RLX_HYBRID: 2400,
 }
@@ -556,7 +549,7 @@ FW_QUERY_CONFIG = FwQueryConfig(
               *HONDA_BOSCH_RADARLESS, *HONDA_BOSCH_CANFD],
     Ecu.vsa: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID, CAR.HONDA_E,
               CAR.HONDA_E_ADVANCE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G, CAR.ACURA_MDX_4G,
-              CAR.HONDA_ACCORD_9G, CAR.ACURA_RLX_HYBRID,
+              CAR.HONDA_ACCORD_9G, CAR.ACURA_RLX_HYBRID, CAR.ACURA_MDX_3G,
               *HONDA_BOSCH_ALT_RADAR, *HONDA_BOSCH_RADARLESS,
               *HONDA_BOSCH_CANFD],
   },
