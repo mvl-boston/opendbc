@@ -11,6 +11,9 @@ output:
 
 test:
   parallel: false
+  env:
+    CAPNP_INCLUDE: ${CAPNP_INCLUDE}
+    PYTHONPATH: ${PYTHONPATH}
   commands:
     # *** static analysis
     ruff:
@@ -27,6 +30,4 @@ test:
 
     # *** tests ***
     unittest:
-      env:
-        CAPNP_INCLUDE: ${CAPNP_INCLUDE}
       run: unittest-parallel -j4

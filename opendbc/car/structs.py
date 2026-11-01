@@ -6,10 +6,11 @@ capnp.remove_import_hook()
 
 
 def _load_car_schema():
-  if os.environ.get("CAPNP_INCLUDE"):
+  try:
     import cereal
     return cereal.car
-  return capnp.load(os.path.join(BASEDIR, "car.capnp"), imports=[BASEDIR])
+  except ImportError:
+    return capnp.load(os.path.join(BASEDIR, "car.capnp"), imports=[BASEDIR])
 
 
 car = _load_car_schema()
