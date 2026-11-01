@@ -31,22 +31,22 @@ SLEW_MAX_STEP = OFFSET_VALID_MAX / (SLEW_FULL_SCALE_SECONDS * SLEW_UPDATE_RATE_H
 D_NEAR = 2.0
 D_MAX = 100.0
 LOOKAHEAD = np.linspace(D_NEAR, D_MAX, NUM_PTS)               # look-ahead distance of each offset
-# raw units per meter of lateral. Fit per look-ahead index by regressing the stock radar's raw
-# offsets against modelV2's lane-center lateral over the same drive (factory ACC lanes route
-# 3792d010590cb83a|00000107, 187 paired sweeps, lane-line probs >= 0.4): the stock encoding uses
-# ~29-37 raw/m over the rendered 2-55 m, ~4.6-5.1x the previous law, which is why openpilot's lanes
-# rendered noticeably flatter than factory. Correlation with the model lateral rises 0.6 -> 0.96
-# with distance; the quadratic below is the correlation-weighted fit of the per-index gains.
-GAIN = 29.3 + 0.243 * LOOKAHEAD - 0.00228 * LOOKAHEAD ** 2
-# previous law, kept for the HUD-lead lateral consistency ratio in curve_boost()
-GAIN_PREV = 6.27 + 0.0106 * LOOKAHEAD + 0.000354 * LOOKAHEAD ** 2
+# raw units per meter of lateral (radarless dash encoding)
+GAIN_RADARLESS = 6.27 + 0.0106 * LOOKAHEAD + 0.000354 * LOOKAHEAD ** 2
+# CAN FD: fit per look-ahead index by regressing the stock radar's raw offsets against modelV2's
+# lane-center lateral over the same drive (factory ACC lanes route 3792d010590cb83a|00000107, 187
+# paired sweeps, lane-line probs >= 0.4): the stock encoding uses ~29-37 raw/m over the rendered
+# 2-55 m, ~4.6-5.1x the radarless law, which is why openpilot's lanes rendered noticeably flatter
+# than factory. Correlation with the model lateral rises 0.6 -> 0.96 with distance; the quadratic
+# below is the correlation-weighted fit of the per-index gains.
+GAIN_CANFD = 29.3 + 0.243 * LOOKAHEAD - 0.00228 * LOOKAHEAD ** 2
 
 def curve_boost(d: float) -> float:
-  """Ratio of the corrected stock-fit gain law to the previous one at look-ahead distance d.
+  """CAN FD only: ratio of the stock-fit gain law to the radarless one at look-ahead distance d.
 
-  The HUD lead marker's LAT_SCALE was tuned on-car against lanes rendered with the previous
-  (too-flat) law; scaling the lead's lateral by this ratio at the lead's distance keeps the
-  marker on the lane now that the lanes carry the full stock curvature."""
+  The HUD lead marker's LAT_SCALE was tuned on-car against lanes rendered with the radarless
+  (flatter) law; scaling the lead's lateral by this ratio at the lead's distance keeps the
+  marker on the lane now that CAN FD lanes carry the full stock curvature."""
   d = min(max(float(d), D_NEAR), D_MAX)
   return (29.3 + 0.243 * d - 0.00228 * d ** 2) / (6.27 + 0.0106 * d + 0.000354 * d ** 2)
 
@@ -64,19 +64,20 @@ DASH_PATH_LEAD_FULL_DIST = 70.0  # m lead distance for full draw length
 DASH_PATH_MIN_REACH = 0.15       # min draw fraction (short stub when stopped / low speed)
 
 
-def _encode(lat):
+def _encode(lat, canfd: bool):
   # lane-center lateral (m, +left) at each LOOKAHEAD -> raw offsets; stock offset = -OP lateral
-  raw = np.clip(np.round(-GAIN * np.asarray(lat, dtype=float)), -OFFSET_VALID_MAX, OFFSET_VALID_MAX)
+  gain = GAIN_CANFD if canfd else GAIN_RADARLESS
+  raw = np.clip(np.round(-gain * np.asarray(lat, dtype=float)), -OFFSET_VALID_MAX, OFFSET_VALID_MAX)
   return [int(v) for v in raw]
 
 
-def encode_lane_path(x, y):
+def encode_lane_path(x, y, canfd: bool = False):
   """OP lane center (x, y arrays, m, +left) -> 40 raw offsets. All-unavailable if the lane doesn't reach D_MAX."""
   x = np.asarray(x, dtype=float)
   y = np.asarray(y, dtype=float)
   if x.size < 2 or x.max() < D_MAX:
     return [OFFSET_UNAVAILABLE] * NUM_PTS
-  return _encode(np.interp(LOOKAHEAD, x, y))
+  return _encode(np.interp(LOOKAHEAD, x, y), canfd)
 
 
 # Stock CAN FD radar LANE_PATH behavior (decoded from MDX factory ACC logs with lane lines displayed):
@@ -205,7 +206,7 @@ class LanePathFitter:
       self._displayed = self._displayed + np.clip(target - self._displayed, -SLEW_MAX_STEP, SLEW_MAX_STEP)
     return [int(v) for v in np.round(self._displayed)]
 
-  def update(self, model, v_ego, lead_d) -> DashLane:
+  def update(self, model, v_ego, lead_d, canfd: bool = False) -> DashLane:
     """`model` = modelV2 (None when invalid); `v_ego` m/s; `lead_d` lead distance m (0 = none). Returns a DashLane.
     Returns blank when the model is missing/invalid, no ego line is confident, or the reach rounds to zero.
     Reach is the drawn length based on speed and lead distance. We don't show full reach as at low speeds because
@@ -225,4 +226,4 @@ class LanePathFitter:
     if round(reach * LANE_LENGTH_MAX_VALUE) <= 0:
       self._displayed = None
       return blank
-    return DashLane(self._slew(encode_lane_path(x, y)), reach, left_on, right_on, v_ego=v_ego)
+    return DashLane(self._slew(encode_lane_path(x, y, canfd)), reach, left_on, right_on, v_ego=v_ego)
