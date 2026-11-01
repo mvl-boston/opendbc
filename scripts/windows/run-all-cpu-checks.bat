@@ -36,10 +36,13 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "if ($l -notmatch '#Requires') { throw 'Bad download (HTML?). Open the raw GitHub link only.' }"
 if errorlevel 1 goto :fail
 
-echo [2/4] Downloading all scripts + LibreHardwareMonitor...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0download-cpu-tools.ps1" -TargetDir "%CD%" -IncludeLibreHardwareMonitor
+echo [2/4] Downloading scripts (no LibreHardwareMonitor - avoids Defender WinRing0 block)...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0download-cpu-tools.ps1" -TargetDir "%CD%"
 if errorlevel 1 goto :fail
 
+echo.
+echo Note: For accurate CPU die temps, run HWiNFO64 Sensors during step 4.
+echo       See DEFENDER-WINRING0.txt in this folder.
 echo.
 echo [3/4] CPU speed / stress test (~45 seconds)...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-health-check.ps1" -DurationSeconds 45
@@ -50,7 +53,7 @@ echo ================================================================
 echo [4/4] CPU temperature under load (~60 seconds)...
 echo ================================================================
 echo.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-temp-check.ps1" -MonitorSeconds 60 -StressCpu
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-temp-check-safe.ps1" -MonitorSeconds 60 -StressCpu
 set "TERR=%ERRORLEVEL%"
 
 echo.

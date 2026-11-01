@@ -1,0 +1,38 @@
+Windows Defender and LibreHardwareMonitor (WinRing0)
+=====================================================
+
+What happened
+-------------
+Windows Security may remove:
+
+  lhm\LibreHardwareMonitorLib.sys
+
+Detection: VulnerableDriver:WinNT/Winring0
+
+LibreHardwareMonitor (and many hardware tools) use the WinRing0 kernel driver to
+read CPU sensors. Microsoft blocks known-vulnerable driver blocks because malware
+can abuse them. The block is expected; it is not a sign your download was "infected."
+
+What to do
+----------
+
+Option 1 - Recommended: HWiNFO64 (manual install)
+  1. Download HWiNFO64 portable from the official HWiNFO website only.
+  2. Run "Sensors-only" as Administrator.
+  3. Run cpu-health-check.bat or cpu-temp-check-safe.bat 60 stress
+  4. Watch "CPU Package" or core temps in HWiNFO during stress.
+
+Option 2 - Built-in script (no extra drivers)
+  cpu-temp-check-safe.bat
+  Uses Windows ACPI / thermal zones only. Often shows NO data on desktops,
+  but will not trigger WinRing0 blocks.
+
+Option 3 - LibreHardwareMonitor again (your choice, security tradeoff)
+  Only if you accept the risk and manage Defender yourself:
+  - Restore/quarantine review: allow on device (not recommended unless you understand the risk)
+  - Or add an exclusion for your cpu-test folder (still loads a vulnerable-class driver)
+
+Our one-click run-all-cpu-checks.bat no longer downloads LibreHardwareMonitor by default.
+
+Option 4 - Speed-only check
+  cpu-health-check.bat still works without any temperature driver.

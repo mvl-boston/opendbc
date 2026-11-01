@@ -56,6 +56,10 @@ function Get-LhmRoot {
 }
 
 function Install-LibreHardwareMonitor {
+    Write-Warn 'LibreHardwareMonitor uses WinRing0. Windows Defender may quarantine LibreHardwareMonitorLib.sys (VulnerableDriver).'
+    Write-Host 'See DEFENDER-WINRING0.txt. Prefer cpu-temp-check-safe.bat or HWiNFO64 unless you accept that risk.'
+    Write-Host ''
+
     $root = Get-LhmRoot
     $exe = Join-Path $root 'LibreHardwareMonitor.exe'
     if (Test-Path -LiteralPath $exe) { return $exe }
@@ -81,7 +85,13 @@ function Initialize-LhmComputer {
 
     $hid = Join-Path $root 'HidSharp.dll'
     $lib = Join-Path $root 'LibreHardwareMonitorLib.dll'
-    if (-not (Test-Path -LiteralPath $lib)) { throw 'LibreHardwareMonitorLib.dll missing.' }
+    if (-not (Test-Path -LiteralPath $lib)) {
+        throw 'LibreHardwareMonitorLib.dll missing. Defender may have removed lhm\ files. Use cpu-temp-check-safe.ps1 or HWiNFO64.'
+    }
+    $sys = Get-ChildItem -LiteralPath $root -Filter '*.sys' -ErrorAction SilentlyContinue
+    if (-not $sys) {
+        Write-Warn 'No .sys driver in lhm folder (often removed by Defender). Sensor read may fail.'
+    }
 
     foreach ($path in @($hid, $lib)) {
         if (Test-Path -LiteralPath $path) {

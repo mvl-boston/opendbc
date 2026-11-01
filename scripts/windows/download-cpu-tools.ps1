@@ -16,6 +16,9 @@ $Files = @(
     'cpu-temp-check.bat',
     'download-cpu-tools.bat',
     'download-cpu-tools.ps1',
+    'cpu-temp-check-safe.ps1',
+    'cpu-temp-check-safe.bat',
+    'DEFENDER-WINRING0.txt',
     'run-all-cpu-checks.bat',
     'download-cpu-health-check.bat',
     'download-cpu-temp-check.bat',
@@ -50,6 +53,9 @@ foreach ($name in $Files) {
 }
 
 if ($IncludeLibreHardwareMonitor) {
+    Write-Warn 'IncludeLibreHardwareMonitor: WinRing0 driver may be removed by Windows Defender (VulnerableDriver).'
+    Write-Host 'See DEFENDER-WINRING0.txt'
+    Write-Host ''
     $lhmRoot = Join-Path $TargetDir 'lhm'
     $lhmExe = Join-Path $lhmRoot 'LibreHardwareMonitor.exe'
     if (-not (Test-Path -LiteralPath $lhmExe)) {
