@@ -27,4 +27,6 @@ test:
 
     # *** tests ***
     unittest:
+      env:
+        CAPNP_INCLUDE: ${CAPNP_INCLUDE}
       run: unittest-parallel -j4

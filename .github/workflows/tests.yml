@@ -47,13 +47,6 @@ jobs:
         source .venv/bin/activate
         export CAPNP_INCLUDE="$GITHUB_WORKSPACE/cereal"
         scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
-    - name: Align cereal schemas for host Python runtime
-      run: |
-        rm -f cereal/car.capnp
-        cp opendbc_repo/opendbc/car/car.capnp cereal/car.capnp
-        for f in log.capnp car.capnp custom.capnp deprecated.capnp; do
-          perl -pi -e 's|import "./include/c++.capnp"|import "/include/c++.capnp"|g' "cereal/$f"
-        done
     - name: Run opendbc tests in host env
       run: |
         cd opendbc_repo
@@ -63,7 +56,7 @@ jobs:
         uv sync --all-extras --inexact
         source "$UV_PROJECT_ENVIRONMENT/bin/activate"
         uv lock --check
-        lefthook run test
+        CAPNP_INCLUDE="$GITHUB_WORKSPACE/cereal" lefthook run test
 
   safety_tests:
     name: safety
@@ -167,13 +160,6 @@ jobs:
         source .venv/bin/activate
         export CAPNP_INCLUDE="$GITHUB_WORKSPACE/cereal"
         scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
-    - name: Align cereal schemas for host Python runtime
-      run: |
-        rm -f cereal/car.capnp
-        cp opendbc_repo/opendbc/car/car.capnp cereal/car.capnp
-        for f in log.capnp car.capnp custom.capnp deprecated.capnp; do
-          perl -pi -e 's|import "./include/c++.capnp"|import "/include/c++.capnp"|g' "cereal/$f"
-        done
     - name: Cache test routes
       id: routes-cache
       uses: actions/cache@v6
