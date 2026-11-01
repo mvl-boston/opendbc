@@ -1383,6 +1383,7 @@ FW_VERSIONS = {
     ],
     (Ecu.fwdRadar, 0x18dab0f1, None): [
       b'36161-TYS-A020\x00\x00',
+      b'36161-TYT-A220\x00\x00',
       b'36161-TZ6-A340\x00\x00', # unknown
       b'36161-TZ6-A640\x00\x00', # unknown
       b'36161-TZ6-A730\x00\x00',
@@ -1390,7 +1391,7 @@ FW_VERSIONS = {
     ],
     (Ecu.shiftByWire, 0x18da0bf1, None): [
       b'54008-TRX-A710\x00\x00',
-      b'54008-TZ5-A710\x00\x00', # unknown
+      b'54008-TZ5-A710\x00\x00',
       b'54008-TZ5-A911\x00\x00',
       b'54008-TZ5-A910\x00\x00',
       b'77959-TZ5-A110\x00\x00', # unknown
@@ -1414,17 +1415,6 @@ FW_VERSIONS = {
       b'28101-5NC-A770\x00\x00',
       b'28101-5NC-A740\x00\x00', # unknown
       b'28103-5NC-B210\x00\x00', # unknown
-    ],
-  },
-  CAR.ACURA_MDX_3G_MMR: {
-    (Ecu.vsa, 0x18da28f1, None): [
-      b'57114-TRX-H130\x00\x00',
-    ],
-    (Ecu.fwdRadar, 0x18dab0f1, None): [
-      b'36161-TYT-A220\x00\x00',
-    ],
-    (Ecu.srs, 0x18da53f1, None): [
-      b'77959-TRX-A011\x00\x00',
     ],
   },
   CAR.HONDA_CLARITY: { # from Sunnypilot
