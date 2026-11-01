@@ -11,9 +11,6 @@ output:
 
 test:
   parallel: false
-  env:
-    CAPNP_INCLUDE: ${CAPNP_INCLUDE}
-    PYTHONPATH: ${PYTHONPATH}
   commands:
     # *** static analysis
     ruff:

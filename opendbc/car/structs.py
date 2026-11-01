@@ -1,19 +1,9 @@
 import os
 import capnp
 from opendbc.car.common.basedir import BASEDIR
+from opendbc.car.schema import car
 
 capnp.remove_import_hook()
-
-
-def _load_car_schema():
-  try:
-    import cereal
-    return cereal.car
-  except ImportError:
-    return capnp.load(os.path.join(BASEDIR, "car.capnp"), imports=[BASEDIR])
-
-
-car = _load_car_schema()
 
 CarState = car.CarState
 RadarData = car.RadarData

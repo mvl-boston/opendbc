@@ -37,26 +37,23 @@ jobs:
         path: opendbc_repo
     - name: Install opendbc car schema into cereal
       run: |
-        # capnpc runs with --src-prefix=cereal; use cereal/include/c++.capnp at compile time.
-        # At runtime, host tests load the same schema via CAPNP_INCLUDE (see below).
         # cereal/car.capnp is a symlink into opendbc_repo; remove it before redirect or sed truncates the source.
         rm -f cereal/car.capnp
         sed 's|import "/include/c++.capnp"|import "./include/c++.capnp"|' opendbc_repo/opendbc/car/car.capnp > cereal/car.capnp
+        cp cereal/car.capnp opendbc_repo/opendbc/car/car.capnp
     - name: Build host openpilot
       run: |
         source .venv/bin/activate
-        export CAPNP_INCLUDE="$GITHUB_WORKSPACE/cereal"
         scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
     - name: Run opendbc tests in host env
       run: |
         cd opendbc_repo
         export UV_PROJECT_ENVIRONMENT="$GITHUB_WORKSPACE/.venv"
-        export CAPNP_INCLUDE="$GITHUB_WORKSPACE/cereal"
         export PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/opendbc_repo"
         uv sync --all-extras --inexact
         source "$UV_PROJECT_ENVIRONMENT/bin/activate"
         uv lock --check
-        CAPNP_INCLUDE="$GITHUB_WORKSPACE/cereal" lefthook run test
+        lefthook run test
 
   safety_tests:
     name: safety
@@ -155,6 +152,7 @@ jobs:
       run: |
         rm -f cereal/car.capnp
         sed 's|import "/include/c++.capnp"|import "./include/c++.capnp"|' opendbc_repo/opendbc/car/car.capnp > cereal/car.capnp
+        cp cereal/car.capnp opendbc_repo/opendbc/car/car.capnp
     - name: Sync opendbc dependencies
       run: |
         cd opendbc_repo
@@ -163,7 +161,6 @@ jobs:
     - name: Build host openpilot
       run: |
         source .venv/bin/activate
-        export CAPNP_INCLUDE="$GITHUB_WORKSPACE/cereal"
         scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
     - name: Cache test routes
       id: routes-cache
@@ -177,7 +174,6 @@ jobs:
         source .venv/bin/activate
         cd opendbc_repo
         export PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/opendbc_repo"
-        export CAPNP_INCLUDE="$GITHUB_WORKSPACE/cereal"
         MAX_EXAMPLES=1 python opendbc/car/tests/test_models.py
       env:
         NUM_JOBS: 4
