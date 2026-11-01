@@ -75,7 +75,7 @@ function Get-ThermalCelsius {
     try {
         $samples = (Get-Counter -Counter '\Thermal Zone Information(*)\Temperature' -ErrorAction Stop).CounterSamples
         foreach ($s in $samples) {
-            if ($s.CookedValue -gt 0) { $temps += $s.CookedValue }
+            if ($s.CookedValue -ge 15 -and $s.CookedValue -le 105) { $temps += $s.CookedValue }
         }
     }
     catch {
@@ -86,7 +86,7 @@ function Get-ThermalCelsius {
         Get-CimInstance -Namespace root/wmi -ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop | ForEach-Object {
             $k = $_.CurrentTemperature / 10.0
             $c = $k - 273.15
-            if ($c -gt -40 -and $c -lt 150) { $temps += $c }
+            if ($c -ge 15 -and $c -le 105) { $temps += $c }
         }
     }
     catch {
@@ -181,7 +181,7 @@ if ($null -ne $idleTemp) {
     Write-Host ('Thermal (approx):              {0} C' -f $idleTemp)
 }
 else {
-    Write-Warn 'No thermal data from Windows. Use HWiNFO64 Sensors during the stress phase.'
+    Write-Warn 'No trustworthy CPU temp from Windows counters. Use cpu-temp-check.bat (LibreHardwareMonitor) or HWiNFO64.'
 }
 
 Write-Section '3. Single-thread benchmark (~3s)'

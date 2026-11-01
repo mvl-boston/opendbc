@@ -31,3 +31,16 @@ Option C - GitHub Raw button
 On the file page on GitHub, click the "Raw" button, then Save As.
 
 Run as Administrator: right-click cpu-health-check.bat -> Run as administrator
+
+Reliable CPU temperatures (recommended)
+---------------------------------------
+Use cpu-temp-check.ps1 (LibreHardwareMonitor, auto-download on first run):
+
+  download-cpu-temp-check.bat
+  Right-click cpu-temp-check.bat -> Run as administrator
+
+  60 seconds under full CPU load:
+  cpu-temp-check.bat 60 stress
+
+Raw files:
+  https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows/cpu-temp-check.ps1
