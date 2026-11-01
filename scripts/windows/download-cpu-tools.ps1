@@ -1,4 +1,4 @@
-#Requires -Version 5.1
+﻿﻿#Requires -Version 5.1
 <#
 .SYNOPSIS
   Download CPU health + temperature scripts from GitHub raw (not HTML pages).
@@ -33,7 +33,7 @@ $Files = @(
 
 function Test-ScriptNotHtml {
     param([string] $Path)
-    $head = Get-Content -LiteralPath $Path -TotalCount 8 -Raw
+    $head = (Get-Content -LiteralPath $Path -TotalCount 8) -join [Environment]::NewLine
     if ($head -match '<!DOCTYPE|<html|githubassets|/assets/') {
         throw ('File looks like a web page, not a script: {0}' -f $Path)
     }
