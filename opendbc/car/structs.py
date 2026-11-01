@@ -1,6 +1,4 @@
-import os
 import capnp
-from opendbc.car.common.basedir import BASEDIR
 from opendbc.car.schema import car
 
 capnp.remove_import_hook()
