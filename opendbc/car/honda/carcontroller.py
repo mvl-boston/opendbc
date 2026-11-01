@@ -545,7 +545,7 @@ class CarController(CarControllerBase):
         (self.apply_brake_last > 0 or self.new_accel < 1e-5): # lower steer limits while braking
       brake_limit = float(233.0 / self.params.STEER_MAX)
       limited_torque = float(np.clip(limited_torque, -brake_limit, brake_limit))
-    self.last_torque = limited_torque
+    self.last_torque = limited_torque if CS.steer_control_active else 0.0
 
     # *** apply brake hysteresis ***
     pre_limit_brake, self.braking, self.brake_steady = actuator_hysteresis(brake, self.braking, self.brake_steady,
@@ -1306,20 +1306,18 @@ class CarController(CarControllerBase):
                                                      CS.scm_ambient_light, self.CP.carFingerprint, bus=self.CAN.camera))
 
     new_actuators = actuators.as_builder()
+    new_actuators.torque = self.last_torque
     if self.CP.carFingerprint in HONDA_BOSCH:
       new_actuators.speed = float(self.gasalpha)
       new_actuators.accel = self.accel
       new_actuators.gas = float(self.gasfactor)
       new_actuators.brake = float(self.windfactor)
+      new_actuators.torqueOutputCan = apply_torque
     else:
       new_actuators.speed = float(self.nidec_pid_factor)
       new_actuators.accel = float(self.accel)
       new_actuators.gas = float(self.average_factor)
       new_actuators.brake = float(self.sat_accel)
-    new_actuators.torque = self.last_torque
-    if self.CP.carFingerprint in HONDA_BOSCH:
-      new_actuators.torqueOutputCan = apply_torque
-    else:
       new_actuators.torqueOutputCan = float(self.speed_factors["low"])
 
     if self.frame % 6000 == 0:
