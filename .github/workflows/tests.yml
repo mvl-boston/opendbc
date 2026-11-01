@@ -40,7 +40,10 @@ jobs:
         # cereal/car.capnp is a symlink into opendbc_repo; remove it before redirect or sed truncates the source.
         rm -f cereal/car.capnp
         sed 's|import "/include/c++.capnp"|import "./include/c++.capnp"|' opendbc_repo/opendbc/car/car.capnp > cereal/car.capnp
-        cp cereal/car.capnp opendbc_repo/opendbc/car/car.capnp
+        rm -f opendbc_repo/opendbc/car/car.capnp
+        ln -s "$GITHUB_WORKSPACE/cereal/car.capnp" opendbc_repo/opendbc/car/car.capnp
+        rm -rf opendbc_repo/opendbc/car/include
+        ln -s "$GITHUB_WORKSPACE/cereal/include" opendbc_repo/opendbc/car/include
     - name: Build host openpilot
       run: |
         source .venv/bin/activate
@@ -49,7 +52,6 @@ jobs:
       run: |
         cd opendbc_repo
         export UV_PROJECT_ENVIRONMENT="$GITHUB_WORKSPACE/.venv"
-        export PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/opendbc_repo"
         uv sync --all-extras --inexact
         source "$UV_PROJECT_ENVIRONMENT/bin/activate"
         uv lock --check
@@ -152,7 +154,10 @@ jobs:
       run: |
         rm -f cereal/car.capnp
         sed 's|import "/include/c++.capnp"|import "./include/c++.capnp"|' opendbc_repo/opendbc/car/car.capnp > cereal/car.capnp
-        cp cereal/car.capnp opendbc_repo/opendbc/car/car.capnp
+        rm -f opendbc_repo/opendbc/car/car.capnp
+        ln -s "$GITHUB_WORKSPACE/cereal/car.capnp" opendbc_repo/opendbc/car/car.capnp
+        rm -rf opendbc_repo/opendbc/car/include
+        ln -s "$GITHUB_WORKSPACE/cereal/include" opendbc_repo/opendbc/car/include
     - name: Sync opendbc dependencies
       run: |
         cd opendbc_repo
@@ -173,7 +178,7 @@ jobs:
       run: |
         source .venv/bin/activate
         cd opendbc_repo
-        export PYTHONPATH="$GITHUB_WORKSPACE:$GITHUB_WORKSPACE/opendbc_repo"
+        export PYTHONPATH="$PWD"
         MAX_EXAMPLES=1 python opendbc/car/tests/test_models.py
       env:
         NUM_JOBS: 4
