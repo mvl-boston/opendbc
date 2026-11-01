@@ -55,6 +55,7 @@ jobs:
         uv sync --all-extras --inexact
         source "$UV_PROJECT_ENVIRONMENT/bin/activate"
         uv lock --check
+        export OPENDBC_HOST_CAPNP=1
         python3 .github/patch_cereal_host_ci.py
         lefthook run test
 
@@ -180,6 +181,7 @@ jobs:
         source .venv/bin/activate
         cd opendbc_repo
         export PYTHONPATH="$PWD"
+        export OPENDBC_HOST_CAPNP=1
         python3 .github/patch_cereal_host_ci.py
         MAX_EXAMPLES=1 python opendbc/car/tests/test_models.py
       env:

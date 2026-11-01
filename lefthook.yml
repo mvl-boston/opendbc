@@ -11,6 +11,8 @@ output:
 
 test:
   parallel: false
+  env:
+    OPENDBC_HOST_CAPNP: "1"
   commands:
     # *** static analysis
     ruff:
