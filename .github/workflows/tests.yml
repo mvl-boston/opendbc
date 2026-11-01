@@ -39,6 +39,8 @@ jobs:
       run: |
         # capnpc runs with --src-prefix=cereal; use cereal/include/c++.capnp at compile time.
         # At runtime, host tests load the same schema via CAPNP_INCLUDE (see below).
+        # cereal/car.capnp is a symlink into opendbc_repo; remove it before redirect or sed truncates the source.
+        rm -f cereal/car.capnp
         sed 's|import "/include/c++.capnp"|import "./include/c++.capnp"|' opendbc_repo/opendbc/car/car.capnp > cereal/car.capnp
     - name: Build host openpilot
       run: |
@@ -150,6 +152,7 @@ jobs:
         path: opendbc_repo
     - name: Install opendbc car schema into cereal
       run: |
+        rm -f cereal/car.capnp
         sed 's|import "/include/c++.capnp"|import "./include/c++.capnp"|' opendbc_repo/opendbc/car/car.capnp > cereal/car.capnp
     - name: Build host openpilot
       run: |
