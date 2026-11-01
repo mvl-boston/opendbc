@@ -211,34 +211,23 @@ class ModelLead:
 def leads_from_model(model, v_ego, n=3):
   """Up to n ModelLeads from modelV2.leadsV3 (index 0 = the lead OP acts on). modelV2's lateral is
   +right, so it is negated to match the dash's +left. v is made relative (v - vEgo) for the
-  smoother's feed-forward. An entry is inactive when missing or below LEAD_PROB_ON."""
+  smoother's feed-forward. Data stays populated below LEAD_PROB_ON too (status False, prob carried):
+  the HUD author's hysteresis keeps an already-rendered lead alive down to LEAD_PROB_OFF instead of
+  blinking it at the 0.5 threshold."""
   out = []
   for i in range(n):
-    if model is None or len(model.leadsV3) <= i:
+    if model is None or len(model.leadsV3) <= i or len(model.leadsV3[i].x) == 0:
       out.append(ModelLead(False, 0.0, 0.0, 0.0))
       continue
     lead = model.leadsV3[i]
-    if lead.prob < LEAD_PROB_ON or len(lead.x) == 0:
-      out.append(ModelLead(False, 0.0, 0.0, 0.0))
-      continue
-    out.append(ModelLead(True, float(lead.x[0]), -float(lead.y[0]), float(lead.v[0]) - v_ego))
+    out.append(ModelLead(bool(lead.prob >= LEAD_PROB_ON), float(lead.x[0]), -float(lead.y[0]),
+                         float(lead.v[0]) - v_ego, prob=float(lead.prob)))
   return out
 
 
 def lead_from_model(model, v_ego):
-  """OP's lead from modelV2.leadsV3[0] for radarless cars. modelV2's lateral is +right, so we negate it to match
-  the dash's +left. v is made relative (v - vEgo) for the smoother's feed-forward. Lead is inactive when the
-  lead is missing or below LEAD_PROB_ON.
-  """
-  if model is None or len(model.leadsV3) == 0:
-    return ModelLead(False, 0.0, 0.0, 0.0)
-  lead = model.leadsV3[0]
-  if len(lead.x) == 0:
-    return ModelLead(False, 0.0, 0.0, 0.0)
-  # data is populated below LEAD_PROB_ON too (status False): the HUD author's hysteresis keeps an
-  # already-rendered lead alive down to LEAD_PROB_OFF instead of blinking it at the 0.5 threshold
-  return ModelLead(bool(lead.prob >= LEAD_PROB_ON), float(lead.x[0]), -float(lead.y[0]),
-                   float(lead.v[0]) - v_ego, prob=float(lead.prob))
+  """OP's lead from modelV2.leadsV3[0] (see leads_from_model)."""
+  return leads_from_model(model, v_ego, n=1)[0]
 
 
 def create_hud_object(packer, bus, mux, track):
@@ -284,6 +273,38 @@ class HudObjectAuthor:
     self._lead_on = False   # hysteresis state for the rendered lead
     self._lead_hold: ModelLead | None = None   # last rendered lead, for the drop-hold bridge
     self._lead_seen_t = -1e9
+    # distinct leadsV3[1]/[2] rendered as non-lead cars in slots 1-2 (CAN FD, where tracks is None)
+    self._extra_ids = {slot: LeadObjectId() for slot in EXTRA_LEAD_SLOTS}
+    self._extra_smooth = {slot: LeadSmoother() for slot in EXTRA_LEAD_SLOTS}
+    self._extra_emit = dict.fromkeys(EXTRA_LEAD_SLOTS, 0)   # emitted OBJECT_ID per extra slot
+
+  def _update_extras(self, extra_leads, lead, in_use, now):
+    """Per-tick state update for the extra leads; returns {slot: track-dict-or-None}. Extras must
+    stay distinct from the primary lead and from each other, and their OBJECT_IDs must not collide
+    with the primary's or one another's."""
+    rendered = [(lead.dRel, lead.yRel)] if lead.status else []
+    out = {}
+    for slot, ex in zip(EXTRA_LEAD_SLOTS, extra_leads or (), strict=False):
+      distinct = ex.status and all(abs(ex.dRel - d) >= EXTRA_LEAD_MIN_SEP_D or
+                                   abs(ex.yRel - y) >= EXTRA_LEAD_MIN_SEP_Y
+                                   for d, y in rendered)
+      op_id = self._extra_ids[slot].update(distinct, ex.dRel, ex.vRel, now)
+      if not distinct:
+        self._extra_emit[slot] = 0
+        out[slot] = None
+        continue
+      emit = self._extra_emit[slot]
+      if emit == 0 or emit in in_use:
+        emit = op_id
+        while emit in in_use:
+          emit = emit % MAX_OBJECT_ID + 1
+        self._extra_emit[slot] = emit
+      in_use.add(emit)
+      d_rel, y_rel = self._extra_smooth[slot].update(ex.dRel, LAT_SCALE * ex.yRel, ex.vRel, emit, now)
+      rendered.append((ex.dRel, ex.yRel))
+      out[slot] = {"d_rel": d_rel, "y_rel": y_rel, "object_id": emit, "is_lead_car": 0,
+                   "car_type": CAR_TYPE_CAR, "rotation": lead_rotation(y_rel / LAT_SCALE)}
+    return out
 
   def _gate_lead(self, lead: ModelLead, now: float) -> ModelLead:
     """On/off hysteresis + short drop-hold for the rendered lead. leadsV3[0].prob hovers around the

@@ -1,7 +1,7 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS,
-                                      HONDA_BOSCH_CANFD, CAR)
+                                      HONDA_BOSCH_CANFD, CAR, HONDA_BOSCH_ALT_RADAR)
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -184,12 +184,15 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
                     lkas_state_change=None):
   commands = []
 
+  solid_lanes = lat_active and not steer_maxed
+  dashed_lanes = hud_control.lanesVisible
+
   lkas_hud_values = {
     'LKAS_READY': 1,
     'LKAS_STATE_CHANGE': 1,
     'STEERING_REQUIRED': alert_steer_required,
-    'SOLID_LANES': hud_control.lanesVisible and not steer_maxed,
-    'DASHED_LANES': lat_active,
+    'SOLID_LANES': solid_lanes,
+    'DASHED_LANES': dashed_lanes,
     'BEEP': 0,
   }
 
@@ -215,18 +218,16 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
       # Don't let steer saturation flicker SOLID_LANES: every payload change must coincide with an
       # LKAS_STATE_CHANGE pulse (see carcontroller), and a 10Hz flicker would keep the pulse
       # re-triggering, which suppresses the dash lane lines.
-      lkas_hud_values['SOLID_LANES'] = hud_control.lanesVisible
+      # Keyed on lat_active, NOT hud_control.lanesVisible (== CC.enabled): under sunnypilot MADS
+      # the lateral control stays engaged when a brake press disengages ACC, and the dash LKAS
+      # indication must follow the lateral state or the driver can't tell MADS is still steering
+      # (drivers pressing the LKAS button to "re-engage" silently toggled MADS off). On forks
+      # without MADS, lat_active == enabled while moving, so this stays equivalent there.
+      lkas_hud_values['SOLID_LANES'] = lat_active
 
-  if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
+  if (not (CP.flags & HondaFlags.BOSCH_EXT_HUD)) or CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
     lkas_hud_values['RDM_OFF'] = 1
     lkas_hud_values['LANE_ASSIST_BEEP_OFF'] = 1
-
-  # New HUD concept for selected Bosch cars, overwrites some of the above
-  # TODO: make global across all Honda if feedback is favorable
-  # Try all Bosch A, didn't work on Nidec, and caused LKAS error in Bosch B/C
-  if CP.carFingerprint in HONDA_BOSCH and CP.carFingerprint not in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
-    lkas_hud_values['DASHED_LANES'] = steering_available
-    lkas_hud_values['SOLID_LANES'] = lat_active
 
   if CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
     commands.append(packer.make_can_msg('LKAS_HUD_A', bus, lkas_hud_values))
