@@ -23,17 +23,16 @@ set "MODE=%~1"
 set "LHM="
 if /I "%MODE%"=="all" set "LHM=-IncludeLibreHardwareMonitor"
 
-REM If .ps1 helper missing, bootstrap it from GitHub first
-if not exist "%~dp0download-cpu-tools.ps1" (
-  echo Fetching downloader helper...
-  powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-    "$u='https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows/download-cpu-tools.ps1';" ^
-    "Invoke-WebRequest -Uri $u -OutFile '%~dp0download-cpu-tools.ps1' -UseBasicParsing"
-  if errorlevel 1 (
-    echo Bootstrap download failed. Check internet or firewall.
-    pause
-    exit /b 1
-  )
+set "RAW=https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows"
+
+REM Always refresh the helper .ps1 first (fixes stale local copies)
+echo Updating download-cpu-tools.ps1 from GitHub...
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "Invoke-WebRequest -Uri '%RAW%/download-cpu-tools.ps1' -OutFile '%~dp0download-cpu-tools.ps1' -UseBasicParsing"
+if errorlevel 1 (
+  echo Failed to download download-cpu-tools.ps1. Check internet or firewall.
+  pause
+  exit /b 1
 )
 
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0download-cpu-tools.ps1" -TargetDir "%CD%" %LHM%

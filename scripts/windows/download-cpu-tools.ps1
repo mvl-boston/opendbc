@@ -26,6 +26,7 @@ $Files = @(
     'cpu-temp-check.ps1',
     'cpu-temp-check.bat',
     'download-cpu-tools.bat',
+    'download-cpu-tools.ps1',
     'download-cpu-health-check.bat',
     'download-cpu-temp-check.bat',
     'README-cpu-health-check.txt'
