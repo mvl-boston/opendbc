@@ -48,14 +48,6 @@ jobs:
       run: |
         source .venv/bin/activate
         scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
-    - name: Single capnp load for host Python tests
-      run: |
-        printf '%s\n' \
-          '"""Host opendbc CI: load car schema once via opendbc.car.schema."""' \
-          'from opendbc.car.schema import car' \
-          '' \
-          'log = custom = None' \
-          > cereal/__init__.py
     - name: Run opendbc tests in host env
       run: |
         cd opendbc_repo
@@ -63,6 +55,7 @@ jobs:
         uv sync --all-extras --inexact
         source "$UV_PROJECT_ENVIRONMENT/bin/activate"
         uv lock --check
+        python3 .github/patch_cereal_host_ci.py
         lefthook run test
 
   safety_tests:
@@ -175,14 +168,6 @@ jobs:
       run: |
         source .venv/bin/activate
         scons -j$(python -c 'import os; print(os.cpu_count() or 1)') common/ cereal/ selfdrive/pandad/ msgq_repo/ opendbc_repo
-    - name: Single capnp load for host Python tests
-      run: |
-        printf '%s\n' \
-          '"""Host opendbc CI: load car schema once via opendbc.car.schema."""' \
-          'from opendbc.car.schema import car' \
-          '' \
-          'log = custom = None' \
-          > cereal/__init__.py
     - name: Cache test routes
       id: routes-cache
       uses: actions/cache@v6
@@ -195,6 +180,7 @@ jobs:
         source .venv/bin/activate
         cd opendbc_repo
         export PYTHONPATH="$PWD"
+        python3 .github/patch_cereal_host_ci.py
         MAX_EXAMPLES=1 python opendbc/car/tests/test_models.py
       env:
         NUM_JOBS: 4
