@@ -16,6 +16,7 @@ $Files = @(
     'cpu-temp-check.bat',
     'download-cpu-tools.bat',
     'download-cpu-tools.ps1',
+    'run-all-cpu-checks.bat',
     'download-cpu-health-check.bat',
     'download-cpu-temp-check.bat',
     'README-cpu-health-check.txt'
@@ -75,6 +76,7 @@ Write-Host ''
 Write-Host 'OK: All files downloaded and verified.'
 Write-Host ''
 Write-Host 'Next steps (run as Administrator):'
+Write-Host '  run-all-cpu-checks.bat       - one-click download + all tests'
 Write-Host '  cpu-health-check.bat          - clocks / stress'
 Write-Host '  cpu-temp-check.bat            - reliable temps (~30s)'
 Write-Host '  cpu-temp-check.bat 60 stress  - temps under full load'

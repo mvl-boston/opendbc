@@ -37,6 +37,14 @@ On the file page on GitHub, click the "Raw" button, then Save As.
 
 Run as Administrator: right-click cpu-health-check.bat -> Run as administrator
 
+One-click (download + speed + temp under load)
+------------------------------------------------
+Save ONE file, double-click (asks for Admin):
+
+  https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows/run-all-cpu-checks.bat
+
+Or after any download: double-click run-all-cpu-checks.bat in this folder.
+
 Reliable CPU temperatures (recommended)
 ---------------------------------------
 Use cpu-temp-check.ps1 (LibreHardwareMonitor, auto-download on first run):
