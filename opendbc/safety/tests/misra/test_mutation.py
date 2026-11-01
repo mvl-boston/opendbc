@@ -46,11 +46,13 @@ for p in patterns:
 mutations = [mutations[0]] + rng.sample(mutations[1:], min(2, len(mutations) - 1))
 
 
-@pytest.mark.parametrize("fn, rule, transform, should_fail", mutations)
-def test_misra_mutation(fn, rule, transform, should_fail):
-  with tempfile.TemporaryDirectory() as tmp:
-    shutil.copytree(ROOT, tmp, dirs_exist_ok=True,
-                    ignore=shutil.ignore_patterns('.venv', '.git', '*.ctu-info', '.hypothesis', '.csm_*'))
+class TestMisraMutation(unittest.TestCase):
+  def test_misra_mutation(self):
+    for fn, rule, transform, should_fail in mutations:
+      with self.subTest(fn=fn, rule=rule, should_fail=should_fail):
+        with tempfile.TemporaryDirectory() as tmp:
+          shutil.copytree(ROOT, tmp, dirs_exist_ok=True,
+                          ignore=shutil.ignore_patterns('.venv', '.git', '*.ctu-info', '.hypothesis'))
 
           # apply patch
           if fn is not None:
