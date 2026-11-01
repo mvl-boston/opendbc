@@ -2,7 +2,7 @@
 setlocal
 cd /d "%~dp0"
 
-echo CPU health check — launching PowerShell...
+echo CPU health check - launching Windows PowerShell...
 echo.
 
 where powershell >nul 2>&1
