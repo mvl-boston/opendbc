@@ -3,20 +3,33 @@ setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 
 set "RAW=https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows"
+set "LOG=%~dp0cpu-full-report.txt"
 
-REM --- Request Administrator (needed for clocks + CPU temps) ---
-net session >nul 2>&1
-if errorlevel 1 (
-  if /I not "%~1"=="elevated" (
+REM --- Elevation: child runs with "inner" so output can be logged ---
+if /I not "%~1"=="inner" (
+  net session >nul 2>&1
+  if errorlevel 1 (
     echo Requesting Administrator approval...
-    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs -ArgumentList 'elevated'"
+    echo Output will be saved to: %LOG%
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs -ArgumentList 'inner'"
     exit /b 0
   )
+  call "%~f0" inner >> "%LOG%" 2>&1
+  set "ERR=%ERRORLEVEL%"
+  echo.
+  echo ========== Full log saved to: %LOG% ==========
+  type "%LOG%"
+  echo.
+  pause
+  exit /b %ERR%
 )
 
+REM ========== inner (Administrator) ==========
 echo ================================================================
 echo  One-click CPU check: download tools, speed test, temperature
 echo  Folder: %CD%
+echo  Log file: %LOG%
+echo  Started: %date% %time%
 echo  Expect about 2-3 minutes total.
 echo ================================================================
 echo.
@@ -24,7 +37,6 @@ echo.
 where powershell >nul 2>&1
 if errorlevel 1 (
   echo ERROR: powershell.exe not found.
-  pause
   exit /b 1
 )
 
@@ -50,7 +62,7 @@ set "HERR=%ERRORLEVEL%"
 
 echo.
 echo ================================================================
-echo [4/4] CPU temperature under load (~60 seconds)...
+echo [4/4] CPU temperature under load (~60 seconds, Windows zones)...
 echo ================================================================
 echo.
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-temp-check-safe.ps1" -MonitorSeconds 60 -StressCpu
@@ -60,14 +72,14 @@ echo.
 echo ================================================================
 echo  ALL DONE
 echo  Health check exit code: %HERR%   Temp check exit code: %TERR%
-echo  To save a log next time:
-echo    run-all-cpu-checks.bat ^> cpu-full-report.txt
+echo.
+echo  SPEED: Look for "MHz min/max/avg" near 3600 on i7-4790 and green OK on stability.
+echo  TEMP:  "no readings" is common here; use HWiNFO64 for real CPU die temps.
+echo  Log:   %LOG%
 echo ================================================================
-pause
 exit /b 0
 
 :fail
 echo.
 echo FAILED. Check internet, then re-run this file.
-pause
 exit /b 1
