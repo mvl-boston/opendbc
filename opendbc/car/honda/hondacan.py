@@ -93,7 +93,6 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   acc_control_values = {
     'ACCEL_COMMAND': accel_command,
     'STANDSTILL': standstill,
-    'BRAKE_REQUEST': braking,
   }
 
   if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
@@ -109,6 +108,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
       "CONTROL_ON": control_on,
       "GAS_COMMAND": gas_command,  # used for gas
       "BRAKE_LIGHTS": braking,
+      "BRAKE_REQUEST": braking,
       "STANDSTILL_RELEASE": standstill_release,
     })
     acc_control_on_values = {
