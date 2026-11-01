@@ -108,11 +108,11 @@ class HondaButtonEnableBase(common.CarSafetyTest):
         self.assertFalse(self.safety.get_controls_allowed())
 
     # counter
-    # reset wrong_counters to zero by sending valid messages
+    # Skip every other counter to trigger counter faults.
     for i in range(MAX_WRONG_COUNTERS + 1):
-      self.__class__.cnt_speed += 1
-      self.__class__.cnt_button += 1
-      self.__class__.cnt_powertrain_data += 1
+      self._speed_msg(0)
+      self._button_msg(Btn.SET)
+      self._user_gas_msg(0)
       if i < MAX_WRONG_COUNTERS:
         self.safety.set_controls_allowed(1)
         self._rx(self._button_msg(Btn.SET))
@@ -278,6 +278,24 @@ class TestHondaNidecSafetyBase(HondaBase):
           send = (controls_allowed and pcm_gas <= self.MAX_GAS) or (pcm_gas == 0 and pcm_speed == 0)
           self.assertEqual(send, self._tx(self._send_acc_hud_msg(pcm_gas, pcm_speed)))
 
+  def test_acc_hud_gas_pressed_passthrough(self):
+    # the carcontroller mirrors the driver's pedal onto ACC_HUD during a gas override; blocking it
+    # makes the PCM drop ACC_STATUS, so the speed/gas checks are waived while the pedal is pressed
+    self.safety.set_controls_allowed(True)
+    self._rx(self._user_gas_msg(1))
+    self.assertTrue(self.safety.get_gas_pressed_prev())
+    for pcm_gas in (0, 1, self.MAX_GAS, 255):
+      for pcm_speed in (0, 1, 99):
+        self.assertTrue(self._tx(self._send_acc_hud_msg(pcm_gas, pcm_speed)))
+
+    # pedal released: back to the standard limits
+    self._rx(self._user_gas_msg(0))
+    self.assertFalse(self.safety.get_gas_pressed_prev())
+    self.assertTrue(self._tx(self._send_acc_hud_msg(self.MAX_GAS, 99)))
+    self.assertFalse(self._tx(self._send_acc_hud_msg(self.MAX_GAS + 1, 0)))
+    self.safety.set_controls_allowed(False)
+    self.assertFalse(self._tx(self._send_acc_hud_msg(1, 0)))
+
   def test_fwd_hook(self):
     # normal operation, not forwarding AEB
     self.FWD_BLACKLISTED_ADDRS[2].append(0x1FA)
@@ -374,6 +392,76 @@ class TestHondaNidecPcmHybridSafety(TestHondaNidecPcmAltSafety):
   def _send_brake_msg(self, brake, aeb_req=0, bus=0):
     values = {"COMPUTER_BRAKE_HYBRID": brake, "AEB_REQ_1": aeb_req}
     return self.packer.make_can_msg_safety("BRAKE_COMMAND", bus, values)
+
+
+class TestHondaNidecPcmRlxBridgeSafety(TestHondaNidecPcmHybridSafety):
+  """
+    Covers the Honda Nidec safety mode for the RLX steer-bus bridge: a bridge panda relays the stock
+    camera's LKAS_HUD onto the powertrain bus, so 0x33D on bus 0 is a checked RX message rather than
+    a relay malfunction
+  """
+  FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x30C]}
+  RELAY_MALFUNCTION_ADDRS = {0: (0xE4, 0x194, 0x30C)}
+
+  cnt_lkas_hud = 0
+
+  def setUp(self):
+    self.packer = CANPackerSafety("acura_rlx_2017_can_generated")
+    self.safety = libsafety_py.libsafety
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaNidec,
+                                 HondaSafetyFlags.NIDEC_ALT | HondaSafetyFlags.NIDEC_HYBRID | HondaSafetyFlags.RLX_STEER_BRIDGE)
+    self.safety.init_tests()
+
+  def _lkas_hud_msg(self, lkas_problem=False, bus=0):
+    values = {"LKAS_PROBLEM": lkas_problem, "COUNTER": self.cnt_lkas_hud % 4}
+    self.__class__.cnt_lkas_hud += 1
+    return self.packer.make_can_msg_safety("LKAS_HUD", bus, values)
+
+  def test_steer_safety_check(self):
+    # the RLX's 4 byte STEERING_CONTROL only has a 12 bit torque field
+    self.safety.set_controls_allowed(0)
+    self.assertTrue(self._tx(self._send_steer_msg(0x0000)))
+    self.assertFalse(self._tx(self._send_steer_msg(0x0100)))
+
+  def test_fwd_hook(self):
+    # normal operation, not forwarding AEB. LKAS_HUD is no longer statically blocked
+    self.FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x30C, 0x1FA]}
+    self.safety.set_honda_fwd_brake(False)
+    HondaBase.test_fwd_hook(self)
+
+    # forwarding AEB brake signal
+    self.FWD_BLACKLISTED_ADDRS = {2: [0xE4, 0x194, 0x30C]}
+    self.safety.set_honda_fwd_brake(True)
+    HondaBase.test_fwd_hook(self)
+
+  def test_lkas_hud_rx_check(self):
+    # the bridged stock camera LKAS_HUD is expected on the powertrain bus and never a relay malfunction
+    self.safety.set_controls_allowed(True)
+    for lkas_problem in (False, True):
+      self.assertTrue(self._rx(self._lkas_hud_msg(lkas_problem)))
+    self.assertFalse(self.safety.get_relay_malfunction())
+    self.assertTrue(self.safety.get_controls_allowed())
+
+    # a bad checksum is rejected and disengages
+    msg = self._lkas_hud_msg()
+    msg[0].data[4] ^= 0x1
+    self.assertFalse(self._rx(msg))
+    self.assertFalse(self.safety.get_controls_allowed())
+
+    # so are repeated counter skips
+    for i in range(MAX_WRONG_COUNTERS + 1):
+      self.__class__.cnt_lkas_hud += 1
+      if i < MAX_WRONG_COUNTERS:
+        self.safety.set_controls_allowed(True)
+        self._rx(self._lkas_hud_msg())
+      else:
+        self.assertFalse(self._rx(self._lkas_hud_msg()))
+        self.assertFalse(self.safety.get_controls_allowed())
+
+    # recover with good messages
+    for _ in range(2):
+      self._rx(self._lkas_hud_msg())
+    self.assertTrue(self._rx(self._lkas_hud_msg()))
 
 
 # ********************* Honda Bosch **********************
@@ -609,6 +697,29 @@ class TestHondaBoschRadarlessLongSafety(common.LongitudinalAccelSafetyTest, Hond
   # Longitudinal doesn't need to send buttons
   def test_spam_cancel_safety_check(self):
     pass
+
+
+class TestHondaBoschRadarlessLongNoEngineDataMsgSafety(TestHondaBoschRadarlessLongSafety):
+  """
+    Covers the Honda Bosch Radarless safety mode with longitudinal control and no engine_data message
+  """
+
+  def setUp(self):
+    super().setUp()
+    self.safety.set_safety_hooks(CarParams.SafetyModel.hondaBosch,
+                                 HondaSafetyFlags.RADARLESS | HondaSafetyFlags.BOSCH_LONG | HondaSafetyFlags.NO_ENGINE_DATA_MSG)
+    self.safety.init_tests()
+
+  # ABS_SENSOR values increase with movement. Change in sum of units per message approximates units of XMISSION_SPEED.
+  def _speed_msg(self, speed):
+    self._abs_tick = getattr(self, '_abs_tick', 0) + speed
+    values = {
+      "ABS_SENSOR_FL": (self._abs_tick // 4) % 256,
+      "ABS_SENSOR_FR": (self._abs_tick // 4) % 256,
+      "ABS_SENSOR_RL": (self._abs_tick // 4) % 256,
+      "ABS_SENSOR_RR": ((self._abs_tick // 4) + (self._abs_tick % 4)) % 256,
+    }
+    return self.packer.make_can_msg_safety("ABS_SENSOR", self.PT_BUS, values)
 
 
 class TestHondaBoschCANFDSafetyBase(TestHondaBoschSafetyBase):

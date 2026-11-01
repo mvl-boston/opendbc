@@ -1,7 +1,7 @@
 from opendbc.car import CanBusBase
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import (HondaFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS,
-                                      HONDA_BOSCH_CANFD, CarControllerParams)
+                                      HONDA_BOSCH_CANFD, CAR, HONDA_BOSCH_ALT_RADAR)
 
 # CAN bus layout with relay
 # 0 = ACC-CAN - radar side
@@ -81,12 +81,11 @@ def create_brake_command(packer, CAN, apply_brake, pump_on, pcm_override, pcm_ca
 def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_counter, CP, gas_force):
 
   commands = []
-  min_gas_accel = CarControllerParams.BOSCH_GAS_LOOKUP_BP[0]
 
   control_on = 5 if enabled else 0
-  gas_command = gas if active and gas_force > min_gas_accel else -30000
+  gas_command = gas if active and gas_force > 0 else -30000
   accel_command = accel if active else 0
-  braking = 1 if active and gas_force < min_gas_accel else 0
+  braking = 1 if active and gas_force < 0 else 0
   standstill = 1 if active and stopping_counter > 0 else 0
   standstill_release = 1 if active and stopping_counter == 0 else 0
 
@@ -99,8 +98,9 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   if CP.carFingerprint in HONDA_BOSCH_RADARLESS:
     acc_control_values.update({
       "CONTROL_ON": enabled,
-      # required whenever braking for Hybrid and Bosch Alt Brake vehicles, allow idle stop after 4 seconds (50 Hz) for other vehicles
-      "COMPUTER_BRAKE_ASSIST": braking if CP.flags & (HondaFlags.HYBRID | HondaFlags.BOSCH_ALT_BRAKE) else stopping_counter > 200,
+      # required whenever braking for Integra, Hybrid and Bosch Alt Brake vehicles, allow idle stop after 4 seconds (50 Hz) for other vehicles
+      "COMPUTER_BRAKE_ASSIST": braking if CP.flags & (HondaFlags.HYBRID | HondaFlags.BOSCH_ALT_BRAKE) or CP.carFingerprint == CAR.ACURA_INTEGRA
+      else stopping_counter > 200,
     })
   else:
     acc_control_values.update({
@@ -171,7 +171,9 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
     acc_hud_values['ACC_ON'] = int(enabled)
     acc_hud_values['PCM_SPEED'] = pcm_speed * CV.MS_TO_KPH
     acc_hud_values['PCM_GAS'] = pcm_accel
-    acc_hud_values['SET_ME_X01'] = speed_control if (CP.flags & HondaFlags.HYBRID) else 1
+    # stock holds X01 through accelerate-to-target ramps ("1 gives power"), so keep it set for the
+    # whole launch window; outside launches keep the existing at-the-rails behavior
+    acc_hud_values['SET_ME_X01'] = 1 if (speed_control or pcm_accel == 0 or pcm_accel == 198) else 0
     acc_hud_values['FCM_OFF'] = acc_hud['FCM_OFF']
     acc_hud_values['FCM_OFF_2'] = acc_hud['FCM_OFF_2']
     acc_hud_values['FCM_PROBLEM'] = acc_hud['FCM_PROBLEM']
@@ -184,12 +186,15 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
                     lkas_state_change=None):
   commands = []
 
+  solid_lanes = lat_active and not steer_maxed
+  dashed_lanes = hud_control.lanesVisible
+
   lkas_hud_values = {
     'LKAS_READY': 1,
     'LKAS_STATE_CHANGE': 1,
     'STEERING_REQUIRED': alert_steer_required,
-    'SOLID_LANES': hud_control.lanesVisible and not steer_maxed,
-    'DASHED_LANES': lat_active,
+    'SOLID_LANES': solid_lanes,
+    'DASHED_LANES': dashed_lanes,
     'BEEP': 0,
   }
 
@@ -200,7 +205,6 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
 
   if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
     lkas_hud_values['LANE_LINES'] = 3
-    lkas_hud_values['DASHED_LANES'] = hud_control.lanesVisible
 
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
     # TODO: needed for Bosch CAN FD?
@@ -209,29 +213,10 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
 
     if CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       lkas_hud_values['LKAS_PROBLEM'] = CS.out.steerFaultPermanent # CS.lkas_hud['LKAS_PROBLEM']
-      lkas_hud_values['DASHED_LANES'] = 1  # show gray lanes when disengaged
 
-    if CP.carFingerprint in HONDA_BOSCH_CANFD:
-      # Don't let steer saturation flicker SOLID_LANES: every payload change must coincide with an
-      # LKAS_STATE_CHANGE pulse (see carcontroller), and a 10Hz flicker would keep the pulse
-      # re-triggering, which suppresses the dash lane lines.
-      # Keyed on lat_active, NOT hud_control.lanesVisible (== CC.enabled): under sunnypilot MADS
-      # the lateral control stays engaged when a brake press disengages ACC, and the dash LKAS
-      # indication must follow the lateral state or the driver can't tell MADS is still steering
-      # (drivers pressing the LKAS button to "re-engage" silently toggled MADS off). On forks
-      # without MADS, lat_active == enabled while moving, so this stays equivalent there.
-      lkas_hud_values['SOLID_LANES'] = lat_active
-
-  if not (CP.flags & HondaFlags.BOSCH_EXT_HUD):
+  if (not (CP.flags & HondaFlags.BOSCH_EXT_HUD)) or CP.carFingerprint in HONDA_BOSCH_ALT_RADAR:
     lkas_hud_values['RDM_OFF'] = 1
     lkas_hud_values['LANE_ASSIST_BEEP_OFF'] = 1
-
-  # New HUD concept for selected Bosch cars, overwrites some of the above
-  # TODO: make global across all Honda if feedback is favorable
-  # Try all Bosch A, didn't work on Nidec, and caused LKAS error in Bosch B/C
-  if CP.carFingerprint in HONDA_BOSCH and CP.carFingerprint not in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
-    lkas_hud_values['DASHED_LANES'] = steering_available
-    lkas_hud_values['SOLID_LANES'] = lat_active
 
   if CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
     commands.append(packer.make_can_msg('LKAS_HUD_A', bus, lkas_hud_values))
