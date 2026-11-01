@@ -95,18 +95,14 @@ class CarInterface(CarInterfaceBase):
       elif candidate in HONDA_BOSCH_CANFD:
         ret.longitudinalActuatorDelay = 0.05 # set to near zero, canfd seems to have stock feedforward correction
       else:
-        ret.longitudinalActuatorDelay = 0.5 # s
+        ret.longitudinalActuatorDelay = 0.25 # s, per Bosch A log
     else:
       # default longitudinal tuning for all Nidec hondas
       ret.longitudinalTuning.kiBP = [0., 5., 35.]
       ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
 
-    if candidate == CAR.HONDA_CITY_7G:
-      ret.vEgoStopping = 2.0
-      ret.stoppingDecelRate = 0.3
-    else:
-      ret.vEgoStopping = 0.5
-      ret.stoppingDecelRate = 0.1
+    ret.stoppingDecelRate = 0.1
+    ret.vEgoStopping = 0.3
     ret.vEgoStarting = ret.vEgoStopping
 
     # Disable control if EPS mod detected
@@ -135,8 +131,6 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.HONDA_ACCORD:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
-      if ret.transmissionType == TransmissionType.manual:
-        CarControllerParams.BOSCH_GAS_LOOKUP_BP = [-0.2, 2.0]
 
     elif candidate == CAR.HONDA_ACCORD_11G:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
@@ -167,8 +161,6 @@ class CarInterface(CarInterfaceBase):
       ret.steerActuatorDelay = 0.15
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5100], [0, 5100]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
-      if (ret.flags & HondaFlags.HYBRID):
-        CarControllerParams.BOSCH_GAS_LOOKUP_BP = [-0.3, 2.0]
 
     elif candidate == CAR.HONDA_FIT:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
