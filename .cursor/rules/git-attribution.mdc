@@ -1,0 +1,19 @@
+---
+description: Git commit co-author attribution preferences
+alwaysApply: true
+---
+
+Do not add any Co-authored-by trailers to git commits yourself.
+
+Do not copy Co-authored-by lines from git history. The Cloud Agent environment may append one for the run owner via a commit-msg hook; do not add a second one.
+
+Cursor may add `Co-authored-by: cursoragent@cursor.com` via a server-side hook on push when it applies.
+
+On Cloud Agent runs, also set the committer when committing from the shell — the server hook rewrites committer on some branch pushes (e.g. `combined-honda-spacelab`) but often not on `cursor/*` feature branches:
+
+```bash
+GIT_COMMITTER_NAME=mvl-boston GIT_COMMITTER_EMAIL=mvl-boston@users.noreply.github.com \
+  git commit --author="Cursor Agent <cursoragent@cursor.com>"
+```
+
+Author should always be `Cursor Agent <cursoragent@cursor.com>`. Committer should be `mvl-boston <mvl-boston@users.noreply.github.com>` to match other Cloud Agent commits on this repo.
