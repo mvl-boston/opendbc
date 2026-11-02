@@ -12,6 +12,8 @@ $Files = @(
     'cpu-health-check.ps1',
     'cpu-health-check.bat',
     'cpu-throttle-test.ps1',
+    'disk-health-check.ps1',
+    'run-disk-check.bat',
     'cleanup-cpu-tools.bat',
     'download-cpu-tools.bat',
     'download-cpu-tools.ps1',
@@ -51,6 +53,7 @@ Write-Host 'OK: All files downloaded and verified.'
 Write-Host ''
 Write-Host 'Next steps (run as Administrator):'
 Write-Host '  run-all-cpu-checks.bat       - one-click: speed test + throttle test + log'
+Write-Host '  run-disk-check.bat           - one-click: SSD/HDD health + speed + log'
 Write-Host '  cpu-health-check.bat         - 45s clocks / stress only'
 Write-Host '  cleanup-cpu-tools.bat        - uninstall HWiNFO/LHM and remove downloaded files'
 Write-Host ''

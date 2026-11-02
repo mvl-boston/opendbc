@@ -181,7 +181,7 @@ $jobs | Remove-Job -Force
 Remove-Item -LiteralPath $workDir -Recurse -Force -ErrorAction SilentlyContinue
 
 Write-Section 'Analysis'
-$valid = @($samples | Where-Object { $_.Rate -gt 0 })
+$valid = @($samples | Where-Object { $_.Rate -gt 0 -and ($null -eq $_.Util -or $_.Util -ge 80) })
 if ($valid.Count -lt 4) {
     Write-Warn 'Not enough samples to analyze.'
     Write-Host 'THROTTLE_TEST: FAIL reason=too_few_samples'

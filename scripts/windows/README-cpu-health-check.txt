@@ -24,6 +24,15 @@ load. If that does not happen over several minutes of full load, the cooler
 and thermal paste are doing their job. To see an actual temperature number,
 check your BIOS/UEFI "Hardware Monitor" page at boot (idle temperature only).
 
+Disk / SSD check (also driver-free)
+-----------------------------------
+  run-disk-check.bat              (Windows drive)
+  run-disk-check.bat D            (another drive letter)
+
+Writes disk-full-report.txt. Key lines:
+  DISK_HEALTH: PASS ...   SMART/reliability counters, error events, file system
+  DISK_SPEED:  PASS ...   winsat sequential/random MB/s vs expected for the drive type
+
 Removing earlier third-party tools
 ----------------------------------
   cleanup-cpu-tools.bat       (uninstalls HWiNFO, Intel Power Gadget, removes
