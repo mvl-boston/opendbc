@@ -160,7 +160,97 @@ if ($rc) {
         Write-Warn ('Drive temperature {0} C is high.' -f $temp)
         Add-HealthIssue 'WARN' ('drive_temp=' + $temp)
     }
+    if (($null -eq $temp -or $temp -eq 0) -and $busType -eq 'RAID') {
+        Write-Host 'Note: temperature/wear read as 0 because the Intel RST "RAID" controller mode hides SMART from Windows.'
+        Write-Host '      Use the drive vendor tool (e.g. WD Dashboard) for true SMART and firmware updates.'
+    }
+    $latMax = 0
+    foreach ($n in 'ReadLatencyMax', 'WriteLatencyMax', 'FlushLatencyMax') {
+        $v = Get-PropOrNull $rc $n
+        if ($null -ne $v -and $v -gt $latMax) { $latMax = [int]$v }
+    }
+    if ($latMax -ge 1000) {
+        Write-Warn ('Worst-case I/O latency since boot: {0} ms. Single I/Os took over a second - that is a visible "freeze".' -f $latMax)
+        Write-Host '      Stalls like this (not raw MB/s) are what make a PC feel slow. Causes: SSD firmware bugs, SLC cache'
+        Write-Host '      exhaustion on DRAM-less SSDs, old storage driver, bad SATA cable, or Windows write-cache flushing.'
+        Add-HealthIssue 'WARN' ('io_stall_max_ms=' + $latMax)
+    }
+    elseif ($latMax -gt 0) { Write-Ok ('Worst-case I/O latency since boot: {0} ms.' -f $latMax) }
 }
+
+Write-Section 'Storage controller / driver / cache settings'
+try {
+    $ctrls = @(Get-CimInstance Win32_PnPSignedDriver -ErrorAction Stop | Where-Object { $_.DeviceClass -in @('SCSIADAPTER', 'HDC') -and $_.DeviceName -match 'SATA|AHCI|RAID|RST|NVM|Storage|IDE' })
+    foreach ($c in $ctrls) {
+        $d = Get-PropOrNull $c 'DriverDate'
+        $dTxt = if ($d) { ([datetime]$d).ToString('yyyy-MM-dd') } else { '?' }
+        Write-Host ('  {0}' -f $c.DeviceName)
+        Write-Host ('     driver {0}  ({1})  by {2}' -f $c.DriverVersion, $dTxt, $c.DriverProviderName)
+        if ($d -and ([datetime]$d) -lt (Get-Date).AddYears(-6) -and $c.DriverProviderName -notmatch 'Microsoft') {
+            Write-Warn '     Old vendor storage driver. Intel RST updates have fixed SSD stall issues on this chipset generation.'
+        }
+    }
+    if ($ctrls.Count -eq 0) { Write-Host '  (no SATA/RAID/NVMe controller driver entries matched)' }
+}
+catch { Write-Warn ('Driver query failed: {0}' -f $_.Exception.Message) }
+
+try {
+    $dd = Get-CimInstance Win32_DiskDrive -ErrorAction Stop | Where-Object { $_.Index -eq [int]$targetPd.DeviceId } | Select-Object -First 1
+    if ($dd) {
+        $regPath = 'HKLM:\SYSTEM\CurrentControlSet\Enum\{0}\Device Parameters\Disk' -f $dd.PNPDeviceID
+        if (Test-Path -LiteralPath $regPath) {
+            $rp = Get-ItemProperty -LiteralPath $regPath -ErrorAction SilentlyContinue
+            $uwc = Get-PropOrNull $rp 'UserWriteCacheSetting'
+            $cpp = Get-PropOrNull $rp 'CacheIsPowerProtected'
+            $uwcTxt = if ($null -eq $uwc) { 'default (enabled)' } elseif ($uwc -eq 0) { 'DISABLED' } else { 'enabled' }
+            Write-Host ('  Write caching on device: {0}' -f $uwcTxt)
+            if ($uwc -eq 0) {
+                Write-Warn '  Write caching is turned off - this alone can cut SSD write speed to a fraction.'
+                Write-Host '  Device Manager > Disk drives > drive > Properties > Policies > Enable write caching.'
+                Add-HealthIssue 'WARN' 'write_cache_disabled'
+            }
+            Write-Host ('  "Turn off Windows write-cache buffer flushing": {0}' -f $(if ($cpp -eq 1) { 'ON (risky without UPS)' } else { 'off (normal)' }))
+        }
+        else { Write-Host '  Write-cache policy: default (enabled)' }
+    }
+}
+catch { Write-Host ('  Write-cache policy: could not read ({0})' -f $_.Exception.Message) }
+
+try {
+    $defragTask = Get-ScheduledTask -TaskPath '\Microsoft\Windows\Defrag\' -TaskName 'ScheduledDefrag' -ErrorAction Stop
+    $info = $defragTask | Get-ScheduledTaskInfo -ErrorAction SilentlyContinue
+    $lastRun = Get-PropOrNull $info 'LastRunTime'
+    Write-Host ('  Optimize Drives (TRIM) task: {0}, last run {1}' -f $defragTask.State, $lastRun)
+    if ($defragTask.State -eq 'Disabled') {
+        Write-Warn '  Scheduled optimization is disabled; SSD never gets periodic retrim. Re-enable in "Defragment and Optimize Drives".'
+        Add-HealthIssue 'WARN' 'optimize_task_disabled'
+    }
+}
+catch { }
+
+Write-Section 'Background disk load right now (10s sample, before speed test)'
+try {
+    $cs = Get-Counter -Counter @('\PhysicalDisk(_Total)\% Idle Time', '\PhysicalDisk(_Total)\Avg. Disk sec/Transfer', '\PhysicalDisk(_Total)\Disk Transfers/sec', '\PhysicalDisk(_Total)\Disk Bytes/sec') -SampleInterval 2 -MaxSamples 5 -ErrorAction Stop
+    $idle = [math]::Round((($cs | ForEach-Object { ($_.CounterSamples | Where-Object { $_.Path -like '*Idle Time' }).CookedValue }) | Measure-Object -Average).Average, 1)
+    $lat = [math]::Round(((($cs | ForEach-Object { ($_.CounterSamples | Where-Object { $_.Path -like '*sec/Transfer' }).CookedValue }) | Measure-Object -Average).Average) * 1000, 1)
+    $tps = [math]::Round((($cs | ForEach-Object { ($_.CounterSamples | Where-Object { $_.Path -like '*Transfers/sec' }).CookedValue }) | Measure-Object -Average).Average, 0)
+    $bps = [math]::Round(((($cs | ForEach-Object { ($_.CounterSamples | Where-Object { $_.Path -like '*Bytes/sec' }).CookedValue }) | Measure-Object -Average).Average) / 1MB, 1)
+    Write-Host ('  Disk idle: {0}%   avg latency: {1} ms   {2} IO/s   {3} MB/s' -f $idle, $lat, $tps, $bps)
+    if ($idle -lt 80) {
+        Write-Warn '  Something is already using the disk heavily. Speed results below will read low.'
+        Add-HealthIssue 'WARN' ('background_disk_busy_idle=' + $idle + '%')
+    }
+    if ($lat -gt 20) { Write-Warn ('  Average I/O latency {0} ms at idle is high for an SSD (healthy: under 1-5 ms).' -f $lat) }
+    $procs = @(Get-Counter -Counter '\Process(*)\IO Data Bytes/sec' -ErrorAction Stop).CounterSamples | Where-Object { $_.InstanceName -notin @('_total', 'idle') -and $_.CookedValue -gt 1MB } | Sort-Object CookedValue -Descending | Select-Object -First 5
+    if ($procs) {
+        Write-Host '  Top I/O processes:'
+        foreach ($p in $procs) { Write-Host ('     {0,-28} {1,8:N1} MB/s' -f $p.InstanceName, ($p.CookedValue / 1MB)) }
+        if (($procs | Where-Object { $_.InstanceName -match 'OneDrive|MsMpEng|SearchIndexer|CompatTelRunner|TiWorker' })) {
+            Write-Host '  (OneDrive sync, Defender scan, Search indexing, or Windows Update servicing is active)'
+        }
+    }
+}
+catch { Write-Host ('  Could not sample disk counters: {0}' -f $_.Exception.Message) }
 
 try {
     $fp = @(Get-CimInstance -Namespace root\wmi -ClassName MSStorageDriver_FailurePredictStatus -ErrorAction Stop)
@@ -221,7 +311,18 @@ if (-not $SkipVolumeScan) {
             Add-HealthIssue 'WARN' ('fs_scan=' + $scan)
         }
     }
-    catch { Write-Warn ('Repair-Volume scan failed: {0}' -f $_.Exception.Message) }
+    catch {
+        Write-Host ('Repair-Volume scan not available ({0}). Falling back to chkdsk /scan (online, read-only)...' -f ($_.Exception.Message -split "`r?`n")[0])
+        $ck = & chkdsk ("{0}:" -f $DriveLetter) /scan 2>&1 | Out-String
+        $ckLines = ($ck -split "`r?`n" | Where-Object { $_ -match 'found no problems|found problems|corrupt|Errors found|Windows has made corrections|total|free' } | Select-Object -First 6)
+        foreach ($l in $ckLines) { Write-Host ('  ' + $l.Trim()) }
+        if ($ck -match 'found no problems') { Write-Ok 'File system consistent (chkdsk /scan).' }
+        elseif ($ck -match 'found problems|corrupt|Errors found') {
+            Write-Warn ('File-system problems found. Run in Admin cmd:  chkdsk {0}: /f   (reboot required)' -f $DriveLetter)
+            Add-HealthIssue 'WARN' 'fs_scan_found_problems'
+        }
+        else { Write-Warn 'chkdsk /scan result unclear - see lines above.' }
+    }
 }
 
 Write-Host ''
@@ -239,21 +340,31 @@ if (Test-Path -LiteralPath $winsat) {
         @{ Args = @('disk', '-drive', $DriveLetter, '-seq', '-write', '-count', '3'); Name = 'Sequential write' },
         @{ Args = @('disk', '-drive', $DriveLetter, '-ran', '-read', '-count', '3');  Name = 'Random 16K read' }
     )
+    function Invoke-WinsatMbps {
+        param([string[]] $WsArgs)
+        $out = & $winsat @WsArgs 2>&1 | Out-String
+        foreach ($line in ($out -split "`r?`n")) {
+            if ($line -match '>\s*Disk\s+(Sequential|Random)\s+[\d.]+\s+(Read|Write)\s+([\d.]+)\s+MB/s') { return [double]$Matches[3] }
+        }
+        $snippet = ($out -split "`r?`n" | Where-Object { $_ -match 'Error|error|denied|battery|not supported' } | Select-Object -First 2) -join ' | '
+        if ($snippet) { Write-Warn ('winsat: {0}' -f $snippet) }
+        return $null
+    }
+    $retryBelow = @{ 'Sequential read' = 350; 'Sequential write' = 250; 'Random 16K read' = 80 }
     foreach ($t in $tests) {
         Write-Host ('Running winsat {0}...' -f $t.Name)
-        $out = & $winsat @($t.Args) 2>&1 | Out-String
-        $mbps = $null
-        foreach ($line in ($out -split "`r?`n")) {
-            if ($line -match '>\s*Disk\s+(Sequential|Random)\s+[\d.]+\s+(Read|Write)\s+([\d.]+)\s+MB/s') {
-                $mbps = [double]$Matches[3]
+        $mbps = Invoke-WinsatMbps -WsArgs $t.Args
+        if ($null -eq $mbps) { Write-Warn ('{0}: could not parse result.' -f $t.Name); continue }
+        if ($mbps -lt $retryBelow[$t.Name]) {
+            Write-Host ('  {0,-18} {1,8:N1} MB/s  (low - retrying after 10s pause to rule out background activity)' -f $t.Name, $mbps)
+            Start-Sleep -Seconds 10
+            $second = Invoke-WinsatMbps -WsArgs $t.Args
+            if ($null -ne $second) {
+                Write-Host ('  {0,-18} {1,8:N1} MB/s  (retry)' -f $t.Name, $second)
+                if ($second -gt $mbps) { $mbps = $second }
             }
         }
-        if ($null -eq $mbps) {
-            $snippet = ($out -split "`r?`n" | Where-Object { $_ -match 'Error|error|denied|battery|not supported' } | Select-Object -First 2) -join ' | '
-            Write-Warn ('{0}: could not parse result. {1}' -f $t.Name, $snippet)
-            continue
-        }
-        Write-Host ('  {0,-18} {1,8:N1} MB/s' -f $t.Name, $mbps)
+        Write-Host ('  {0,-18} {1,8:N1} MB/s  <-- best' -f $t.Name, $mbps)
         switch ($t.Name) {
             'Sequential read' { $seqRead = $mbps }
             'Sequential write' { $seqWrite = $mbps }
@@ -317,9 +428,14 @@ switch ($speedVerdict) {
     'PASS' { Write-Ok 'Drive speed is in the normal range for its type.' }
     'WARN' {
         Write-Warn 'Slower than expected for this drive type.'
-        if ($mediaType -eq 'SSD' -and $busType -match 'SATA|ATA') {
-            Write-Host 'Common causes: drive on a SATA 3Gb/s port (cap ~270 MB/s), nearly full SSD, TRIM off,'
-            Write-Host 'AHCI not enabled in BIOS (IDE mode), worn SSD, or bad SATA cable.'
+        if ($mediaType -eq 'SSD' -and $busType -match 'SATA|ATA|RAID') {
+            Write-Host 'Common causes, in order of likelihood for a SATA SSD:'
+            Write-Host '  1. DRAM-less SSD (WD Blue SA510, Crucial BX500, Kingston A400...) past its SLC cache -> writes fall'
+            Write-Host '     to 100-150 MB/s and random reads suffer. Vendor firmware updates often fix stalls on these.'
+            Write-Host '  2. Old Intel RST / chipset storage driver (RAID mode). Update from the board/Intel site.'
+            Write-Host '  3. Write caching disabled on the device (see settings section above).'
+            Write-Host '  4. Background load during test (OneDrive, Defender, indexing) - see 10s sample above.'
+            Write-Host '  5. SATA 3Gb/s port (caps ~270 MB/s), bad/loose SATA cable, or drive overheating.'
         }
         if ($mediaType -eq 'HDD') { Write-Host 'A slow HDD as the Windows drive is the #1 cause of a sluggish PC. An SSD fixes it.' }
     }
