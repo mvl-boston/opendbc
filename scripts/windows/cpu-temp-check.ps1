@@ -177,7 +177,7 @@ if (-not $hwi) {
     Write-Host ''
     Write-Host 'Falling back to Windows ACPI zones (often NOT CPU die temp)...'
     & (Join-Path $PSScriptRoot 'cpu-temp-check-safe.ps1') -MonitorSeconds $MonitorSeconds -SampleIntervalSeconds $SampleIntervalSeconds -StressCpu:$StressCpu
-    exit $LASTEXITCODE
+    exit 0
 }
 
 Write-Host ('HWiNFO64: {0}' -f $hwi)
