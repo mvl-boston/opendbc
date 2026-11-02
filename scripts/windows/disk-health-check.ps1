@@ -194,6 +194,50 @@ try {
 }
 catch { Write-Warn ('Driver query failed: {0}' -f $_.Exception.Message) }
 
+# SATA link power management (LPM / HIPM / DIPM). Aggressive LPM is a classic cause of random
+# multi-second SSD stalls: the link sleeps, the drive takes too long to wake, I/O hangs.
+try {
+    $lpmFound = $false
+    $lpmOn = $false
+    $svcKeys = @(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' -ErrorAction Stop | Where-Object { $_.PSChildName -match '^(iaStor|storahci|stornvme)' })
+    foreach ($sk in $svcKeys) {
+        $devKey = 'HKLM:\SYSTEM\CurrentControlSet\Services\{0}\Parameters\Device' -f $sk.PSChildName
+        if (-not (Test-Path -LiteralPath $devKey)) { continue }
+        $dp = Get-ItemProperty -LiteralPath $devKey -ErrorAction SilentlyContinue
+        if ($null -eq $dp) { continue }
+        $lpmProps = @($dp.PSObject.Properties | Where-Object { $_.Name -match 'LPM|DIPM|HIPM' })
+        if ($lpmProps.Count -eq 0) { continue }
+        $lpmFound = $true
+        Write-Host ('  {0} link power management (registry):' -f $sk.PSChildName)
+        foreach ($p in $lpmProps) {
+            Write-Host ('     {0,-32} = {1}' -f $p.Name, $p.Value)
+            if ($p.Name -match 'LPM$|DIPM$|HIPM$' -and ([string]$p.Value) -ne '0') { $lpmOn = $true }
+        }
+    }
+    $pc = & powercfg /q SCHEME_CURRENT 0012ee47-9041-4b5d-9b77-535fba8b1442 0b2d69d7-a2a1-449c-9680-f91c70521c60 2>&1 | Out-String
+    if ($pc -match 'Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)') {
+        $acIdx = [Convert]::ToInt32($Matches[1], 16)
+        $names = @{ 0 = 'Active (LPM off)'; 1 = 'HIPM'; 2 = 'HIPM+DIPM'; 3 = 'DIPM'; 4 = 'Lowest' }
+        $acTxt = if ($names.ContainsKey($acIdx)) { $names[$acIdx] } else { "index $acIdx" }
+        Write-Host ('  Power plan "AHCI Link Power Management - HIPM/DIPM" (plugged in): {0}' -f $acTxt)
+        $lpmFound = $true
+        if ($acIdx -ne 0) { $lpmOn = $true }
+    }
+    if ($lpmFound -and $lpmOn) {
+        Write-Warn '  SATA link power management is ON. On SATA SSDs this is a known cause of random freezes of'
+        Write-Host '       1-10 seconds (the link naps, the drive is slow to wake, Windows waits). It saves almost no'
+        Write-Host '       power on a desktop. Try turning it off and re-run this check:'
+        Write-Host '         Admin cmd:  powercfg /setacvalueindex SCHEME_CURRENT 0012ee47-9041-4b5d-9b77-535fba8b1442 0b2d69d7-a2a1-449c-9680-f91c70521c60 0'
+        Write-Host '                     powercfg /setactive SCHEME_CURRENT'
+        Write-Host '         Intel RST:  Intel Optane Memory and Storage Management / RST app > Performance tab >'
+        Write-Host '                     Link Power Management = Disabled  (or set the *LPM registry values above to 0, then reboot)'
+        Add-HealthIssue 'WARN' 'sata_lpm_enabled'
+    }
+    elseif ($lpmFound) { Write-Ok '  SATA link power management is off (no LPM-induced stalls).' }
+    else { Write-Host '  Link power management: no LPM settings found to read.' }
+}
+catch { Write-Host ('  Link power management: could not read ({0})' -f $_.Exception.Message) }
+
 try {
     $dd = Get-CimInstance Win32_DiskDrive -ErrorAction Stop | Where-Object { $_.Index -eq [int]$targetPd.DeviceId } | Select-Object -First 1
     if ($dd) {
