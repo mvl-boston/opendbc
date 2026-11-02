@@ -279,6 +279,10 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_CANFD.value
     if candidate == CAR.ACURA_RLX_HYBRID:
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RLX_STEER_BRIDGE.value
+    # Only with stock ACC: with openpilot longitudinal the radar is disabled and STEERING_CONTROL already
+    # goes straight to the powertrain bus (see CanBus.lkas), so there is no radar copy to race
+    if ret.flags & HondaFlags.BOSCH_PT_STEER_BYPASS and not ret.openpilotLongitudinalControl:
+      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_PT_STEER_BYPASS.value
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
     # to a negative value, so it won't matter. Otherwise, add 0.5 mph margin to not

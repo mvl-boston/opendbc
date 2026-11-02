@@ -659,6 +659,36 @@ class TestHondaBoschAltBrakeSafety(HondaPcmEnableBase, TestHondaBoschAltBrakeSaf
   """
     Covers the Honda Bosch safety mode with stock longitudinal and an alternate brake message
   """
+class TestHondaBoschPtSteerBypassSafety(HondaPcmEnableBase, TestHondaBoschSafetyBase):
+  """
+    Covers the Honda Bosch safety mode with stock longitudinal where STEERING_CONTROL is additionally sent
+    directly on the powertrain bus, racing the radar's own copy (RDX 3G MMR, MDX 4G, Odyssey 5G MMR, TLX 2G)
+  """
+  SAFETY_PARAM = HondaSafetyFlags.BOSCH_PT_STEER_BYPASS
+
+  TX_MSGS = [[0xE4, 0], [0xE4, 1], [0xE5, 0], [0x296, 1], [0x33D, 0], [0x33DA, 0], [0x33DB, 0]]
+
+  def test_steer_safety_check_pt_bus(self):
+    # the direct-to-EPS copy is held to the same torque gate as the one towards the radar
+    for controls_allowed in (False, True):
+      self.safety.set_controls_allowed(controls_allowed)
+      for bus in (0, 1):
+        values = {"STEER_TORQUE": 0x1000}
+        self.assertEqual(controls_allowed, self._tx(self.packer.make_can_msg_safety("STEERING_CONTROL", bus, values)), bus)
+        values = {"STEER_TORQUE": 0}
+        self.assertTrue(self._tx(self.packer.make_can_msg_safety("STEERING_CONTROL", bus, values)), bus)
+
+  def test_radar_steering_control_on_pt_bus_is_not_a_relay_malfunction(self):
+    # the stock radar keeps transmitting 0xE4 on the powertrain bus the whole time, so unlike the camera-side copy
+    # (0xE4 on bus 0) seeing it there must neither flag a relay malfunction nor stop our transmissions
+    self.assertFalse(self.safety.get_relay_malfunction())
+    for _ in range(10):
+      self._rx(self.packer.make_can_msg_safety("STEERING_CONTROL", 1, {"STEER_TORQUE": 0}))
+    self.assertFalse(self.safety.get_relay_malfunction())
+    self.safety.set_controls_allowed(True)
+    self.assertTrue(self._tx(self.packer.make_can_msg_safety("STEERING_CONTROL", 1, {"STEER_TORQUE": 0x100})))
+    self._rx(self.packer.make_can_msg_safety("STEERING_CONTROL", 0, {"STEER_TORQUE": 0}))
+    self.assertTrue(self.safety.get_relay_malfunction())
 class TestHondaBoschLongSafety(HondaButtonEnableBase, TestHondaBoschSafetyBase):
   """
     Covers the Honda Bosch safety mode with longitudinal control
