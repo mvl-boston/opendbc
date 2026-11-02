@@ -25,6 +25,18 @@ function Write-Ok {
     Write-Host ('OK: {0}' -f $Message) -ForegroundColor Green
 }
 
+function Get-HWiNFOLicenseMarker {
+    return (Join-Path $env:TEMP 'cpu-check-hwinfo-license.ok')
+}
+
+function Test-HWiNFOLicenseAccepted {
+    return (Test-Path -LiteralPath (Get-HWiNFOLicenseMarker))
+}
+
+function Set-HWiNFOLicenseAccepted {
+    Set-Content -LiteralPath (Get-HWiNFOLicenseMarker) -Value ('ok ' + (Get-Date)) -Force
+}
+
 function Get-HWiNFOExe {
     $candidates = @(
         (Join-Path $PSScriptRoot 'hwinfo\HWiNFO64.exe'),
@@ -138,21 +150,34 @@ function Start-HWiNFOSensorsProcess {
     )
     if (Test-Path -LiteralPath $LogFile) { Remove-Item -LiteralPath $LogFile -Force -ErrorAction SilentlyContinue }
 
-    $argSets = @(
-        @('/SENSORSONLY', '/SKIPSPLASH', '/MINIMIZE', ('/LOG={0}' -f $LogFile)),
-        @('/SENSORSONLY', '/SKIPSPLASH', '/MINIMIZE', '/LOG', $LogFile),
-        @('/SENSORSONLY', '/SKIPSPLASH', '/MINIMIZE')
-    )
-    foreach ($argList in $argSets) {
-        try {
-            $p = Start-Process -FilePath $HwinfoExe -ArgumentList $argList -PassThru -WindowStyle Minimized -ErrorAction Stop
-            Start-Sleep -Seconds 8
-            if (-not $p.HasExited) { return $p }
-        }
-        catch {
-            Write-Warn $_.Exception.Message
-        }
+    $argList = '/SENSORSONLY /SKIPSPLASH /MINIMIZE'
+    if ($LogFile) { $argList += (' /LOG="{0}"' -f $LogFile) }
+
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $HwinfoExe
+        $psi.Arguments = $argList
+        $psi.UseShellExecute = $true
+        $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
+        $p = [System.Diagnostics.Process]::Start($psi)
+        Start-Sleep -Seconds 10
+        if ($p -and -not $p.HasExited) { return $p }
     }
+    catch {
+        Write-Warn $_.Exception.Message
+    }
+
+    try {
+        $cmd = 'start "" /MIN "' + $HwinfoExe + '" ' + $argList.Replace('/', '/')
+        cmd.exe /c $cmd
+        Start-Sleep -Seconds 10
+        $p = Get-Process -Name 'HWiNFO64' -ErrorAction SilentlyContinue | Select-Object -First 1
+        if ($p) { return $p }
+    }
+    catch {
+        Write-Warn $_.Exception.Message
+    }
+
     return $null
 }
 
@@ -211,11 +236,22 @@ if (-not $hwi) {
 
 Write-Host ('HWiNFO64: {0}' -f $hwi)
 
-$marker = Join-Path $PSScriptRoot '.hwinfo-license-ok'
-if (-not (Test-Path -LiteralPath $marker)) {
+$marker = Get-HWiNFOLicenseMarker
+if (-not (Test-HWiNFOLicenseAccepted)) {
     Write-Host 'First HWiNFO launch: if a license window appears, click OK/Accept.'
-    Start-Process -FilePath $hwi -ArgumentList @('/SKIPSPLASH', '/SENSORSONLY') -Wait -WindowStyle Normal
-    New-Item -ItemType File -Path $marker -Force | Out-Null
+    try {
+        $psi = New-Object System.Diagnostics.ProcessStartInfo
+        $psi.FileName = $hwi
+        $psi.Arguments = '/SKIPSPLASH /SENSORSONLY'
+        $psi.UseShellExecute = $true
+        $null = [System.Diagnostics.Process]::Start($psi)
+        Start-Sleep -Seconds 15
+        Set-HWiNFOLicenseAccepted
+    }
+    catch {
+        Write-Warn ('Could not auto-open HWiNFO for license: {0}' -f $_.Exception.Message)
+        Write-Host 'NEXT_STEP: Start Menu - open HWiNFO64, accept license, open Sensors, close it.'
+    }
 }
 
 $stressJobs = $null

@@ -106,10 +106,10 @@ set "HWI="
 if exist "%~dp0hwinfo\HWiNFO64.exe" set "HWI=%~dp0hwinfo\HWiNFO64.exe"
 if exist "%ProgramFiles%\HWiNFO64\HWiNFO64.exe" set "HWI=%ProgramFiles%\HWiNFO64\HWiNFO64.exe"
 if not defined HWI exit /b 1
-if not exist "%~dp0.hwinfo-license-ok" (
+if not exist "%TEMP%\cpu-check-hwinfo-license.ok" (
   echo First run: accept HWiNFO license if prompted...
   start "" /wait "%HWI%" /SKIPSPLASH /SENSORSONLY
-  echo ok> "%~dp0.hwinfo-license-ok"
+  powershell -NoProfile -Command "Set-Content -LiteralPath $env:TEMP\cpu-check-hwinfo-license.ok -Value ok -Force" 2>nul
 )
 echo HWiNFO64 ready: %HWI%
 exit /b 0
