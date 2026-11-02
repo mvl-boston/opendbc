@@ -7,7 +7,7 @@ on:
   pull_request:
 
 env:
-  PARENT_MVL_BRANCH: new-op-temp
+  PARENT_MVL_BRANCH: delete
   CEREAL_DIR: openpilot/cereal
   SCONS_TARGETS: openpilot/common/ openpilot/cereal/ openpilot/selfdrive/pandad/ msgq_repo/ opendbc_repo
 
