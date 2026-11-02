@@ -105,7 +105,7 @@ catch {
 }
 
 Write-Section ('All-core stress with throughput tracking ({0}s)' -f $DurationSeconds)
-$endUtc = [datetime]::UtcNow.AddSeconds($DurationSeconds + 5)
+$endUtc = [datetime]::UtcNow.AddSeconds($DurationSeconds + 8 + $SampleIntervalSeconds + 5)
 $jobs = @()
 for ($t = 0; $t -lt $threads; $t++) {
     $counterFile = Join-Path $workDir ('t{0}.txt' -f $t)
