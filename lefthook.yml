@@ -12,7 +12,7 @@ output:
 test:
   parallel: false
   env:
-    OPENDBC_HOST_CAPNP: "1"
+    CAPNP_INCLUDE: ${CAPNP_INCLUDE}
   commands:
     # *** static analysis
     ruff:
