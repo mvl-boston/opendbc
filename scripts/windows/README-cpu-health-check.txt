@@ -28,6 +28,8 @@ Disk / SSD check (also driver-free)
 -----------------------------------
   run-disk-check.bat              (Windows drive)
   run-disk-check.bat D            (another drive letter)
+  make-rma-evidence.bat           (writes rma-evidence.txt: a warranty-claim document for a slow SSD;
+                                   attach it with your vendor Dashboard SMART screenshots)
 
 Writes disk-full-report.txt. Key lines:
   DISK_HEALTH: PASS ...   SMART/reliability counters, error events, file system

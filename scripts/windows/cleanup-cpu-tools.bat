@@ -129,7 +129,7 @@ echo ===== [4] Downloaded helper scripts =====
 for %%F in (
   cpu-health-check.ps1 cpu-health-check.bat cpu-throttle-test.ps1
   cpu-temp-check.ps1 cpu-temp-check.bat cpu-temp-check-safe.ps1 cpu-temp-check-safe.bat
-  disk-health-check.ps1 run-disk-check.bat
+  disk-health-check.ps1 run-disk-check.bat rma-evidence.ps1 make-rma-evidence.bat
   install-hwinfo.bat download-cpu-tools.ps1 download-cpu-tools.bat download-cpu-tools-all.bat
   download-cpu-health-check.bat download-cpu-temp-check.bat run-all-cpu-checks.bat
   HARDWARE-MONITORING.txt DEFENDER-WINRING0.txt README-cpu-health-check.txt .hwinfo-license-ok
