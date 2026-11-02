@@ -237,16 +237,20 @@ if ($mhzValues.Count -gt 0) {
     $nominal = ($cpus | Measure-Object -Property MaxClockSpeed -Maximum).Maximum
     if ($nominal -gt 0 -and $avgMhz -lt ($nominal * 0.75)) {
         Write-Warn ('Average MHz is well below WMI max ({0} MHz). Possible thermal or power throttling.' -f $nominal)
+        Write-Host 'SPEED_TEST: WARN reason=low_average_MHz'
     }
     elseif ($minMhz -lt ($maxMhz * 0.85)) {
         Write-Warn 'MHz dropped more than ~15% during the run. Check temps, paste, dust, and fans.'
+        Write-Host 'SPEED_TEST: WARN reason=Mhz_dropped_under_load'
     }
     else {
         Write-Ok 'MHz stayed fairly stable this run (still confirm temps with HWiNFO).'
+        Write-Host ('SPEED_TEST: PASS avg_MHz={0} min={1} max={2}' -f $avgMhz, $minMhz, $maxMhz)
     }
 }
 else {
     Write-Warn 'No MHz samples in log. Re-run as Administrator.'
+    Write-Host 'SPEED_TEST: FAIL reason=no_frequency_samples'
 }
 
 Write-Section '5. Interpretation'

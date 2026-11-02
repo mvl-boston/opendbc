@@ -2,7 +2,8 @@
 param(
     [int] $MonitorSeconds = 30,
     [double] $SampleIntervalSeconds = 5,
-    [switch] $StressCpu
+    [switch] $StressCpu,
+    [switch] $RequireHWiNFO
 )
 
 Set-StrictMode -Version Latest
@@ -33,6 +34,26 @@ function Get-HWiNFOExe {
     )
     foreach ($p in $candidates) {
         if (Test-Path -LiteralPath $p) { return (Resolve-Path -LiteralPath $p).Path }
+    }
+    return $null
+}
+
+function Install-HWiNFOViaWinget {
+    if (-not (Get-Command winget -ErrorAction SilentlyContinue)) { return $null }
+    Write-Host 'Trying winget install REALiX.HWiNFO (official installer)...'
+    try {
+        $proc = Start-Process -FilePath 'winget.exe' -ArgumentList @(
+            'install', '-e', '--id', 'REALiX.HWiNFO',
+            '--accept-package-agreements', '--accept-source-agreements', '--silent'
+        ) -Wait -PassThru -WindowStyle Hidden
+        Start-Sleep -Seconds 5
+        if ($proc.ExitCode -le 1) {
+            $exe = Get-HWiNFOExe
+            if ($exe) { return $exe }
+        }
+    }
+    catch {
+        Write-Warn $_.Exception.Message
     }
     return $null
 }
@@ -136,8 +157,8 @@ function Invoke-HWiNFOCsvSnapshot {
     New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
     $argSets = @(
-        @('/RPT', ('CSV:{0}' -f $OutCsv), '/SKIPSPLASH', '/SENSORSONLY', '/SILENT'),
-        @('/RPT', ('CSV:{0}' -f $OutCsv), '/SKIPSPLASH', '/SILENT'),
+        @('/RPT', ('CSV:{0}' -f $OutCsv), '/SKIPSPLASH', '/SENSORSONLY', '/SILENT', '/CLOSE'),
+        @('/RPT', ('CSV:{0}' -f $OutCsv), '/SKIPSPLASH', '/SILENT', '/CLOSE'),
         @('/CSV', $OutCsv, '/SKIPSPLASH', '/SENSORSONLY', '/SILENT')
     )
 
@@ -161,23 +182,21 @@ Write-Host 'Uses HWiNFO64 (signed). Does NOT use LibreHardwareMonitor / WinRing0
 Write-Host ''
 
 $hwi = Get-HWiNFOExe
+if (-not $hwi) { $hwi = Install-HWiNFOViaWinget }
 if (-not $hwi) {
     Write-Host 'HWiNFO64 not found locally. Attempting portable download...'
     $hwi = Install-HWiNFOPortable
 }
 
 if (-not $hwi) {
+    Write-Host 'CPU_TEMP_TEST: FAIL reason=HWiNFO64_not_installed'
+    Write-Host 'NEXT_STEP: run-all-cpu-checks.bat will open the download page - extract to hwinfo\HWiNFO64.exe'
+    if ($RequireHWiNFO) { exit 2 }
     Write-Warn 'Could not install HWiNFO automatically.'
-    Write-Host 'Manual setup (one time):'
-    Write-Host '  1. Open https://www.hwinfo.com/download/'
-    Write-Host '  2. Download HWiNFO64 portable (ZIP).'
-    Write-Host '  3. Extract HWiNFO64.exe into:'
-    Write-Host ('     {0}' -f (Join-Path $PSScriptRoot 'hwinfo'))
-    Write-Host '  4. Re-run this script.'
-    Write-Host ''
-    Write-Host 'Falling back to Windows ACPI zones (often NOT CPU die temp)...'
+    Write-Host 'Falling back to Windows ACPI zones (NOT CPU die temp)...'
     & (Join-Path $PSScriptRoot 'cpu-temp-check-safe.ps1') -MonitorSeconds $MonitorSeconds -SampleIntervalSeconds $SampleIntervalSeconds -StressCpu:$StressCpu
-    exit 0
+    Write-Host 'CPU_TEMP_TEST: FAIL reason=ACPI_fallback_not_CPU_die'
+    exit 2
 }
 
 Write-Host ('HWiNFO64: {0}' -f $hwi)
@@ -230,6 +249,7 @@ if ($stressJobs) {
 Write-Section 'Summary'
 if ($peak -gt 0) {
     Write-Host ('Peak CPU-related reading this run: {0} C' -f [math]::Round($peak, 1))
+    Write-Host ('CPU_TEMP_TEST: PASS peak={0}C samples={1}' -f [math]::Round($peak, 1), $sampleCount)
     if ($peak -ge 100) {
         Write-Warn 'Near typical Intel throttle (~100 C). Check paste, cooler mount, dust, fans.'
     }
@@ -239,10 +259,10 @@ if ($peak -gt 0) {
     else {
         Write-Ok 'CPU temperature under load looks reasonable for a short stress test.'
     }
-}
-else {
-    Write-Warn 'No CPU temps captured. Open hwinfo\HWiNFO64.exe as Administrator once, then re-run.'
+    exit 0
 }
 
-Write-Section 'Done'
-exit 0
+Write-Host 'CPU_TEMP_TEST: FAIL reason=no_CPU_readings'
+Write-Host 'NEXT_STEP: run hwinfo\HWiNFO64.exe as Administrator once (accept license), then re-run run-all-cpu-checks.bat'
+Write-Warn 'No CPU temps captured from HWiNFO CSV snapshots.'
+exit 2
