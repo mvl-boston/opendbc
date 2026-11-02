@@ -2,7 +2,8 @@
 param(
     [string] $DriveLetter = $env:SystemDrive.TrimEnd(':'),
     [switch] $SkipVolumeScan,
-    [switch] $SkipSpeedTest
+    [switch] $SkipSpeedTest,
+    [switch] $SkipRetrim
 )
 
 Set-StrictMode -Version Latest
@@ -352,7 +353,8 @@ $eventChecks = @(
     @{ Label = 'disk: controller error (11)';         Provider = 'disk';      Ids = @(11);       Level = 'WARN' },
     @{ Label = 'disk: paging I/O error (51)';         Provider = 'disk';      Ids = @(51);       Level = 'WARN' },
     @{ Label = 'disk: I/O retried (153)';             Provider = 'disk';      Ids = @(153);      Level = 'WARN' },
-    @{ Label = 'Ntfs: corruption (55/130/137/140)';   Provider = 'Ntfs';      Ids = @(55,130,137,140); Level = 'FAIL' },
+    @{ Label = 'Ntfs: corruption found (55/137/140)'; Provider = 'Ntfs';      Ids = @(55,137,140); Level = 'FAIL' },
+    @{ Label = 'Ntfs: self-repair completed (130)';   Provider = 'Ntfs';      Ids = @(130);      Level = 'WARN' },
     @{ Label = 'storahci: device reset (129)';        Provider = 'storahci';  Ids = @(129);      Level = 'WARN' },
     @{ Label = 'stornvme: device reset (129)';        Provider = 'stornvme';  Ids = @(129);      Level = 'WARN' },
     @{ Label = 'iaStorA/iaStorAC: reset (129)';       Provider = @('iaStorA','iaStorAC','iaStorAVC'); Ids = @(129); Level = 'WARN' }
@@ -416,6 +418,19 @@ $reasonTxt = if ($healthReasons.Count -gt 0) { $healthReasons -join ',' } else {
 Write-Host ('DISK_HEALTH: {0} disk={1} type={2} bus={3} reasons={4}' -f $healthVerdict, $targetPd.FriendlyName, $mediaType, $busType, $reasonTxt)
 
 if ($SkipSpeedTest) { exit 0 }
+
+if ($mediaType -eq 'SSD' -and -not $SkipRetrim) {
+    Write-Section 'TRIM now + 60s idle so the SSD can garbage-collect before measuring'
+    try {
+        $dOut = & defrag ("{0}:" -f $DriveLetter) /L 2>&1 | Out-String
+        $dLine = ($dOut -split "`r?`n" | Where-Object { $_ -match 'Retrim|Trim|complete|Error|error|not supported' } | Select-Object -First 3)
+        foreach ($l in $dLine) { Write-Host ('  ' + $l.Trim()) }
+        if ($dOut -match 'Error|error|not supported') { Write-Warn '  Retrim did not run. In RAID mode this can mean TRIM is not reaching the drive at all.' }
+        else { Write-Ok '  Retrim sent. Waiting 60 s with the disk idle...' }
+        Start-Sleep -Seconds 60
+    }
+    catch { Write-Warn ('  defrag /L failed: {0}' -f $_.Exception.Message) }
+}
 
 Write-Section ('Speed test on {0}: (Windows built-in winsat)' -f $DriveLetter)
 $seqRead = $null; $seqWrite = $null; $ranRead = $null
@@ -488,6 +503,77 @@ if ($null -eq $seqRead) {
     catch { Write-Warn ('Fallback speed test failed: {0}' -f $_.Exception.Message) }
 }
 
+# Sustained write profile. winsat reports one number; this shows the *shape*: a healthy drive is flat,
+# a DRAM-less SSD drops once its SLC cache fills, a sick drive is slow everywhere and stalls mid-write.
+$susFirst = $null; $susLast = $null; $susMaxMs = $null; $susStalls = 0
+$volForTest = Get-Volume -DriveLetter $DriveLetter -ErrorAction SilentlyContinue
+if ($null -ne $volForTest -and $volForTest.SizeRemaining -gt 6GB) {
+    Write-Section ('Sustained write profile on {0}: (2 GB, unbuffered, 256 MB steps)' -f $DriveLetter)
+    $testFile = Join-Path ("{0}:\" -f $DriveLetter) ('disk-sustained-{0}.tmp' -f ([guid]::NewGuid().ToString('N')))
+    $fs = $null
+    try {
+        $bufSize = 1MB
+        $stepBytes = 256MB
+        $totalBytes = 2GB
+        $buf = New-Object byte[] $bufSize
+        (New-Object Random).NextBytes($buf)
+        $noBuffering = [System.IO.FileOptions]0x20000000
+        $fs = New-Object System.IO.FileStream($testFile, [System.IO.FileMode]::Create, [System.IO.FileAccess]::Write, [System.IO.FileShare]::None, $bufSize, ($noBuffering -bor [System.IO.FileOptions]::WriteThrough))
+        $stepRates = New-Object System.Collections.Generic.List[double]
+        $maxMs = 0.0
+        $stallCount = 0
+        $written = 0L
+        $stepSw = [System.Diagnostics.Stopwatch]::StartNew()
+        $ioSw = New-Object System.Diagnostics.Stopwatch
+        $stepStart = 0L
+        while ($written -lt $totalBytes) {
+            $ioSw.Restart()
+            $fs.Write($buf, 0, $bufSize)
+            $ioSw.Stop()
+            $ms = $ioSw.Elapsed.TotalMilliseconds
+            if ($ms -gt $maxMs) { $maxMs = $ms }
+            if ($ms -ge 500) { $stallCount++ }
+            $written += $bufSize
+            if (($written - $stepStart) -ge $stepBytes) {
+                $rate = [math]::Round((($written - $stepStart) / 1MB) / $stepSw.Elapsed.TotalSeconds, 1)
+                $stepRates.Add($rate)
+                $bar = '#' * [math]::Min(60, [int][math]::Floor($rate / 10))
+                Write-Host ('  {0,5} MB  {1,7:N1} MB/s  {2}' -f ($written / 1MB), $rate, $bar)
+                $stepStart = $written
+                $stepSw.Restart()
+            }
+        }
+        $fs.Flush($true); $fs.Dispose()
+        $susFirst = $stepRates[0]
+        $susLast = $stepRates[$stepRates.Count - 1]
+        $susMaxMs = [math]::Round($maxMs, 0)
+        $susStalls = $stallCount
+        Write-Host ('  Slowest single 1 MB write: {0} ms.  Writes that took 500 ms or longer: {1}' -f $susMaxMs, $susStalls)
+        $susMin = ($stepRates | Measure-Object -Minimum).Minimum
+        $susAvg = [math]::Round(($stepRates | Measure-Object -Average).Average, 1)
+        if ($mediaType -eq 'SSD') {
+            if ($susFirst -ge 300 -and $susLast -lt ($susFirst * 0.5)) {
+                Write-Host ('  Shape: fast start ({0} MB/s) then drop to {1} MB/s = SLC cache filled. Normal for a DRAM-less SSD;' -f $susFirst, $susLast)
+                Write-Host '         the drive is working, it just has a small cache.'
+            }
+            elseif ($susAvg -lt 150) {
+                Write-Warn ('  Shape: slow from the first step (avg {0} MB/s, min {1}). The cache never engaged. A SATA SSD that cannot' -f $susAvg, $susMin)
+                Write-Host '        exceed ~150 MB/s even on a fresh 256 MB with an idle disk and healthy SMART is controller/firmware-side'
+                Write-Host '        trouble (stuck garbage collection, worn SLC region, or defective unit), not a Windows setting.'
+            }
+            else { Write-Ok ('  Shape: steady (avg {0} MB/s, min {1}).' -f $susAvg, $susMin) }
+            if ($susMaxMs -ge 1000) {
+                Write-Warn ('  A single 1 MB write stalled for {0} ms during the test. That is the freeze you feel, reproduced on demand.' -f $susMaxMs)
+            }
+        }
+    }
+    catch { Write-Warn ('Sustained write test failed: {0}' -f $_.Exception.Message) }
+    finally {
+        if ($null -ne $fs) { try { $fs.Dispose() } catch { } }
+        Remove-Item -LiteralPath $testFile -Force -ErrorAction SilentlyContinue
+    }
+}
+
 Write-Section 'Expected vs measured'
 $expLabel = ''
 $readWarn = 0; $readFail = 0; $writeWarn = 0; $ranWarn = 0
@@ -509,6 +595,8 @@ if ($null -ne $seqRead) {
 else { $speedVerdict = 'UNKNOWN'; $speedReasons.Add('no_read_measurement') }
 if ($null -ne $seqWrite -and $seqWrite -lt $writeWarn) { if ($speedVerdict -eq 'PASS') { $speedVerdict = 'WARN' }; $speedReasons.Add('seq_write_low=' + $seqWrite) }
 if ($null -ne $ranRead -and $ranRead -lt $ranWarn) { if ($speedVerdict -eq 'PASS') { $speedVerdict = 'WARN' }; $speedReasons.Add('random_read_low=' + $ranRead) }
+if ($null -ne $susMaxMs -and $susMaxMs -ge 1000) { if ($speedVerdict -eq 'PASS') { $speedVerdict = 'WARN' }; $speedReasons.Add('write_stall_ms=' + $susMaxMs) }
+if ($mediaType -eq 'SSD' -and $null -ne $susFirst -and $susFirst -lt 150 -and $null -ne $susLast -and $susLast -lt 150) { if ($speedVerdict -eq 'PASS') { $speedVerdict = 'WARN' }; $speedReasons.Add('sustained_write_low_first=' + $susFirst + '_last=' + $susLast) }
 
 switch ($speedVerdict) {
     'PASS' { Write-Ok 'Drive speed is in the normal range for its type.' }
@@ -539,7 +627,10 @@ $swr = if ($null -ne $seqWrite) { $seqWrite } else { 'n/a' }
 $rr = if ($null -ne $ranRead) { $ranRead } else { 'n/a' }
 $spReason = if ($speedReasons.Count -gt 0) { $speedReasons -join ',' } else { 'none' }
 Write-Host ''
-Write-Host ('DISK_SPEED: {0} drive={1}: type={2} bus={3} seq_read={4}MBps seq_write={5}MBps random_read={6}MBps reasons={7}' -f $speedVerdict, $DriveLetter, $mediaType, $busType, $sr, $swr, $rr, $spReason)
+$sf = if ($null -ne $susFirst) { $susFirst } else { 'n/a' }
+$sl = if ($null -ne $susLast) { $susLast } else { 'n/a' }
+$sm = if ($null -ne $susMaxMs) { $susMaxMs } else { 'n/a' }
+Write-Host ('DISK_SPEED: {0} drive={1}: type={2} bus={3} seq_read={4}MBps seq_write={5}MBps random_read={6}MBps sustained_first={8}MBps sustained_last={9}MBps max_write_ms={10} reasons={7}' -f $speedVerdict, $DriveLetter, $mediaType, $busType, $sr, $swr, $rr, $spReason, $sf, $sl, $sm)
 
 if ($healthVerdict -eq 'FAIL' -or $speedVerdict -eq 'FAIL') { exit 2 }
 exit 0
