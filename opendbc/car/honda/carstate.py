@@ -280,11 +280,6 @@ class CarState(CarStateBase):
     if self.initial_accFault_cleared_timer > 0:
       self.initial_accFault_cleared_timer -= 1
 
-    # Gets rid of Pedal Grinding noise when brake is pressed at slow speeds for some models
-    if self.CP.carFingerprint in (CAR.HONDA_PILOT, CAR.HONDA_RIDGELINE):
-      if cp.vl["VSA_STATUS"]["USER_BRAKE"] > 0.1:
-        ret.brakePressed = True
-
     if self.CP.carFingerprint in HONDA_BOSCH:
       # TODO: find the radarless AEB_STATUS bit and make sure ACCEL_COMMAND is correct to enable AEB alerts
       if not (self.CP.flags & HondaFlags.BOSCH_RADARLESS):
