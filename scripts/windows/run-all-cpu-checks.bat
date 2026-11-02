@@ -60,7 +60,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-health-check.ps1" 
 set "HERR=%ERRORLEVEL%"
 
 echo.
-echo [4/5] Ensure HWiNFO64 ^(Defender-safe CPU temps^)...
+echo [4/5] Ensure HWiNFO64 local copy ^(avoids referral error in Program Files^)...
 call :ensure_hwinfo
 if errorlevel 1 goto :fail
 
@@ -82,32 +82,45 @@ if %HERR% NEQ 0 exit /b %HERR%
 exit /b 0
 
 :ensure_hwinfo
-if exist "%~dp0hwinfo\HWiNFO64.exe" goto :hwinfo_license
-if exist "%ProgramFiles%\HWiNFO64\HWiNFO64.exe" goto :hwinfo_license
+set "LOCAL=%LOCALAPPDATA%\CpuHealthCheck\hwinfo"
+if not exist "%LOCAL%" mkdir "%LOCAL%"
+
+if exist "%ProgramFiles%\HWiNFO64\HWiNFO64.exe" (
+  echo Copying HWiNFO64 out of Program Files ^(fixes referral error^)...
+  xcopy "%ProgramFiles%\HWiNFO64\*" "%LOCAL%\" /E /I /Y /Q >nul
+)
+
+if exist "%~dp0hwinfo\HWiNFO64.exe" (
+  echo Copying portable hwinfo from script folder to local AppData...
+  xcopy "%~dp0hwinfo\*" "%LOCAL%\" /E /I /Y /Q >nul
+)
+
+if exist "%LOCAL%\HWiNFO64.exe" goto :hwinfo_license
+
 echo Trying winget install REALiX.HWiNFO ...
 winget install -e --id REALiX.HWiNFO --accept-package-agreements --accept-source-agreements -h 2>nul
-if exist "%ProgramFiles%\HWiNFO64\HWiNFO64.exe" goto :hwinfo_license
+if exist "%ProgramFiles%\HWiNFO64\HWiNFO64.exe" (
+  xcopy "%ProgramFiles%\HWiNFO64\*" "%LOCAL%\" /E /I /Y /Q >nul
+)
+if exist "%LOCAL%\HWiNFO64.exe" goto :hwinfo_license
+
 echo.
 echo *** ONE-TIME SETUP ***
-echo Browser opening: download HWiNFO64 PORTABLE ^(ZIP^)
-echo Extract so this file exists:
-echo   %~dp0hwinfo\HWiNFO64.exe
+echo If HWiNFO shows "A referral was returned from the server" - use PORTABLE zip here:
+echo   %LOCAL%
+echo Do NOT run HWiNFO from Program Files on this PC.
 echo.
 start https://www.hwinfo.com/download/
-echo Press any key after HWiNFO64.exe is in hwinfo\ ...
+echo Press any key after HWiNFO64.exe is in that folder...
 pause >nul
-if exist "%~dp0hwinfo\HWiNFO64.exe" goto :hwinfo_license
-if exist "%ProgramFiles%\HWiNFO64\HWiNFO64.exe" goto :hwinfo_license
-echo HWiNFO64 still not found.
+if exist "%LOCAL%\HWiNFO64.exe" goto :hwinfo_license
+echo HWiNFO64 still not found in %LOCAL%
 exit /b 1
 
 :hwinfo_license
-set "HWI="
-if exist "%~dp0hwinfo\HWiNFO64.exe" set "HWI=%~dp0hwinfo\HWiNFO64.exe"
-if exist "%ProgramFiles%\HWiNFO64\HWiNFO64.exe" set "HWI=%ProgramFiles%\HWiNFO64\HWiNFO64.exe"
-if not defined HWI exit /b 1
+set "HWI=%LOCAL%\HWiNFO64.exe"
 if not exist "%TEMP%\cpu-check-hwinfo-license.ok" (
-  echo First run: accept HWiNFO license if prompted...
+  echo First run: accept HWiNFO license if prompted ^(local copy^)...
   start "" /wait "%HWI%" /SKIPSPLASH /SENSORSONLY
   powershell -NoProfile -Command "Set-Content -LiteralPath $env:TEMP\cpu-check-hwinfo-license.ok -Value ok -Force" 2>nul
 )
