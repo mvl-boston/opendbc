@@ -102,14 +102,16 @@ echo HWiNFO64 still not found.
 exit /b 1
 
 :hwinfo_license
-if exist "%~dp0hwinfo\HWiNFO64.exe" (
-  if not exist "%~dp0hwinfo\.license_ok" (
-    echo First run: accept HWiNFO license if a window appears ^(10s^)...
-    start "" /wait "%~dp0hwinfo\HWiNFO64.exe" /SKIPSPLASH /SENSORSONLY /MINIMIZE
-    echo ok> "%~dp0hwinfo\.license_ok"
-  )
+set "HWI="
+if exist "%~dp0hwinfo\HWiNFO64.exe" set "HWI=%~dp0hwinfo\HWiNFO64.exe"
+if exist "%ProgramFiles%\HWiNFO64\HWiNFO64.exe" set "HWI=%ProgramFiles%\HWiNFO64\HWiNFO64.exe"
+if not defined HWI exit /b 1
+if not exist "%~dp0.hwinfo-license-ok" (
+  echo First run: accept HWiNFO license if prompted...
+  start "" /wait "%HWI%" /SKIPSPLASH /SENSORSONLY
+  echo ok> "%~dp0.hwinfo-license-ok"
 )
-echo HWiNFO64 ready.
+echo HWiNFO64 ready: %HWI%
 exit /b 0
 
 :fail

@@ -106,44 +106,54 @@ function Start-StressJobs {
     return $jobs
 }
 
+function Get-CpuTempsFromTextFile {
+    param([string] $Path)
+    if (-not (Test-Path -LiteralPath $Path)) { return @() }
+    $temps = @()
+    foreach ($line in (Get-Content -LiteralPath $Path -ErrorAction SilentlyContinue)) {
+        if ($line -notmatch 'CPU|Core\s*#|Package|Tctl|CCD|Processor') { continue }
+        if ($line -match '(?i)(CPU Package|Core\s*#\d+|Tctl|Tdie).*?(?<t>\d{1,3}[.,]\d+)') {
+            $v = [double]($Matches['t'] -replace ',', '.')
+        }
+        elseif ($line -match '(?<t>\d{1,3}[.,]\d+)\s*°?\s*C') {
+            $v = [double]($Matches['t'] -replace ',', '.')
+        }
+        else { continue }
+        if ($v -ge 30 -and $v -le 115) {
+            $temps += [pscustomobject]@{ Line = $line; Celsius = $v }
+        }
+    }
+    return $temps
+}
+
 function Get-CpuTempsFromHwinfoCsv {
     param([string] $CsvPath)
-    if (-not (Test-Path -LiteralPath $CsvPath)) { return @() }
+    return Get-CpuTempsFromTextFile -Path $CsvPath
+}
 
-    $rows = Import-Csv -LiteralPath $CsvPath -ErrorAction SilentlyContinue
-    if (-not $rows) {
-        $lines = Get-Content -LiteralPath $CsvPath -ErrorAction SilentlyContinue
-        $temps = @()
-        foreach ($line in $lines) {
-            if ($line -notmatch 'CPU|Core|Package|Tctl|CCD') { continue }
-            if ($line -notmatch '([0-9]{1,3}[.,][0-9]+)\s*°?C') { continue }
-            $v = [double]($Matches[1] -replace ',', '.')
-            if ($v -ge 25 -and $v -le 115) {
-                $temps += [pscustomobject]@{ Line = $line; Celsius = $v }
-            }
+function Start-HWiNFOSensorsProcess {
+    param(
+        [string] $HwinfoExe,
+        [string] $LogFile
+    )
+    if (Test-Path -LiteralPath $LogFile) { Remove-Item -LiteralPath $LogFile -Force -ErrorAction SilentlyContinue }
+
+    $argSets = @(
+        @('/SENSORSONLY', '/SKIPSPLASH', '/MINIMIZE', ('/LOG={0}' -f $LogFile)),
+        @('/SENSORSONLY', '/SKIPSPLASH', '/MINIMIZE', '/LOG', $LogFile),
+        @('/SENSORSONLY', '/SKIPSPLASH', '/MINIMIZE')
+    )
+    foreach ($argList in $argSets) {
+        try {
+            $p = Start-Process -FilePath $HwinfoExe -ArgumentList $argList -PassThru -WindowStyle Minimized -ErrorAction Stop
+            Start-Sleep -Seconds 8
+            if (-not $p.HasExited) { return $p }
         }
-        return $temps
-    }
-
-    $out = @()
-    foreach ($r in $rows) {
-        $text = ($r | Out-String)
-        if ($text -notmatch 'CPU|Core|Package|Tctl|CCD|Processor') { continue }
-        foreach ($prop in $r.PSObject.Properties) {
-            $val = "$($prop.Value)"
-            if ($val -match '^([0-9]{1,3}[.,][0-9]+)') {
-                $v = [double]($Matches[1] -replace ',', '.')
-                if ($v -ge 25 -and $v -le 115) {
-                    $out += [pscustomobject]@{
-                        Sensor  = $prop.Name
-                        Celsius = $v
-                        Raw     = $text
-                    }
-                }
-            }
+        catch {
+            Write-Warn $_.Exception.Message
         }
     }
-    return $out
+    return $null
 }
 
 function Invoke-HWiNFOCsvSnapshot {
@@ -201,18 +211,33 @@ if (-not $hwi) {
 
 Write-Host ('HWiNFO64: {0}' -f $hwi)
 
+$marker = Join-Path $PSScriptRoot '.hwinfo-license-ok'
+if (-not (Test-Path -LiteralPath $marker)) {
+    Write-Host 'First HWiNFO launch: if a license window appears, click OK/Accept.'
+    Start-Process -FilePath $hwi -ArgumentList @('/SKIPSPLASH', '/SENSORSONLY') -Wait -WindowStyle Normal
+    New-Item -ItemType File -Path $marker -Force | Out-Null
+}
+
 $stressJobs = $null
 $duration = $MonitorSeconds
 if ($duration -lt 20) { $duration = 20 }
 
+$logDir = Join-Path $PSScriptRoot 'hwinfo-logs'
+New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+$liveLog = Join-Path $logDir 'hwinfo-live.csv'
+
+$hwiProc = Start-HWiNFOSensorsProcess -HwinfoExe $hwi -LogFile $liveLog
+if (-not $hwiProc) {
+    Write-Host 'CPU_TEMP_TEST: FAIL reason=HWiNFO_did_not_start'
+    Write-Host 'NEXT_STEP: Start Menu - run HWiNFO64 as Administrator, open Sensors, close, re-run run-all-cpu-checks.bat'
+    exit 2
+}
+
 if ($StressCpu) {
     Write-Host ('Starting {0}s CPU stress...' -f ($duration + 10))
     $stressJobs = Start-StressJobs -Seconds ($duration + 15)
-    Start-Sleep -Seconds 12
+    Start-Sleep -Seconds 10
 }
-
-$logDir = Join-Path $PSScriptRoot 'hwinfo-logs'
-New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 
 $peak = 0.0
 $sampleCount = 0
@@ -220,25 +245,31 @@ $end = [datetime]::UtcNow.AddSeconds($duration)
 
 while ([datetime]::UtcNow -lt $end) {
     $ts = Get-Date -Format 'HH:mm:ss'
-    $csv = Join-Path $logDir ('sample_{0}.csv' -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
-    $ok = Invoke-HWiNFOCsvSnapshot -HwinfoExe $hwi -OutCsv $csv
-    if ($ok) {
-        $temps = Get-CpuTempsFromHwinfoCsv -CsvPath $csv
-        if ($temps.Count -gt 0) {
-            $max = ($temps.Celsius | Measure-Object -Maximum).Maximum
-            $avg = [math]::Round(($temps.Celsius | Measure-Object -Average).Average, 1)
-            if ($max -gt $peak) { $peak = $max }
-            $sampleCount++
-            Write-Host ('{0}  CPU sensors: max={1} C  avg={2} C  (samples={3})' -f $ts, [math]::Round($max, 1), $avg, $temps.Count)
+    $temps = @()
+    if (Test-Path -LiteralPath $liveLog) {
+        $temps = Get-CpuTempsFromTextFile -Path $liveLog
+    }
+    if ($temps.Count -eq 0) {
+        $snap = Join-Path $logDir ('snap_{0}.csv' -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
+        if (Invoke-HWiNFOCsvSnapshot -HwinfoExe $hwi -OutCsv $snap) {
+            $temps = Get-CpuTempsFromTextFile -Path $snap
         }
-        else {
-            Write-Host ('{0}  CSV created but no CPU temp rows parsed - open HWiNFO Sensors once manually' -f $ts)
-        }
+    }
+    if ($temps.Count -gt 0) {
+        $max = ($temps.Celsius | Measure-Object -Maximum).Maximum
+        $avg = [math]::Round(($temps.Celsius | Measure-Object -Average).Average, 1)
+        if ($max -gt $peak) { $peak = $max }
+        $sampleCount++
+        Write-Host ('{0}  CPU sensors: max={1} C  avg={2} C  (readings={3})' -f $ts, [math]::Round($max, 1), $avg, $temps.Count)
     }
     else {
-        Write-Host ('{0}  HWiNFO snapshot failed - run HWiNFO64.exe once as Admin to accept license' -f $ts)
+        Write-Host ('{0}  waiting for HWiNFO sensor data (log={1})' -f $ts, $liveLog)
     }
     Start-Sleep -Seconds $SampleIntervalSeconds
+}
+
+if ($hwiProc -and -not $hwiProc.HasExited) {
+    Stop-Process -Id $hwiProc.Id -Force -ErrorAction SilentlyContinue
 }
 
 if ($stressJobs) {
@@ -263,6 +294,6 @@ if ($peak -gt 0) {
 }
 
 Write-Host 'CPU_TEMP_TEST: FAIL reason=no_CPU_readings'
-Write-Host 'NEXT_STEP: run hwinfo\HWiNFO64.exe as Administrator once (accept license), then re-run run-all-cpu-checks.bat'
+Write-Host 'NEXT_STEP: Start Menu - run HWiNFO64 as Administrator, enable Sensors + logging, re-run run-all-cpu-checks.bat'
 Write-Warn 'No CPU temps captured from HWiNFO CSV snapshots.'
 exit 2

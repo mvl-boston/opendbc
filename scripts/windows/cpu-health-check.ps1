@@ -228,13 +228,16 @@ foreach ($line in $log) {
 }
 
 if ($mhzValues.Count -gt 0) {
-    $minMhz = ($mhzValues | Measure-Object -Minimum).Minimum
+    $nominal = ($cpus | Measure-Object -Property MaxClockSpeed -Maximum).Maximum
+    $forStability = @($mhzValues | Where-Object { $_ -ge [math]::Round($nominal * 0.75) })
+    if ($forStability.Count -eq 0) { $forStability = @($mhzValues) }
+
+    $minMhz = ($forStability | Measure-Object -Minimum).Minimum
     $maxMhz = ($mhzValues | Measure-Object -Maximum).Maximum
     $avgMhz = [math]::Round(($mhzValues | Measure-Object -Average).Average, 0)
     Write-Host ''
     Write-Host ('During stress: MHz min={0} max={1} avg={2}' -f $minMhz, $maxMhz, $avgMhz)
 
-    $nominal = ($cpus | Measure-Object -Property MaxClockSpeed -Maximum).Maximum
     if ($nominal -gt 0 -and $avgMhz -lt ($nominal * 0.75)) {
         Write-Warn ('Average MHz is well below WMI max ({0} MHz). Possible thermal or power throttling.' -f $nominal)
         Write-Host 'SPEED_TEST: WARN reason=low_average_MHz'
