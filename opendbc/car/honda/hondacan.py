@@ -121,7 +121,7 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   return commands
 
 
-def create_steering_control(packer, CAN, apply_torque, lkas_active, tja_control):
+def create_steering_control(packer, CAN, apply_torque, lkas_active, tja_control, bus=None, counter=None):
   values = {
     "STEER_TORQUE": apply_torque if lkas_active else 0,
     "STEER_TORQUE_REQUEST": lkas_active,
@@ -130,7 +130,12 @@ def create_steering_control(packer, CAN, apply_torque, lkas_active, tja_control)
   if tja_control:
     values["STEER_DOWN_TO_ZERO"] = lkas_active
 
-  return packer.make_can_msg("STEERING_CONTROL", CAN.lkas, values)
+  if counter is not None:
+    # an explicit counter also reseeds the packer's running counter for this address, so callers
+    # that pin the counter must use a packer dedicated to that stream (see radar_steer_bypass.py)
+    values["COUNTER"] = counter
+
+  return packer.make_can_msg("STEERING_CONTROL", CAN.lkas if bus is None else bus, values)
 
 
 def create_bosch_supplemental_1(packer, CAN):

@@ -45,6 +45,12 @@ class CarState(CarStateBase, CarStateExt):
       self.steer_status_msg = "STEER_STATUS"
 
     self.steer_control_active = False  # whether EPS is reacting to steering messages
+    self.steer_status = "UNKNOWN"
+
+    # Stock-ACC steering bypass (see radar_steer_bypass.py): the radar's STEERING_CONTROL stream on the
+    # powertrain bus is observed so the car controller can race it with the counter it is about to use
+    self.pt_steer_bypass = bool(CP.flags & HondaFlags.BOSCH_PT_STEER_BYPASS) and not CP.openpilotLongitudinalControl
+    self.radar_steer_counters: list[int] = []
 
     self.steer_status_values = defaultdict(lambda: "UNKNOWN", can_define.dv["STEER_STATUS"]["STEER_STATUS"])
 
@@ -177,6 +183,12 @@ class CarState(CarStateBase, CarStateExt):
       ret.steerFaultTemporary = steer_status not in ("NORMAL", "LOW_SPEED_LOCKOUT", "NO_TORQUE_ALERT_2")
 
     self.steer_control_active = bool(cp.vl[self.steer_status_msg]["STEER_CONTROL_ACTIVE"])
+    self.steer_status = steer_status
+
+    if self.pt_steer_bypass:
+      # every radar STEERING_CONTROL frame that arrived on the powertrain bus this tick, in order. openpilot's
+      # own 0xE4 transmissions are not looped back as RX, so these are the radar's frames only.
+      self.radar_steer_counters = [int(c) for c in cp.vl_all.get("STEERING_CONTROL", {}).get("COUNTER", [])]
 
     if (self.CP.carFingerprint == CAR.ACURA_MDX_4G) and (steer_status == "TJA_LOW_SPEED_LOCKOUT"):
       ret.steerFaultPermanent = False
@@ -413,6 +425,10 @@ class CarState(CarStateBase, CarStateExt):
       # Both messages intentionally go silent (the radar is disabled, the camera ends up behind the
       # open relay), so subscribe with NaN frequency to skip the alive/timeout checks.
       pt_messages += [("ACC_CONTROL", float('nan')), ("STEERING_CONTROL", float('nan'))]
+    if self.pt_steer_bypass:
+      # the radar's STEERING_CONTROL on the powertrain bus, read via vl_all (which does not auto-subscribe).
+      # NaN frequency: it must not gate canValid, the stock stream is the radar's to keep alive.
+      pt_messages += [("STEERING_CONTROL", float('nan'))]
     if self.CP.flags & HondaFlags.BOSCH_RADARLESS:
       # HUD_OBJECTS is polled by the HudObjectTracker, but not every radarless camera emits it,
       # so subscribe with NaN frequency to skip the alive/timeout checks.
@@ -423,6 +439,10 @@ class CarState(CarStateBase, CarStateExt):
     }
     if CP.flags & HondaFlags.HAS_BSM:
       parsers[Bus.body] = CANParser(DBC[CP.carFingerprint][Bus.body], [], CanBus(CP).radar)
+    if self.pt_steer_bypass:
+      # the bypass has to follow the radar's counter wherever it goes, and the continuity of the radar's
+      # stream is not a canValid matter for openpilot, so skip the parser's counter check on it
+      parsers[Bus.pt].message_states[0xE4].ignore_counter = True
     if self.CP.flags & HondaFlags.BOSCH_CANFD:
       # These radar tick-reference messages are only read via vl_all, which (unlike vl) does not
       # auto-subscribe messages, so they must be listed explicitly or they are never parsed.
