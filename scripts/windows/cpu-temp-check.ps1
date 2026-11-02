@@ -1,33 +1,12 @@
 ﻿#Requires -Version 5.1
-<#
-.SYNOPSIS
-  Reliable CPU temperature readout on Win10 using LibreHardwareMonitor (direct sensor access).
-
-.PARAMETER MonitorSeconds
-  How long to sample (default 30). Use 0 for one-shot.
-
-.PARAMETER SampleIntervalSeconds
-  Seconds between samples (default 2).
-
-.PARAMETER StressCpu
-  Run all-core load while monitoring (helps expose cooling limits).
-
-.EXAMPLE
-  powershell -ExecutionPolicy Bypass -File .\cpu-temp-check.ps1
-
-.EXAMPLE
-  powershell -ExecutionPolicy Bypass -File .\cpu-temp-check.ps1 -MonitorSeconds 60 -StressCpu
-#>
-[CmdletBinding()]
 param(
     [int] $MonitorSeconds = 30,
-    [double] $SampleIntervalSeconds = 2,
-    [switch] $StressCpu,
-    [switch] $InstallOnly
+    [double] $SampleIntervalSeconds = 5,
+    [switch] $StressCpu
 )
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
+$ErrorActionPreference = 'Continue'
 
 function Write-Section {
     param([string] $Title)
@@ -45,124 +24,48 @@ function Write-Ok {
     Write-Host ('OK: {0}' -f $Message) -ForegroundColor Green
 }
 
-function Test-IsAdmin {
-    $id = [Security.Principal.WindowsIdentity]::GetCurrent()
-    $p = New-Object Security.Principal.WindowsPrincipal($id)
-    return $p.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+function Get-HWiNFOExe {
+    $candidates = @(
+        (Join-Path $PSScriptRoot 'hwinfo\HWiNFO64.exe'),
+        (Join-Path $PSScriptRoot 'HWiNFO64.exe'),
+        "${env:ProgramFiles}\HWiNFO64\HWiNFO64.exe",
+        "${env:ProgramFiles(x86)}\HWiNFO64\HWiNFO64.exe"
+    )
+    foreach ($p in $candidates) {
+        if (Test-Path -LiteralPath $p) { return (Resolve-Path -LiteralPath $p).Path }
+    }
+    return $null
 }
 
-function Get-LhmRoot {
-    return (Join-Path $PSScriptRoot 'lhm')
-}
-
-function Install-LibreHardwareMonitor {
-    Write-Warn 'LibreHardwareMonitor uses WinRing0. Windows Defender may quarantine LibreHardwareMonitorLib.sys (VulnerableDriver).'
-    Write-Host 'See DEFENDER-WINRING0.txt. Prefer cpu-temp-check-safe.bat or HWiNFO64 unless you accept that risk.'
-    Write-Host ''
-
-    $root = Get-LhmRoot
-    $exe = Join-Path $root 'LibreHardwareMonitor.exe'
+function Install-HWiNFOPortable {
+    $root = Join-Path $PSScriptRoot 'hwinfo'
+    $exe = Join-Path $root 'HWiNFO64.exe'
     if (Test-Path -LiteralPath $exe) { return $exe }
 
-    $zipUrl = 'https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases/download/v0.9.4/LibreHardwareMonitor-net472.zip'
-    $zipPath = Join-Path $env:TEMP 'LibreHardwareMonitor-net472.zip'
-
-    Write-Host ('Downloading LibreHardwareMonitor 0.9.4 to {0} ...' -f $root)
-    New-Item -ItemType Directory -Path $root -Force | Out-Null
-    Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
-    Expand-Archive -LiteralPath $zipPath -DestinationPath $root -Force
-    Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
-
-    if (-not (Test-Path -LiteralPath $exe)) {
-        throw 'LibreHardwareMonitor download failed or unexpected zip layout.'
-    }
-    return $exe
-}
-
-function Initialize-LhmComputer {
-    $root = Get-LhmRoot
-    $null = Install-LibreHardwareMonitor
-
-    $hid = Join-Path $root 'HidSharp.dll'
-    $lib = Join-Path $root 'LibreHardwareMonitorLib.dll'
-    if (-not (Test-Path -LiteralPath $lib)) {
-        throw 'LibreHardwareMonitorLib.dll missing. Defender may have removed lhm\ files. Use cpu-temp-check-safe.ps1 or HWiNFO64.'
-    }
-    $sys = Get-ChildItem -LiteralPath $root -Filter '*.sys' -ErrorAction SilentlyContinue
-    if (-not $sys) {
-        Write-Warn 'No .sys driver in lhm folder (often removed by Defender). Sensor read may fail.'
-    }
-
-    foreach ($path in @($hid, $lib)) {
-        if (Test-Path -LiteralPath $path) {
-            try {
-                Add-Type -Path $path -ErrorAction Stop
-            }
-            catch {
-                if ($_.Exception.Message -notmatch 'already (exists|added)') { throw }
-            }
-        }
-    }
-
-    $computer = New-Object LibreHardwareMonitor.Hardware.Computer
-    $computer.IsCpuEnabled = $true
-    $computer.Open()
-    return $computer
-}
-
-function Get-CpuTemperatureSamples {
-    param(
-        [Parameter(Mandatory = $true)]
-        $Computer
+    $zipPath = Join-Path $env:TEMP 'hw64.zip'
+    $urls = @(
+        'https://www.hwinfo.com/files/hw64.zip',
+        'https://www.ftp.hwinfo.com/files/hw64.zip'
     )
+    $ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
 
-    $cpuType = [LibreHardwareMonitor.Hardware.HardwareType]::Cpu
-    $tempType = [LibreHardwareMonitor.Hardware.SensorType]::Temperature
-    $rows = New-Object System.Collections.Generic.List[object]
-
-    function Add-HwSensors {
-        param($Hardware)
-        $Hardware.Update()
-        foreach ($sensor in $Hardware.Sensors) {
-            if ($sensor.SensorType -ne $tempType) { continue }
-            if (-not $sensor.Value.HasValue) { continue }
-            $v = [double]$sensor.Value.Value
-            if ($v -lt 15 -or $v -gt 115) { continue }
-            [void]$rows.Add([pscustomobject]@{
-                    Hardware = $Hardware.Name
-                    Sensor   = $sensor.Name
-                    Celsius  = [math]::Round($v, 1)
-                })
+    New-Item -ItemType Directory -Path $root -Force | Out-Null
+    foreach ($url in $urls) {
+        try {
+            Write-Host ('Trying download: {0}' -f $url)
+            Invoke-WebRequest -Uri $url -OutFile $zipPath -UseBasicParsing -UserAgent $ua -TimeoutSec 120
+            if ((Get-Item $zipPath).Length -lt 1000000) { throw 'Download too small (not a zip?)' }
+            Expand-Archive -LiteralPath $zipPath -DestinationPath $root -Force
+            Remove-Item $zipPath -Force -ErrorAction SilentlyContinue
+            if (Test-Path -LiteralPath $exe) { return $exe }
+            $found = Get-ChildItem -LiteralPath $root -Filter 'HWiNFO64.exe' -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) { return $found.FullName }
         }
-        foreach ($sub in $Hardware.SubHardware) {
-            Add-HwSensors -Hardware $sub
+        catch {
+            Write-Warn $_.Exception.Message
         }
     }
-
-    foreach ($hw in $Computer.Hardware) {
-        if ($hw.HardwareType -ne $cpuType) { continue }
-        Add-HwSensors -Hardware $hw
-    }
-
-    return $rows
-}
-
-function Format-TempSummary {
-    param($Rows)
-    if (-not $Rows -or $Rows.Count -eq 0) { return $null }
-
-    $package = $Rows | Where-Object { $_.Sensor -match 'Package|Tctl|CPU' } | Select-Object -First 1
-    $cores = $Rows | Where-Object { $_.Sensor -match 'Core|CCD|Die' }
-    $all = $Rows | ForEach-Object { $_.Celsius }
-
-    return [pscustomobject]@{
-        PackageC    = if ($package) { $package.Celsius } else { $null }
-        CoreAvgC    = if ($cores) { [math]::Round(($cores.Celsius | Measure-Object -Average).Average, 1) } else { $null }
-        CoreMaxC    = if ($cores) { ($cores.Celsius | Measure-Object -Maximum).Maximum } else { ($all | Measure-Object -Maximum).Maximum }
-        CoreMinC    = if ($cores) { ($cores.Celsius | Measure-Object -Minimum).Minimum } else { ($all | Measure-Object -Minimum).Minimum }
-        SensorCount = $Rows.Count
-        Rows        = $Rows
-    }
+    return $null
 }
 
 function Start-StressJobs {
@@ -182,101 +85,164 @@ function Start-StressJobs {
     return $jobs
 }
 
-Write-Section 'CPU temperature check (LibreHardwareMonitor)'
-Write-Host ('Admin:       {0}' -f (Test-IsAdmin))
-Write-Host ('PowerShell:  {0}' -f $PSVersionTable.PSVersion)
-if (-not (Test-IsAdmin)) {
-    Write-Warn 'Run as Administrator for best access to CPU sensors (right-click cpu-temp-check.bat).'
-}
+function Get-CpuTempsFromHwinfoCsv {
+    param([string] $CsvPath)
+    if (-not (Test-Path -LiteralPath $CsvPath)) { return @() }
 
-try {
-    $null = Install-LibreHardwareMonitor
-}
-catch {
-    Write-Warn $_.Exception.Message
-    exit 1
-}
-
-if ($InstallOnly) {
-    Write-Ok ('LibreHardwareMonitor ready in {0}' -f (Get-LhmRoot))
-    exit 0
-}
-
-$computer = $null
-$stressJobs = $null
-try {
-    $computer = Initialize-LhmComputer
-
-    Write-Section 'One-shot CPU sensors'
-    $rows = Get-CpuTemperatureSamples -Computer $computer
-    $summary = Format-TempSummary -Rows $rows
-    if (-not $summary) {
-        Write-Warn 'No CPU temperature sensors found. Try Administrator, or reboot after first LHM download.'
-        exit 2
+    $rows = Import-Csv -LiteralPath $CsvPath -ErrorAction SilentlyContinue
+    if (-not $rows) {
+        $lines = Get-Content -LiteralPath $CsvPath -ErrorAction SilentlyContinue
+        $temps = @()
+        foreach ($line in $lines) {
+            if ($line -notmatch 'CPU|Core|Package|Tctl|CCD') { continue }
+            if ($line -notmatch '([0-9]{1,3}[.,][0-9]+)\s*°?C') { continue }
+            $v = [double]($Matches[1] -replace ',', '.')
+            if ($v -ge 25 -and $v -le 115) {
+                $temps += [pscustomobject]@{ Line = $line; Celsius = $v }
+            }
+        }
+        return $temps
     }
 
-    foreach ($r in ($rows | Sort-Object Sensor)) {
-        Write-Host ('  {0} / {1}: {2} C' -f $r.Hardware, $r.Sensor, $r.Celsius)
+    $out = @()
+    foreach ($r in $rows) {
+        $text = ($r | Out-String)
+        if ($text -notmatch 'CPU|Core|Package|Tctl|CCD|Processor') { continue }
+        foreach ($prop in $r.PSObject.Properties) {
+            $val = "$($prop.Value)"
+            if ($val -match '^([0-9]{1,3}[.,][0-9]+)') {
+                $v = [double]($Matches[1] -replace ',', '.')
+                if ($v -ge 25 -and $v -le 115) {
+                    $out += [pscustomobject]@{
+                        Sensor  = $prop.Name
+                        Celsius = $v
+                        Raw     = $text
+                    }
+                }
+            }
+        }
     }
+    return $out
+}
+
+function Invoke-HWiNFOCsvSnapshot {
+    param(
+        [string] $HwinfoExe,
+        [string] $OutCsv
+    )
+    if (Test-Path -LiteralPath $OutCsv) { Remove-Item -LiteralPath $OutCsv -Force -ErrorAction SilentlyContinue }
+
+    $dir = Split-Path -Parent $OutCsv
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+
+    $argSets = @(
+        @('/RPT', ('CSV:{0}' -f $OutCsv), '/SKIPSPLASH', '/SENSORSONLY', '/SILENT'),
+        @('/RPT', ('CSV:{0}' -f $OutCsv), '/SKIPSPLASH', '/SILENT'),
+        @('/CSV', $OutCsv, '/SKIPSPLASH', '/SENSORSONLY', '/SILENT')
+    )
+
+    foreach ($argList in $argSets) {
+        try {
+            $p = Start-Process -FilePath $HwinfoExe -ArgumentList $argList -PassThru -Wait -WindowStyle Hidden -ErrorAction Stop
+            Start-Sleep -Seconds 2
+            if ((Test-Path -LiteralPath $OutCsv) -and (Get-Item $OutCsv).Length -gt 50) {
+                return $true
+            }
+        }
+        catch {
+            # try next
+        }
+    }
+    return $false
+}
+
+Write-Section 'CPU temperature (HWiNFO64 - Defender safe)'
+Write-Host 'Uses HWiNFO64 (signed). Does NOT use LibreHardwareMonitor / WinRing0.'
+Write-Host ''
+
+$hwi = Get-HWiNFOExe
+if (-not $hwi) {
+    Write-Host 'HWiNFO64 not found locally. Attempting portable download...'
+    $hwi = Install-HWiNFOPortable
+}
+
+if (-not $hwi) {
+    Write-Warn 'Could not install HWiNFO automatically.'
+    Write-Host 'Manual setup (one time):'
+    Write-Host '  1. Open https://www.hwinfo.com/download/'
+    Write-Host '  2. Download HWiNFO64 portable (ZIP).'
+    Write-Host '  3. Extract HWiNFO64.exe into:'
+    Write-Host ('     {0}' -f (Join-Path $PSScriptRoot 'hwinfo'))
+    Write-Host '  4. Re-run this script.'
     Write-Host ''
-    if ($null -ne $summary.PackageC) {
-        Write-Host ('Package (preferred): {0} C' -f $summary.PackageC)
-    }
-    Write-Host ('Core max: {0} C   Core avg: {1} C' -f $summary.CoreMaxC, $summary.CoreAvgC)
+    Write-Host 'Falling back to Windows ACPI zones (often NOT CPU die temp)...'
+    & (Join-Path $PSScriptRoot 'cpu-temp-check-safe.ps1') -MonitorSeconds $MonitorSeconds -SampleIntervalSeconds $SampleIntervalSeconds -StressCpu:$StressCpu
+    exit $LASTEXITCODE
+}
 
-    if ($MonitorSeconds -le 0) {
-        Write-Section 'Done (one-shot)'
-        exit 0
-    }
+Write-Host ('HWiNFO64: {0}' -f $hwi)
 
-    Write-Section ('Monitoring {0}s (interval {1}s){2}' -f $MonitorSeconds, $SampleIntervalSeconds, $(if ($StressCpu) { ' WITH all-core stress' } else { '' }))
-    if ($StressCpu) {
-        $stressJobs = Start-StressJobs -Seconds ($MonitorSeconds + 5)
-    }
+$stressJobs = $null
+$duration = $MonitorSeconds
+if ($duration -lt 20) { $duration = 20 }
 
-    $maxSeen = 0.0
-    $end = [datetime]::UtcNow.AddSeconds($MonitorSeconds)
-    while ([datetime]::UtcNow -lt $end) {
-        $rows = Get-CpuTemperatureSamples -Computer $computer
-        $summary = Format-TempSummary -Rows $rows
-        $ts = Get-Date -Format 'HH:mm:ss'
-        if ($summary) {
-            $line = '{0}  Package={1}  CoreMax={2}  CoreAvg={3}' -f $ts,
-            $(if ($null -ne $summary.PackageC) { ('{0} C' -f $summary.PackageC) } else { 'n/a' }),
-            ('{0} C' -f $summary.CoreMaxC),
-            $(if ($null -ne $summary.CoreAvgC) { ('{0} C' -f $summary.CoreAvgC) } else { 'n/a' })
-            Write-Host $line
-            if ($summary.CoreMaxC -gt $maxSeen) { $maxSeen = $summary.CoreMaxC }
+if ($StressCpu) {
+    Write-Host ('Starting {0}s CPU stress...' -f ($duration + 10))
+    $stressJobs = Start-StressJobs -Seconds ($duration + 15)
+    Start-Sleep -Seconds 12
+}
+
+$logDir = Join-Path $PSScriptRoot 'hwinfo-logs'
+New-Item -ItemType Directory -Path $logDir -Force | Out-Null
+
+$peak = 0.0
+$sampleCount = 0
+$end = [datetime]::UtcNow.AddSeconds($duration)
+
+while ([datetime]::UtcNow -lt $end) {
+    $ts = Get-Date -Format 'HH:mm:ss'
+    $csv = Join-Path $logDir ('sample_{0}.csv' -f (Get-Date -Format 'yyyyMMdd_HHmmss'))
+    $ok = Invoke-HWiNFOCsvSnapshot -HwinfoExe $hwi -OutCsv $csv
+    if ($ok) {
+        $temps = Get-CpuTempsFromHwinfoCsv -CsvPath $csv
+        if ($temps.Count -gt 0) {
+            $max = ($temps.Celsius | Measure-Object -Maximum).Maximum
+            $avg = [math]::Round(($temps.Celsius | Measure-Object -Average).Average, 1)
+            if ($max -gt $peak) { $peak = $max }
+            $sampleCount++
+            Write-Host ('{0}  CPU sensors: max={1} C  avg={2} C  (samples={3})' -f $ts, [math]::Round($max, 1), $avg, $temps.Count)
         }
         else {
-            Write-Host ('{0}  (no readings)' -f $ts)
+            Write-Host ('{0}  CSV created but no CPU temp rows parsed - open HWiNFO Sensors once manually' -f $ts)
         }
-        Start-Sleep -Seconds $SampleIntervalSeconds
-    }
-
-    Write-Section 'Assessment'
-    Write-Host ('Peak core temperature this run: {0} C' -f [math]::Round($maxSeen, 1))
-    if ($maxSeen -ge 100) {
-        Write-Warn 'At or above ~100 C (typical Intel throttle zone for Haswell). Check paste, mount pressure, dust, and fans.'
-    }
-    elseif ($maxSeen -ge 85) {
-        Write-Warn 'Warm under load. Cooling may be marginal; watch for rising temps over longer runs.'
     }
     else {
-        Write-Ok 'Temperatures look reasonable for a short load test.'
+        Write-Host ('{0}  HWiNFO snapshot failed - run HWiNFO64.exe once as Admin to accept license' -f $ts)
     }
-    if (-not $StressCpu) {
-        Write-Host 'Tip: re-run with -StressCpu to see temps under full load (paste/cooler stress test).'
+    Start-Sleep -Seconds $SampleIntervalSeconds
+}
+
+if ($stressJobs) {
+    $stressJobs | Wait-Job | Out-Null
+    $stressJobs | Remove-Job -Force
+}
+
+Write-Section 'Summary'
+if ($peak -gt 0) {
+    Write-Host ('Peak CPU-related reading this run: {0} C' -f [math]::Round($peak, 1))
+    if ($peak -ge 100) {
+        Write-Warn 'Near typical Intel throttle (~100 C). Check paste, cooler mount, dust, fans.'
+    }
+    elseif ($peak -ge 85) {
+        Write-Warn 'Warm under load. Monitor with longer tests or improve cooling if sustained.'
+    }
+    else {
+        Write-Ok 'CPU temperature under load looks reasonable for a short stress test.'
     }
 }
-finally {
-    if ($stressJobs) {
-        $stressJobs | Wait-Job | Out-Null
-        $stressJobs | Remove-Job -Force
-    }
-    if ($computer) {
-        $computer.Close()
-    }
+else {
+    Write-Warn 'No CPU temps captured. Open hwinfo\HWiNFO64.exe as Administrator once, then re-run.'
 }
 
 Write-Section 'Done'
+exit 0

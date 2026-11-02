@@ -2,26 +2,17 @@
 setlocal
 cd /d "%~dp0"
 
-echo CPU temperature check
-echo   Default: safe mode (no WinRing0) - cpu-temp-check-safe.ps1
-echo   Optional: cpu-temp-check.bat lhm 60 stress  ^(LibreHardwareMonitor - may be blocked by Defender^)
+echo CPU temperature (HWiNFO64 - no WinRing0 / Defender block)
+echo Run as Administrator. First HWiNFO run may need one manual accept of the license.
 echo.
 
-if /I "%~1"=="lhm" (
-  shift
-  set "SEC=%~1"
-  if "%SEC%"=="" set "SEC=30"
-  set "STRESS=%~2"
-  if /I "%STRESS%"=="stress" (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-temp-check.ps1" -MonitorSeconds %SEC% -StressCpu
-  ) else (
-    powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-temp-check.ps1" -MonitorSeconds %SEC%
-  )
-  goto :done
-)
+set "SEC=%~1"
+if "%SEC%"=="" set "SEC=60"
+set "STRESS=%~2"
+if /I not "%STRESS%"=="stress" set "STRESS=stress"
 
-call "%~dp0cpu-temp-check-safe.bat" %*
-
-:done
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-temp-check.ps1" -MonitorSeconds %SEC% -StressCpu
 set "ERR=%ERRORLEVEL%"
+echo.
+pause
 exit /b %ERR%

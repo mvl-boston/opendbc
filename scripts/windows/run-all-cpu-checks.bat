@@ -69,8 +69,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0download-cpu-tools.ps1
 if errorlevel 1 goto :fail
 
 echo.
-echo Note: For accurate CPU die temps, run HWiNFO64 Sensors during step 4.
-echo       See DEFENDER-WINRING0.txt in this folder.
+echo Note: Step 4 uses HWiNFO64 (Defender-safe). See HARDWARE-MONITORING.txt
 echo.
 echo [3/4] CPU speed / stress test (~45 seconds)...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-health-check.ps1" -DurationSeconds 45
@@ -78,10 +77,11 @@ set "HERR=%ERRORLEVEL%"
 
 echo.
 echo ================================================================
-echo [4/4] CPU temperature under load (~60 seconds, Windows zones)...
+echo [4/4] CPU temperature under load (~60 seconds, HWiNFO64)...
+echo       If first run: may need install-hwinfo.bat or auto-download.
 echo ================================================================
 echo.
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-temp-check-safe.ps1" -MonitorSeconds 60 -StressCpu
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-temp-check.ps1" -MonitorSeconds 60 -StressCpu
 set "TERR=%ERRORLEVEL%"
 
 echo.
@@ -92,7 +92,8 @@ echo  Health check exit code: %HERR%   Temp check exit code: %TERR%
 echo.
 echo  SPEED: i7-4790 should show MHz min/max/avg near ~3600 under stress.
 echo         Green OK on stability = good. WARN on MHz drop = check cooling.
-echo  TEMP:  "no readings" is common; use HWiNFO64 for CPU die temperature.
+echo  TEMP:  HWiNFO64 CPU Package/Core; peak under ~100 C is OK on i7-4790.
+echo         If HWiNFO missing, run install-hwinfo.bat once.
 echo ================================================================
 exit /b 0
 

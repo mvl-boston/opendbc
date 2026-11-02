@@ -1,0 +1,26 @@
+CPU temperature tools (Windows Defender friendly)
+===============================================
+
+We use HWiNFO64 for CPU die temperature.
+We do NOT use LibreHardwareMonitor / WinRing0 by default.
+
+Why Defender blocked LibreHardwareMonitor
+---------------------------------------
+Windows removed LibreHardwareMonitorLib.sys as VulnerableDriver:WinNT/Winring0.
+That is expected. Do not re-enable unless you accept the security tradeoff.
+
+HWiNFO64 setup (one time)
+---------------------------
+1. run-all-cpu-checks.bat tries to auto-download portable HWiNFO into hwinfo\
+2. If download fails, double-click install-hwinfo.bat and extract the ZIP to:
+     hwinfo\HWiNFO64.exe
+3. First launch: run hwinfo\HWiNFO64.exe as Administrator once if prompted.
+
+Fallback
+--------
+If HWiNFO is missing, cpu-temp-check.ps1 falls back to Windows ACPI zones
+(cpu-temp-check-safe.ps1). Those readings are often NOT CPU core temperature.
+
+Speed tests
+-----------
+cpu-health-check.bat does not load any hardware drivers.

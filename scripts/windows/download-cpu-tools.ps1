@@ -1,7 +1,6 @@
 ﻿#Requires -Version 5.1
 param(
-    [string] $TargetDir = $PSScriptRoot,
-    [switch] $IncludeLibreHardwareMonitor
+    [string] $TargetDir = $PSScriptRoot
 )
 
 Set-StrictMode -Version Latest
@@ -14,11 +13,12 @@ $Files = @(
     'cpu-health-check.bat',
     'cpu-temp-check.ps1',
     'cpu-temp-check.bat',
-    'download-cpu-tools.bat',
-    'download-cpu-tools.ps1',
     'cpu-temp-check-safe.ps1',
     'cpu-temp-check-safe.bat',
-    'DEFENDER-WINRING0.txt',
+    'install-hwinfo.bat',
+    'HARDWARE-MONITORING.txt',
+    'download-cpu-tools.bat',
+    'download-cpu-tools.ps1',
     'run-all-cpu-checks.bat',
     'download-cpu-health-check.bat',
     'download-cpu-temp-check.bat',
@@ -52,38 +52,12 @@ foreach ($name in $Files) {
     }
 }
 
-if ($IncludeLibreHardwareMonitor) {
-    Write-Warn 'IncludeLibreHardwareMonitor: WinRing0 driver may be removed by Windows Defender (VulnerableDriver).'
-    Write-Host 'See DEFENDER-WINRING0.txt'
-    Write-Host ''
-    $lhmRoot = Join-Path $TargetDir 'lhm'
-    $lhmExe = Join-Path $lhmRoot 'LibreHardwareMonitor.exe'
-    if (-not (Test-Path -LiteralPath $lhmExe)) {
-        Write-Host ''
-        Write-Host 'Downloading LibreHardwareMonitor 0.9.4...'
-        $zipUrl = 'https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases/download/v0.9.4/LibreHardwareMonitor-net472.zip'
-        $zipPath = Join-Path $env:TEMP 'LibreHardwareMonitor-net472.zip'
-        New-Item -ItemType Directory -Path $lhmRoot -Force | Out-Null
-        Invoke-WebRequest -Uri $zipUrl -OutFile $zipPath -UseBasicParsing
-        Expand-Archive -LiteralPath $zipPath -DestinationPath $lhmRoot -Force
-        Remove-Item -LiteralPath $zipPath -Force -ErrorAction SilentlyContinue
-        if (-not (Test-Path -LiteralPath $lhmExe)) {
-            throw 'LibreHardwareMonitor zip layout unexpected.'
-        }
-        Write-Host ('  OK: {0}' -f $lhmExe)
-    }
-    else {
-        Write-Host ''
-        Write-Host 'LibreHardwareMonitor already present in lhm\'
-    }
-}
-
 Write-Host ''
 Write-Host 'OK: All files downloaded and verified.'
 Write-Host ''
 Write-Host 'Next steps (run as Administrator):'
-Write-Host '  run-all-cpu-checks.bat       - one-click download + all tests'
-Write-Host '  cpu-health-check.bat          - clocks / stress'
-Write-Host '  cpu-temp-check.bat            - reliable temps (~30s)'
-Write-Host '  cpu-temp-check.bat 60 stress  - temps under full load'
+Write-Host '  run-all-cpu-checks.bat       - one-click download + all tests + log'
+Write-Host '  cpu-health-check.bat         - clocks / stress'
+Write-Host '  cpu-temp-check.bat           - HWiNFO CPU temps under load'
+Write-Host '  install-hwinfo.bat           - if HWiNFO auto-download fails'
 Write-Host ''
