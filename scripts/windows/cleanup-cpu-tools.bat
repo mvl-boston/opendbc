@@ -139,15 +139,30 @@ echo      done
 echo.
 echo ===== [5] VERIFY HWiNFO fully removed =====
 set "LEFT=0"
-call :chk_dir "%ProgramFiles%\HWiNFO64"
-call :chk_dir "%ProgramFiles(x86)%\HWiNFO64"
-call :chk_dir "%LOCALAPPDATA%\CpuHealthCheck"
-call :chk_dir "%ProgramData%\Microsoft\Windows\Start Menu\Programs\HWiNFO64"
-call :chk_reg "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\HWiNFO64_is1"
-call :chk_reg "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\HWiNFO64_is1"
-call :chk_reg "HKCU\Software\HWiNFO64"
-call :chk_file "%windir%\System32\drivers\HWiNFO64A.SYS"
-call :chk_file "%windir%\HWiNFO64A.SYS"
+for %%D in (
+  "%ProgramFiles%\HWiNFO64"
+  "%ProgramFiles(x86)%\HWiNFO64"
+  "%LOCALAPPDATA%\CpuHealthCheck"
+  "%ProgramData%\Microsoft\Windows\Start Menu\Programs\HWiNFO64"
+  "%APPDATA%\Microsoft\Windows\Start Menu\Programs\HWiNFO64"
+) do (
+  if exist "%%~D\" (echo  FOUND   folder %%~D & set "LEFT=1") else (echo  clean   %%~D)
+)
+for %%F in (
+  "%windir%\System32\drivers\HWiNFO64A.SYS"
+  "%windir%\HWiNFO64A.SYS"
+  "%ProgramFiles%\HWiNFO64\HWiNFO64.exe"
+) do (
+  if exist "%%~F" (echo  FOUND   file %%~F & set "LEFT=1") else (echo  clean   %%~F)
+)
+for %%K in (
+  "HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\HWiNFO64_is1"
+  "HKLM\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\HWiNFO64_is1"
+  "HKCU\Software\HWiNFO64"
+  "HKLM\SOFTWARE\HWiNFO64"
+) do (
+  reg query "%%~K" >nul 2>&1 && (echo  FOUND   registry %%~K & set "LEFT=1") || echo  clean   %%~K
+)
 sc query type= driver state= all 2>nul | findstr /I "HWiNFO" >nul && (echo  FOUND   driver service containing HWiNFO & set "LEFT=1") || echo  clean   no HWiNFO driver service
 tasklist /FI "IMAGENAME eq HWiNFO64.exe" 2>nul | findstr /I "HWiNFO64.exe" >nul && (echo  FOUND   HWiNFO64.exe still running & set "LEFT=1") || echo  clean   no HWiNFO process
 winget list -e --id REALiX.HWiNFO --disable-interactivity 2>nul | findstr /I "HWiNFO" >nul && (echo  FOUND   winget still lists REALiX.HWiNFO & set "LEFT=1") || echo  clean   winget does not list HWiNFO
@@ -167,14 +182,4 @@ dir /B "%~dp0"
 echo.
 echo Finished: %date% %time%
 echo Windows Security ^> Protection history still shows the earlier WinRing0 block; that is history only.
-exit /b 0
-
-:chk_dir
-if exist %1 (echo  FOUND   folder %~1 & set "LEFT=1") else (echo  clean   %~1)
-exit /b 0
-:chk_file
-if exist %1 (echo  FOUND   file %~1 & set "LEFT=1") else (echo  clean   %~1)
-exit /b 0
-:chk_reg
-reg query %1 >nul 2>&1 && (echo  FOUND   registry %~1 & set "LEFT=1") || echo  clean   %~1
 exit /b 0

@@ -1,0 +1,6 @@
+# cmd.exe's GOTO/CALL label lookup is unreliable in LF-only batch files, and the
+# .bat files here are downloaded straight from raw.githubusercontent.com (the stored
+# blob), so they must be committed with CRLF and never normalized.
+*.bat -text
+*.ps1 -text
+*.txt -text
