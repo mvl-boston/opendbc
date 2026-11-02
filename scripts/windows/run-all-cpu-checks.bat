@@ -2,29 +2,45 @@
 setlocal EnableDelayedExpansion
 cd /d "%~dp0"
 
-set "RAW=https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows"
 set "LOG=%~dp0cpu-full-report.txt"
 
-REM --- Elevation: child runs with "inner" so output can be logged ---
-if /I not "%~1"=="inner" (
-  net session >nul 2>&1
-  if errorlevel 1 (
-    echo Requesting Administrator approval...
-    echo Output will be saved to: %LOG%
-    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs -ArgumentList 'inner'"
-    exit /b 0
+REM Hidden mode: all output goes to stdout; caller redirects to LOG
+if /I "%~1"=="_run" goto :main
+
+echo Report file:
+echo   %LOG%
+echo.
+
+net session >nul 2>&1
+if errorlevel 1 (
+  echo Requesting Administrator ^(required for CPU counters^)...
+  powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "Start-Process -FilePath '%ComSpec%' -Verb RunAs -Wait -ArgumentList @('/c', 'cd /d \"%~dp0.\" && \"%~f0\" _run > \"%~dp0cpu-full-report.txt\" 2>&1');"
+  if exist "%LOG%" (
+    echo.
+    echo ========== %LOG% ==========
+    type "%LOG%"
+  ) else (
+    echo WARN: Log file was not created. Did you approve Administrator?
   )
-  call "%~f0" inner >> "%LOG%" 2>&1
-  set "ERR=%ERRORLEVEL%"
-  echo.
-  echo ========== Full log saved to: %LOG% ==========
-  type "%LOG%"
   echo.
   pause
-  exit /b %ERR%
+  exit /b 0
 )
 
-REM ========== inner (Administrator) ==========
+call "%~f0" _run > "%LOG%" 2>&1
+set "ERR=!ERRORLEVEL!"
+echo.
+echo ========== %LOG% ==========
+type "%LOG%"
+echo.
+echo Saved: %LOG%
+pause
+exit /b %ERR%
+
+:main
+set "RAW=https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows"
+
 echo ================================================================
 echo  One-click CPU check: download tools, speed test, temperature
 echo  Folder: %CD%
@@ -71,11 +87,12 @@ set "TERR=%ERRORLEVEL%"
 echo.
 echo ================================================================
 echo  ALL DONE
+echo  Finished: %date% %time%
 echo  Health check exit code: %HERR%   Temp check exit code: %TERR%
 echo.
-echo  SPEED: Look for "MHz min/max/avg" near 3600 on i7-4790 and green OK on stability.
-echo  TEMP:  "no readings" is common here; use HWiNFO64 for real CPU die temps.
-echo  Log:   %LOG%
+echo  SPEED: i7-4790 should show MHz min/max/avg near ~3600 under stress.
+echo         Green OK on stability = good. WARN on MHz drop = check cooling.
+echo  TEMP:  "no readings" is common; use HWiNFO64 for CPU die temperature.
 echo ================================================================
 exit /b 0
 
