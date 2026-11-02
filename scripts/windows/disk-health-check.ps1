@@ -186,8 +186,15 @@ try {
         $dTxt = if ($d) { ([datetime]$d).ToString('yyyy-MM-dd') } else { '?' }
         Write-Host ('  {0}' -f $c.DeviceName)
         Write-Host ('     driver {0}  ({1})  by {2}' -f $c.DriverVersion, $dTxt, $c.DriverProviderName)
-        if ($d -and ([datetime]$d) -lt (Get-Date).AddYears(-6) -and $c.DriverProviderName -notmatch 'Microsoft') {
-            Write-Warn '     Old vendor storage driver. Intel RST updates have fixed SSD stall issues on this chipset generation.'
+        if ($c.DriverProviderName -match 'Intel' -and $c.DriverVersion -match '^(\d+)\.(\d+)\.') {
+            $rstMajor = [int]$Matches[1]; $rstMinor = [int]$Matches[2]
+            if ($rstMajor -lt 14 -or ($rstMajor -eq 14 -and $rstMinor -lt 8)) {
+                Write-Warn '     Intel RST older than 14.8. For 8/9-series (Haswell) chipsets the newest usable lines are 14.8.x,'
+                Write-Host '       15.9.x and 15.44.x (all 2016-2018). Updating from 12.x/13.x is reasonable; nothing newer exists.'
+            }
+            else {
+                Write-Host '       (this is already the newest RST line available for Haswell-era chipsets; no update to chase)'
+            }
         }
     }
     if ($ctrls.Count -eq 0) { Write-Host '  (no SATA/RAID/NVMe controller driver entries matched)' }
@@ -199,29 +206,56 @@ catch { Write-Warn ('Driver query failed: {0}' -f $_.Exception.Message) }
 try {
     $lpmFound = $false
     $lpmOn = $false
-    $svcKeys = @(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' -ErrorAction Stop | Where-Object { $_.PSChildName -match '^(iaStor|storahci|stornvme)' })
+    # Intel RST keeps its own per-port switches (Controller0Phy0LPM / LPMDSTATE / DIPM, 1 = on).
+    # storahci's "NoLPM" is a *list of device IDs excluded from LPM*, not a switch, so it is ignored.
+    $svcKeys = @(Get-ChildItem 'HKLM:\SYSTEM\CurrentControlSet\Services' -ErrorAction Stop | Where-Object { $_.PSChildName -match '^iaStor' })
     foreach ($sk in $svcKeys) {
+        $svcProps = Get-ItemProperty -LiteralPath $sk.PSPath -ErrorAction SilentlyContinue
+        $imgPath = Get-PropOrNull $svcProps 'ImagePath'
+        $startV = Get-PropOrNull $svcProps 'Start'
+        $startTxt = switch ($startV) { 0 { 'boot' } 1 { 'system' } 2 { 'auto' } 3 { 'manual' } 4 { 'disabled' } default { "$startV" } }
+        Write-Host ('  RST service {0}: start={1}  {2}' -f $sk.PSChildName, $startTxt, $imgPath)
         $devKey = 'HKLM:\SYSTEM\CurrentControlSet\Services\{0}\Parameters\Device' -f $sk.PSChildName
-        if (-not (Test-Path -LiteralPath $devKey)) { continue }
+        if (-not (Test-Path -LiteralPath $devKey)) { Write-Host '     (no Parameters\Device key - driver defaults in effect)'; continue }
         $dp = Get-ItemProperty -LiteralPath $devKey -ErrorAction SilentlyContinue
         if ($null -eq $dp) { continue }
-        $lpmProps = @($dp.PSObject.Properties | Where-Object { $_.Name -match 'LPM|DIPM|HIPM' })
-        if ($lpmProps.Count -eq 0) { continue }
-        $lpmFound = $true
-        Write-Host ('  {0} link power management (registry):' -f $sk.PSChildName)
-        foreach ($p in $lpmProps) {
-            Write-Host ('     {0,-32} = {1}' -f $p.Name, $p.Value)
-            if ($p.Name -match 'LPM$|DIPM$|HIPM$' -and ([string]$p.Value) -ne '0') { $lpmOn = $true }
+        $numProps = @($dp.PSObject.Properties | Where-Object { $_.Name -notmatch '^PS' -and $_.Value -is [int] } | Select-Object -First 24)
+        if ($numProps.Count -eq 0) { Write-Host '     (no numeric driver parameters set - driver defaults in effect)'; continue }
+        foreach ($p in $numProps) {
+            $flag = ''
+            if ($p.Name -match '^Controller\d+Phy\d+(LPM|DIPM)$') {
+                $lpmFound = $true
+                if ($p.Value -ne 0) { $lpmOn = $true; $flag = '  <-- LPM on' }
+            }
+            Write-Host ('     {0,-32} = {1}{2}' -f $p.Name, $p.Value, $flag)
         }
     }
-    $pc = & powercfg /q SCHEME_CURRENT 0012ee47-9041-4b5d-9b77-535fba8b1442 0b2d69d7-a2a1-449c-9680-f91c70521c60 2>&1 | Out-String
-    if ($pc -match 'Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)') {
-        $acIdx = [Convert]::ToInt32($Matches[1], 16)
-        $names = @{ 0 = 'Active (LPM off)'; 1 = 'HIPM'; 2 = 'HIPM+DIPM'; 3 = 'DIPM'; 4 = 'Lowest' }
-        $acTxt = if ($names.ContainsKey($acIdx)) { $names[$acIdx] } else { "index $acIdx" }
-        Write-Host ('  Power plan "AHCI Link Power Management - HIPM/DIPM" (plugged in): {0}' -f $acTxt)
-        $lpmFound = $true
-        if ($acIdx -ne 0) { $lpmOn = $true }
+    if ($busType -eq 'RAID') {
+        Write-Host '  (Bus mode RAID: the Windows power-plan AHCI LPM setting does not apply; the RST driver decides.'
+        Write-Host '   RST default on desktop boards is LPM off; it is only on if the values above say so.)'
+    }
+    else {
+        $sub = '0012ee47-9041-4b5d-9b77-535fba8b1442'; $set = '0b2d69d7-a2a1-449c-9680-f91c70521c60'
+        & powercfg -attributes $sub $set -ATTRIB_HIDE 2>&1 | Out-Null
+        $pc = & powercfg /q SCHEME_CURRENT $sub $set 2>&1 | Out-String
+        $acIdx = $null
+        if ($pc -match 'Current AC Power Setting Index:\s*0x([0-9a-fA-F]+)') { $acIdx = [Convert]::ToInt32($Matches[1], 16) }
+        else {
+            $schemeOut = & powercfg /getactivescheme 2>&1 | Out-String
+            if ($schemeOut -match '([0-9a-fA-F-]{36})') {
+                $k = 'HKLM:\SYSTEM\CurrentControlSet\Control\Power\User\PowerSchemes\{0}\{1}\{2}' -f $Matches[1], $sub, $set
+                $v = Get-PropOrNull (Get-ItemProperty -LiteralPath $k -ErrorAction SilentlyContinue) 'ACSettingIndex'
+                if ($null -ne $v) { $acIdx = [int]$v }
+            }
+        }
+        if ($null -ne $acIdx) {
+            $names = @{ 0 = 'Active (LPM off)'; 1 = 'HIPM'; 2 = 'HIPM+DIPM'; 3 = 'DIPM'; 4 = 'Lowest' }
+            $acTxt = if ($names.ContainsKey($acIdx)) { $names[$acIdx] } else { "index $acIdx" }
+            Write-Host ('  Power plan "AHCI Link Power Management - HIPM/DIPM" (plugged in): {0}' -f $acTxt)
+            $lpmFound = $true
+            if ($acIdx -ne 0) { $lpmOn = $true }
+        }
+        else { Write-Host '  Power plan AHCI LPM setting: not set explicitly (Windows default = HIPM on Balanced).' }
     }
     if ($lpmFound -and $lpmOn) {
         Write-Warn '  SATA link power management is ON. On SATA SSDs this is a known cause of random freezes of'
@@ -234,6 +268,7 @@ try {
         Add-HealthIssue 'WARN' 'sata_lpm_enabled'
     }
     elseif ($lpmFound) { Write-Ok '  SATA link power management is off (no LPM-induced stalls).' }
+    elseif ($busType -eq 'RAID') { Write-Ok '  No RST LPM switches set; driver default applies (LPM off on desktop boards). Not a stall cause here.' }
     else { Write-Host '  Link power management: no LPM settings found to read.' }
 }
 catch { Write-Host ('  Link power management: could not read ({0})' -f $_.Exception.Message) }
@@ -285,10 +320,10 @@ try {
         Add-HealthIssue 'WARN' ('background_disk_busy_idle=' + $idle + '%')
     }
     if ($lat -gt 20) { Write-Warn ('  Average I/O latency {0} ms at idle is high for an SSD (healthy: under 1-5 ms).' -f $lat) }
-    $procs = @(Get-Counter -Counter '\Process(*)\IO Data Bytes/sec' -ErrorAction Stop).CounterSamples | Where-Object { $_.InstanceName -notin @('_total', 'idle') -and $_.CookedValue -gt 1MB } | Sort-Object CookedValue -Descending | Select-Object -First 5
+    $procs = @(Get-Counter -Counter '\Process(*)\IO Data Bytes/sec' -ErrorAction Stop).CounterSamples | Where-Object { $_.InstanceName -notin @('_total', 'idle') -and $_.CookedValue -gt 100KB } | Sort-Object CookedValue -Descending | Select-Object -First 6
     if ($procs) {
         Write-Host '  Top I/O processes:'
-        foreach ($p in $procs) { Write-Host ('     {0,-28} {1,8:N1} MB/s' -f $p.InstanceName, ($p.CookedValue / 1MB)) }
+        foreach ($p in $procs) { Write-Host ('     {0,-28} {1,8:N2} MB/s' -f $p.InstanceName, ($p.CookedValue / 1MB)) }
         if (($procs | Where-Object { $_.InstanceName -match 'OneDrive|MsMpEng|SearchIndexer|CompatTelRunner|TiWorker' })) {
             Write-Host '  (OneDrive sync, Defender scan, Search indexing, or Windows Update servicing is active)'
         }
@@ -326,6 +361,7 @@ $totalDiskEvents = 0
 foreach ($chk in $eventChecks) {
     $count = 0
     $last = $null
+    $evts = @()
     try {
         $evts = @(Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = $chk.Provider; Id = $chk.Ids; StartTime = $since } -ErrorAction Stop)
         $count = $evts.Count
@@ -336,6 +372,12 @@ foreach ($chk in $eventChecks) {
         $totalDiskEvents += $count
         Write-Host ('  {0,-42} {1,4}   last: {2}' -f $chk.Label, $count, $last) -ForegroundColor Yellow
         Add-HealthIssue $chk.Level ('events_' + ($chk.Label -replace '[^A-Za-z0-9]', '_') + '=' + $count)
+        foreach ($e in ($evts | Sort-Object TimeCreated -Descending | Select-Object -First 3)) {
+            $msg = [string](Get-PropOrNull $e 'Message')
+            $msg = ($msg -replace '\s+', ' ').Trim()
+            if ($msg.Length -gt 220) { $msg = $msg.Substring(0, 220) + '...' }
+            Write-Host ('       [{0}] Id {1}: {2}' -f $e.TimeCreated, $e.Id, $msg)
+        }
     }
     else {
         Write-Host ('  {0,-42}    0' -f $chk.Label)
@@ -480,6 +522,10 @@ switch ($speedVerdict) {
             Write-Host '  3. Write caching disabled on the device (see settings section above).'
             Write-Host '  4. Background load during test (OneDrive, Defender, indexing) - see 10s sample above.'
             Write-Host '  5. SATA 3Gb/s port (caps ~270 MB/s), bad/loose SATA cable, or drive overheating.'
+            Write-Host '     (cable check: in the vendor tool look at SMART "UDMA CRC Error Count" / attribute 199 - any'
+            Write-Host '      value above 0 that keeps rising means cable or port, not the drive.)'
+            Write-Host '  6. The SSD itself is degrading. Writes under ~100 MB/s plus multi-second stalls on current'
+            Write-Host '     firmware, with the cable ruled out, points at the drive - use the warranty.'
         }
         if ($mediaType -eq 'HDD') { Write-Host 'A slow HDD as the Windows drive is the #1 cause of a sluggish PC. An SSD fixes it.' }
     }
