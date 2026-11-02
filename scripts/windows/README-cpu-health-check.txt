@@ -1,59 +1,34 @@
-Windows CPU health check - download help
+Windows CPU health check (driver-free)
 ======================================
 
-If PowerShell shows errors about "<", "html", or "githubassets", your
-cpu-health-check.ps1 file is an HTML web page, not the script.
+One file does everything:
 
-DO NOT use "Save As" on the normal GitHub file view.
+  run-all-cpu-checks.bat          (double-click, approve Administrator)
+  run-all-cpu-checks.bat 300      (longer 5-minute throttle test)
 
-Option A - one PowerShell command (recommended)
------------------------------------------------
-Open PowerShell, cd to your folder, then paste:
+It writes cpu-full-report.txt next to itself. Key result lines:
 
-  cd $env:USERPROFILE\OneDrive\Desktop\TempMDX
-  Invoke-WebRequest -Uri "https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows/cpu-health-check.ps1" -OutFile cpu-health-check.ps1 -UseBasicParsing
-  Invoke-WebRequest -Uri "https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows/cpu-health-check.bat" -OutFile cpu-health-check.bat -UseBasicParsing
-  Get-Content .\cpu-health-check.ps1 -TotalCount 2
+  SPEED_TEST: PASS ...        CPU holds its rated clock under 45s all-core load
+  THROTTLE_EVENTS: NONE       Windows has not logged firmware speed-limit events
+  THROTTLE_TEST: PASS ...     No slowdown during a long sustained all-core load
 
-The first lines must look like:
-  #Requires -Version 5.1
+Why no temperature number?
+--------------------------
+Windows has no supported, driver-free way to read the CPU die temperature.
+Every tool that shows it (HWiNFO, LibreHardwareMonitor, Intel Power Gadget)
+installs a kernel driver, and that is what Windows Defender / policy fights.
 
-Option B - download helper batch file
--------------------------------------
-Save this ONE file, double-click it (downloads everything):
+Instead this suite detects the *effect* of overheating: when a CPU hits its
+thermal limit it throttles, so MHz and work-per-second fall under constant
+load. If that does not happen over several minutes of full load, the cooler
+and thermal paste are doing their job. To see an actual temperature number,
+check your BIOS/UEFI "Hardware Monitor" page at boot (idle temperature only).
 
-  https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows/download-cpu-tools.bat
+Removing earlier third-party tools
+----------------------------------
+  cleanup-cpu-tools.bat       (uninstalls HWiNFO, Intel Power Gadget, removes
+                               LibreHardwareMonitor folder and WinRing0 driver
+                               service, deletes downloaded helper files)
 
-Optional (includes LibreHardwareMonitor ~2 MB up front):
-
-  download-cpu-tools.bat all
-
-Legacy names download-cpu-health-check.bat and download-cpu-temp-check.bat
-call the same downloader.
-
-Option C - GitHub Raw button
-----------------------------
-On the file page on GitHub, click the "Raw" button, then Save As.
-
-Run as Administrator: right-click cpu-health-check.bat -> Run as administrator
-
-One-click (download + speed + temp under load)
-------------------------------------------------
-Save ONE file, double-click (asks for Admin):
-
+Raw download link for the one-click file:
   https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows/run-all-cpu-checks.bat
-
-Or after any download: double-click run-all-cpu-checks.bat in this folder.
-
-Reliable CPU temperatures (recommended)
----------------------------------------
-Use cpu-temp-check.ps1 (LibreHardwareMonitor, auto-download on first run):
-
-  download-cpu-temp-check.bat
-  Right-click cpu-temp-check.bat -> Run as administrator
-
-  60 seconds under full CPU load:
-  cpu-temp-check.bat 60 stress
-
-Raw files:
-  https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows/cpu-temp-check.ps1

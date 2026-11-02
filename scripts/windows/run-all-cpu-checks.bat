@@ -5,26 +5,31 @@ cd /d "%~dp0"
 set "LOG=%~dp0cpu-full-report.txt"
 set "RAW=https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-cpu-health-check-65b2/scripts/windows"
 
+REM Optional first argument: throttle test length in seconds (default 180)
+set "THROTTLE_SEC=%~1"
+if /I "%THROTTLE_SEC%"=="_run" set "THROTTLE_SEC="
+if "%THROTTLE_SEC%"=="" set "THROTTLE_SEC=180"
+
 REM ========== Double-click entry (requests Admin, writes log automatically) ==========
 if /I not "%~1"=="_run" (
   echo ================================================================
-  echo  CPU check - ONE file does everything
+  echo  CPU check - driver-free, no third-party tools
   echo  Log: %LOG%
-  echo  Paste cpu-full-report.txt back until you see CPU_TEMP_TEST: PASS
+  echo  Runtime: about %THROTTLE_SEC%s stress + 1 minute
   echo ================================================================
   echo.
   net session >nul 2>&1
   if errorlevel 1 (
-    echo Requesting Administrator...
+    echo Requesting Administrator ^(needed for CPU frequency counters^)...
     powershell -NoProfile -ExecutionPolicy Bypass -Command ^
-      "Start-Process -FilePath '%ComSpec%' -Verb RunAs -Wait -ArgumentList @('/c', 'cd /d \"%~dp0.\" && \"%~f0\" _run > \"%~dp0cpu-full-report.txt\" 2^>^&1');"
+      "Start-Process -FilePath '%ComSpec%' -Verb RunAs -Wait -ArgumentList @('/c', 'cd /d \"%~dp0.\" && \"%~f0\" _run %THROTTLE_SEC% > \"%~dp0cpu-full-report.txt\" 2^>^&1');"
     if exist "%LOG%" type "%LOG%"
     echo.
     echo Saved: %LOG%
     pause
     exit /b 0
   )
-  call "%~f0" _run > "%LOG%" 2>&1
+  call "%~f0" _run %THROTTLE_SEC% > "%LOG%" 2>&1
   set "ERR=!ERRORLEVEL!"
   type "%LOG%"
   echo.
@@ -34,7 +39,11 @@ if /I not "%~1"=="_run" (
 )
 
 REM ========== _run (Administrator) ==========
+set "THROTTLE_SEC=%~2"
+if "%THROTTLE_SEC%"=="" set "THROTTLE_SEC=180"
+
 echo Started: %date% %time%
+echo Mode: native Windows only (no HWiNFO, no LibreHardwareMonitor, no drivers)
 echo.
 
 where powershell >nul 2>&1
@@ -43,7 +52,7 @@ if errorlevel 1 (
   exit /b 1
 )
 
-echo [1/5] Update scripts from GitHub...
+echo [1/4] Update scripts from GitHub...
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "$ErrorActionPreference='Stop';" ^
   "Invoke-WebRequest -Uri '%RAW%/download-cpu-tools.ps1' -OutFile '%~dp0download-cpu-tools.ps1' -UseBasicParsing;" ^
@@ -51,80 +60,32 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
   "if ($l -notmatch '#Requires') { throw 'Bad download - use Raw GitHub link only.' }"
 if errorlevel 1 goto :fail
 
-echo [2/5] Download all tools...
+echo [2/4] Download all tools...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0download-cpu-tools.ps1" -TargetDir "%CD%"
 if errorlevel 1 goto :fail
 
-echo [3/5] CPU speed / stress (~45s)...
+echo.
+echo [3/4] CPU identity + 45s speed test...
 powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-health-check.ps1" -DurationSeconds 45
 set "HERR=%ERRORLEVEL%"
 
 echo.
-echo [4/5] Ensure HWiNFO64 local copy ^(avoids referral error in Program Files^)...
-call :ensure_hwinfo
-if errorlevel 1 goto :fail
-
-echo.
-echo [5/5] CPU temperature under load (~60s)...
-powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-temp-check.ps1" -MonitorSeconds 60 -StressCpu -RequireHWiNFO
+echo [4/4] Driver-free thermal throttle test (%THROTTLE_SEC%s sustained load)...
+powershell -NoProfile -ExecutionPolicy Bypass -File "%~dp0cpu-throttle-test.ps1" -DurationSeconds %THROTTLE_SEC%
 set "TERR=%ERRORLEVEL%"
 
 echo.
 echo ================================================================
 echo  FINISHED: %date% %time%
-echo  Look for these lines in this log:
+echo  Key lines in this log:
 echo    SPEED_TEST: PASS ...
-echo    CPU_TEMP_TEST: PASS peak=...C
-echo  If CPU_TEMP_TEST: FAIL - follow NEXT_STEP in the log, then run this bat again.
+echo    THROTTLE_EVENTS: NONE
+echo    THROTTLE_TEST: PASS ...
+echo  All three = CPU is running at full speed and not thermally throttling.
+echo  Longer test: run-all-cpu-checks.bat 300
 echo ================================================================
 if %TERR% NEQ 0 exit /b %TERR%
 if %HERR% NEQ 0 exit /b %HERR%
-exit /b 0
-
-:ensure_hwinfo
-set "LOCAL=%LOCALAPPDATA%\CpuHealthCheck\hwinfo"
-if not exist "%LOCAL%" mkdir "%LOCAL%"
-
-if exist "%ProgramFiles%\HWiNFO64\HWiNFO64.exe" (
-  echo Copying HWiNFO64 out of Program Files ^(fixes referral error^)...
-  xcopy "%ProgramFiles%\HWiNFO64\*" "%LOCAL%\" /E /I /Y /Q >nul
-)
-
-if exist "%~dp0hwinfo\HWiNFO64.exe" (
-  echo Copying portable hwinfo from script folder to local AppData...
-  xcopy "%~dp0hwinfo\*" "%LOCAL%\" /E /I /Y /Q >nul
-)
-
-if exist "%LOCAL%\HWiNFO64.exe" goto :hwinfo_license
-
-echo Trying winget install REALiX.HWiNFO ...
-winget install -e --id REALiX.HWiNFO --accept-package-agreements --accept-source-agreements -h 2>nul
-if exist "%ProgramFiles%\HWiNFO64\HWiNFO64.exe" (
-  xcopy "%ProgramFiles%\HWiNFO64\*" "%LOCAL%\" /E /I /Y /Q >nul
-)
-if exist "%LOCAL%\HWiNFO64.exe" goto :hwinfo_license
-
-echo.
-echo *** ONE-TIME SETUP ***
-echo If HWiNFO shows "A referral was returned from the server" - use PORTABLE zip here:
-echo   %LOCAL%
-echo Do NOT run HWiNFO from Program Files on this PC.
-echo.
-start https://www.hwinfo.com/download/
-echo Press any key after HWiNFO64.exe is in that folder...
-pause >nul
-if exist "%LOCAL%\HWiNFO64.exe" goto :hwinfo_license
-echo HWiNFO64 still not found in %LOCAL%
-exit /b 1
-
-:hwinfo_license
-set "HWI=%LOCAL%\HWiNFO64.exe"
-if not exist "%TEMP%\cpu-check-hwinfo-license.ok" (
-  echo First run: accept HWiNFO license if prompted ^(local copy^)...
-  start "" /wait "%HWI%" /SKIPSPLASH /SENSORSONLY
-  powershell -NoProfile -Command "Set-Content -LiteralPath $env:TEMP\cpu-check-hwinfo-license.ok -Value ok -Force" 2>nul
-)
-echo HWiNFO64 ready: %HWI%
 exit /b 0
 
 :fail

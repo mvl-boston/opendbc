@@ -11,17 +11,11 @@ $BaseUrl = 'https://raw.githubusercontent.com/mvl-boston/opendbc/cursor/windows-
 $Files = @(
     'cpu-health-check.ps1',
     'cpu-health-check.bat',
-    'cpu-temp-check.ps1',
-    'cpu-temp-check.bat',
-    'cpu-temp-check-safe.ps1',
-    'cpu-temp-check-safe.bat',
-    'install-hwinfo.bat',
-    'HARDWARE-MONITORING.txt',
+    'cpu-throttle-test.ps1',
+    'cleanup-cpu-tools.bat',
     'download-cpu-tools.bat',
     'download-cpu-tools.ps1',
     'run-all-cpu-checks.bat',
-    'download-cpu-health-check.bat',
-    'download-cpu-temp-check.bat',
     'README-cpu-health-check.txt'
 )
 
@@ -56,8 +50,7 @@ Write-Host ''
 Write-Host 'OK: All files downloaded and verified.'
 Write-Host ''
 Write-Host 'Next steps (run as Administrator):'
-Write-Host '  run-all-cpu-checks.bat       - one-click download + all tests + log'
-Write-Host '  cpu-health-check.bat         - clocks / stress'
-Write-Host '  cpu-temp-check.bat           - HWiNFO CPU temps under load'
-Write-Host '  install-hwinfo.bat           - if HWiNFO auto-download fails'
+Write-Host '  run-all-cpu-checks.bat       - one-click: speed test + throttle test + log'
+Write-Host '  cpu-health-check.bat         - 45s clocks / stress only'
+Write-Host '  cleanup-cpu-tools.bat        - uninstall HWiNFO/LHM and remove downloaded files'
 Write-Host ''
