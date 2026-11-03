@@ -1134,6 +1134,9 @@ class CarController(CarControllerBase):
           if (CS.out.vEgo < 1e-5) and (self.accel < 1e-5): # gradually restore 2m/s pid after stopped
             self.nidec_brake_pid.i = float(np.clip(self.brake_pid_factor_non_lowspeed, self.nidec_brake_pid.i - 0.01, self.nidec_brake_pid.i + 0.01))
           brakefactor = 1 + self.brake_pid_factor
+          if actuators.longControlState == LongCtrlState.stopping:  # simulate the old stoppingDecelRate of 0.1 m/s^2/s @ 50hz
+            apply_brake = min(apply_brake * brakefactor, self.last_applied_brake + 0.00042) / brakefactor
+          self.last_applied_brake = apply_brake * brakefactor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
