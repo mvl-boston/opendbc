@@ -255,6 +255,7 @@ class CarController(CarControllerBase):
     self.brake = 0.0
     self.last_torque = 0.0
     self.bosch_last_gas = 0
+    self.last_applied_brake = 0.0
 
     self.lkas_button_send_remaining = 0
     self.last_lkas_button_frame = 0
@@ -1072,7 +1073,9 @@ class CarController(CarControllerBase):
             else:
               self.brake_pid.reset()
             targetaccel = min(accel,accel + self.brake_pid.i)
-
+          if actuators.longControlState == LongCtrlState.stopping:  # simulate the old stoppingDecelRate of 0.1 m/s^2/s @ 50hz
+            targetaccel = max(targetaccel, self.last_applied_brake - 0.002)
+          self.last_applied_brake = targetaccel
           self.accel = float(np.clip(targetaccel, self.params.BOSCH_ACCEL_MIN, self.params.BOSCH_ACCEL_MAX))
           gas_pedal_force = targetaccel + wind_brake_ms2 * self.windfactor + hill_brake + self.gasalpha
 
