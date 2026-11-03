@@ -1117,7 +1117,7 @@ class CarController(CarControllerBase):
           self.gas = min(self.gas, max_gas)
           self.bosch_last_gas = self.gas
 
-          stopping = actuators.longControlState == LongCtrlState.stopping
+          stopping = actuators.longControlState == LongCtrlState.stopping and self.accel <= 0.0
           self.stopping_counter = self.stopping_counter + 1 if stopping else 0
           # CAN FD: never overlap the stock radar's own ACC_CONTROL stream; ours starts within a few
           # frames of the radar going silent (see the deferred radar disable above)
