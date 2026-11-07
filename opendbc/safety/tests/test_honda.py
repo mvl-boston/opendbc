@@ -363,8 +363,12 @@ class TestHondaNidecSafetyBase(HondaBase):
       self.assertTrue(self._tx(self._send_brake_msg(148)))
       disallow(by_gas)
 
-      # holding or raising the brake is still blocked
-      self.assertFalse(self._tx(self._send_brake_msg(148)))
+      if by_gas:
+        # one grace frame at the pre-override level, then holding or raising is blocked
+        self.assertTrue(self._tx(self._send_brake_msg(148)))
+        self.assertFalse(self._tx(self._send_brake_msg(148)))
+      else:
+        self.assertFalse(self._tx(self._send_brake_msg(148)))
       self.assertFalse(self._tx(self._send_brake_msg(150)))
       # a rejected frame does not move the reference: this is still a 32 step from 148
       self.assertTrue(self._tx(self._send_brake_msg(116)))
@@ -397,6 +401,17 @@ class TestHondaNidecSafetyBase(HondaBase):
     self.assertFalse(self._tx(self._send_brake_msg(68)))
     self.safety.set_honda_fwd_brake(False)
     self.assertTrue(self._tx(self._send_brake_msg(68)))
+
+  def test_brake_release_grace_one_frame(self):
+    # gas reaches the panda one tick before carState; a hold at the last allowed level may repeat once
+    self.safety.set_controls_allowed(True)
+    self._rx(self._user_gas_msg(0))
+    self.assertTrue(self._tx(self._send_brake_msg(121)))
+    self._rx(self._user_gas_msg(1))
+    self.assertFalse(self.safety.get_longitudinal_allowed())
+    self.assertTrue(self._tx(self._send_brake_msg(121)))
+    self.assertFalse(self._tx(self._send_brake_msg(122)))
+    self.assertTrue(self._tx(self._send_brake_msg(89)))
 
   def test_block_aeb(self):
     for controls_allowed in [True, False]:
