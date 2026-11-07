@@ -1210,8 +1210,16 @@ class CarController(CarControllerBase):
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
-          # limit brake release to 32 units per frame to match factory
-          apply_brake = max(self.apply_brake_last - 32, apply_brake)
+          # limit brake release to 32 units per frame to match factory, but only while the panda will
+          # pass the ramp. Once longitudinal is not allowed (driver gas override, brake press, cancel)
+          # honda.h rejects every nonzero BRAKE_COMMAND, so the ramp never reaches the bus: the brake
+          # module sees 0x1FA go silent for the ramp's frames and then step to 0 anyway. From 148
+          # counts at 10 m/s that was a 120 ms dropout (route 230 t=2160.2, 5 rejected frames) and
+          # the brake module raised BRAKE_ERROR 0.5 s later; overrides from <=121 counts (2-4
+          # rejected frames, <=100 ms, routes 182/1cc/230) have not. Step to 0 at once instead so
+          # the stream stays continuous; the wire ends at the same 0 either way.
+          if CC.longActive and not CS.out.gasPressed:
+            apply_brake = max(self.apply_brake_last - 32, apply_brake)
 
           pcm_override = CC.longActive or CS.out.stockAeb
           if apply_brake > 0: # prevent fault from concurrent gas + brake
