@@ -223,6 +223,7 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   };
 
   bool tx = true;
+  bool brake_allow_prior = false;
 
   unsigned int bus_pt = honda_get_pt_bus();
   unsigned int bus_buttons = (honda_bosch_radarless) ? 2U : bus_pt;  // the camera controls ACC on radarless Bosch cars
@@ -263,7 +264,12 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     const int HONDA_NIDEC_BRAKE_RELEASE_MIN_STEP = 16;
     bool brake_ramping_down = (honda_brake <= (honda_nidec_brake_tx_prev - HONDA_NIDEC_BRAKE_RELEASE_MIN_STEP));
     if (longitudinal_brake_checks(honda_brake, HONDA_NIDEC_LONG_LIMITS) && !brake_ramping_down) {
-      tx = false;
+      if (!brake_allow_prior) {
+        tx = false;
+      }
+      brake_allow_prior = false;
+    } else {
+      brake_allow_prior = true;
     }
     if (honda_fwd_brake) {
       tx = false;
