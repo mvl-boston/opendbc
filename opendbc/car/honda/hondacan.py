@@ -226,6 +226,59 @@ def spam_buttons_command(packer, CAN, button_val, CP):
   return packer.make_can_msg("SCM_BUTTONS", bus, values)
 
 
+# --- Experimental lead spoof -------------------------------------------------------------------
+# The Bosch-A camera streams a 16-slot forward-object bank (slot 0 = nearest object) that the radar
+# fuses for its low-speed Traffic Jam Assist steering-relay lead gate. When the camera reports no
+# lead, the radar drops the relay and openpilot can no longer steer below ~45 mph. To keep steering
+# available we inject a phantom slot-0 object toward the radar. We start from real captured camera
+# frames so every unknown/reserved bit matches a genuine object, then override only range, azimuth,
+# relative velocity, the rolling frame index and the lifecycle counter. The phantom is placed far
+# away (50 m) with zero relative velocity so it should not induce stock-ACC gas/brake response.
+# Object layout/scaling: opendbc PR mvl-boston/opendbc#669.
+LEAD_SPOOF_MSGS = (0x280, 0x281, 0x282, 0x283, 0x2C8)
+LEAD_SPOOF_MAX_SPEED = 20.  # m/s (~72 kph); above the relay band the radar relays unconditionally
+
+_LEAD_SPOOF_TEMPLATES = {
+  0x280: bytes.fromhex("047422ab94c00238"),  # F0: STATUS/RANGE/AZIMUTH
+  0x281: bytes.fromhex("00020db67cfefe3d"),  # F1: existence probability
+  0x282: bytes.fromhex("10bb80007d7e25b2"),  # F2: lifecycle
+  0x283: bytes.fromhex("9bb68de080c0113a"),  # F3: track id / azimuth edges
+  0x2C8: bytes.fromhex("7ef6164081007bf3"),  # AUX: relative velocity / range ratio
+}
+_LEAD_SPOOF_FRAME_IDX_BIT = {0x280: 27, 0x281: 28, 0x282: 11, 0x283: 12, 0x2C8: 12}
+_LEAD_SPOOF_RANGE_M = 50.
+_LEAD_SPOOF_RANGE_RAW = round((_LEAD_SPOOF_RANGE_M + 3.0) / 0.05712)  # RANGE = 0.05712*raw - 3.0
+_LEAD_SPOOF_AZIMUTH_CENTER = 1024  # straight ahead
+_LEAD_SPOOF_VREL_CENTER = 864      # zero relative velocity (scale 1/64 m/s)
+
+
+def _set_be(dat: bytearray, start: int, length: int, value: int) -> None:
+  # Set a big-endian (Motorola, @0) DBC signal by its start bit and length.
+  bp = start
+  for k in range(length):
+    b = (value >> (length - 1 - k)) & 1
+    byte, off = bp // 8, bp % 8
+    dat[byte] = (dat[byte] & ~(1 << off)) | (b << off)
+    bp = bp + 15 if bp % 8 == 0 else bp - 1
+
+
+def create_lead_spoof(CAN, frame_idx: int, lifecycle: int):
+  msgs = []
+  for addr in LEAD_SPOOF_MSGS:
+    dat = bytearray(_LEAD_SPOOF_TEMPLATES[addr])
+    _set_be(dat, _LEAD_SPOOF_FRAME_IDX_BIT[addr], 4, frame_idx & 0xF)
+    if addr == 0x280:
+      _set_be(dat, 15, 4, 7)                            # STATUS: valid object (not 0xF)
+      _set_be(dat, 23, 12, _LEAD_SPOOF_RANGE_RAW)       # RANGE_RAW
+      _set_be(dat, 39, 11, _LEAD_SPOOF_AZIMUTH_CENTER)  # AZIMUTH_RAW: straight ahead
+    elif addr == 0x282:
+      _set_be(dat, 7, 12, lifecycle & 0xFFF)            # LIFECYCLE_RAW (+2 per sweep)
+    elif addr == 0x2C8:
+      _set_be(dat, 7, 11, _LEAD_SPOOF_VREL_CENTER)      # REL_VELOCITY_RAW: 0 m/s
+    msgs.append((addr, bytes(dat), CAN.radar))
+  return msgs
+
+
 def honda_checksum(address: int, sig, d: bytearray) -> int:
   s = 0
   extended = address > 0x7FF
