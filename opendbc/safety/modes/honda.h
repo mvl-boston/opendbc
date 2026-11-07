@@ -38,6 +38,10 @@ enum {
 static int honda_brake = 0;
 // last Nidec BRAKE_COMMAND brake value that was passed to the bus (not the last one requested)
 static int honda_nidec_brake_tx_prev = 0;
+// one-shot: after a brake frame passes while longitudinal is allowed, the next 0x1FA that would
+// otherwise be blocked may pass if it does not exceed that value (gas_pressed lags the panda by
+// one frame, so the carcontroller can still send the pre-override hold once)
+static bool honda_nidec_brake_release_grace = false;
 static bool honda_brake_switch_prev = false;
 static bool honda_alt_brake_msg = false;
 static bool honda_fwd_brake = false;
@@ -262,8 +266,15 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     // frame after the panda) does not get its first ramp frame rejected.
     const int HONDA_NIDEC_BRAKE_RELEASE_MIN_STEP = 16;
     bool brake_ramping_down = (honda_brake <= (honda_nidec_brake_tx_prev - HONDA_NIDEC_BRAKE_RELEASE_MIN_STEP));
-    if (longitudinal_brake_checks(honda_brake, HONDA_NIDEC_LONG_LIMITS) && !brake_ramping_down) {
-      tx = false;
+    bool brake_violation = longitudinal_brake_checks(honda_brake, HONDA_NIDEC_LONG_LIMITS) && !brake_ramping_down;
+    if (brake_violation) {
+      // grace is only for the driver-gas-override tick: gas is on the panda before the carcontroller
+      // sees gasPressed, so one more hold at or below the last bus value may pass
+      if (honda_nidec_brake_release_grace && gas_pressed && (honda_brake <= honda_nidec_brake_tx_prev)) {
+        honda_nidec_brake_release_grace = false;
+      } else {
+        tx = false;
+      }
     }
     if (honda_fwd_brake) {
       tx = false;
@@ -279,6 +290,9 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
 
     if (tx) {
       honda_nidec_brake_tx_prev = honda_brake;
+      if (get_longitudinal_allowed()) {
+        honda_nidec_brake_release_grace = true;
+      }
     }
   }
 
@@ -403,6 +417,7 @@ static safety_config honda_nidec_init(uint16_t param) {
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
   honda_nidec_brake_tx_prev = 0;
+  honda_nidec_brake_release_grace = false;
   honda_brake_switch_prev = false;
   honda_fwd_brake = false;
   honda_alt_brake_msg = false;
@@ -562,6 +577,7 @@ static safety_config honda_bosch_init(uint16_t param) {
 
   honda_hw = HONDA_BOSCH;
   honda_nidec_brake_tx_prev = 0;
+  honda_nidec_brake_release_grace = false;
   honda_brake_switch_prev = false;
   honda_op_buttons_fresh = 0;
   honda_bosch_radarless = GET_FLAG(param, HONDA_PARAM_RADARLESS);
