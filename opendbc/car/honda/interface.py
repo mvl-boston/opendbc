@@ -210,7 +210,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]] # TODO: can probably use some tuning
 
     elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
-      CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
       ret.steerActuatorDelay = 0.15
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
       if not ret.openpilotLongitudinalControl:
@@ -262,8 +262,7 @@ class CarInterface(CarInterfaceBase):
       CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2200]
 
     # These cars use alternate user brake msg (0x1BE)
-    if 0x1BE in fingerprint[CAN.pt] and (candidate in (CAR.HONDA_ACCORD, CAR.HONDA_HRV_3G, CAR.ACURA_RDX_3G, CAR.ACURA_MDX_4G, CAR.ACURA_ADX) or
-                                          ret.flags & HondaFlags.BOSCH_CANFD):
+    if 0x1BE in fingerprint[CAN.pt] and ret.flags & HondaFlags.BOSCH:
       ret.flags |= HondaFlags.BOSCH_ALT_BRAKE.value
 
     if ret.flags & HondaFlags.BOSCH_ALT_BRAKE:
