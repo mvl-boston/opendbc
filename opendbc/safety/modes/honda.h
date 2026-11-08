@@ -38,6 +38,10 @@ enum {
 static int honda_brake = 0;
 // last Nidec BRAKE_COMMAND brake value that was passed to the bus (not the last one requested)
 static int honda_nidec_brake_tx_prev = 0;
+// one-shot: after a brake frame passes while longitudinal is allowed, the next violating 0x1FA may
+// pass once at any brake value while longitudinal is no longer allowed (gas-override skew, cancel,
+// brake/steer disengage before carcontroller catches up).
+static bool honda_nidec_brake_release_grace = false;
 static bool honda_brake_switch_prev = false;
 static bool honda_alt_brake_msg = false;
 static bool honda_fwd_brake = false;
@@ -260,8 +264,16 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     // on the carcontroller wire; one-shot grace covers the first skew frame).
     const int HONDA_NIDEC_BRAKE_RELEASE_MIN_STEP = 32;
     bool brake_ramping_down = (honda_brake <= (honda_nidec_brake_tx_prev - HONDA_NIDEC_BRAKE_RELEASE_MIN_STEP));
-    if (longitudinal_brake_checks(honda_brake, HONDA_NIDEC_LONG_LIMITS) && !brake_ramping_down) {
-      tx = false;
+    bool brake_violation = longitudinal_brake_checks(honda_brake, HONDA_NIDEC_LONG_LIMITS) && !brake_ramping_down;
+    bool long_allowed_now = get_longitudinal_allowed();
+    // grace only waives the longitudinal-disallowed part; the magnitude bound always holds
+    bool brake_over_max = honda_brake > HONDA_NIDEC_LONG_LIMITS.max_brake;
+    if (brake_violation) {
+      if (honda_nidec_brake_release_grace && !long_allowed_now && !brake_over_max) {
+        honda_nidec_brake_release_grace = false;
+      } else {
+        tx = false;
+      }
     }
     if (honda_fwd_brake) {
       tx = false;
@@ -277,6 +289,13 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
 
     if (tx) {
       honda_nidec_brake_tx_prev = honda_brake;
+      if (long_allowed_now) {
+        honda_nidec_brake_release_grace = true;
+      } else if (honda_brake == 0) {
+        honda_nidec_brake_release_grace = false;
+      } else {
+        // keep grace armed through a ramp step until longitudinal is allowed or brake hits 0
+      }
     }
   }
 
@@ -401,6 +420,7 @@ static safety_config honda_nidec_init(uint16_t param) {
   honda_hw = HONDA_NIDEC;
   honda_brake = 0;
   honda_nidec_brake_tx_prev = 0;
+  honda_nidec_brake_release_grace = false;
   honda_brake_switch_prev = false;
   honda_fwd_brake = false;
   honda_alt_brake_msg = false;
@@ -560,6 +580,7 @@ static safety_config honda_bosch_init(uint16_t param) {
 
   honda_hw = HONDA_BOSCH;
   honda_nidec_brake_tx_prev = 0;
+  honda_nidec_brake_release_grace = false;
   honda_brake_switch_prev = false;
   honda_op_buttons_fresh = 0;
   honda_bosch_radarless = GET_FLAG(param, HONDA_PARAM_RADARLESS);
