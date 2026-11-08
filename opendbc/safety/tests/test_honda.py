@@ -395,7 +395,7 @@ class TestHondaNidecSafetyBase(HondaBase):
     # last value the bus saw, at least 32 counts per frame, matching the carcontroller release law
     def disallow(by_gas):
       if by_gas:
-        self._rx(self._user_gas_msg(1))
+        self._driver_gas_on()
         self.assertTrue(self.safety.get_controls_allowed())
       else:
         self.safety.set_controls_allowed(False)
@@ -403,7 +403,7 @@ class TestHondaNidecSafetyBase(HondaBase):
 
     for by_gas in (True, False):
       self.safety.set_controls_allowed(True)
-      self._rx(self._user_gas_msg(0))
+      self._driver_gas_off()
       self.assertTrue(self._tx(self._send_brake_msg(148)))
       disallow(by_gas)
 
@@ -431,7 +431,7 @@ class TestHondaNidecSafetyBase(HondaBase):
 
       # the ramp can go straight to 0 too
       self.safety.set_controls_allowed(True)
-      self._rx(self._user_gas_msg(0))
+      self._driver_gas_off()
       self.assertTrue(self._tx(self._send_brake_msg(100)))
       disallow(by_gas)
       self.assertTrue(self._tx(self._send_brake_msg(0)))
@@ -439,7 +439,7 @@ class TestHondaNidecSafetyBase(HondaBase):
 
     # forwarding stock AEB still blocks the ramp
     self.safety.set_controls_allowed(True)
-    self._rx(self._user_gas_msg(0))
+    self._driver_gas_off()
     self.assertTrue(self._tx(self._send_brake_msg(100)))
     self.safety.set_controls_allowed(False)
     self.safety.set_honda_fwd_brake(True)
@@ -450,9 +450,9 @@ class TestHondaNidecSafetyBase(HondaBase):
   def test_brake_release_grace_one_frame(self):
     # gas reaches the panda one tick before carState; a hold at the pre-override level may repeat once
     self.safety.set_controls_allowed(True)
-    self._rx(self._user_gas_msg(0))
+    self._driver_gas_off()
     self.assertTrue(self._tx(self._send_brake_msg(121)))
-    self._rx(self._user_gas_msg(1))
+    self._driver_gas_on()
     self.assertFalse(self.safety.get_longitudinal_allowed())
     self.assertTrue(self._tx(self._send_brake_msg(121)))
     self.assertFalse(self._tx(self._send_brake_msg(122)))
@@ -461,9 +461,9 @@ class TestHondaNidecSafetyBase(HondaBase):
   def test_brake_release_grace_unrestricted_one_frame(self):
     # panda drops longitudinal before carcontroller: one violating frame at any brake count may pass
     self.safety.set_controls_allowed(True)
-    self._rx(self._user_gas_msg(0))
+    self._driver_gas_off()
     self.assertTrue(self._tx(self._send_brake_msg(50)))
-    self._rx(self._user_gas_msg(1))
+    self._driver_gas_on()
     self.assertTrue(self.safety.get_controls_allowed())
     self.assertFalse(self.safety.get_longitudinal_allowed())
     self.assertTrue(self._tx(self._send_brake_msg(51)))
@@ -471,7 +471,7 @@ class TestHondaNidecSafetyBase(HondaBase):
     self.assertTrue(self._tx(self._send_brake_msg(19)))
     # cancel/disengage: controls_allowed already false on panda (route 239 event 6 class)
     self.safety.set_controls_allowed(True)
-    self._rx(self._user_gas_msg(0))
+    self._driver_gas_off()
     self.assertTrue(self._tx(self._send_brake_msg(50)))
     self.safety.set_controls_allowed(False)
     self.assertFalse(self.safety.get_longitudinal_allowed())
@@ -479,14 +479,14 @@ class TestHondaNidecSafetyBase(HondaBase):
     self.assertFalse(self._tx(self._send_brake_msg(52)))
     self.assertTrue(self._tx(self._send_brake_msg(19)))
     self.safety.set_controls_allowed(True)
-    self._rx(self._user_gas_msg(0))
+    self._driver_gas_off()
     self.assertTrue(self._tx(self._send_brake_msg(30)))
-    self._rx(self._user_gas_msg(1))
+    self._driver_gas_on()
     self.assertTrue(self._tx(self._send_brake_msg(29)))
     self.assertFalse(self._tx(self._send_brake_msg(31)))
     # grace never lifts the magnitude bound, and is not re-armed by the rejected frame
     self.safety.set_controls_allowed(True)
-    self._rx(self._user_gas_msg(0))
+    self._driver_gas_off()
     self.assertTrue(self._tx(self._send_brake_msg(100)))
     self.safety.set_controls_allowed(False)
     self.assertFalse(self._tx(self._send_brake_msg(self.MAX_BRAKE + 1)))
@@ -531,15 +531,6 @@ class TestHondaNidecGasInterceptorSafety(GasInterceptorSafetyTest, HondaButtonEn
 
   def _driver_gas_off(self):
     self._rx(self._interceptor_user_gas(0))
-
-  def test_brake_release_ramp_when_longitudinal_not_allowed(self):
-    pass
-
-  def test_brake_release_grace_one_frame(self):
-    pass
-
-  def test_brake_release_grace_unrestricted_one_frame(self):
-    pass
 
 
 class TestHondaNidecPcmAltSafety(TestHondaNidecPcmSafety):
@@ -590,15 +581,6 @@ class TestHondaNidecAltGasInterceptorSafety(GasInterceptorSafetyTest, HondaButto
     values = {"CRUISE_BUTTONS": buttons, "MAIN_ON": main_on, "COUNTER": self.cnt_button % 4}
     self.__class__.cnt_button += 1
     return self.packer.make_can_msg_safety("SCM_BUTTONS", bus, values)
-
-  def test_brake_release_ramp_when_longitudinal_not_allowed(self):
-    pass
-
-  def test_brake_release_grace_one_frame(self):
-    pass
-
-  def test_brake_release_grace_unrestricted_one_frame(self):
-    pass
 
 
 class TestHondaNidecStockLongitudinalSafety(HondaPcmEnableBase, TestHondaNidecSafetyBase):
