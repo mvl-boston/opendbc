@@ -251,7 +251,7 @@ def create_radar_hud_canfd(packer, bus, acc, acc_pulse=False):
   values = {
     # The stock radar only raises this bit in short (~2-6 s) bursts right after ACC engages/resumes,
     # then drops it for the rest of the drive; it is never held for a whole engagement.
-    'CMBS_ENABLED_MAYBE': 1 if (acc and acc_pulse) else 0,
+    'CMBS_ENABLED_MAYBE': 0,
     'ACC_ON': acc,
     'SET_ME_X01': 0x01,
     'SET_ME_X01_2': 0x01,
