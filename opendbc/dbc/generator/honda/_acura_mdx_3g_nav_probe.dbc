@@ -1,0 +1,69 @@
+CM_ "Provisional navigation / cluster-turn probe definitions for ACURA_MDX_3G.";
+CM_ "Evidence route: 3792d010590cb83a|00000235--2c1d904186 (full rlogs, ~927 s).";
+CM_ "IDs 546/559/460/808/804/1348 appear on body/camera buses 0 and 130 (~25 Hz ticker) and are the preferred car-side candidates.";
+CM_ "IDs 829/506/780 are primarily on buses 128/2 (<1 Hz) and likely camera/FCM path translations — compare in Cabana, not for navd without validation.";
+CM_ "NAV_*_PHASE scale: 15 m per raw unit (4-state countdown, ±0 m at maneuver; provisional).";
+
+BO_ 546 NAV_CAR_TICKER_A: 3 XXX
+ SG_ NAV_TICKER_A_BYTE0 : 7|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_TICKER_A_BYTE1 : 15|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_TICKER_A_PHASE : 23|8@0+ (15,0) [0|3825] "m" XXX
+
+BO_ 559 NAV_CAR_HINT_B: 3 XXX
+ SG_ NAV_HINT_MODE : 7|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_HINT_BYTE1 : 15|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_HINT_PHASE : 23|8@0+ (15,0) [0|3825] "m" XXX
+
+BO_ 460 NAV_CAR_PHASE: 3 XXX
+ SG_ NAV_PHASE_PAD0 : 7|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_PHASE_PAD1 : 15|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_PHASE_STEP : 23|8@0+ (15,0) [0|3825] "m" XXX
+
+BO_ 808 NAV_CAR_COUNTDOWN: 8 XXX
+ SG_ NAV_COUNTDOWN_PAD : 7|56@0+ (1,0) [0|1.0141204802792e+15] "" XXX
+ SG_ NAV_COUNTDOWN_PHASE : 63|8@0+ (15,0) [0|3825] "m" XXX
+
+BO_ 804 NAV_CAR_MAP_SLICE: 8 XXX
+ SG_ NAV_MAP_BYTE0 : 7|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE1 : 15|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE2 : 23|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE3 : 31|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE4 : 39|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE5 : 47|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE6 : 55|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE7 : 63|8@0+ (1,0) [0|255] "" XXX
+
+BO_ 1348 NAV_CAR_DIST_544: 8 XXX
+ SG_ NAV_544_PAD : 7|40@0+ (1,0) [0|1.099511627776e+12] "" XXX
+ SG_ NAV_544_COUNTER : 47|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_544_PHASE : 55|8@0+ (15,0) [0|3825] "m" XXX
+
+BO_ 829 CAM_NAV_GUIDE_33D: 8 XXX
+ SG_ NAV_33D_BYTE0 : 7|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_33D_STYLE : 15|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_33D_BYTE2 : 23|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_33D_BYTE3 : 31|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_33D_PHASE : 39|8@0+ (15,0) [0|3825] "m" XXX
+ SG_ NAV_33D_TAIL : 47|16@0+ (1,0) [0|65535] "" XXX
+
+BO_ 506 CAM_NAV_STATE_1FA: 8 XXX
+ SG_ NAV_1FA_PAD0 : 7|16@0+ (1,0) [0|65535] "" XXX
+ SG_ NAV_1FA_FLAG : 23|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_1FA_BYTE3 : 31|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_1FA_TAIL : 39|24@0+ (1,0) [0|16777215] "" XXX
+
+BO_ 780 CAM_NAV_FRAME_30C: 8 XXX
+ SG_ NAV_30C_BYTE0 : 7|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE1 : 15|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE2 : 23|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE3 : 31|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE4 : 39|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE5 : 47|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE6 : 55|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE7 : 63|8@0+ (1,0) [0|255] "" XXX
+
+VAL_ 546 NAV_TICKER_A_BYTE0 162 "active_prefix_a2" ;
+VAL_ 546 NAV_TICKER_A_BYTE1 128 "active_prefix_80" ;
+VAL_ 559 NAV_HINT_MODE 145 "default_or_right_aisle" 125 "turn_hint_left" ;
+VAL_ 559 NAV_HINT_BYTE1 64 "fixed_second_byte" ;
+VAL_ 829 NAV_33D_STYLE 0 "style_00" 64 "style_40" 65 "style_41" 68 "style_44" ;
