@@ -413,26 +413,23 @@ class TestHondaNidecSafetyBase(HondaBase):
     self.assertFalse(self._tx(self._send_brake_msg(122)))
     self.assertTrue(self._tx(self._send_brake_msg(89)))
 
-  def test_brake_release_grace_one_step_down(self):
-    # route 239 event 5: planner may send one step down while carState still shows longActive
+  def test_brake_release_grace_unrestricted_one_frame(self):
+    # panda drops longitudinal before carcontroller: one violating frame at any brake count may pass
+    self.safety.set_controls_allowed(True)
+    self._rx(self._user_gas_msg(0))
+    self.assertTrue(self._tx(self._send_brake_msg(50)))
+    self._rx(self._user_gas_msg(1))
+    self.assertTrue(self.safety.get_controls_allowed())
+    self.assertFalse(self.safety.get_longitudinal_allowed())
+    self.assertTrue(self._tx(self._send_brake_msg(51)))
+    self.assertFalse(self._tx(self._send_brake_msg(52)))
+    self.assertTrue(self._tx(self._send_brake_msg(19)))
     self.safety.set_controls_allowed(True)
     self._rx(self._user_gas_msg(0))
     self.assertTrue(self._tx(self._send_brake_msg(30)))
     self._rx(self._user_gas_msg(1))
-    self.assertFalse(self.safety.get_longitudinal_allowed())
     self.assertTrue(self._tx(self._send_brake_msg(29)))
-    self.assertFalse(self._tx(self._send_brake_msg(30)))
-    self.assertTrue(self._tx(self._send_brake_msg(0)))
-
-  def test_brake_release_grace_disengage_one_bump(self):
-    # route 239 event 6: one +1 count tick on disengage before the -32 release ramp
-    self.safety.set_controls_allowed(True)
-    self._rx(self._user_gas_msg(0))
-    self.assertTrue(self._tx(self._send_brake_msg(50)))
-    self.safety.set_controls_allowed(False)
-    self.assertTrue(self._tx(self._send_brake_msg(51)))
-    self.assertFalse(self._tx(self._send_brake_msg(51)))
-    self.assertTrue(self._tx(self._send_brake_msg(19)))
+    self.assertFalse(self._tx(self._send_brake_msg(31)))
 
   def test_block_aeb(self):
     for controls_allowed in [True, False]:
