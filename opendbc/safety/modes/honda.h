@@ -293,6 +293,8 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
         honda_nidec_brake_release_grace = true;
       } else if (honda_brake == 0) {
         honda_nidec_brake_release_grace = false;
+      } else {
+        // keep grace armed through a ramp step until longitudinal is allowed or brake hits 0
       }
     }
   }
