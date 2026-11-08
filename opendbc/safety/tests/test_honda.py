@@ -337,6 +337,8 @@ class TestHondaNidecSafetyBase(HondaBase):
       for brake in np.arange(0, self.MAX_BRAKE + 10, 1):
         for controls_allowed in [True, False]:
           self.safety.set_controls_allowed(controls_allowed)
+          if (not controls_allowed) and (brake != 0):
+            self._tx(self._send_brake_msg(0))  # drop one-shot grace from the engaged sample
           if fwd_brake:
             send = False  # block openpilot brake msg when fwd'ing stock msg
           elif controls_allowed:
@@ -347,8 +349,7 @@ class TestHondaNidecSafetyBase(HondaBase):
 
   def test_brake_release_ramp_when_longitudinal_not_allowed(self):
     # once longitudinal is disallowed the only nonzero brake frames that pass are a ramp down from the
-    # last value the bus saw, at least 16 counts per frame, so the carcontroller's 32/frame factory
-    # release reaches the brake module instead of leaving a gap in 0x1FA
+    # last value the bus saw, at least 32 counts per frame, matching the carcontroller release law
     def disallow(by_gas):
       if by_gas:
         self._rx(self._user_gas_msg(1))
@@ -368,6 +369,7 @@ class TestHondaNidecSafetyBase(HondaBase):
         self.assertTrue(self._tx(self._send_brake_msg(148)))
         self.assertFalse(self._tx(self._send_brake_msg(148)))
       else:
+        self.assertTrue(self._tx(self._send_brake_msg(148)))
         self.assertFalse(self._tx(self._send_brake_msg(148)))
       self.assertFalse(self._tx(self._send_brake_msg(150)))
       # a rejected frame does not move the reference: this is still a 32 step from 148
@@ -375,9 +377,9 @@ class TestHondaNidecSafetyBase(HondaBase):
       self.assertTrue(self._tx(self._send_brake_msg(84)))
       # too small a step is blocked, and does not move the reference
       self.assertFalse(self._tx(self._send_brake_msg(70)))
-      self.assertTrue(self._tx(self._send_brake_msg(68)))
-      self.assertTrue(self._tx(self._send_brake_msg(36)))
-      self.assertTrue(self._tx(self._send_brake_msg(4)))
+      self.assertFalse(self._tx(self._send_brake_msg(68)))
+      self.assertTrue(self._tx(self._send_brake_msg(52)))
+      self.assertTrue(self._tx(self._send_brake_msg(20)))
       self.assertTrue(self._tx(self._send_brake_msg(0)))
       # the ramp is over: nothing nonzero passes until longitudinal is allowed again
       self.assertFalse(self._tx(self._send_brake_msg(16)))
@@ -420,6 +422,15 @@ class TestHondaNidecSafetyBase(HondaBase):
     self.assertTrue(self._tx(self._send_brake_msg(50)))
     self._rx(self._user_gas_msg(1))
     self.assertTrue(self.safety.get_controls_allowed())
+    self.assertFalse(self.safety.get_longitudinal_allowed())
+    self.assertTrue(self._tx(self._send_brake_msg(51)))
+    self.assertFalse(self._tx(self._send_brake_msg(52)))
+    self.assertTrue(self._tx(self._send_brake_msg(19)))
+    # cancel/disengage: controls_allowed already false on panda (route 239 event 6 class)
+    self.safety.set_controls_allowed(True)
+    self._rx(self._user_gas_msg(0))
+    self.assertTrue(self._tx(self._send_brake_msg(50)))
+    self.safety.set_controls_allowed(False)
     self.assertFalse(self.safety.get_longitudinal_allowed())
     self.assertTrue(self._tx(self._send_brake_msg(51)))
     self.assertFalse(self._tx(self._send_brake_msg(52)))
