@@ -3,7 +3,7 @@ from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.honda.values import (HondaFlags, CAR)
 from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
 
-# RADAR_HUD_CANFD / ACC_HUD hud_tick is 10 Hz; periods are in those ticks (1 Hz = 10 ticks).
+# RADAR_HUD_CANFD hud_tick is 10 Hz; periods are in those ticks (1 Hz = 10 ticks).
 _HUD_TICKS_PER_SECOND = 10
 
 
@@ -153,7 +153,7 @@ def create_bosch_supplemental_1(packer, CAN):
 
 
 def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, hud_v_cruise, is_metric, acc_hud, speed_control,
-                   alphalong, cmbs_cluster_bit_diag_tick=None):
+                   alphalong):
   acc_hud_values = {
     'CRUISE_SPEED': hud_v_cruise,
     'ENABLE_MINI_CAR': 1 if enabled else 0,
@@ -170,16 +170,8 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
 
   if CP.flags & HondaFlags.BOSCH:
     acc_hud_values['ACC_ON'] = int(enabled)
-    if cmbs_cluster_bit_diag_tick is not None:
-      t = cmbs_cluster_bit_diag_tick
-      # Instrument-cluster BDY bits (high start bit = "top"), 1/2/3/4 s blink periods
-      acc_hud_values['FCM_OFF_2'] = _cluster_bit_diag_blink(t, 1)
-      acc_hud_values['FCM_OFF'] = _cluster_bit_diag_blink(t, 2)
-      acc_hud_values['FCM_PROBLEM'] = _cluster_bit_diag_blink(t, 3)
-      acc_hud_values['RADAR_OBSTRUCTED'] = _cluster_bit_diag_blink(t, 4)
-    else:
-      acc_hud_values['FCM_OFF'] = bool(0)
-      acc_hud_values['FCM_OFF_2'] = bool(0)
+    acc_hud_values['FCM_OFF'] = bool(0)
+    acc_hud_values['FCM_OFF_2'] = bool(0)
   else:
     # Shows the distance bars, TODO: stock camera shows updates temporarily while disabled
     acc_hud_values['ACC_ON'] = int(enabled)
@@ -264,25 +256,14 @@ def spam_buttons_command(packer, CAN, cruise_button, cruise_setting, ambient_lig
   return packer.make_can_msg("SCM_BUTTONS", bus, values)
 
 
-def create_radar_hud_canfd(packer, bus, acc, acc_pulse=False, cmbs_cluster_bit_diag_tick=None):
-  if cmbs_cluster_bit_diag_tick is not None:
-    t = cmbs_cluster_bit_diag_tick
-    values = {
-      # 0x310 bits ordered top-to-bottom by start bit (Cabana), 1/2/3/4 s blink periods
-      'ACC_ON': _cluster_bit_diag_blink(t, 1),
-      'CMBS_ENABLED_MAYBE': _cluster_bit_diag_blink(t, 2),
-      'SET_ME_X01_2': _cluster_bit_diag_blink(t, 3),
-      'SET_ME_X01': _cluster_bit_diag_blink(t, 4),
-    }
-  else:
-    values = {
-      # The stock radar only raises this bit in short (~2-6 s) bursts right after ACC engages/resumes,
-      # then drops it for the rest of the drive; it is never held for a whole engagement.
-      'CMBS_ENABLED_MAYBE': 1 if (acc and acc_pulse) else 0,
-      'ACC_ON': acc,
-      'SET_ME_X01': 0x01,
-      'SET_ME_X01_2': 0x01,
-    }
+def create_radar_hud_canfd(packer, bus, hud_tick):
+  # 0x310 bits ordered top-to-bottom by start bit (Cabana), 1/2/3/4 s blink periods
+  values = {
+    'ACC_ON': _cluster_bit_diag_blink(hud_tick, 1),
+    'CMBS_ENABLED_MAYBE': _cluster_bit_diag_blink(hud_tick, 2),
+    'SET_ME_X01_2': _cluster_bit_diag_blink(hud_tick, 3),
+    'SET_ME_X01': _cluster_bit_diag_blink(hud_tick, 4),
+  }
   return packer.make_can_msg("RADAR_HUD_CANFD", bus, values)
 
 

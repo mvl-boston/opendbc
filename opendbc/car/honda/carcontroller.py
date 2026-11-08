@@ -312,13 +312,6 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.windfactor_before_gasmax = self.windfactor_before_brake = self.windfactor
     self.pitch = 0.0
     self.radar_mux = 0
-    # stock RADAR_HUD_CANFD raises its CMBS bit only for a short burst after ACC engages (see
-    # create_radar_hud_canfd); counted in 10 Hz hud ticks
-    self.radar_hud_pulse = 0
-    self.last_acc_enabled = False
-    _cmbs_diag = Params().get("HondaCmbsClusterBitDiag")
-    self.cmbs_cluster_bit_diag = _cmbs_diag not in (None, 0, b"0", "0", False, b"")
-
     # Bosch extra-brake controller
     self.brake_pid = PIDController(k_p=0.0,
                                    k_i=1.0,
@@ -662,16 +655,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # While the stock radar is still transmitting (drive start, before the deferred disable above has
     # silenced it), it authors all of these itself: sending look-alikes too would double them up.
     if (self.CP.flags & HondaFlags.BOSCH_CANFD) and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
-      if CC.enabled and not self.last_acc_enabled:
-        self.radar_hud_pulse = 30  # ~3 s at 10 Hz, matching the stock 2-6 s engage burst
-      self.last_acc_enabled = CC.enabled
       radar_msgs = []
       if CS.hud_tick:
-        diag_tick = self.frame // 10 if self.cmbs_cluster_bit_diag else None
-        radar_msgs.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled, self.radar_hud_pulse > 0,
-                                                          cmbs_cluster_bit_diag_tick=diag_tick))
-        if not self.cmbs_cluster_bit_diag and self.radar_hud_pulse > 0:
-          self.radar_hud_pulse -= 1
+        radar_msgs.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, self.frame // 10))
       if CS.supp_tick:
         radar_msgs.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
       if CS.radar_50hz_tick:
@@ -1264,10 +1250,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # the non-long safety config doesn't allowlist it.
     speed_control = 0 if self.CP.flags & HondaFlags.BOSCH else self.launch_active
     if (self.CP.flags & HondaFlags.BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
-        diag_tick = self.frame // 10 if self.cmbs_cluster_bit_diag else None
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, actuators.accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
-                                                 self.CP.openpilotLongitudinalControl, cmbs_cluster_bit_diag_tick=diag_tick))
+                                                 self.CP.openpilotLongitudinalControl))
 
     # Send dashboard UI commands.
     if self.frame % 10 == 0:
@@ -1276,10 +1261,9 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           # On Nidec, this also controls longitudinal positive acceleration
           acc_hud_pcm_accel = self.new_accel if self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and \
                               not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL) else pcm_accel
-          diag_tick = self.frame // 10 if self.cmbs_cluster_bit_diag else None
           can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, acc_hud_pcm_accel,
                                                    hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
-                                                   self.CP.openpilotLongitudinalControl, cmbs_cluster_bit_diag_tick=diag_tick))
+                                                   self.CP.openpilotLongitudinalControl))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       reduced_steering = CS.out.steeringPressed
