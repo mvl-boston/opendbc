@@ -316,6 +316,8 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # create_radar_hud_canfd); counted in 10 Hz hud ticks
     self.radar_hud_pulse = 0
     self.last_acc_enabled = False
+    _cmbs_diag = Params().get("HondaCmbsClusterBitDiag")
+    self.cmbs_cluster_bit_diag = _cmbs_diag not in (None, 0, b"0", "0", False, b"")
 
     # Bosch extra-brake controller
     self.brake_pid = PIDController(k_p=0.0,
@@ -665,8 +667,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
       self.last_acc_enabled = CC.enabled
       radar_msgs = []
       if CS.hud_tick:
-        radar_msgs.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled, self.radar_hud_pulse > 0))
-        if self.radar_hud_pulse > 0:
+        diag_tick = self.frame // 10 if self.cmbs_cluster_bit_diag else None
+        radar_msgs.append(hondacan.create_radar_hud_canfd(self.packer, self.CAN.pt, CC.enabled, self.radar_hud_pulse > 0,
+                                                          cmbs_cluster_bit_diag_tick=diag_tick))
+        if not self.cmbs_cluster_bit_diag and self.radar_hud_pulse > 0:
           self.radar_hud_pulse -= 1
       if CS.supp_tick:
         radar_msgs.append(hondacan.create_canfd_supplemental(self.packer, self.CAN.pt))
@@ -1260,9 +1264,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # the non-long safety config doesn't allowlist it.
     speed_control = 0 if self.CP.flags & HondaFlags.BOSCH else self.launch_active
     if (self.CP.flags & HondaFlags.BOSCH_CANFD) and CS.hud_tick and self.CP.openpilotLongitudinalControl and not CS.stock_acc_alive:
+        diag_tick = self.frame // 10 if self.cmbs_cluster_bit_diag else None
         can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, actuators.accel,
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
-                                                 self.CP.openpilotLongitudinalControl))
+                                                 self.CP.openpilotLongitudinalControl, cmbs_cluster_bit_diag_tick=diag_tick))
 
     # Send dashboard UI commands.
     if self.frame % 10 == 0:
@@ -1271,9 +1276,10 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           # On Nidec, this also controls longitudinal positive acceleration
           acc_hud_pcm_accel = self.new_accel if self.CP.openpilotLongitudinalControl and not (self.CP.flags & HondaFlags.BOSCH) and \
                               not self.CP_SP.enableGasInterceptor and not (self.CP_SP.flags & HondaFlagsSP.STOCK_LONGITUDINAL) else pcm_accel
+          diag_tick = self.frame // 10 if self.cmbs_cluster_bit_diag else None
           can_sends.append(hondacan.create_acc_hud(self.packer, self.CAN.pt, self.CP, CC.enabled, pcm_speed, acc_hud_pcm_accel,
                                                    hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
-                                                   self.CP.openpilotLongitudinalControl))
+                                                   self.CP.openpilotLongitudinalControl, cmbs_cluster_bit_diag_tick=diag_tick))
 
       steering_available = CS.out.cruiseState.available and CS.out.vEgo > max(self.params.STEER_GLOBAL_MIN_SPEED, self.CP.minSteerSpeed)
       reduced_steering = CS.out.steeringPressed
