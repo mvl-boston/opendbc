@@ -39,11 +39,9 @@ static int honda_brake = 0;
 // last Nidec BRAKE_COMMAND brake value that was passed to the bus (not the last one requested)
 static int honda_nidec_brake_tx_prev = 0;
 // one-shot: after a brake frame passes while longitudinal is allowed, the next violating 0x1FA may
-// pass once if it does not exceed the last value the bus saw. Gas override keeps controls_allowed
-// true while get_longitudinal_allowed() is already false on the panda, so grace must not require
-// gas_pressed alone (POWERTRAIN gas can lag gas_pressed_prev by a frame too).
+// pass once with any brake value while controls_allowed is still true but longitudinal is already
+// false on the panda (gas override / early disengage before carcontroller catches up).
 static bool honda_nidec_brake_release_grace = false;
-static bool honda_nidec_long_allowed_prev = false;
 static bool honda_brake_switch_prev = false;
 static bool honda_alt_brake_msg = false;
 static bool honda_fwd_brake = false;
@@ -270,17 +268,8 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     bool brake_ramping_down = (honda_brake <= (honda_nidec_brake_tx_prev - HONDA_NIDEC_BRAKE_RELEASE_MIN_STEP));
     bool brake_violation = longitudinal_brake_checks(honda_brake, HONDA_NIDEC_LONG_LIMITS) && !brake_ramping_down;
     bool long_allowed_now = get_longitudinal_allowed();
-    bool long_falling_edge = honda_nidec_long_allowed_prev && !long_allowed_now;
     if (brake_violation) {
-      bool gas_override_tick = controls_allowed && !long_allowed_now;
-      bool grace_hold = honda_nidec_brake_release_grace && (honda_brake <= honda_nidec_brake_tx_prev) &&
-                        (gas_override_tick || gas_pressed || gas_pressed_prev);
-      // cancel/disengage: carcontroller can still wind +1 count on the last allowed tick while the panda
-      // already dropped longitudinal (route 239 seg 37: 50->51)
-      bool grace_disengage_bump = honda_nidec_brake_release_grace && long_falling_edge &&
-                                  (honda_nidec_brake_tx_prev > 0) &&
-                                  (honda_brake == (honda_nidec_brake_tx_prev + 1));
-      if (grace_hold || grace_disengage_bump) {
+      if (honda_nidec_brake_release_grace && controls_allowed && !long_allowed_now) {
         honda_nidec_brake_release_grace = false;
       } else {
         tx = false;
@@ -302,9 +291,10 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
       honda_nidec_brake_tx_prev = honda_brake;
       if (long_allowed_now) {
         honda_nidec_brake_release_grace = true;
+      } else if (honda_brake == 0) {
+        honda_nidec_brake_release_grace = false;
       }
     }
-    honda_nidec_long_allowed_prev = long_allowed_now;
   }
 
   // BRAKE/GAS: safety check (bosch)
@@ -429,7 +419,6 @@ static safety_config honda_nidec_init(uint16_t param) {
   honda_brake = 0;
   honda_nidec_brake_tx_prev = 0;
   honda_nidec_brake_release_grace = false;
-  honda_nidec_long_allowed_prev = false;
   honda_brake_switch_prev = false;
   honda_fwd_brake = false;
   honda_alt_brake_msg = false;
@@ -590,7 +579,6 @@ static safety_config honda_bosch_init(uint16_t param) {
   honda_hw = HONDA_BOSCH;
   honda_nidec_brake_tx_prev = 0;
   honda_nidec_brake_release_grace = false;
-  honda_nidec_long_allowed_prev = false;
   honda_brake_switch_prev = false;
   honda_op_buttons_fresh = 0;
   honda_bosch_radarless = GET_FLAG(param, HONDA_PARAM_RADARLESS);

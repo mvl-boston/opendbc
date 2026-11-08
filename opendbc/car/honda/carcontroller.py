@@ -1208,10 +1208,6 @@ class CarController(CarControllerBase):
             apply_brake = min(apply_brake * brakefactor, self.last_applied_brake + 0.00042) / brakefactor
           self.last_applied_brake = apply_brake * brakefactor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
-          # Panda drops longitudinal before carState on gas override and often before cancel on disengage;
-          # do not command a higher brake count in that window (route 239 seg 37: 50->51 rejected).
-          if CS.out.gasPressed or (not CC.longActive) or pcm_cancel_cmd or (not CC.enabled):
-            apply_brake = min(apply_brake, self.apply_brake_last)
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
           # limit brake release to 32 units per frame to match factory
