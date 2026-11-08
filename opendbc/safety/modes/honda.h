@@ -266,8 +266,10 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
     bool brake_ramping_down = (honda_brake <= (honda_nidec_brake_tx_prev - HONDA_NIDEC_BRAKE_RELEASE_MIN_STEP));
     bool brake_violation = longitudinal_brake_checks(honda_brake, HONDA_NIDEC_LONG_LIMITS) && !brake_ramping_down;
     bool long_allowed_now = get_longitudinal_allowed();
+    // grace only waives the longitudinal-disallowed part; the magnitude bound always holds
+    bool brake_over_max = honda_brake > HONDA_NIDEC_LONG_LIMITS.max_brake;
     if (brake_violation) {
-      if (honda_nidec_brake_release_grace && !long_allowed_now) {
+      if (honda_nidec_brake_release_grace && !long_allowed_now && !brake_over_max) {
         honda_nidec_brake_release_grace = false;
       } else {
         tx = false;
