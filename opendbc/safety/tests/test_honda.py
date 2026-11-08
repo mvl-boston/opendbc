@@ -345,6 +345,59 @@ class TestHondaNidecSafetyBase(HondaBase):
             send = brake == 0
           self.assertEqual(send, self._tx(self._send_brake_msg(brake)))
 
+  def test_brake_release_ramp_when_longitudinal_not_allowed(self):
+    # once longitudinal is disallowed the only nonzero brake frames that pass are a ramp down from the
+    # last value the bus saw, at least 16 counts per frame, so the carcontroller's 32/frame factory
+    # release reaches the brake module instead of leaving a gap in 0x1FA
+    def disallow(by_gas):
+      if by_gas:
+        self._rx(self._user_gas_msg(1))
+        self.assertTrue(self.safety.get_controls_allowed())
+      else:
+        self.safety.set_controls_allowed(False)
+      self.assertFalse(self.safety.get_longitudinal_allowed())
+
+    for by_gas in (True, False):
+      self.safety.set_controls_allowed(True)
+      self._rx(self._user_gas_msg(0))
+      self.assertTrue(self._tx(self._send_brake_msg(148)))
+      disallow(by_gas)
+
+      # holding or raising the brake is still blocked
+      self.assertFalse(self._tx(self._send_brake_msg(148)))
+      self.assertFalse(self._tx(self._send_brake_msg(150)))
+      # a rejected frame does not move the reference: this is still a 32 step from 148
+      self.assertTrue(self._tx(self._send_brake_msg(116)))
+      self.assertTrue(self._tx(self._send_brake_msg(84)))
+      # too small a step is blocked, and does not move the reference
+      self.assertFalse(self._tx(self._send_brake_msg(70)))
+      self.assertTrue(self._tx(self._send_brake_msg(68)))
+      self.assertTrue(self._tx(self._send_brake_msg(36)))
+      self.assertTrue(self._tx(self._send_brake_msg(4)))
+      self.assertTrue(self._tx(self._send_brake_msg(0)))
+      # the ramp is over: nothing nonzero passes until longitudinal is allowed again
+      self.assertFalse(self._tx(self._send_brake_msg(16)))
+      self.assertFalse(self._tx(self._send_brake_msg(1)))
+      self.assertTrue(self._tx(self._send_brake_msg(0)))
+
+      # the ramp can go straight to 0 too
+      self.safety.set_controls_allowed(True)
+      self._rx(self._user_gas_msg(0))
+      self.assertTrue(self._tx(self._send_brake_msg(100)))
+      disallow(by_gas)
+      self.assertTrue(self._tx(self._send_brake_msg(0)))
+      self.assertFalse(self._tx(self._send_brake_msg(84)))
+
+    # forwarding stock AEB still blocks the ramp
+    self.safety.set_controls_allowed(True)
+    self._rx(self._user_gas_msg(0))
+    self.assertTrue(self._tx(self._send_brake_msg(100)))
+    self.safety.set_controls_allowed(False)
+    self.safety.set_honda_fwd_brake(True)
+    self.assertFalse(self._tx(self._send_brake_msg(68)))
+    self.safety.set_honda_fwd_brake(False)
+    self.assertTrue(self._tx(self._send_brake_msg(68)))
+
   def test_block_aeb(self):
     for controls_allowed in [True, False]:
       self.safety.set_controls_allowed(controls_allowed)
