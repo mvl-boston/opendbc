@@ -441,6 +441,17 @@ class TestHondaNidecSafetyBase(HondaBase):
     self._rx(self._user_gas_msg(1))
     self.assertTrue(self._tx(self._send_brake_msg(29)))
     self.assertFalse(self._tx(self._send_brake_msg(31)))
+    # grace never lifts the magnitude bound, and is not re-armed by the rejected frame
+    self.safety.set_controls_allowed(True)
+    self._rx(self._user_gas_msg(0))
+    self.assertTrue(self._tx(self._send_brake_msg(100)))
+    self.safety.set_controls_allowed(False)
+    self.assertFalse(self._tx(self._send_brake_msg(self.MAX_BRAKE + 1)))
+    self.assertTrue(self._tx(self._send_brake_msg(self.MAX_BRAKE)))
+    self.assertFalse(self._tx(self._send_brake_msg(self.MAX_BRAKE)))
+    # grace is armed by a pass while allowed, not by the ramp: 0 while disallowed does not re-arm
+    self.assertTrue(self._tx(self._send_brake_msg(0)))
+    self.assertFalse(self._tx(self._send_brake_msg(10)))
 
   def test_block_aeb(self):
     for controls_allowed in [True, False]:
