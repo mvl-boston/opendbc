@@ -17,7 +17,8 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
-from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
+from opendbc.car.honda.nidec_long_helpers import (nidec_speed_lead_mps, nidec_speed_channel_pinned,
+                                                  nidec_set_speed_governed, nidec_accel_with_pid)
 from opendbc.car.honda.lateral_model import HondaLateralModel
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -511,10 +512,18 @@ class CarController(CarControllerBase):
            (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
            and (not CS.out.stockAeb) and (not CS.out.gasPressed):
           old_i = self.nidec_pid.i
-          self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
-          if actuators.accel >= 1e-5 and CS.out.vEgo < 1.0: # don't drop PID at launch lurch
-             self.nidec_pid_factor = self.nidec_pid.i = max(old_i, self.nidec_pid.i)
-          self.accel = actuators.accel + self.nidec_pid_factor
+          if set_speed_governed:
+            # The PCM governor owns the response near set speed; a subtract-only pid cannot fix an
+            # undershoot there and its integral was part of the route-25 limit cycle (wind the
+            # integrator down, do not apply the correction on the wire).
+            self.nidec_pid.update(error=actuators.accel - CS.out.aEgo, speed=CS.out.vEgo, override=True)
+            self.nidec_pid_factor = 0.0
+            self.accel = float(actuators.accel)
+          else:
+            self.nidec_pid_factor = self.nidec_pid.update(error=actuators.accel - CS.out.aEgo, speed=CS.out.vEgo)
+            if actuators.accel >= 1e-5 and CS.out.vEgo < 1.0:  # don't drop PID at launch lurch
+              self.nidec_pid_factor = self.nidec_pid.i = max(old_i, self.nidec_pid.i)
+            self.accel = nidec_accel_with_pid(float(actuators.accel), float(self.nidec_pid_factor))
           adjust_accel = self.accel + hill_brake
 
           # copy wind tuning from Bosch code

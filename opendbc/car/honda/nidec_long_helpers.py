@@ -7,6 +7,18 @@ NIDEC_DV_SAT_MIN = 2.5
 # m/s below the displayed set speed where the PCM's own set-speed governor takes over (see
 # nidec_set_speed_governed); the gas-channel learners have always used this margin
 NIDEC_SET_SPEED_MARGIN = 2.0
+# Do not send a negative PCM_SPEED/gas interpretation when the planner is asking for accel:
+# nidec_pid can wind negative on brief aEgo overshoots, and on the CR-V coast floor (route
+# a6354c3dcf16e7cf/56 seg 14-16: ~22% of frames at plan>0.05 had applied accel<0 with a ~6s
+# oscillation) that becomes fuel-cut decel against the plan.
+NIDEC_PLAN_ACCEL_FLOOR = 0.05
+
+
+def nidec_accel_with_pid(plan_accel: float, pid_factor: float) -> float:
+  blended = plan_accel + pid_factor
+  if plan_accel > NIDEC_PLAN_ACCEL_FLOOR:
+    blended = max(blended, 0.0)
+  return blended
 
 
 def nidec_speed_lead_mps(sf_eff: float, accel: float, alpha_eff: float) -> float:

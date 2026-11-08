@@ -1,6 +1,7 @@
 import unittest
 
-from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
+from opendbc.car.honda.nidec_long_helpers import (nidec_speed_lead_mps, nidec_speed_channel_pinned,
+                                                    nidec_set_speed_governed, nidec_accel_with_pid)
 
 
 class TestNidecSpeedChannelPinned(unittest.TestCase):
@@ -20,6 +21,15 @@ class TestNidecSpeedChannelPinned(unittest.TestCase):
     accel_lag = -0.5
     self.assertFalse(nidec_speed_channel_pinned(4.0 * accel_lag, 10.0))
     self.assertTrue(nidec_speed_channel_pinned(6.0 * accel_lag, 10.0))
+
+
+class TestNidecAccelWithPid(unittest.TestCase):
+  def test_positive_plan_not_sent_negative(self):
+    # route a6354c3dcf16e7cf/56: plan ~0.1 with pid ~-0.17 must not command coast
+    self.assertAlmostEqual(nidec_accel_with_pid(0.10, -0.17), 0.0)
+
+  def test_braking_plan_unchanged(self):
+    self.assertAlmostEqual(nidec_accel_with_pid(-1.0, 0.1), -0.9)
 
 
 class TestNidecSetSpeedGoverned(unittest.TestCase):
