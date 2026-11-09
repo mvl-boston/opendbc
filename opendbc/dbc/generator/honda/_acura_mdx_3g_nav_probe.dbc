@@ -1,7 +1,7 @@
 CM_ "Provisional navigation / cluster-turn probe definitions for ACURA_MDX_3G.";
 CM_ "Evidence route: 3792d010590cb83a|00000235--2c1d904186 (full rlogs, ~927 s).";
 CM_ "IDs 546/559/460/808/1348 are car-side probe messages (buses 0 and 130).";
-CM_ "0x324 (804) CRUISE, 0x1FA (506) BRAKE_COMMAND, 0x30C (780) ACC_HUD, 0x33D (829) LKAS_HUD: already defined in honda imports; use those message names in Cabana (bus 128/2 for 829/506/780).";
+CM_ "Camera-path raw bytes: CRUISE 804 NAV_MAP_BYTE*, ACC_HUD 780 NAV_30C_BYTE* (_honda_common); BRAKE_COMMAND 506 NAV_1FA_BYTE* (_nidec_common); LKAS_HUD 829 NAV_33D_* (_lkas_hud_5byte; first 5 bytes of 8-byte bus-128 frames).";
 CM_ "NAV_*_PHASE scale: 15 m per raw unit (4-state countdown, ±0 m at maneuver; provisional).";
 
 BO_ 546 NAV_CAR_TICKER_A: 3 XXX
