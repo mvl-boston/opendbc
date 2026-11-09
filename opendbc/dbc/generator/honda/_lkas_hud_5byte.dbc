@@ -19,10 +19,15 @@ BO_ 829 LKAS_HUD: 5 ADAS
  SG_ LANE_ASSIST_BEEP_OFF : 30|1@0+ (1,0) [0|1] "" XXX
  SG_ CHECKSUM : 35|4@0+ (1,0) [0|15] "" BDY
  SG_ COUNTER : 37|2@0+ (1,0) [0|3] "" BDY
-
+ SG_ NAV_33D_BYTE0 : 7|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_33D_STYLE : 15|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_33D_BYTE2 : 23|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_33D_BYTE3 : 31|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_33D_BYTE4 : 39|8@0+ (1,0) [0|255] "" XXX
 
 CM_ SG_ 829 BEEP "beeps are pleasant, chimes are for warnings etc...";
 CM_ SG_ 829 CAM_TEMP_HIGH "Some Driver Assist Systems Cannot Operate: Camera Temperature Too High";
 CM_ SG_ 829 CAMERA_OVERHEAT "Lane Keeping Assist Cannot Operate: Camera Too Hot";
 
 VAL_ 829 BEEP 5 "solid_beep" 4 "double_beep" 3 "single_beep" 2 "triple_beep" 1 "repeated_beep" 0 "no_beep";
+VAL_ 829 NAV_33D_STYLE 0 "style_00" 64 "style_40" 65 "style_41" 68 "style_44";
