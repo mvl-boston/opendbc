@@ -170,8 +170,8 @@ def create_acc_hud(packer, bus, CP, enabled, pcm_speed, pcm_accel, hud_control, 
 
   if CP.flags & HondaFlags.BOSCH:
     acc_hud_values['ACC_ON'] = int(enabled)
-    acc_hud_values['FCM_OFF'] = bool(0)
-    acc_hud_values['FCM_OFF_2'] = bool(0)
+    acc_hud_values['FCM_OFF'] = 1
+    acc_hud_values['FCM_OFF_2'] = 1
   else:
     # Shows the distance bars, TODO: stock camera shows updates temporarily while disabled
     acc_hud_values['ACC_ON'] = int(enabled)
