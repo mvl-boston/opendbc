@@ -1362,7 +1362,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     # driver's LKAS button from reaching the camera by taking over SCM_BUTTONS on the camera bus while engaged
     # (panda blocks the forwarded stock SCM_BUTTONS when engaged; the standard button spamming isn't reliably
     # accepted by the camera).
-    if self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD) and CC.enabled and self.frame % 4 == 0 and \
+    if self.CP.flags & HondaFlags.BOSCH_RADARLESS and CC.enabled and self.frame % 4 == 0 and \
         not pcm_cancel_cmd and not CC.cruiseControl.resume:
       if self.lkas_button_send_remaining == 0 and CS.lkas_hud["LKAS_READY"] and self.frame >= self.last_lkas_button_frame + 500:
         self.lkas_button_send_remaining = 3
