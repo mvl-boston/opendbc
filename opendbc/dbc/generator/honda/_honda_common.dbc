@@ -59,6 +59,7 @@ BO_ 420 VSA_STATUS: 8 VSA
  SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
 
 BO_ 427 STEER_MOTOR_TORQUE: 3 EPS
+ SG_ UNKNOWN_TORQUE_STATE_BIT : 3|1@0+ (1,0) [0|1] "" XXX
  SG_ CONFIG_VALID : 7|1@0+ (1,0) [0|1] "" EON
  SG_ MOTOR_TORQUE : 1|10@0+ (1,0) [0|256] "" EON
  SG_ OUTPUT_DISABLED : 22|1@0+ (1,0) [0|1] "" EON
@@ -150,6 +151,14 @@ BO_ 780 ACC_HUD: 8 ADAS
  SG_ ICONS : 63|2@0+ (1,0) [0|1] "" BDY
  SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" BDY
  SG_ CHECKSUM : 59|4@0+ (1,0) [0|3] "" BDY
+ SG_ NAV_30C_BYTE0 : 7|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE1 : 15|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE2 : 23|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE3 : 31|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE4 : 39|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE5 : 47|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE6 : 55|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_30C_BYTE7 : 63|8@0+ (1,0) [0|255] "" XXX
 
 BO_ 804 CRUISE: 8 PCM
  SG_ HUD_SPEED_KPH : 7|8@0+ (1,0) [0|255] "kph" EON
@@ -160,6 +169,14 @@ BO_ 804 CRUISE: 8 PCM
  SG_ BOH3 : 55|8@0+ (1,0) [0|255] "" EON
  SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
  SG_ CHECKSUM : 59|4@0+ (1,0) [0|15] "" EON
+ SG_ NAV_MAP_BYTE0 : 7|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE1 : 15|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE2 : 23|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE3 : 31|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE4 : 39|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE5 : 47|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE6 : 55|8@0+ (1,0) [0|255] "" XXX
+ SG_ NAV_MAP_BYTE7 : 63|8@0+ (1,0) [0|255] "" XXX
 
 BO_ 862 CAMERA_MESSAGES: 8 CAM
  SG_ ZEROS_BOH : 7|16@0+ (1,0) [0|127] "" BDY
@@ -206,6 +223,7 @@ BO_ 1302 ODOMETER: 8 XXX
 CM_ SG_ 304 "Seems to be platform-agnostic";
 CM_ SG_ 316 "Should exist on Nidec";
 CM_ SG_ 420 BRAKE_HOLD_RELATED "On when Brake Hold engaged";
+CM_ SG_ 427 UNKNOWN_TORQUE_STATE_BIT "Might signal driver input above threshold, for driver inactivity detection";
 CM_ SG_ 490 LONG_ACCEL "wheel speed derivative, noisy and zero snapping";
 CM_ SG_ 773 PASS_AIRBAG_ON "Might just be indicator light";
 CM_ SG_ 773 PASS_AIRBAG_OFF "Might just be indicator light";
