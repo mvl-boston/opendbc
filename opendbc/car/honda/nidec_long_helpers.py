@@ -1,4 +1,5 @@
 """Pure Nidec longitudinal helpers (importable without openpilot)."""
+from collections import deque
 
 # Keep in sync with opendbc/car/honda/carcontroller.py
 NIDEC_MIN_ACCEL_SPEED_LEAD = 0.35
@@ -42,3 +43,27 @@ def nidec_set_speed_governed(v_ego: float, v_cruise: float, margin: float = NIDE
   cap on that route. Uses the same 2 m/s margin the gas-channel learners already apply.
   """
   return v_ego >= v_cruise - margin
+
+
+class DelayLine:
+  """Fixed transport delay: push() returns the value pushed delay seconds earlier.
+
+  Used to compare the measured acceleration with the command that produced it. The brake answers a
+  command CP.longitudinalActuatorDelay late, so an error taken against the current command is the
+  actuator's dead time, not a tracking error: MDX 3G route 3792d010590cb83a/00000250--7f4c16cef3 at
+  13:03:22 ET, plan step -0.1 -> -2.2 m/s2, aEgo still 0 for the first 0.2 s, and nidec_pid
+  integrated that to -0.44 m/s2 of extra brake that then took a second to unwind (aEgo -2.6
+  against a -2.1 plan); -0.84 on the 13:04:30 stop of the same drive.
+  """
+
+  def __init__(self, delay: float, dt: float, initial=0.0):
+    self.frames = max(0, int(round(delay / dt)))
+    self.buf = deque([initial] * (self.frames + 1), maxlen=self.frames + 1)
+
+  def push(self, value):
+    self.buf.append(value)
+    return self.buf[0]
+
+  def reset(self, value):
+    for _ in range(self.frames + 1):
+      self.buf.append(value)
