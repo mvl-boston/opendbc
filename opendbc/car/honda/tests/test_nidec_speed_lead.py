@@ -1,6 +1,6 @@
 import unittest
 
-from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
+from opendbc.car.honda.nidec_long_helpers import DelayLine, nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
 
 
 class TestNidecSpeedChannelPinned(unittest.TestCase):
@@ -20,6 +20,53 @@ class TestNidecSpeedChannelPinned(unittest.TestCase):
     accel_lag = -0.5
     self.assertFalse(nidec_speed_channel_pinned(4.0 * accel_lag, 10.0))
     self.assertTrue(nidec_speed_channel_pinned(6.0 * accel_lag, 10.0))
+
+
+class TestDelayLine(unittest.TestCase):
+  def test_returns_value_from_delay_ago(self):
+    line = DelayLine(0.25, 0.01)
+    self.assertEqual(line.frames, 25)
+    out = [line.push(float(i)) for i in range(1, 60)]
+    self.assertEqual(out[:25], [0.0] * 25)
+    self.assertEqual(out[25], 1.0)
+    self.assertEqual(out[58], 34.0)
+
+  def test_half_rate_line_spans_the_same_time(self):
+    self.assertEqual(DelayLine(0.25, 0.02).frames, 12)
+    self.assertEqual(DelayLine(0.15, 0.02).frames, 8)
+
+  def test_zero_delay_is_passthrough(self):
+    line = DelayLine(0.0, 0.01)
+    self.assertEqual(line.push(3.0), 3.0)
+    self.assertEqual(line.push(-1.0), -1.0)
+
+  def test_reset_fills_history(self):
+    line = DelayLine(0.05, 0.01)
+    for i in range(10):
+      line.push(float(i))
+    line.reset(-0.7)
+    self.assertEqual([line.push(1.0) for _ in range(5)], [-0.7] * 5)
+    self.assertEqual(line.push(1.0), 1.0)
+
+  def test_tuple_values(self):
+    line = DelayLine(0.04, 0.02, (0.0, 0.0))
+    self.assertEqual(line.push((-1.0, 0.2)), (0.0, 0.0))
+    self.assertEqual(line.push((-2.0, 0.4)), (0.0, 0.0))
+    self.assertEqual(line.push((-2.0, 0.4)), (-1.0, 0.2))
+
+  def test_brake_step_does_not_wind_the_integrator(self):
+    # route 00000250 13:03:22 ET shape: plan steps to -2.2, the car follows 0.25 s later. Integrating
+    # plan - aEgo winds ~ -0.4 during the dead time; against the delayed plan there is nothing to wind.
+    dt, delay, ki = 0.01, 0.25, 0.76
+    line = DelayLine(delay, dt)
+    plan = [0.0] * 50 + [-2.2] * 100
+    a_ego = [0.0] * 75 + [-2.2] * 75
+    i_now = i_delayed = 0.0
+    for p, a in zip(plan, a_ego, strict=True):
+      i_now += ki * dt * (p - a)
+      i_delayed += ki * dt * (line.push(p) - a)
+    self.assertLess(i_now, -0.4)
+    self.assertAlmostEqual(i_delayed, 0.0, places=6)
 
 
 class TestNidecSetSpeedGoverned(unittest.TestCase):

@@ -17,7 +17,7 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
-from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
+from opendbc.car.honda.nidec_long_helpers import DelayLine, nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
 from opendbc.car.honda.lateral_model import HondaLateralModel
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -334,6 +334,12 @@ class CarController(CarControllerBase):
                                    neg_limit=0,
                                    rate=50)
     self.nidec_brake_pid.reset()
+    # Both Nidec brake-side integrators read the acceleration the brake delivers now against the
+    # command it is answering, CP.longitudinalActuatorDelay ago (the planner already issues the
+    # accel it wants that far ahead). plan_accel_delay runs every tick (nidec_pid), brake_cmd_delay
+    # at the 50 Hz brake send (nidec_brake_pid: internal accel command and normalized brake).
+    self.plan_accel_delay = DelayLine(CP.longitudinalActuatorDelay, DT_CTRL)
+    self.brake_cmd_delay = DelayLine(CP.longitudinalActuatorDelay, 2 * DT_CTRL, (0.0, 0.0))
     self.brake_pid_factor_non_lowspeed = 0.4 if (Params().get("HondaBrakePIDParams") is None) else Params().get("HondaBrakePIDParams")
     self.nidec_brake_pid.i = self.brake_pid_factor_non_lowspeed
     self.brake_pid_factor = 0.0
@@ -500,6 +506,13 @@ class CarController(CarControllerBase):
     wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
 
     prior_windfactor = self.windfactor
+    # not engaged: no command is being answered, so the delayed reference starts at the car's own
+    # acceleration (zero error) rather than at a stale plan
+    if CC.longActive:
+      accel_delayed = self.plan_accel_delay.push(float(actuators.accel))
+    else:
+      self.plan_accel_delay.reset(float(CS.out.aEgo))
+      accel_delayed = float(CS.out.aEgo)
     if CC.longActive:
       if self.CP.carFingerprint in HONDA_BOSCH:
         accel = actuators.accel
@@ -511,7 +524,10 @@ class CarController(CarControllerBase):
            (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
            and (not CS.out.stockAeb) and (not CS.out.gasPressed):
           old_i = self.nidec_pid.i
-          self.nidec_pid_factor = self.nidec_pid.update(error = actuators.accel - CS.out.aEgo, speed = CS.out.vEgo)
+          # while the brake is on the wire aEgo is its answer to the plan a brake delay ago; the
+          # gas side keeps the undelayed error (its lag is the speed servo's, handled by its learners)
+          pid_accel_ref = accel_delayed if self.apply_brake_last > 0 else actuators.accel
+          self.nidec_pid_factor = self.nidec_pid.update(error = pid_accel_ref - CS.out.aEgo, speed = CS.out.vEgo)
           if actuators.accel >= 1e-5 and CS.out.vEgo < 1.0: # don't drop PID at launch lurch
              self.nidec_pid_factor = self.nidec_pid.i = max(old_i, self.nidec_pid.i)
           self.accel = actuators.accel + self.nidec_pid_factor
@@ -1196,9 +1212,13 @@ class CarController(CarControllerBase):
                                                           self.stopping_counter, self.CP, gas_pedal_force))
         else:
           apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
+          brake_accel_delayed, apply_brake_delayed = self.brake_cmd_delay.push((float(self.accel), float(apply_brake)))
           if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb):
               if not ((self.accel >= 1e-5) and CS.out.vEgo < 1.0): # don't wind PID at launch lurch
-                self.brake_pid_factor = self.nidec_brake_pid.update(error = -(self.accel - CS.out.aEgo) * apply_brake, speed = CS.out.vEgo)
+                # brake gain error: delivered accel vs the accel command, weighted by the brake, both as
+                # they were a brake delay ago (zero until the brake has been applied that long)
+                self.brake_pid_factor = self.nidec_brake_pid.update(error = -(brake_accel_delayed - CS.out.aEgo) * apply_brake_delayed,
+                                                                    speed = CS.out.vEgo)
           if (CS.out.vEgo >= 2): # save pid above 2m/s
             self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
           if (CS.out.vEgo < 1e-5) and (self.accel < 1e-5): # gradually restore 2m/s pid after stopped
