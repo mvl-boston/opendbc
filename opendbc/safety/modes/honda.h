@@ -581,6 +581,20 @@ static safety_config honda_bosch_init(uint16_t param) {
     {0x33DB, 0, 8, .check_relay = true},
   };
 
+  // Bosch stock ACC where the radar blanks low-speed steering: STEERING_CONTROL is additionally sent
+  // directly on the powertrain bus, racing the radar's own copy. The stock radar keeps transmitting
+  // 0xE4 on that bus the whole time, so its presence there is expected rather than a relay malfunction.
+  static CanMsg HONDA_BOSCH_PT_STEER_BYPASS_TX_MSGS[] = {
+    {0xE4, 0, 5, .check_relay = true},
+    {0xE4, 1, 5, .check_relay = false},
+    {0xE5, 0, 8, .check_relay = true},
+    {0x296, 1, 4, .check_relay = false},
+    {0x33D, 0, 5, .check_relay = true},
+    {0x33D, 0, 8, .check_relay = true},
+    {0x33DA, 0, 5, .check_relay = true},
+    {0x33DB, 0, 8, .check_relay = true},
+  };
+
   // Bosch w/ gas and brakes
   static CanMsg HONDA_BOSCH_LONG_TX_MSGS[] = {
     {0xE4, 1, 5, .check_relay = true},
@@ -654,6 +668,7 @@ static safety_config honda_bosch_init(uint16_t param) {
   const uint16_t HONDA_PARAM_RADARLESS = 8;
   const uint16_t HONDA_PARAM_BOSCH_CANFD = 16;
   const uint16_t HONDA_PARAM_NO_ENGINE_DATA_MSG = 128;
+  const uint16_t HONDA_PARAM_PT_STEER_BYPASS = 256;
 
   // Bosch radarless and CAN-FD have the powertrain bus on bus 0
   static RxCheck honda_bosch_pt0_rx_checks[] = {
@@ -688,6 +703,7 @@ static safety_config honda_bosch_init(uint16_t param) {
   honda_bosch_radarless = GET_FLAG(param, HONDA_PARAM_RADARLESS);
   honda_bosch_canfd = GET_FLAG(param, HONDA_PARAM_BOSCH_CANFD);
   honda_no_engine_data_msg = GET_FLAG(param, HONDA_PARAM_NO_ENGINE_DATA_MSG);
+  const bool honda_bosch_pt_steer_bypass = GET_FLAG(param, HONDA_PARAM_PT_STEER_BYPASS);
   honda_abs_prev_fl = 0U;
   honda_abs_prev_fr = 0U;
   honda_abs_prev_rl = 0U;
@@ -735,6 +751,8 @@ static safety_config honda_bosch_init(uint16_t param) {
   } else {
     if (honda_bosch_long) {
       SET_TX_MSGS(HONDA_BOSCH_LONG_TX_MSGS, ret);
+    } else if (honda_bosch_pt_steer_bypass) {
+      SET_TX_MSGS(HONDA_BOSCH_PT_STEER_BYPASS_TX_MSGS, ret);
     } else {
       SET_TX_MSGS(HONDA_BOSCH_TX_MSGS, ret);
     }
