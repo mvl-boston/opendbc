@@ -14,15 +14,18 @@ dependencies = [
   "numpy",
   "crcmod",
   "tqdm",
-  "pycapnp",
+  "pycapnp==2.1.0",
   "pycryptodome",
 ]
 
 [project.optional-dependencies]
 testing = [
   "cffi",
+  "tree-sitter",
+  "tree-sitter-c",
   "gcovr",
-  "pytest",
+  # FIXME: pytest 9.0.0 doesn't support unittest.SkipTest
+  "pytest==8.4.2",
   "pytest-coverage",
   "pytest-mock",
   "pytest-randomly",
@@ -31,6 +34,8 @@ testing = [
   "pytest-subtests",
   "hypothesis==6.47.*",
   "parameterized>=0.8,<0.9",
+  "zstandard",
+  "unittest-parallel",
 
   # static analysis
   "ruff",
@@ -38,6 +43,7 @@ testing = [
   "lefthook",
   "cpplint",
   "codespell",
+  "cppcheck @ git+https://github.com/commaai/dependencies.git@releases#subdirectory=cppcheck",
 ]
 docs = [
   "Jinja2",
