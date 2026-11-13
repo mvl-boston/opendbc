@@ -1,8 +1,6 @@
 from dataclasses import dataclass, field
 from enum import Enum, IntFlag
 
-import numpy as np
-
 from opendbc.car import Bus, CarSpecs, DbcDict, PlatformConfig, Platforms, structs, uds
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.docs_definitions import CarFootnote, CarHarness, CarDocs, CarParts, Column, SupportType
@@ -33,18 +31,6 @@ class CarControllerParams:
 
   BOSCH_ACCEL_MIN = -3.5  # m/s^2
   BOSCH_ACCEL_MAX = 2.0  # m/s^2
-
-  # Speed-dependent ceiling on the Bosch accel request for the platforms in HONDA_BOSCH_ACCEL_ENVELOPE.
-  # The planner asks for (v_cruise - v_ego) clipped only at ACCEL_MAX, so more than ~2 m/s below the
-  # set speed the request pins at BOSCH_ACCEL_MAX at any road speed. The Prelude's PCM follows that
-  # for about 2 s and then stops honoring ACCEL_COMMAND altogether, with ACC_STATUS still on and no
-  # CRUISE_FAULT, until the driver brakes or cycles MAIN (route acd27eb0b6ecb6dd/00000197--22b2397846:
-  # t=389.6, pinned 2.5 s, dropped at 22.4 m/s; t=1714.1, pinned 1.7 s, dropped at 19.2 m/s; requests
-  # up to 1.6 m/s2 for 2.9 s on the same drive were followed). Where the PCM's limit actually sits
-  # between those is not known, so this is the m/s2-by-m/s ACC envelope openpilot's planner used to
-  # apply to every car, not a measured threshold.
-  BOSCH_ACCEL_ENVELOPE_BP = [0., 10., 25., 40.]
-  BOSCH_ACCEL_ENVELOPE_V = [1.6, 1.2, 0.8, 0.6]
 
   BOSCH_GAS_LOOKUP_BP = [0.0, 2.0]  # 2m/s^2
   BOSCH_GAS_LOOKUP_V = [0, 1600]
@@ -531,14 +517,6 @@ HONDA_BOSCH = frozenset(c for c in CAR if c.config.flags & HondaFlags.BOSCH)
 HONDA_BOSCH_ALT_RADAR = frozenset(c for c in CAR if c.config.flags & HondaFlags.BOSCH_ALT_RADAR)
 HONDA_BOSCH_RADARLESS = frozenset(c for c in CAR if c.config.flags & HondaFlags.BOSCH_RADARLESS)
 HONDA_BOSCH_CANFD = frozenset(c for c in CAR if c.config.flags & HondaFlags.BOSCH_CANFD)
-# Bosch platforms whose PCM drops ACC torque control after a sustained BOSCH_ACCEL_MAX request
-HONDA_BOSCH_ACCEL_ENVELOPE = frozenset({CAR.HONDA_PRELUDE_6G})
-
-
-def bosch_accel_max(car_fingerprint, v_ego: float) -> float:
-  if car_fingerprint in HONDA_BOSCH_ACCEL_ENVELOPE:
-    return float(np.interp(v_ego, CarControllerParams.BOSCH_ACCEL_ENVELOPE_BP, CarControllerParams.BOSCH_ACCEL_ENVELOPE_V))
-  return CarControllerParams.BOSCH_ACCEL_MAX
 
 
 STEER_THRESHOLD = {
