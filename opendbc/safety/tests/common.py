@@ -894,6 +894,8 @@ class SafetyTest(SafetyTestBase):
             # No point in comparing to ALLOUTPUT which allows all messages
             if attr.startswith('TestAllOutput'):
               continue
+            if attr.startswith('TestHondaBoschRadarlessLong') and current_test.startswith('TestHondaBoschRadarlessLong'):
+              continue
             if attr.startswith('TestToyota') and current_test.startswith('TestToyota'):
               continue
             if attr.startswith('TestSubaruGen') and current_test.startswith('TestSubaruGen'):
@@ -934,6 +936,10 @@ class SafetyTest(SafetyTestBase):
 
             # Volkswagen MQB and Honda Bosch Radarless ACC HUD messages overlap
             if attr == 'TestVolkswagenMqbLongSafety' and current_test.startswith('TestHondaBoschRadarless'):
+              tx = list(filter(lambda m: m[0] not in [0x30c, ], tx))
+
+            # Volkswagen MQB and Honda Bosch Canfd ACC HUD messages overlap
+            if attr == 'TestVolkswagenMqbLongSafety' and current_test.startswith('TestHondaBoschCANFD'):
               tx = list(filter(lambda m: m[0] not in [0x30c, ], tx))
 
             # TODO: Temporary, should be fixed in panda firmware, safety_honda.h
