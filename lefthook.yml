@@ -10,7 +10,7 @@ output:
   - skips          # Print "skip" (i.e. no files matched)
 
 test:
-  parallel: true
+  parallel: false
   commands:
     # *** static analysis
     ruff:
