@@ -51,12 +51,14 @@ class CarControllerParams:
 
 
 class HondaSafetyFlags(IntFlag):
-  ALT_BRAKE = 32 # not using 1 since breaks Volkswagen Mqb cross safety test
+  ALT_BRAKE = 1
   BOSCH_LONG = 2
   NIDEC_ALT = 4
   RADARLESS = 8
   BOSCH_CANFD = 16
   NIDEC_HYBRID = 32
+  # RLX: a bridge panda relays the stock camera's LKAS_HUD from the steer bus onto the powertrain bus
+  RLX_STEER_BRIDGE = 64
   NO_ENGINE_DATA_MSG = 128
 
 
@@ -83,9 +85,6 @@ class HondaFlags(IntFlag):
   BOSCH_TJA_CONTROL = 4096
   LKAS_MINSPEED_CUTOFF = 8192
   HYBRID_ALT_BRAKEHOLD = 16384  # Some Nidec Hybrids use a different brakehold
-  LEGACY_MDX_STEER = 32768
-  HYBRID_ALT_BRAKEHOLD = 16384  # Some Nidec Hybrids use a different brakehold
-
 
 
 # Car button codes
@@ -138,7 +137,7 @@ class HondaBoschPlatformConfig(PlatformConfig):
 
 @dataclass
 class HondaBoschCANFDPlatformConfig(HondaBoschPlatformConfig):
-  dbc_dict: DbcDict = field(default_factory=lambda: {Bus.pt: 'honda_common_canfd_generated'})
+  dbc_dict: DbcDict = field(default_factory=lambda: {Bus.pt: 'honda_common_canfd_generated', Bus.radar: 'honda_common_canfd_generated'})
 
   def init(self):
     super().init()
@@ -260,12 +259,6 @@ class CAR(Platforms):
     {Bus.pt: 'acura_rdx_2020_can_generated'},
     flags=HondaFlags.BOSCH_ALT_RADAR,
   )
-  ACURA_RDX_3G_MMR = HondaBoschPlatformConfig(
-    [HondaCarDocs("Acura RDX 2022-25", "All", min_steer_speed=70. * CV.KPH_TO_MS)],
-    CarSpecs(mass=4079 * CV.LB_TO_KG, wheelbase=2.75, steerRatio=12.0, centerToFrontRatio=0.41, tireStiffnessFactor=0.677),  # as spec
-    {Bus.pt: 'acura_rdx_2020_can_generated'},
-    flags=HondaFlags.BOSCH_ALT_BRAKE,
-  )
   HONDA_INSIGHT = HondaBoschPlatformConfig(
     [HondaCarDocs("Honda Insight 2019-22", "All", min_steer_speed=3. * CV.MPH_TO_MS)],
     CarSpecs(mass=2987 * CV.LB_TO_KG, wheelbase=2.7, steerRatio=15.0, centerToFrontRatio=0.39, tireStiffnessFactor=0.82),  # as spec
@@ -351,12 +344,6 @@ class CAR(Platforms):
     {Bus.pt: 'honda_bosch_radarless_generated'},
     flags=HondaFlags.BOSCH_RADARLESS
   )
-  ACURA_ADX = HondaBoschPlatformConfig(
-    [HondaCarDocs("Acura ADX 2025", "All")],
-    CarSpecs(mass=3578 * CV.LB_TO_KG, wheelbase=2.65, steerRatio=16.6, centerToFrontRatio=0.43),
-    {Bus.pt: 'honda_bosch_radarless_generated'},
-    flags=HondaFlags.BOSCH_RADARLESS
-  )
 
   # Nidec Cars
   ACURA_ILX = HondaNidecPlatformConfig(
@@ -396,7 +383,7 @@ class CAR(Platforms):
     [HondaCarDocs("Honda Fit 2018-20", min_steer_speed=12. * CV.MPH_TO_MS)],
     CarSpecs(mass=2644 * CV.LB_TO_KG, wheelbase=2.53, steerRatio=13.06, centerToFrontRatio=0.39, tireStiffnessFactor=0.75),
     radar_dbc_dict('acura_ilx_2016_can_generated'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.ALLOW_MANUAL_TRANS
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   HONDA_FREED = HondaNidecPlatformConfig(
     [HondaCarDocs("Honda Freed 2020", min_steer_speed=12. * CV.MPH_TO_MS)],
@@ -435,12 +422,6 @@ class CAR(Platforms):
     [], # don't add to cardocs since custom steering board # TODO: find remaining fingerprints
     CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
     radar_dbc_dict('acura_mdx_3g_can_generated'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
-  )
-  ACURA_MDX_3G_MMR = HondaNidecPlatformConfig(
-    [], # don't add to cardocs since custom steering board
-    CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
-    radar_dbc_dict('acura_ilx_2016_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
   ACURA_RLX_HYBRID = HondaNidecPlatformConfig(
@@ -484,12 +465,6 @@ class CAR(Platforms):
     radar_dbc_dict('honda_clarity_hybrid_2018_can_generated'),
     flags=HondaFlags.HAS_ALL_DOOR_STATES,
   )
-  HONDA_CLARITY = HondaNidecPlatformConfig(
-    [HondaCarDocs("Honda Clarity 2018-21", min_steer_speed=12. * CV.MPH_TO_MS)],
-    CarSpecs(mass=1834, wheelbase=2.75, centerToFrontRatio=0.4, steerRatio=16.5),
-    radar_dbc_dict('honda_clarity_hybrid_2018_can_generated'),
-    flags=HondaFlags.HAS_ALL_DOOR_STATES,
-  )
 
 
 HONDA_NIDEC_ALT_PCM_ACCEL = CAR.with_flags(HondaFlags.NIDEC_ALT_PCM_ACCEL)
@@ -522,7 +497,6 @@ STEER_THRESHOLD = {
   CAR.HONDA_ODYSSEY_5G_MMR: 600,
   CAR.HONDA_ACCORD_9G: 30,
   CAR.ACURA_MDX_3G: 400,
-  CAR.ACURA_MDX_3G_MMR: 400,
   CAR.ACURA_TLX_1G: 200,
   CAR.ACURA_RLX_HYBRID: 2400,
 }

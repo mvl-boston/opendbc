@@ -2,7 +2,7 @@
 import numpy as np
 from opendbc.car import get_safety_config, structs, uds
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.disable_ecu import disable_ecu
+from opendbc.car.disable_ecu import disable_ecu, clear_all_dtcs, clear_ecu_dtcs
 from opendbc.car.honda.hondacan import CanBus
 from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HONDA_BOSCH, HONDA_BOSCH_CANFD, \
                                                  HONDA_NIDEC_ALT_SCM_MESSAGES, HONDA_BOSCH_RADARLESS, HondaSafetyFlags
@@ -52,10 +52,7 @@ class CarInterface(CarInterfaceBase):
       ret.openpilotLongitudinalControl = alpha_long
       ret.pcmCruise = not ret.openpilotLongitudinalControl
     else:
-      cfgs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
-      if candidate == CAR.ACURA_RLX_HYBRID:
-        cfgs.insert(1, get_safety_config(structs.CarParams.SafetyModel.noOutput))
-      ret.safetyConfigs = cfgs
+      ret.safetyConfigs = [get_safety_config(structs.CarParams.SafetyModel.hondaNidec)]
       ret.openpilotLongitudinalControl = True
 
       ret.pcmCruise = True
@@ -78,7 +75,7 @@ class CarInterface(CarInterfaceBase):
 
     if all(msg not in fingerprint[CAN.pt] for msg in (0x191, 0x1A3)):
       ret.transmissionType = TransmissionType.manual
-    elif 0x191 in fingerprint[CAN.pt] and candidate not in (CAR.ACURA_RDX, CAR.ACURA_RLX_HYBRID):
+    elif 0x191 in fingerprint[CAN.pt] and candidate != CAR.ACURA_RDX:
       # Traditional CVTs, gearshift position in GEARBOX_CVT
       ret.transmissionType = TransmissionType.cvt
     else:
@@ -101,8 +98,9 @@ class CarInterface(CarInterfaceBase):
         ret.longitudinalActuatorDelay = 0.25 # s, per Bosch A log
     else:
       # default longitudinal tuning for all Nidec hondas
-      ret.longitudinalTuning.kiBP = [0., 5., 35.]
-      ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
+      # ret.longitudinalTuning.kiBP = [0., 5., 35.]
+      # ret.longitudinalTuning.kiV = [1.2, 0.8, 0.5]
+      pass  # moved to opendbc controller
 
     ret.stoppingDecelRate = 0.1
     ret.vEgoStopping = 0.3
@@ -117,7 +115,7 @@ class CarInterface(CarInterfaceBase):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2560], [0, 2560]]
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[1.1], [0.33]]
 
-    elif candidate in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL):
+    elif candidate in (CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CIVIC_BOSCH_DIESEL, CAR.ACURA_INTEGRA):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.8], [0.24]]
 
@@ -134,8 +132,6 @@ class CarInterface(CarInterfaceBase):
     elif candidate == CAR.HONDA_ACCORD:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.6], [0.18]]
-      if ret.transmissionType == TransmissionType.manual:
-        CarControllerParams.BOSCH_GAS_LOOKUP_BP = [-0.2, 2.0]
 
     elif candidate == CAR.HONDA_ACCORD_11G:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 12789], [0, 12789]]
@@ -166,8 +162,6 @@ class CarInterface(CarInterfaceBase):
       ret.steerActuatorDelay = 0.15
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 5100], [0, 5100]]
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
-      if (ret.flags & HondaFlags.HYBRID):
-        CarControllerParams.BOSCH_GAS_LOOKUP_BP = [-0.3, 2.0]
 
     elif candidate == CAR.HONDA_FIT:
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
@@ -208,16 +202,7 @@ class CarInterface(CarInterfaceBase):
 
     elif candidate == CAR.HONDA_ODYSSEY_TWN:
       ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.28], [0.08]]
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 2047], [0, -2047]] # steering is negative from other Hondas
-      ret.longitudinalTuning.kpBP = [0., 5., 35.]
-      ret.longitudinalTuning.kpV = [1.2, 0.8, 0.5]
-      ret.longitudinalTuning.kiBP = [0., 35.]
-      ret.longitudinalTuning.kiV = [0.18, 0.12]
-
-    elif candidate == CAR.HONDA_ODYSSEY_5G_MMR:
-      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 3810], [0, 3810]]  # TODO: determine if there is a dead zone at the top end
-      ret.lateralTuning.pid.kpV, ret.lateralTuning.pid.kiV = [[0.2], [0.06]]
-      CarControllerParams.BOSCH_GAS_LOOKUP_V = [0, 2000]
+      ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 32767], [0, 32767]]  # TODO: determine if there is a dead zone at the top end
 
     elif candidate in (CAR.HONDA_PILOT, CAR.HONDA_PILOT_4G):
       ret.lateralParams.torqueBP, ret.lateralParams.torqueV = [[0, 4096], [0, 4096]]  # TODO: determine if there is a dead zone at the top end
@@ -338,11 +323,8 @@ class CarInterface(CarInterfaceBase):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_CANFD.value
     if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID):
       ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.NIDEC_HYBRID.value
-    if (ret.flags & HondaFlags.NIDEC) and (ret.flags & HondaFlags.HYBRID) and (0x223 in fingerprint[CAN.pt]):
-      ret.flags |= HondaFlags.HYBRID_ALT_BRAKEHOLD.value
-
-    if candidate in HONDA_BOSCH_CANFD:
-      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.BOSCH_CANFD.value
+    if candidate == CAR.ACURA_RLX_HYBRID:
+      ret.safetyConfigs[-1].safetyParam |= HondaSafetyFlags.RLX_STEER_BRIDGE.value
 
     # min speed to enable ACC. if car can do stop and go, then set enabling speed
     # to a negative value, so it won't matter. Otherwise, add 0.5 mph margin to not
@@ -371,11 +353,31 @@ class CarInterface(CarInterfaceBase):
   @staticmethod
   def init(CP, can_recv, can_send, communication_control=None):
     if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and CP.openpilotLongitudinalControl:
-      # 0x80 silences response
-      if communication_control is None:
-        communication_control = bytes([uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
-                                       uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT])
-      disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1, com_cont_req=communication_control)
+      if communication_control is None and CP.carFingerprint in HONDA_BOSCH_CANFD:
+        # CAN FD: only clear DTCs here; the radar silencing itself is deferred to CarController until
+        # the comma relay is confirmed open. init() runs while the panda is still in the ELM327 safety
+        # mode, and silencing the radar from here raced the safety-mode switch: openpilot's replacement
+        # ACC_CONTROL stream was blocked until the switch landed, and whenever that took longer than
+        # ~110 ms the brake module (VSA) latched CRUISE_FAULT (accFaulted) for the entire drive.
+        #
+        # The brake module latches a radar lost-communication DTC when the radar goes silent for more
+        # than ~0.1 s at cutover, and the DTC matures over trips (Honda two-trip detection): once it is
+        # confirmed from a previous drive, the very next comm-loss detection trips
+        # BRAKE_MODULE.CRUISE_FAULT ~0.16 s after the radar is silenced. Broadcast-clear stored DTCs on
+        # all ECUs (powertrain and camera buses) every drive so the maturation counter is reset, and
+        # clear the radar's own stored DTCs so codes accumulated while it was disabled don't re-fault a
+        # later drive. Clearing must precede the radar silence because a DTC clear can take an ECU
+        # several hundred ms to process.
+        # NOTE: ELM327 safety mode allows the 29-bit functional diagnostic address on every bus, so the
+        # broadcast needs no TX allowlist entry in the car safety mode.
+        clear_all_dtcs(can_send, [CanBus(CP).pt, CanBus(CP).camera])
+        clear_ecu_dtcs(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1)
+      else:
+        # 0x80 silences response
+        if communication_control is None:
+          communication_control = bytes([uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
+                                         uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT])
+        disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1, com_cont_req=communication_control)
 
   @staticmethod
   def deinit(CP, can_recv, can_send):
