@@ -18,7 +18,7 @@ class CarControllerParams:
   # Our controller should still keep the 2 second average above
   # -3.5 m/s^2 as per planner limits
   NIDEC_ACCEL_MIN = -4.0  # m/s^2
-  NIDEC_ACCEL_MAX = 1.6  # m/s^2, lower than 2.0 m/s^2 for tuning reasons
+  NIDEC_ACCEL_MAX = 2.0  # m/s^2, dv_sat removes need for artificial limit
 
   NIDEC_ACCEL_LOOKUP_BP = [-1., 0., .6]
   NIDEC_ACCEL_LOOKUP_V = [-4.8, 0., 2.0]
@@ -57,6 +57,8 @@ class HondaSafetyFlags(IntFlag):
   RADARLESS = 8
   BOSCH_CANFD = 16
   NIDEC_HYBRID = 32
+  # RLX: a bridge panda relays the stock camera's LKAS_HUD from the steer bus onto the powertrain bus
+  RLX_STEER_BRIDGE = 64
   NO_ENGINE_DATA_MSG = 128
 
 
@@ -135,7 +137,7 @@ class HondaBoschPlatformConfig(PlatformConfig):
 
 @dataclass
 class HondaBoschCANFDPlatformConfig(HondaBoschPlatformConfig):
-  dbc_dict: DbcDict = field(default_factory=lambda: {Bus.pt: 'honda_common_canfd_generated'})
+  dbc_dict: DbcDict = field(default_factory=lambda: {Bus.pt: 'honda_common_canfd_generated', Bus.radar: 'honda_common_canfd_generated'})
 
   def init(self):
     super().init()
@@ -419,14 +421,16 @@ class CAR(Platforms):
   ACURA_MDX_3G = HondaNidecPlatformConfig(
     [], # don't add to cardocs since custom steering board # TODO: find remaining fingerprints
     CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
-    radar_dbc_dict('acura_mdx_2016_can_generated'),
+    radar_dbc_dict('acura_mdx_3g_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
   )
-  ACURA_MDX_3G_MMR = HondaNidecPlatformConfig(
-    [], # don't add to cardocs since custom steering board
-    CarSpecs(mass=4215 * CV.LB_TO_KG, wheelbase=2.82, steerRatio=16.8, centerToFrontRatio=0.428),  # as spec, learned steerRatio
-    radar_dbc_dict('acura_ilx_2016_can_generated'),
-    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES,
+  ACURA_RLX_HYBRID = HondaNidecPlatformConfig(
+    # 2017 RLX Sport Hybrid. Don't add to cardocs: the EPS is on a separate steer bus; a
+    # pre-flashed red panda bridges steer messages onto the powertrain bus this code sees
+    [],
+    CarSpecs(mass=4359 * CV.LB_TO_KG, wheelbase=2.85, centerToFrontRatio=0.43, steerRatio=18.3),
+    radar_dbc_dict('acura_rlx_2017_can_generated'),
+    flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   HONDA_PILOT = HondaNidecPlatformConfig(
     [
@@ -451,13 +455,13 @@ class CAR(Platforms):
   )
   ACURA_TLX_1G = HondaNidecPlatformConfig(
     [], # don't add to cardocs since custom steering board
-    CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=15.1, centerToFrontRatio=0.40),  # as spec
-    radar_dbc_dict('acura_mdx_2016_can_generated'),
+    CarSpecs(mass=3680 * CV.LB_TO_KG, wheelbase=2.78, steerRatio=17.0, centerToFrontRatio=0.40, tireStiffnessFactor=0.18),
+    radar_dbc_dict('acura_mdx_3g_can_generated'),
     flags=HondaFlags.NIDEC_ALT_SCM_MESSAGES | HondaFlags.HAS_ALL_DOOR_STATES,
   )
   HONDA_CLARITY = HondaNidecPlatformConfig(
     [HondaCarDocs("Honda Clarity 2018-21", min_steer_speed=12. * CV.MPH_TO_MS)],
-    CarSpecs(mass=1834, wheelbase=2.75, centerToFrontRatio=0.4, steerRatio=16.5),
+    CarSpecs(mass=1838, wheelbase=2.75, centerToFrontRatio=0.4, steerRatio=16.5),
     radar_dbc_dict('honda_clarity_hybrid_2018_can_generated'),
     flags=HondaFlags.HAS_ALL_DOOR_STATES,
   )
@@ -492,9 +496,9 @@ STEER_THRESHOLD = {
   CAR.HONDA_PASSPORT_4G: 600,
   CAR.HONDA_ODYSSEY_5G_MMR: 600,
   CAR.HONDA_ACCORD_9G: 30,
-  CAR.ACURA_MDX_3G: 30,
-  CAR.ACURA_MDX_3G_MMR: 30,
-  CAR.ACURA_TLX_1G: 30,
+  CAR.ACURA_MDX_3G: 400,
+  CAR.ACURA_TLX_1G: 200,
+  CAR.ACURA_RLX_HYBRID: 2400,
 }
 
 
@@ -540,12 +544,12 @@ FW_QUERY_CONFIG = FwQueryConfig(
   # This is or'd with (ALL_ECUS - ESSENTIAL_ECUS) from fw_versions.py
   non_essential_ecus={
     Ecu.eps: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_E, CAR.HONDA_E_ADVANCE, CAR.ACURA_MDX_4G,
-              CAR.HONDA_CRV_SA, CAR.ACURA_MDX_3G, CAR.HONDA_ACCORD_9G,
+              CAR.HONDA_CRV_SA, CAR.ACURA_MDX_3G, CAR.HONDA_ACCORD_9G, CAR.ACURA_RLX_HYBRID,
               *HONDA_BOSCH_ALT_RADAR,
               *HONDA_BOSCH_RADARLESS, *HONDA_BOSCH_CANFD],
     Ecu.vsa: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID, CAR.HONDA_E,
               CAR.HONDA_E_ADVANCE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G, CAR.ACURA_MDX_4G,
-              CAR.HONDA_ACCORD_9G,
+              CAR.HONDA_ACCORD_9G, CAR.ACURA_RLX_HYBRID, CAR.ACURA_MDX_3G,
               *HONDA_BOSCH_ALT_RADAR, *HONDA_BOSCH_RADARLESS,
               *HONDA_BOSCH_CANFD],
   },
