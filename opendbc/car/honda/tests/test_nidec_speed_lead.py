@@ -1,6 +1,8 @@
 import unittest
 
-from opendbc.car.honda.nidec_long_helpers import DelayLine, nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
+from opendbc.car.honda.nidec_long_helpers import DelayLine, NIDEC_GAS_RECOVERY_TICKS, NIDEC_GAS_STAGE, NIDEC_GAS_STAGE_MIN_ACCEL, \
+                                                NIDEC_GAS_UNWOUND_TICKS, nidec_gas_staged, nidec_gas_unwound, \
+                                                nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
 
 
 class TestNidecSpeedChannelPinned(unittest.TestCase):
@@ -20,6 +22,55 @@ class TestNidecSpeedChannelPinned(unittest.TestCase):
     accel_lag = -0.5
     self.assertFalse(nidec_speed_channel_pinned(4.0 * accel_lag, 10.0))
     self.assertTrue(nidec_speed_channel_pinned(6.0 * accel_lag, 10.0))
+
+
+class TestGasStaging(unittest.TestCase):
+  def staged(self, wire=0, recovery_ticks=NIDEC_GAS_RECOVERY_TICKS, accel=0.3, v_ego=5.0, braking=False, gas_pressed=False,
+             launch_active=False):
+    return nidec_gas_staged(wire, recovery_ticks, accel, v_ego, braking, gas_pressed, launch_active, 198)
+
+  def unwound(self, zero_ticks=NIDEC_GAS_UNWOUND_TICKS, wire_target=40, accel=0.3, v_ego=5.0, braking=False, gas_pressed=False,
+              launch_active=False):
+    return nidec_gas_unwound(zero_ticks, wire_target, accel, v_ego, braking, gas_pressed, launch_active)
+
+  def test_window_holds_the_wire_at_the_stage(self):
+    self.assertEqual(self.staged(wire=0), NIDEC_GAS_STAGE)
+    self.assertEqual(self.staged(wire=35), NIDEC_GAS_STAGE)
+
+  def test_feedforward_above_the_stage_is_untouched(self):
+    self.assertEqual(self.staged(wire=150), 150)
+    self.assertEqual(self.staged(wire=198), 198)
+
+  def test_no_stage_outside_a_window(self):
+    self.assertEqual(self.staged(wire=35, recovery_ticks=0), 35)
+
+  def test_no_stage_without_a_positive_plan(self):
+    self.assertEqual(self.staged(accel=NIDEC_GAS_STAGE_MIN_ACCEL), 0)
+    self.assertEqual(self.staged(accel=-0.4), 0)
+
+  def test_no_stage_with_brake_driver_gas_launch_or_standstill(self):
+    self.assertEqual(self.staged(braking=True), 0)
+    self.assertEqual(self.staged(gas_pressed=True), 0)
+    self.assertEqual(self.staged(launch_active=True), 0)
+    self.assertEqual(self.staged(v_ego=0.0), 0)
+
+  def test_stage_never_exceeds_the_gas_limit(self):
+    self.assertEqual(nidec_gas_staged(0, 1, 0.3, 5.0, False, False, False, 90), 90)
+
+  def test_coast_restart_opens_a_window(self):
+    self.assertTrue(self.unwound())
+    self.assertFalse(self.unwound(zero_ticks=NIDEC_GAS_UNWOUND_TICKS - 1))
+
+  def test_no_window_while_the_plan_is_not_asking_for_accel(self):
+    self.assertFalse(self.unwound(accel=0.0))
+    self.assertFalse(self.unwound(wire_target=0))
+    self.assertFalse(self.unwound(accel=-0.5))
+
+  def test_no_window_with_brake_driver_gas_launch_or_standstill(self):
+    self.assertFalse(self.unwound(braking=True))
+    self.assertFalse(self.unwound(gas_pressed=True))
+    self.assertFalse(self.unwound(launch_active=True))
+    self.assertFalse(self.unwound(v_ego=0.05))
 
 
 class TestDelayLine(unittest.TestCase):

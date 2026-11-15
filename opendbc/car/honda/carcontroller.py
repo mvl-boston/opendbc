@@ -17,7 +17,8 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
-from opendbc.car.honda.nidec_long_helpers import DelayLine, nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
+from opendbc.car.honda.nidec_long_helpers import DelayLine, NIDEC_GAS_RECOVERY_TICKS, nidec_gas_staged, nidec_gas_unwound, \
+                                                nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
 from opendbc.car.honda.lateral_model import HondaLateralModel
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -449,6 +450,7 @@ class CarController(CarControllerBase):
     # pedal at +1.44s, so the wire shaping here is bounded-benefit, while the learner gating
     # the window provides is the certain part).
     self.gas_recovery_ticks = 0
+    self.gas_zero_ticks = 0
     self.gas_pressed_prev = False
     self.long_active_prev = False
     self.launch_ticks = 0
@@ -896,12 +898,25 @@ class CarController(CarControllerBase):
       # letting that run at +70/frame just triples the sawtooth amplitude the PCM has to smooth
       # (bench: 0->140 in 0.2s against a target of 50) for no gain in reaching the target.
       prior_accel = int(self.new_accel)
+      # the gas command returning after the PCM dropped the pedal (a coast, or a brake released before
+      # the plan turned positive) restarts the throttle from zero like the releases above: same window
+      gas_staging_blocked = (self.apply_brake_last > 0, CS.out.gasPressed, self.launch_active)
+      if CC.longActive and nidec_gas_unwound(self.gas_zero_ticks, pcm_accel, float(self.accel), CS.out.vEgo, *gas_staging_blocked):
+        self.gas_recovery_ticks = NIDEC_GAS_RECOVERY_TICKS
+      self.gas_zero_ticks = self.gas_zero_ticks + 1 if (pcm_accel == 0 and prior_accel == 0) else 0
       max_increase = 7 if (self.gas_recovery_ticks > 0 and prior_accel < pcm_accel) else 2  # per 100Hz tick, x10 per sent frame
       # When GAS_PEDAL_2 is absent the direct-measurement learner cannot run; use a fixed factor so
       # feedforward stays stable on platforms that do not report applied pedal position.
       effective_average_factor = self.average_factor if CS.car_gas_available else 0.5
       self.new_accel = int((pcm_accel - self.prior_gas_average * (1 - effective_average_factor)) / effective_average_factor)
       self.new_accel = int(np.clip(self.new_accel, 0, min(prior_accel + max_increase, self.params.NIDEC_GAS_MAX)))
+      if CC.longActive:
+        # inside a recovery window the wire goes straight to the staging level instead of following the
+        # plan up from zero (see nidec_gas_staged); the brake guard below still zeroes it with any brake
+        self.new_accel = nidec_gas_staged(self.new_accel, self.gas_recovery_ticks, float(self.accel), CS.out.vEgo,
+                                          *gas_staging_blocked, self.params.NIDEC_GAS_MAX)
+        if self.new_accel > 0:
+          pcm_speed = max(pcm_speed, 1.0)  # as above: always a positive speed with gas on the wire
       if self.launch_active:
         # gas seed: send the learned launch gas immediately (stock jumps to 104-114 in one frame,
         # within its observed +114/frame ramp envelope; ramping from 0 at +2/tick wastes ~0.5s of the
