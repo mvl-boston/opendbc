@@ -8,6 +8,17 @@ NIDEC_DV_SAT_MIN = 2.5
 # m/s below the displayed set speed where the PCM's own set-speed governor takes over (see
 # nidec_set_speed_governed); the gas-channel learners have always used this margin
 NIDEC_SET_SPEED_MARGIN = 2.0
+# Gas staging in a recovery window (see nidec_gas_staged / nidec_gas_unwound).
+# PCM_GAS level the wire is held at or above while the PCM re-applies the throttle: what the factory
+# camera has on the wire at its own brake releases (MDX 3G bus 2, routes 3792d010590cb83a/00000279
+# and /00000250: median 116 and 100, with no ramp from zero) and inside the 104-114 it launches with.
+NIDEC_GAS_STAGE = 110
+# m/s2 of commanded accel above which the wire is staged
+NIDEC_GAS_STAGE_MIN_ACCEL = 0.05
+# 100 Hz ticks of zero gas command after which the PCM has let the pedal go (applied pedal reaches
+# zero about 0.5 s after the wire does on this platform)
+NIDEC_GAS_UNWOUND_TICKS = 50
+NIDEC_GAS_RECOVERY_TICKS = 200
 
 
 def nidec_speed_lead_mps(sf_eff: float, accel: float, alpha_eff: float) -> float:
@@ -43,6 +54,42 @@ def nidec_set_speed_governed(v_ego: float, v_cruise: float, margin: float = NIDE
   cap on that route. Uses the same 2 m/s margin the gas-channel learners already apply.
   """
   return v_ego >= v_cruise - margin
+
+
+def nidec_gas_unwound(zero_ticks: int, wire_target: int, accel: float, v_ego: float, braking: bool, gas_pressed: bool,
+                      launch_active: bool) -> bool:
+  """True on a tick where the gas command comes back after the PCM's throttle went to zero.
+
+  zero_ticks counts the ticks the gas command (feedforward target and wire) has been zero up to the
+  previous tick. Past NIDEC_GAS_UNWOUND_TICKS the PCM has dropped the pedal, so a returning command
+  is the same restart as a brake or override release and gets the same recovery window. Of 194
+  pedal restarts on four MDX 3G drives, 138 followed a coast with no brake and had no window: the
+  wire climbed at the cruise rate and the learners read the PCM's re-apply time as tracking error.
+  Zeros of the wire alone do not count: the feedforward parks it at zero whenever the modeled
+  average is above the target, which is not a pedal release. Standstill is the launch governor's.
+  """
+  return zero_ticks >= NIDEC_GAS_UNWOUND_TICKS and wire_target > 0 and accel > NIDEC_GAS_STAGE_MIN_ACCEL and \
+         v_ego > 0.1 and not (braking or gas_pressed or launch_active)
+
+
+def nidec_gas_staged(wire: int, recovery_ticks: int, accel: float, v_ego: float, braking: bool, gas_pressed: bool,
+                     launch_active: bool, gas_max: int) -> int:
+  """PCM_GAS for this tick, held at NIDEC_GAS_STAGE or above while a recovery window re-applies the throttle.
+
+  The PCM starts opening the throttle 0.8-0.9 s after the wire reaches about 100, whether the wire
+  got there in one frame or ten, and it never discarded a fast rise (routes 3792d010590cb83a/00000279,
+  /00000250, /00000235, /000001cc). What this side controls is when that clock starts, and the wire
+  used to follow the plan up from zero, which itself ramps from zero. The factory camera does not
+  ramp: it already has 100-116 on the wire at the frame its brake releases, and lets a small
+  PCM_SPEED lead meter the acceleration under that ceiling.
+
+  Only a floor: the feedforward keeps everything above it. Never with a brake on the wire or at
+  standstill (concurrent gas + brake and standstill ACC faults, see carcontroller).
+  """
+  if recovery_ticks > 0 and accel > NIDEC_GAS_STAGE_MIN_ACCEL and v_ego > 0.1 and \
+     not (braking or gas_pressed or launch_active):
+    return max(wire, min(NIDEC_GAS_STAGE, gas_max))
+  return wire
 
 
 class DelayLine:
