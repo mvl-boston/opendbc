@@ -230,6 +230,12 @@ class CarInterface(CarInterfaceBase):
       # ~3 m/s^2 in under 2 s, the request pinned the other way for 2-2.5 s, the car swinging past and back
       ret.steerActuatorDelay = 0.5
       CarInterfaceBase.configure_torque_tune(candidate, ret.lateralTuning)
+      # brake command -> aEgo, route 3792d010590cb83a/00000250--7f4c16cef3 (24 segments, 280 s of openpilot
+      # braking): cross-correlation of changes in the accel command against changes in aEgo peaks at 0.20-0.24 s
+      # (apply 0.22, release 0.24; 0.20-0.22 in the 7-11, 11-15 and >15 m/s bins), half-amplitude timing of the five step onsets
+      # 0.20-0.30 s (median 0.27). Of that the wire -> aEgo part is 0.14 s; the rest is the brake rate limit, the
+      # 50 Hz send and aEgo's own filter. The Nidec brake integrators in the carcontroller lag their reference by it.
+      ret.longitudinalActuatorDelay = 0.25
 
     elif candidate == CAR.ACURA_RLX_HYBRID:
       # STEERING_CONTROL is bridged to the EPS on the steer bus by a pre-flashed red panda.
