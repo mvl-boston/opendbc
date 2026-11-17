@@ -17,7 +17,11 @@ from opendbc.car.interfaces import CarControllerBase
 from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
-from opendbc.car.honda.nidec_long_helpers import DelayLine, nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
+from opendbc.car.honda.nidec_long_helpers import DelayLine, NIDEC_BRAKE_ACCEL_SCALE, NIDEC_BRAKE_BANDS, NIDEC_BRAKE_COAST_KEYS, \
+                                                NIDEC_BRAKE_GAIN_KEYS, NIDEC_BRAKE_GAIN_LEGACY_BAND, \
+                                                NidecBrakeCoast, NidecBrakeGain, nidec_band_weights as band_weights, \
+                                                nidec_brake_coast_error, nidec_brake_scale, \
+                                                nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
 from opendbc.car.honda.lateral_model import HondaLateralModel
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -194,26 +198,6 @@ NIDEC_SERVO_LAG_FRAMES = 90
 NIDEC_AEGO_FILTER_ALPHA = 0.05
 
 
-def band_weights(bands, v_ego):
-  # hat-function weights of piecewise-linear interpolation across the band nodes: exactly the
-  # two nodes bracketing v_ego get nonzero weight (summing to 1), and outside the grid the edge
-  # node gets all of it. These weights blend the per-band values into the sent target and gate
-  # how much each band learns from a frame, generalizing the old low_w/(1-low_w) two-band split.
-  weights = {band: 0.0 for band, _ in bands}
-  if v_ego <= bands[0][1]:
-    weights[bands[0][0]] = 1.0
-  elif v_ego >= bands[-1][1]:
-    weights[bands[-1][0]] = 1.0
-  else:
-    for (band_lo, spd_lo), (band_hi, spd_hi) in zip(bands[:-1], bands[1:], strict=True):
-      if spd_lo <= v_ego <= spd_hi:
-        frac = (v_ego - spd_lo) / (spd_hi - spd_lo)
-        weights[band_lo] = 1.0 - frac
-        weights[band_hi] = frac
-        break
-  return weights
-
-
 class HondaParamWriter:
   # Each Params.put is write + fsync + rename + fsync(dir); the dir fsync forces an ext4 journal
   # commit that first flushes every dirty page in the filesystem (loggerd's buffered video). The
@@ -328,20 +312,31 @@ class CarController(CarControllerBase):
                                    neg_limit=self.params.NIDEC_ACCEL_MIN)
     self.nidec_pid.reset()
 
-    self.nidec_brake_pid = PIDController(k_p=0.0,
-                                   k_i=2.0,
-                                   pos_limit=4.0,
-                                   neg_limit=0,
-                                   rate=50)
-    self.nidec_brake_pid.reset()
     # Both Nidec brake-side integrators read the acceleration the brake delivers now against the
     # command it is answering, CP.longitudinalActuatorDelay ago (the planner already issues the
     # accel it wants that far ahead). plan_accel_delay runs every tick (nidec_pid), brake_cmd_delay
-    # at the 50 Hz brake send (nidec_brake_pid: internal accel command and normalized brake).
+    # at the 50 Hz brake send (brake gain and coast decel: internal accel command, normalized brake,
+    # speed and whether a brake request was up).
     self.plan_accel_delay = DelayLine(CP.longitudinalActuatorDelay, DT_CTRL)
-    self.brake_cmd_delay = DelayLine(CP.longitudinalActuatorDelay, 2 * DT_CTRL, (0.0, 0.0))
-    self.brake_pid_factor_non_lowspeed = 0.4 if (Params().get("HondaBrakePIDParams") is None) else Params().get("HondaBrakePIDParams")
-    self.nidec_brake_pid.i = self.brake_pid_factor_non_lowspeed
+    self.brake_cmd_delay = DelayLine(CP.longitudinalActuatorDelay, 2 * DT_CTRL, (0.0, 0.0, 0.0, False))
+    # speed-banded brake gain (see NidecBrakeGain). Nodes without a stored value seed from the old
+    # single gain, so the first drive starts from today's braking. A key this openpilot build does
+    # not register reads as missing: its node still learns, it just starts from the seed each drive.
+    brake_gain_seed = 0.4 if (Params().get("HondaBrakePIDParams") is None) else float(Params().get("HondaBrakePIDParams"))
+
+    def load_brake_band(key, seed):
+      try:
+        value = Params().get(key)
+      except Exception:
+        value = None
+      return float(seed) if value is None else float(value)
+
+    self.brake_gain = NidecBrakeGain({band: load_brake_band(NIDEC_BRAKE_GAIN_KEYS[band], brake_gain_seed) for band, _ in NIDEC_BRAKE_BANDS})
+    # speed-banded coast decel (see NidecBrakeCoast), replacing the wind term in the brake request;
+    # nodes without a stored value seed from that term at their speed
+    self.brake_coast = NidecBrakeCoast({band: load_brake_band(NIDEC_BRAKE_COAST_KEYS[band],
+                                                              self.nidec_wind_brake(band_speed) * NIDEC_BRAKE_ACCEL_SCALE)
+                                        for band, band_speed in NIDEC_BRAKE_BANDS})
     self.brake_pid_factor = 0.0
 
     self.prior_gas_average = 0.0
@@ -483,6 +478,9 @@ class CarController(CarControllerBase):
       "60": 1.0 if (Params().get("HondaLatAccelFactor60Params") is None) else Params().get("HondaLatAccelFactor60Params")
     }
 
+  def nidec_wind_brake(self, v_ego):
+    return float(np.interp(v_ego, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor)
+
   def update(self, CC, CS, now_nanos):
     gas_pedal_force = 0.0
     actuators = CC.actuators
@@ -503,7 +501,7 @@ class CarController(CarControllerBase):
     set_speed_governed = nidec_set_speed_governed(CS.out.vEgo, CS.out.cruiseState.speed)
 
     # wind brake from air resistance decel at high speed
-    wind_brake = np.interp(CS.out.vEgo, [0.0, 2.3, 35.0], [0.001, 0.002, 0.15]) * self.windfactor # not in m/s2 units
+    wind_brake = self.nidec_wind_brake(CS.out.vEgo) # not in m/s2 units
 
     prior_windfactor = self.windfactor
     # not engaged: no command is being answered, so the delayed reference starts at the car's own
@@ -524,10 +522,11 @@ class CarController(CarControllerBase):
            (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
            and (not CS.out.stockAeb) and (not CS.out.gasPressed):
           old_i = self.nidec_pid.i
-          # while the brake is on the wire aEgo is its answer to the plan a brake delay ago; the
-          # gas side keeps the undelayed error (its lag is the speed servo's, handled by its learners)
-          pid_accel_ref = accel_delayed if self.apply_brake_last > 0 else actuators.accel
-          self.nidec_pid_factor = self.nidec_pid.update(error = pid_accel_ref - CS.out.aEgo, speed = CS.out.vEgo)
+          # aEgo is the car's answer to the plan an actuator delay ago, on the brake and on the gas: the
+          # gas side answers no sooner than the brake (aEgo against the plan shifted 0.25 s correlates
+          # at least as well as unshifted in every speed range, routes 3792d010590cb83a/00000279,
+          # /00000283, /0000028c, /0000028f), so an undelayed error there is partly dead time too
+          self.nidec_pid_factor = self.nidec_pid.update(error = accel_delayed - CS.out.aEgo, speed = CS.out.vEgo)
           if actuators.accel >= 1e-5 and CS.out.vEgo < 1.0: # don't drop PID at launch lurch
              self.nidec_pid_factor = self.nidec_pid.i = max(old_i, self.nidec_pid.i)
           self.accel = actuators.accel + self.nidec_pid_factor
@@ -539,8 +538,8 @@ class CarController(CarControllerBase):
           wind_adjust = 1 + wind_brake / wind_learn_speed
           # windfactor is the one gas-side learner that was not protected near the set speed: at
           # the governor the gas error is permanently positive (plan +0.7, car 0) and it climbed
-          # toward its 3.0 clip, which also pushes the Nidec brake threshold (brake_last - wind_brake)
-          # out to ~-2 m/s2 of plan before any brake is applied
+          # toward its 3.0 clip (which at the time also pushed the Nidec brake threshold out to
+          # ~-2 m/s2 of plan; the brake request now has its own coast decel, see NidecBrakeCoast)
           if not set_speed_governed:
             self.windfactor = np.clip(self.windfactor * (wind_adjust if (gas_error > 0) else 1.0/wind_adjust), 0.1, 3.0)
           gas_pedal_force = self.accel
@@ -1211,19 +1210,24 @@ class CarController(CarControllerBase):
             can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
                                                           self.stopping_counter, self.CP, gas_pedal_force))
         else:
-          apply_brake = np.clip(self.brake_last - wind_brake, 0.0, 1.0)
-          brake_accel_delayed, apply_brake_delayed = self.brake_cmd_delay.push((float(self.accel), float(apply_brake)))
-          if (apply_brake > 0) and (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb):
-              if not ((self.accel >= 1e-5) and CS.out.vEgo < 1.0): # don't wind PID at launch lurch
-                # brake gain error: delivered accel vs the accel command, weighted by the brake, both as
-                # they were a brake delay ago (zero until the brake has been applied that long)
-                self.brake_pid_factor = self.nidec_brake_pid.update(error = -(brake_accel_delayed - CS.out.aEgo) * apply_brake_delayed,
-                                                                    speed = CS.out.vEgo)
-          if (CS.out.vEgo >= 2): # save pid above 2m/s
-            self.brake_pid_factor_non_lowspeed = self.brake_pid_factor
-          if (CS.out.vEgo < 1e-5) and (self.accel < 1e-5): # gradually restore 2m/s pid after stopped
-            self.nidec_brake_pid.i = float(np.clip(self.brake_pid_factor_non_lowspeed, self.nidec_brake_pid.i - 0.01, self.nidec_brake_pid.i + 0.01))
-          brakefactor = 1 + self.brake_pid_factor
+          # the brake only has to add what the car does not already shed by itself (see NidecBrakeCoast)
+          apply_brake = np.clip(self.brake_last - self.brake_coast.at(CS.out.vEgo) / NIDEC_BRAKE_ACCEL_SCALE, 0.0, 1.0)
+          brake_accel_delayed, apply_brake_delayed, v_ego_delayed, brake_requested_delayed = \
+            self.brake_cmd_delay.push((float(self.accel), float(apply_brake), float(CS.out.vEgo), self.brake_last > 0))
+          if (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb) and \
+             (not ((self.accel >= 1e-5) and CS.out.vEgo < 1.0)): # don't wind the integrators at launch lurch
+            # delivered accel vs the accel command a brake delay ago (zero until the brake has been
+            # applied that long), learned by the speed nodes the car was at then. Weighted by the
+            # brake it teaches the gain (slope); at light or fully absorbed braking it teaches the
+            # coast decel (offset): more decel than commanded means the car sheds more by itself
+            brake_error = brake_accel_delayed - CS.out.aEgo
+            if apply_brake > 0:
+              self.brake_gain.update(-brake_error * apply_brake_delayed, v_ego_delayed, 2 * DT_CTRL)
+            if CC.longActive and (not CS.out.gasPressed) and (not CS.out.brakePressed):
+              coast_error = nidec_brake_coast_error(brake_error, apply_brake_delayed, brake_requested_delayed, self.new_accel == 0)
+              self.brake_coast.update(coast_error, v_ego_delayed, 2 * DT_CTRL)
+          self.brake_pid_factor = self.brake_gain.at(CS.out.vEgo)
+          brakefactor = nidec_brake_scale(self.brake_pid_factor, float(apply_brake))
           if actuators.longControlState == LongCtrlState.stopping:  # simulate the old stoppingDecelRate of 0.1 m/s^2/s @ 50hz
             apply_brake = min(apply_brake * brakefactor, self.last_applied_brake + 0.00042) / brakefactor
           self.last_applied_brake = apply_brake * brakefactor
@@ -1437,7 +1441,7 @@ class CarController(CarControllerBase):
       else:
         learned_values = {
           "HondaFeedForwardParams": self.average_factor,
-          "HondaBrakePIDParams": self.brake_pid_factor_non_lowspeed,
+          "HondaBrakePIDParams": max(self.brake_gain.values[NIDEC_BRAKE_GAIN_LEGACY_BAND], 0.0),
           "HondaCreepFactorParams": self.creep_factor,
           "HondaWindFactorParams": self.windfactor,
           "HondaSatAccelParams": self.sat_accel,
@@ -1446,6 +1450,9 @@ class CarController(CarControllerBase):
           "HondaLaunchGasParams": self.gas_launch,
           "HondaLaunchDvBreakParams": self.dv_break,
         }
+        for band, _ in NIDEC_BRAKE_BANDS:
+          learned_values[NIDEC_BRAKE_GAIN_KEYS[band]] = self.brake_gain.values[band]
+          learned_values[NIDEC_BRAKE_COAST_KEYS[band]] = self.brake_coast.values[band]
         for band, _ in NIDEC_GAS_BANDS:
           learned_values[NIDEC_GAS_FACTOR_KEYS[band]] = self.gas_factors_nomaxspeed[band]
           learned_values[NIDEC_GAS_ALPHA_KEYS[band]] = self.gas_alphas_nomaxspeed[band]
