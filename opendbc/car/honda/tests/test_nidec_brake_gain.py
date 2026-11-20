@@ -2,7 +2,7 @@ import unittest
 
 from opendbc.car.honda.nidec_long_helpers import NIDEC_BRAKE_BANDS, NIDEC_BRAKE_COAST_KI, NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE, \
                                                 NIDEC_BRAKE_COAST_MAX, NIDEC_BRAKE_COAST_MIN, NIDEC_BRAKE_GAIN_KI, NIDEC_BRAKE_GAIN_MAX, \
-                                                NIDEC_BRAKE_GAIN_MIN, NIDEC_BRAKE_REDUCTION_FADE_START, NidecBrakeCoast, NidecBrakeGain, \
+                                                NIDEC_BRAKE_GAIN_MIN, NidecBrakeCoast, NidecBrakeGain, \
                                                 nidec_band_weights, nidec_brake_coast_error, nidec_brake_scale
 
 DT = 0.02
@@ -46,7 +46,7 @@ class TestNidecBrakeGain(unittest.TestCase):
     gain = uniform(0.3)
     for _ in range(500):
       gain.update(-0.2, 1.0, DT)
-    self.assertLess(gain.at(1.0), 0.0)
+    self.assertEqual(gain.at(1.0), 0.0)
     self.assertAlmostEqual(gain.at(20.0), 0.3)
 
   def test_total_learning_rate_matches_the_single_integrator(self):
@@ -66,6 +66,7 @@ class TestNidecBrakeGain(unittest.TestCase):
   def test_stored_values_outside_the_limits_are_clamped(self):
     self.assertEqual(uniform(9.0).at(5.0), NIDEC_BRAKE_GAIN_MAX)
     self.assertEqual(uniform(-3.0).at(5.0), NIDEC_BRAKE_GAIN_MIN)
+    self.assertEqual(nidec_brake_scale(-0.5, 0.1), 1.0)
 
 
 class TestNidecBrakeCoast(unittest.TestCase):
@@ -120,27 +121,12 @@ class TestBrakeCoastError(unittest.TestCase):
 
 
 class TestBrakeScale(unittest.TestCase):
-  def test_gain_at_or_above_one_is_applied_as_is(self):
+  def test_gain_is_one_plus_factor_and_never_below_one(self):
     self.assertAlmostEqual(nidec_brake_scale(0.0, 0.2), 1.0)
     self.assertAlmostEqual(nidec_brake_scale(0.6, 0.2), 1.6)
     self.assertAlmostEqual(nidec_brake_scale(0.6, 1.0), 1.6)
-
-  def test_reduction_applies_in_full_to_light_braking(self):
-    self.assertAlmostEqual(nidec_brake_scale(-0.3, 0.1), 0.7)
-    self.assertAlmostEqual(nidec_brake_scale(-0.3, NIDEC_BRAKE_REDUCTION_FADE_START), 0.7)
-
-  def test_reduction_fades_out_and_is_gone_at_a_full_request(self):
-    self.assertAlmostEqual(nidec_brake_scale(-0.3, 0.75), 0.85)
-    self.assertAlmostEqual(nidec_brake_scale(-0.3, 1.0), 1.0)
-    self.assertAlmostEqual(nidec_brake_scale(NIDEC_BRAKE_GAIN_MIN, 1.0), 1.0)
-
-  def test_applied_brake_never_decreases_as_the_request_grows(self):
-    last = 0.0
-    for i in range(101):
-      brake = i / 100
-      applied = brake * nidec_brake_scale(NIDEC_BRAKE_GAIN_MIN, brake)
-      self.assertGreaterEqual(applied, last)
-      last = applied
+    self.assertAlmostEqual(nidec_brake_scale(-0.3, 0.1), 1.0)
+    self.assertGreaterEqual(NIDEC_BRAKE_GAIN_MIN, 0.0)
 
 
 if __name__ == "__main__":

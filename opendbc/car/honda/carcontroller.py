@@ -522,11 +522,11 @@ class CarController(CarControllerBase):
            (CS.out.vEgo > 1e-5 or actuators.accel > 1e-5) \
            and (not CS.out.stockAeb) and (not CS.out.gasPressed):
           old_i = self.nidec_pid.i
-          # aEgo is the car's answer to the plan an actuator delay ago, on the brake and on the gas: the
-          # gas side answers no sooner than the brake (aEgo against the plan shifted 0.25 s correlates
-          # at least as well as unshifted in every speed range, routes 3792d010590cb83a/00000279,
-          # /00000283, /0000028c, /0000028f), so an undelayed error there is partly dead time too
-          self.nidec_pid_factor = self.nidec_pid.update(error = accel_delayed - CS.out.aEgo, speed = CS.out.vEgo)
+          # while the brake is on the wire aEgo is its answer to the plan a brake delay ago; the gas
+          # side keeps the undelayed error (its lag is the speed servo's, handled by its learners).
+          # nidec_pid.pos_limit stays +0.2 m/s2: the same cap on extra accel as before the banded brake work.
+          pid_accel_ref = accel_delayed if self.apply_brake_last > 0 else actuators.accel
+          self.nidec_pid_factor = self.nidec_pid.update(error = pid_accel_ref - CS.out.aEgo, speed = CS.out.vEgo)
           if actuators.accel >= 1e-5 and CS.out.vEgo < 1.0: # don't drop PID at launch lurch
              self.nidec_pid_factor = self.nidec_pid.i = max(old_i, self.nidec_pid.i)
           self.accel = actuators.accel + self.nidec_pid_factor

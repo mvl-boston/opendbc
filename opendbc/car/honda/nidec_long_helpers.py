@@ -26,12 +26,9 @@ NIDEC_BRAKE_GAIN_KEYS: dict[str, str] = {band: f"HondaBrakePID{band}Params" for 
 # single-gain code starts from a mid-speed value
 NIDEC_BRAKE_GAIN_LEGACY_BAND = "120"
 NIDEC_BRAKE_GAIN_KI = 2.0
-# the gain is 1 + factor. The single gain could not go below 1; a node can, because at 2-7.5 m/s
-# the brake delivers more than commanded even at 1.0
-NIDEC_BRAKE_GAIN_MIN = -0.5
+# the gain applied on the wire is 1 + factor, same as the old nidec_brake_pid (neg_limit 0): never below 1.0
+NIDEC_BRAKE_GAIN_MIN = 0.0
 NIDEC_BRAKE_GAIN_MAX = 4.0
-# normalized brake request (1.0 = 4.8 m/s2) above which a learned reduction fades out, gone at 1.0
-NIDEC_BRAKE_REDUCTION_FADE_START = 0.5
 # Coast decel (see NidecBrakeCoast): m/s2 the car sheds by itself while the brake request is up,
 # taken off the request. The gas channel's alpha/factor pair on the brake side: this is the offset,
 # the brake gain is the slope.
@@ -104,17 +101,12 @@ def nidec_band_weights(bands, v_ego: float) -> dict[str, float]:
 
 
 def nidec_brake_scale(factor: float, brake: float) -> float:
-  """Multiplier on the normalized brake request for a brake gain factor (gain = 1 + factor).
+  """Multiplier on the normalized brake request (gain = 1 + factor, minimum 1.0).
 
-  A gain below 1 is a comfort correction for light and moderate braking. It fades out above
-  NIDEC_BRAKE_REDUCTION_FADE_START and is gone at a full request, so a learned reduction never
-  takes away brake authority.
+  brake is unused; kept so call sites can pass the request level if a speed-dependent scale is added
+  later. Matches upstream nidec_brake_pid neg_limit 0: the learned addition never goes negative.
   """
-  gain = 1.0 + factor
-  if gain < 1.0:
-    fade = min(max((brake - NIDEC_BRAKE_REDUCTION_FADE_START) / (1.0 - NIDEC_BRAKE_REDUCTION_FADE_START), 0.0), 1.0)
-    gain += (1.0 - gain) * fade
-  return gain
+  return 1.0 + max(factor, 0.0)
 
 
 class NidecBandedIntegrator:
