@@ -19,8 +19,9 @@ from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
 from opendbc.car.honda.nidec_long_helpers import DelayLine, NIDEC_BRAKE_ACCEL_SCALE, NIDEC_BRAKE_BANDS, NIDEC_BRAKE_COAST_KEYS, \
                                                 NIDEC_BRAKE_GAIN_KEYS, NIDEC_BRAKE_GAIN_LEGACY_BAND, \
-                                                NidecBrakeCoast, NidecBrakeGain, nidec_band_weights as band_weights, \
-                                                nidec_brake_coast_error, nidec_brake_scale, nidec_launch_gas, nidec_launch_lead, \
+                                                NidecAccelValid, NidecBrakeCoast, NidecBrakeGain, nidec_band_weights as band_weights, \
+                                                nidec_brake_after_coast, nidec_brake_coast_error, nidec_brake_scale, nidec_launch_gas, nidec_launch_lead, \
+                                                nidec_stopping_brake, nidec_stopping_hold, \
                                                 nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
 from opendbc.car.honda.lateral_model import HondaLateralModel
 
@@ -339,6 +340,7 @@ class CarController(CarControllerBase):
                                         for band, band_speed in NIDEC_BRAKE_BANDS})
     self.brake_pid_factor = 0.0
     self.gas_off_time = 0.0  # s the gas wire has been at zero, counted at the 50 Hz brake send
+    self.accel_valid = NidecAccelValid(DT_CTRL)
 
     self.prior_gas_average = 0.0
     self.average_factor = 0.5 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
@@ -505,6 +507,7 @@ class CarController(CarControllerBase):
     wind_brake = self.nidec_wind_brake(CS.out.vEgo) # not in m/s2 units
 
     prior_windfactor = self.windfactor
+    accel_valid = self.accel_valid.update(CS.out.vEgoRaw)
     # not engaged: no command is being answered, so the delayed reference starts at the car's own
     # acceleration (zero error) rather than at a stale plan
     if CC.longActive:
@@ -527,7 +530,11 @@ class CarController(CarControllerBase):
           # side keeps the undelayed error (its lag is the speed servo's, handled by its learners).
           # nidec_pid.pos_limit stays +0.2 m/s2: the same cap on extra accel as before the banded brake work.
           pid_accel_ref = accel_delayed if self.apply_brake_last > 0 else actuators.accel
-          self.nidec_pid_factor = self.nidec_pid.update(error = pid_accel_ref - CS.out.aEgo, speed = CS.out.vEgo)
+          # no error where aEgo is the speed filter answering a wheel speed sensor edge (see
+          # NidecAccelValid). A positive plan keeps its error: that is the wind-up at a standstill
+          # launch, and the lurch guard below already drops the edge's negative half
+          pid_error = pid_accel_ref - CS.out.aEgo if (accel_valid or actuators.accel >= 1e-5) else 0.0
+          self.nidec_pid_factor = self.nidec_pid.update(error = pid_error, speed = CS.out.vEgo)
           # don't drop PID at launch lurch, nor for the rest of a launch window: the window's commands
           # do not read it, so what it integrates there is only an offset handed to the brake at exit
           # (route 2b1 t=385: 0.2 m/s2 plan, +0.20 fell to -0.33 between 1.0 and 1.8 m/s and the
@@ -1222,12 +1229,13 @@ class CarController(CarControllerBase):
             can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
                                                           self.stopping_counter, self.CP, gas_pedal_force))
         else:
-          # the brake only has to add what the car does not already shed by itself (see NidecBrakeCoast)
-          apply_brake = np.clip(self.brake_last - self.brake_coast.at(CS.out.vEgo) / NIDEC_BRAKE_ACCEL_SCALE, 0.0, 1.0)
+          # the brake only has to add what the car does not already shed by itself, and at creep
+          # speeds what the car adds by itself (see NidecBrakeCoast)
+          apply_brake = nidec_brake_after_coast(self.brake_last, self.brake_coast.at(CS.out.vEgo))
           brake_accel_delayed, apply_brake_delayed, v_ego_delayed, brake_requested_delayed = \
             self.brake_cmd_delay.push((float(self.accel), float(apply_brake), float(CS.out.vEgo), self.brake_last > 0))
           self.gas_off_time = self.gas_off_time + 2 * DT_CTRL if self.new_accel == 0 else 0.0
-          if (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb) and \
+          if (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb) and accel_valid and \
              (not ((self.accel >= 1e-5) and CS.out.vEgo < 1.0)): # don't wind the integrators at launch lurch
             # delivered accel vs the accel command a brake delay ago (zero until the brake has been
             # applied that long), learned by the speed nodes the car was at then. Weighted by the
@@ -1241,8 +1249,9 @@ class CarController(CarControllerBase):
               self.brake_coast.update(coast_error, v_ego_delayed, 2 * DT_CTRL)
           self.brake_pid_factor = self.brake_gain.at(CS.out.vEgo)
           brakefactor = nidec_brake_scale(self.brake_pid_factor, float(apply_brake))
-          if actuators.longControlState == LongCtrlState.stopping:  # simulate the old stoppingDecelRate of 0.1 m/s^2/s @ 50hz
-            apply_brake = min(apply_brake * brakefactor, self.last_applied_brake + 0.00042) / brakefactor
+          if actuators.longControlState == LongCtrlState.stopping:
+            apply_brake = nidec_stopping_brake(apply_brake * brakefactor, self.last_applied_brake,
+                                               nidec_stopping_hold(hill_brake), 2 * DT_CTRL) / brakefactor
           self.last_applied_brake = apply_brake * brakefactor
           apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)

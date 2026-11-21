@@ -34,8 +34,14 @@ NIDEC_BRAKE_GAIN_MAX = 4.0
 # the brake gain is the slope.
 NIDEC_BRAKE_COAST_KEYS: dict[str, str] = {band: f"HondaBrakeCoast{band}Params" for band, _ in NIDEC_BRAKE_BANDS}
 NIDEC_BRAKE_COAST_KI = 0.5  # m/s2 of coast decel per second per m/s2 of error
-NIDEC_BRAKE_COAST_MIN = 0.0  # never negative: that would hold brake against a zero request (launch)
+NIDEC_BRAKE_COAST_MIN = 0.0
 NIDEC_BRAKE_COAST_MAX = 1.5
+# Creep: below this speed the drivetrain pushes the car instead of slowing it, so the nodes under
+# it may learn a negative coast decel, which adds brake to a request (see nidec_brake_after_coast).
+# Speed and bound are the fixed creep term of upstream's compute_gb_honda_nidec (0.15 of brake at
+# standstill, gone at 2.3 m/s; off here, creep_factor is 0).
+NIDEC_BRAKE_CREEP_SPEED = 2.3
+NIDEC_BRAKE_CREEP_MAX = 0.15 * 4.8
 # normalized brake at which the coast decel stops learning: at light braking an error is mostly
 # offset, at heavy braking mostly gain, and the gain learner is already weighted by the brake
 NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE = 0.5
@@ -155,9 +161,10 @@ def nidec_brake_scale(factor: float, brake: float) -> float:
 class NidecBandedIntegrator:
   """One clamped integrator per NIDEC_BRAKE_BANDS node, blended and taught by the hat weights."""
 
-  def __init__(self, values: dict[str, float], k_i: float, lower: float, upper: float):
-    self.k_i, self.lower, self.upper = k_i, lower, upper
-    self.values = {band: float(min(max(values[band], lower), upper)) for band, _ in NIDEC_BRAKE_BANDS}
+  def __init__(self, values: dict[str, float], k_i: float, lower: float | dict[str, float], upper: float):
+    self.k_i, self.upper = k_i, upper
+    self.lower = lower if isinstance(lower, dict) else {band: lower for band, _ in NIDEC_BRAKE_BANDS}
+    self.values = {band: float(min(max(values[band], self.lower[band]), upper)) for band, _ in NIDEC_BRAKE_BANDS}
 
   def at(self, v_ego: float) -> float:
     return sum(w * self.values[band] for band, w in nidec_band_weights(NIDEC_BRAKE_BANDS, v_ego).items())
@@ -165,7 +172,7 @@ class NidecBandedIntegrator:
   def update(self, error: float, v_ego: float, dt: float) -> None:
     for band, w in nidec_band_weights(NIDEC_BRAKE_BANDS, v_ego).items():
       if w > 0.0:
-        self.values[band] = min(max(self.values[band] + w * self.k_i * error * dt, self.lower), self.upper)
+        self.values[band] = min(max(self.values[band] + w * self.k_i * error * dt, self.lower[band]), self.upper)
 
 
 class NidecBrakeGain(NidecBandedIntegrator):
@@ -202,10 +209,97 @@ class NidecBrakeCoast(NidecBandedIntegrator):
   that: at 3.5-7.5 m/s light braking needed a gain of 0.1-0.2 and heavier braking 0.9-1.1.
 
   Nodes seed from the wind term at their speed, so the first drive starts from today's braking.
+
+  Below NIDEC_BRAKE_CREEP_SPEED the value may be negative: there the car is pushed, not slowed.
+  MDX 3G Sport Hybrid, 172 s of steady openpilot braking below 5 m/s on routes
+  3792d010590cb83a/00000279, /00000283, /0000028c, /000002b1 and /000002b4, grade removed, decel
+  delivered against nominal brake decel fitted per speed bin:
+
+    m/s        0.4-0.6  0.6-0.8  0.8-1.0  1.0-1.25  1.25-1.5  1.5-2.0  2.0-3.0  3.0-5.0
+    slope        1.07     1.28     1.22     1.09      1.01      0.84     0.74     0.84
+    offset      -0.26    -0.41    -0.32    -0.17     -0.06     +0.15    +0.37    +0.40
+
+  The curve below 1.5 m/s is an offset that changes sign, not a slope that grows. With the offset
+  floored at zero the gain learned it as slope: the 0.5 m/s node went 0.16 -> 0.92 between
+  /000002b1 and /000002b4, about right for the light braking of a level stop and double on a
+  grade (/000002b4 t=324 and t=935, -3 deg: plan -0.45, aEgo -0.9 into the stop, nidec_pid at its
+  +0.2 limit).
   """
 
   def __init__(self, decels: dict[str, float]):
-    super().__init__(decels, NIDEC_BRAKE_COAST_KI, NIDEC_BRAKE_COAST_MIN, NIDEC_BRAKE_COAST_MAX)
+    lower = {band: (-NIDEC_BRAKE_CREEP_MAX if speed < NIDEC_BRAKE_CREEP_SPEED else NIDEC_BRAKE_COAST_MIN) for band, speed in NIDEC_BRAKE_BANDS}
+    super().__init__(decels, NIDEC_BRAKE_COAST_KI, lower, NIDEC_BRAKE_COAST_MAX)
+
+
+def nidec_brake_after_coast(brake_request: float, coast_decel: float) -> float:
+  """Normalized brake left to send once the coast decel (m/s2) is taken off the request.
+
+  A negative coast decel (creep) adds brake, but only to a request that is up: with no request
+  there is nothing to add to, so creep never puts brake on the wire by itself (a launch, or the
+  gas side crawling in traffic).
+  """
+  if brake_request <= 0.0:
+    return 0.0
+  return min(max(brake_request - coast_decel / NIDEC_BRAKE_ACCEL_SCALE, 0.0), 1.0)
+
+
+# Stopping state: m/s2 per second the brake may rise, as nominal decel (the old stoppingDecelRate)
+NIDEC_STOPPING_BRAKE_RATE = 0.1
+# and up to the hold (the planner's own stopping ramp is 1.0)
+NIDEC_STOPPING_HOLD_RATE = 1.0
+
+
+def nidec_stopping_hold(hill_accel: float) -> float:
+  """Normalized brake on the wire that keeps a stopped car stopped: creep plus a downhill grade.
+
+  hill_accel is the grade term of the brake request (sin(pitch) * g, negative downhill). The creep
+  part is upstream's fixed value at standstill, not the learned one: nothing is measured at a
+  standstill, so there is nothing to learn it from there.
+  """
+  return (NIDEC_BRAKE_CREEP_MAX + max(-hill_accel, 0.0)) / NIDEC_BRAKE_ACCEL_SCALE
+
+
+def nidec_stopping_brake(request: float, last: float, hold: float, dt: float) -> float:
+  """Rate limit on the normalized wire brake in the stopping state.
+
+  The planner's stopping ramp is held to NIDEC_STOPPING_BRAKE_RATE so the car is not pulled up
+  short. That is also all the brake had to finish the stop with: the wheel speeds read zero from
+  0.3 m/s down, the state begins there, and the brake it begins with is whatever the easing plan
+  left. MDX 3G, routes 3792d010590cb83a/00000279 to /000002b4, 42 entries: with less than 0.25
+  m/s2 of nominal brake beyond the grade the car kept rolling on creep and the speed came back
+  0.2-1.4 s later 9 times out of 15 (2b4 t=859: 17 counts, t=1038: 14), with more than 0.25
+  once in 27 (median 0.5). So up to the hold the brake may rise at NIDEC_STOPPING_HOLD_RATE.
+  """
+  step = dt / NIDEC_BRAKE_ACCEL_SCALE
+  allowed = max(last + NIDEC_STOPPING_BRAKE_RATE * step, min(last + NIDEC_STOPPING_HOLD_RATE * step, hold))
+  return min(request, allowed)
+
+
+# m/s of raw wheel speed below which the sensors are not reading (MDX 3G: zero below 0.28-0.38)
+NIDEC_WHEEL_SPEED_MIN = 0.1
+# s of continuous reading before aEgo is a measurement again
+NIDEC_ACCEL_SETTLE_TIME = 0.5
+
+
+class NidecAccelValid:
+  """Whether aEgo is a measurement of the car this frame.
+
+  The wheel speeds read zero below about 0.3 m/s, so the raw speed steps between 0 and 0.3 with
+  the car still rolling and the speed filter turns each step into acceleration: +2.8 m/s2 (median
+  of 24 on routes 3792d010590cb83a/000002b1 and /000002b4) 0.1 s after the speed reappears, back
+  to the real value by 0.4 s, and -2.5 for 0.2 s when it drops out. nidec_pid integrated those:
+  /000002b4 t=860.5, creeping under a 20-count hold with the plan at -0.08, the reappearing speed
+  read +2.2 and the brake went 21 -> 152 counts in 0.3 s; /000002b1 t=163.1 44 -> 91; and each
+  drop-out pushed the integrator up, taking brake off at the moment of stopping.
+  """
+
+  def __init__(self, dt: float):
+    self.dt = dt
+    self.reading_time = 0.0
+
+  def update(self, v_ego_raw: float) -> bool:
+    self.reading_time = min(self.reading_time + self.dt, NIDEC_ACCEL_SETTLE_TIME) if v_ego_raw >= NIDEC_WHEEL_SPEED_MIN else 0.0
+    return self.reading_time >= NIDEC_ACCEL_SETTLE_TIME
 
 
 def nidec_brake_coast_error(error: float, brake_applied: float, brake_requested: bool, gas_off_time: float) -> float:
