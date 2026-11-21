@@ -56,6 +56,44 @@ def nidec_speed_lead_mps(sf_eff: float, accel: float, alpha_eff: float) -> float
   return speed_lead
 
 
+# Launch window, after first motion (see nidec_launch_lead / nidec_launch_gas). The fixed template
+# (gas seed 100, lead 7.9 m/s) delivered 0.54-0.71 m/s2 on 8 of 9 MDX 3G launches on routes
+# 3792d010590cb83a/00000279, /00000283, /0000028c and /000002b1 (1.04 on the ninth, engine running
+# on a -3.6 deg grade) against plans of 0.2 to 1.56 m/s2.
+NIDEC_LAUNCH_TEMPLATE_ACCEL = 0.6
+# plan at and below which the lead is the general pipeline's (0.3-0.4 m/s2 delivered at 0.4-1.5 m/s
+# with a 1.8-2.0 m/s lead on the same routes)
+NIDEC_LAUNCH_LEAD_MIN_ACCEL = 0.3
+# plan at and above which the gas seed is the full wire
+NIDEC_LAUNCH_GAS_FULL_ACCEL = 1.2
+
+
+def _interp(x: float, x0: float, x1: float, y0: float, y1: float) -> float:
+  return y0 + (y1 - y0) * min(max((x - x0) / (x1 - x0), 0.0), 1.0)
+
+
+def nidec_launch_lead(accel: float, dv_launch: float, general_lead: float) -> float:
+  """PCM_SPEED lead (m/s) in the launch window once the car is moving.
+
+  The learned launch lead is what a plan of NIDEC_LAUNCH_TEMPLATE_ACCEL or more gets. A gentler
+  plan gets less, down to the general pipeline's lead at NIDEC_LAUNCH_LEAD_MIN_ACCEL: with the full
+  lead a 0.2 m/s2 plan was answered with 0.6 (routes 28c t=2512, 2b1 t=385), and the brake came on
+  at window exit with the plan still positive.
+  """
+  return _interp(accel, NIDEC_LAUNCH_LEAD_MIN_ACCEL, NIDEC_LAUNCH_TEMPLATE_ACCEL, min(general_lead, dv_launch), dv_launch)
+
+
+def nidec_launch_gas(accel: float, gas_launch: float, gas_max: float) -> float:
+  """PCM_GAS seed in the launch window once the car is moving.
+
+  The learned seed is what a plan up to NIDEC_LAUNCH_TEMPLATE_ACCEL gets. A stronger plan gets
+  more, the full wire at NIDEC_LAUNCH_GAS_FULL_ACCEL: with the seed alone plans of 0.9-1.56 m/s2
+  were answered with 0.6-0.9 until the window closed (routes 279 t=936, 28c t=2131, 2b1 t=415), and
+  the seed cannot learn its way up on an engine-off launch (no pedal evidence).
+  """
+  return _interp(accel, NIDEC_LAUNCH_TEMPLATE_ACCEL, NIDEC_LAUNCH_GAS_FULL_ACCEL, gas_launch, max(gas_launch, gas_max))
+
+
 def nidec_speed_channel_pinned(dv_lead: float, dv_sat: float, dv_coast: float = NIDEC_DV_SAT_MIN) -> bool:
   """True when the lead the servo is answering is past its responsive band in either direction.
 

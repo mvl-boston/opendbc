@@ -20,7 +20,7 @@ from opendbc.car.honda import hud_objects
 from opendbc.car.honda.nidec_long_helpers import DelayLine, NIDEC_BRAKE_ACCEL_SCALE, NIDEC_BRAKE_BANDS, NIDEC_BRAKE_COAST_KEYS, \
                                                 NIDEC_BRAKE_GAIN_KEYS, NIDEC_BRAKE_GAIN_LEGACY_BAND, \
                                                 NidecBrakeCoast, NidecBrakeGain, nidec_band_weights as band_weights, \
-                                                nidec_brake_coast_error, nidec_brake_scale, \
+                                                nidec_brake_coast_error, nidec_brake_scale, nidec_launch_gas, nidec_launch_lead, \
                                                 nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
 from opendbc.car.honda.lateral_model import HondaLateralModel
 
@@ -528,7 +528,11 @@ class CarController(CarControllerBase):
           # nidec_pid.pos_limit stays +0.2 m/s2: the same cap on extra accel as before the banded brake work.
           pid_accel_ref = accel_delayed if self.apply_brake_last > 0 else actuators.accel
           self.nidec_pid_factor = self.nidec_pid.update(error = pid_accel_ref - CS.out.aEgo, speed = CS.out.vEgo)
-          if actuators.accel >= 1e-5 and CS.out.vEgo < 1.0: # don't drop PID at launch lurch
+          # don't drop PID at launch lurch, nor for the rest of a launch window: the window's commands
+          # do not read it, so what it integrates there is only an offset handed to the brake at exit
+          # (route 2b1 t=385: 0.2 m/s2 plan, +0.20 fell to -0.33 between 1.0 and 1.8 m/s and the
+          # brake came on at 1.7 m/s with the plan still positive)
+          if actuators.accel >= 1e-5 and (CS.out.vEgo < 1.0 or self.launch_active):
              self.nidec_pid_factor = self.nidec_pid.i = max(old_i, self.nidec_pid.i)
           self.accel = actuators.accel + self.nidec_pid_factor
           adjust_accel = self.accel + hill_brake
@@ -869,7 +873,11 @@ class CarController(CarControllerBase):
           # poisoned-prone and a step input the servo low-passes into dead time + late surge.
           # Until first motion the larger breakaway lead is used: EV creep response scales with dv,
           # and the post-motion lead alone was not enough to break away engine-off.
-          speed_lead = self.dv_launch if CS.out.vEgo > 0.1 else self.dv_break
+          # Once moving the lead follows the plan (see nidec_launch_lead).
+          if CS.out.vEgo > 0.1:
+            speed_lead = nidec_launch_lead(float(actuators.accel), self.dv_launch, nidec_speed_lead_mps(sf_eff, float(self.accel), alpha_eff))
+          else:
+            speed_lead = self.dv_break
         else:
           speed_lead = nidec_speed_lead_mps(sf_eff, float(self.accel), alpha_eff)
         pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
@@ -908,7 +916,10 @@ class CarController(CarControllerBase):
         # launch just climbing, and PCM_GAS=0 gates off all power on this platform). While the brake
         # is still applied the concurrent gas+brake protection below keeps the wire at 0; on window
         # exit the rise clip continues from the seed via prior_accel, so there is no discontinuity.
+        # Once moving the seed follows the plan (see nidec_launch_gas).
         launch_seed = self.gas_launch
+        if CS.out.vEgo > 0.1:
+          launch_seed = nidec_launch_gas(float(actuators.accel), self.gas_launch, self.params.NIDEC_GAS_MAX)
         if (CS.engine_rpm < 500) and (CS.out.vEgo <= 0.1):
           # EV breakaway: midrange gas has no pedal coupling engine-off (route 1a t=3002: gas 108
           # held 2.6s, zero motion until the driver's pedal cranked the engine). The stock camera's

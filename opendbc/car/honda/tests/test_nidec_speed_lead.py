@@ -1,6 +1,39 @@
 import unittest
 
-from opendbc.car.honda.nidec_long_helpers import DelayLine, nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
+from opendbc.car.honda.nidec_long_helpers import DelayLine, NIDEC_LAUNCH_GAS_FULL_ACCEL, NIDEC_LAUNCH_LEAD_MIN_ACCEL, NIDEC_LAUNCH_TEMPLATE_ACCEL, \
+                                                nidec_launch_gas, nidec_launch_lead, nidec_speed_lead_mps, nidec_speed_channel_pinned, \
+                                                nidec_set_speed_governed
+
+
+class TestNidecLaunchFollowsPlan(unittest.TestCase):
+  def test_template_plan_gets_the_learned_template(self):
+    self.assertAlmostEqual(nidec_launch_lead(NIDEC_LAUNCH_TEMPLATE_ACCEL, 7.9, 2.0), 7.9)
+    self.assertAlmostEqual(nidec_launch_gas(NIDEC_LAUNCH_TEMPLATE_ACCEL, 100.0, 198), 100.0)
+
+  def test_gentle_plan_gets_less_lead_and_the_same_seed(self):
+    self.assertAlmostEqual(nidec_launch_lead(NIDEC_LAUNCH_LEAD_MIN_ACCEL, 7.9, 2.0), 2.0)
+    self.assertAlmostEqual(nidec_launch_lead(0.1, 7.9, 2.0), 2.0)
+    self.assertAlmostEqual(nidec_launch_lead(0.45, 7.9, 2.0), 4.95)
+    self.assertAlmostEqual(nidec_launch_gas(0.1, 100.0, 198), 100.0)
+
+  def test_strong_plan_gets_more_seed_and_the_same_lead(self):
+    self.assertAlmostEqual(nidec_launch_gas(NIDEC_LAUNCH_GAS_FULL_ACCEL, 100.0, 198), 198.0)
+    self.assertAlmostEqual(nidec_launch_gas(2.0, 100.0, 198), 198.0)
+    self.assertAlmostEqual(nidec_launch_gas(0.9, 100.0, 198), 149.0)
+    self.assertAlmostEqual(nidec_launch_lead(2.0, 7.9, 2.0), 7.9)
+
+  def test_never_past_the_learned_lead_or_below_the_learned_seed(self):
+    for accel in (-0.5, 0.0, 0.2, 0.5, 1.0, 3.0):
+      self.assertLessEqual(nidec_launch_lead(accel, 3.0, 9.0), 3.0)
+      self.assertGreaterEqual(nidec_launch_gas(accel, 150.0, 198), 150.0)
+      self.assertLessEqual(nidec_launch_gas(accel, 150.0, 198), 198.0)
+
+  def test_monotonic_in_the_plan(self):
+    plans = [i / 20 for i in range(41)]
+    leads = [nidec_launch_lead(a, 7.9, 2.0) for a in plans]
+    seeds = [nidec_launch_gas(a, 100.0, 198) for a in plans]
+    self.assertEqual(leads, sorted(leads))
+    self.assertEqual(seeds, sorted(seeds))
 
 
 class TestNidecSpeedChannelPinned(unittest.TestCase):
