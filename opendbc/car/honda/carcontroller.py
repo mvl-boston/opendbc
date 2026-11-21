@@ -20,8 +20,8 @@ from opendbc.car.honda import hud_objects
 from opendbc.car.honda.nidec_long_helpers import DelayLine, NIDEC_BRAKE_ACCEL_SCALE, NIDEC_BRAKE_BANDS, NIDEC_BRAKE_COAST_KEYS, \
                                                 NIDEC_BRAKE_GAIN_KEYS, NIDEC_BRAKE_GAIN_LEGACY_BAND, \
                                                 NidecAccelValid, NidecBrakeCoast, NidecBrakeGain, nidec_band_weights as band_weights, \
-                                                nidec_brake_after_coast, nidec_brake_coast_error, nidec_brake_scale, nidec_launch_gas, nidec_launch_lead, \
-                                                nidec_stopping_brake, nidec_stopping_hold, \
+                                                nidec_brake_coast_error, nidec_brake_floor, nidec_brake_gain_error, nidec_brake_guard, nidec_brake_scale, \
+                                                nidec_launch_gas, nidec_launch_lead, nidec_stopping_brake, nidec_stopping_hold, \
                                                 nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
 from opendbc.car.honda.lateral_model import HondaLateralModel
 
@@ -317,9 +317,9 @@ class CarController(CarControllerBase):
     # command it is answering, CP.longitudinalActuatorDelay ago (the planner already issues the
     # accel it wants that far ahead). plan_accel_delay runs every tick (nidec_pid), brake_cmd_delay
     # at the 50 Hz brake send (brake gain and coast decel: internal accel command, normalized brake,
-    # speed and whether a brake request was up).
+    # speed, whether a brake request was up and whether the brake floor set the brake).
     self.plan_accel_delay = DelayLine(CP.longitudinalActuatorDelay, DT_CTRL)
-    self.brake_cmd_delay = DelayLine(CP.longitudinalActuatorDelay, 2 * DT_CTRL, (0.0, 0.0, 0.0, False))
+    self.brake_cmd_delay = DelayLine(CP.longitudinalActuatorDelay, 2 * DT_CTRL, (0.0, 0.0, 0.0, False, False))
     # speed-banded brake gain (see NidecBrakeGain). Nodes without a stored value seed from the old
     # single gain, so the first drive starts from today's braking. A key this openpilot build does
     # not register reads as missing: its node still learns, it just starts from the seed each drive.
@@ -1229,11 +1229,14 @@ class CarController(CarControllerBase):
             can_sends.extend(hondacan.create_acc_commands(self.packer, self.CAN, CC.enabled, CC.longActive, self.accel, self.gas,
                                                           self.stopping_counter, self.CP, gas_pedal_force))
         else:
-          # the brake only has to add what the car does not already shed by itself, and at creep
-          # speeds what the car adds by itself (see NidecBrakeCoast)
-          apply_brake = nidec_brake_after_coast(self.brake_last, self.brake_coast.at(CS.out.vEgo))
-          brake_accel_delayed, apply_brake_delayed, v_ego_delayed, brake_requested_delayed = \
-            self.brake_cmd_delay.push((float(self.accel), float(apply_brake), float(CS.out.vEgo), self.brake_last > 0))
+          # the brake only has to add what the car does not already shed by itself (see NidecBrakeCoast),
+          # and what the learners make of the request is never less than the unlearned brake
+          # (see nidec_brake_floor)
+          coast_brake = float(np.clip(self.brake_last - self.brake_coast.at(CS.out.vEgo) / NIDEC_BRAKE_ACCEL_SCALE, 0.0, 1.0))
+          brake_floor = nidec_brake_floor(self.brake_last, self.nidec_wind_brake(CS.out.vEgo))
+          apply_brake, floor_bound = nidec_brake_guard(coast_brake, nidec_brake_scale(self.brake_pid_factor, coast_brake), brake_floor)
+          brake_accel_delayed, apply_brake_delayed, v_ego_delayed, brake_requested_delayed, floor_bound_delayed = \
+            self.brake_cmd_delay.push((float(self.accel), float(apply_brake), float(CS.out.vEgo), self.brake_last > 0, floor_bound))
           self.gas_off_time = self.gas_off_time + 2 * DT_CTRL if self.new_accel == 0 else 0.0
           if (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb) and accel_valid and \
              (not ((self.accel >= 1e-5) and CS.out.vEgo < 1.0)): # don't wind the integrators at launch lurch
@@ -1243,12 +1246,14 @@ class CarController(CarControllerBase):
             # coast decel (offset): more decel than commanded means the car sheds more by itself
             brake_error = brake_accel_delayed - CS.out.aEgo
             if apply_brake > 0:
-              self.brake_gain.update(-brake_error * apply_brake_delayed, v_ego_delayed, 2 * DT_CTRL)
+              self.brake_gain.update(nidec_brake_gain_error(brake_error, apply_brake_delayed, floor_bound_delayed), v_ego_delayed, 2 * DT_CTRL)
             if CC.longActive and (not CS.out.gasPressed) and (not CS.out.brakePressed):
-              coast_error = nidec_brake_coast_error(brake_error, apply_brake_delayed, brake_requested_delayed, self.gas_off_time)
+              coast_error = nidec_brake_coast_error(brake_error, apply_brake_delayed, brake_requested_delayed, self.gas_off_time,
+                                                    floor_bound_delayed)
               self.brake_coast.update(coast_error, v_ego_delayed, 2 * DT_CTRL)
           self.brake_pid_factor = self.brake_gain.at(CS.out.vEgo)
           brakefactor = nidec_brake_scale(self.brake_pid_factor, float(apply_brake))
+          apply_brake = max(apply_brake, brake_floor / brakefactor)  # the gain has just learned
           if actuators.longControlState == LongCtrlState.stopping:
             apply_brake = nidec_stopping_brake(apply_brake * brakefactor, self.last_applied_brake,
                                                nidec_stopping_hold(hill_brake), 2 * DT_CTRL) / brakefactor
