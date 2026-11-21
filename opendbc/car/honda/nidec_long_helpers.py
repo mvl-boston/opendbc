@@ -39,6 +39,11 @@ NIDEC_BRAKE_COAST_MAX = 1.5
 # normalized brake at which the coast decel stops learning: at light braking an error is mostly
 # offset, at heavy braking mostly gain, and the gain learner is already weighted by the brake
 NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE = 0.5
+# seconds the gas wire must have been at zero before the coast decel learns. After a gas cut the
+# engine keeps pulling while it runs down: MDX 3G, 160 gas cuts above 10 m/s on routes
+# 3792d010590cb83a/00000279, /0000028c and /000002b1, aEgo is still 0.6 m/s2 above its settled
+# value 0.4 s after the cut, 0.15 at 1.0 s, 0.09 at 1.2 s and settled at 1.5 s.
+NIDEC_BRAKE_COAST_GAS_OFF_MIN = 1.5
 # normalized brake per m/s2 (compute_gb_honda_nidec)
 NIDEC_BRAKE_ACCEL_SCALE = 4.8
 
@@ -165,22 +170,29 @@ class NidecBrakeCoast(NidecBandedIntegrator):
     super().__init__(decels, NIDEC_BRAKE_COAST_KI, NIDEC_BRAKE_COAST_MIN, NIDEC_BRAKE_COAST_MAX)
 
 
-def nidec_brake_coast_error(error: float, brake_applied: float, brake_requested: bool, gas_wire_zero: bool) -> float:
+def nidec_brake_coast_error(error: float, brake_applied: float, brake_requested: bool, gas_off_time: float) -> float:
   """The part of this frame's brake-side error (commanded minus delivered accel) that teaches the coast decel.
 
   brake_applied is the normalized brake that was on the wire, brake_requested whether a request
-  was up before the coast decel came off it.
+  was up before the coast decel came off it, gas_off_time how long (s) the gas wire has been at
+  zero.
+  Nothing counts until the gas has been off for NIDEC_BRAKE_COAST_GAS_OFF_MIN: until then the
+  engine is still running down and the car decelerates less than it will coasting, which reads as
+  a coast decel that is too high. On route 3792d010590cb83a/000002b1 those frames were the largest
+  push on the estimate above 10 m/s (24 s of them against 2 s of settled coasting), it sat at
+  0.3-0.4 m/s2 where the car coasts at 0.5-0.7, and every gas overshoot then drew a 1.5 s brake
+  dab (7 applications a minute at 10-21 m/s against 2-4 before the coast decel was learned).
   With brake on the wire, light braking counts in full and fades to nothing at
   NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE.
-  With the request swallowed whole and the gas wire at zero the car is answering with its coast
-  decel alone. Too little decel there counts in full: without it a coast decel learned too high
-  could never come back down (no brake, no error). Too much decel does not count: there is no
-  brake left to take off, so the estimate would only run to its limit.
+  With the request swallowed whole the car is answering with its coast decel alone. Too little
+  decel there counts in full: without it a coast decel learned too high could never come back
+  down (no brake, no error). Too much decel does not count: there is no brake left to take off,
+  so the estimate would only run to its limit.
   """
-  if not brake_requested:
+  if (not brake_requested) or gas_off_time < NIDEC_BRAKE_COAST_GAS_OFF_MIN:
     return 0.0
   if brake_applied <= 0.0:
-    return min(error, 0.0) if gas_wire_zero else 0.0
+    return min(error, 0.0)
   return error * min(max(1.0 - brake_applied / NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE, 0.0), 1.0)
 
 

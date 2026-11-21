@@ -338,6 +338,7 @@ class CarController(CarControllerBase):
                                                               self.nidec_wind_brake(band_speed) * NIDEC_BRAKE_ACCEL_SCALE)
                                         for band, band_speed in NIDEC_BRAKE_BANDS})
     self.brake_pid_factor = 0.0
+    self.gas_off_time = 0.0  # s the gas wire has been at zero, counted at the 50 Hz brake send
 
     self.prior_gas_average = 0.0
     self.average_factor = 0.5 if (Params().get("HondaFeedForwardParams") is None) else Params().get("HondaFeedForwardParams")
@@ -1214,6 +1215,7 @@ class CarController(CarControllerBase):
           apply_brake = np.clip(self.brake_last - self.brake_coast.at(CS.out.vEgo) / NIDEC_BRAKE_ACCEL_SCALE, 0.0, 1.0)
           brake_accel_delayed, apply_brake_delayed, v_ego_delayed, brake_requested_delayed = \
             self.brake_cmd_delay.push((float(self.accel), float(apply_brake), float(CS.out.vEgo), self.brake_last > 0))
+          self.gas_off_time = self.gas_off_time + 2 * DT_CTRL if self.new_accel == 0 else 0.0
           if (actuators.longControlState == LongCtrlState.pid) and (CS.out.vEgo > 1e-5) and (not CS.out.stockAeb) and \
              (not ((self.accel >= 1e-5) and CS.out.vEgo < 1.0)): # don't wind the integrators at launch lurch
             # delivered accel vs the accel command a brake delay ago (zero until the brake has been
@@ -1224,7 +1226,7 @@ class CarController(CarControllerBase):
             if apply_brake > 0:
               self.brake_gain.update(-brake_error * apply_brake_delayed, v_ego_delayed, 2 * DT_CTRL)
             if CC.longActive and (not CS.out.gasPressed) and (not CS.out.brakePressed):
-              coast_error = nidec_brake_coast_error(brake_error, apply_brake_delayed, brake_requested_delayed, self.new_accel == 0)
+              coast_error = nidec_brake_coast_error(brake_error, apply_brake_delayed, brake_requested_delayed, self.gas_off_time)
               self.brake_coast.update(coast_error, v_ego_delayed, 2 * DT_CTRL)
           self.brake_pid_factor = self.brake_gain.at(CS.out.vEgo)
           brakefactor = nidec_brake_scale(self.brake_pid_factor, float(apply_brake))

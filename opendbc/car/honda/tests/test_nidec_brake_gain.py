@@ -1,11 +1,12 @@
 import unittest
 
-from opendbc.car.honda.nidec_long_helpers import NIDEC_BRAKE_BANDS, NIDEC_BRAKE_COAST_KI, NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE, \
-                                                NIDEC_BRAKE_COAST_MAX, NIDEC_BRAKE_COAST_MIN, NIDEC_BRAKE_GAIN_KI, NIDEC_BRAKE_GAIN_MAX, \
-                                                NIDEC_BRAKE_GAIN_MIN, NidecBrakeCoast, NidecBrakeGain, \
+from opendbc.car.honda.nidec_long_helpers import NIDEC_BRAKE_BANDS, NIDEC_BRAKE_COAST_GAS_OFF_MIN, NIDEC_BRAKE_COAST_KI, \
+                                                NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE, NIDEC_BRAKE_COAST_MAX, NIDEC_BRAKE_COAST_MIN, \
+                                                NIDEC_BRAKE_GAIN_KI, NIDEC_BRAKE_GAIN_MAX, NIDEC_BRAKE_GAIN_MIN, NidecBrakeCoast, NidecBrakeGain, \
                                                 nidec_band_weights, nidec_brake_coast_error, nidec_brake_scale
 
 DT = 0.02
+GAS_OFF = NIDEC_BRAKE_COAST_GAS_OFF_MIN
 
 
 def uniform(value):
@@ -103,21 +104,34 @@ class TestNidecBrakeCoast(unittest.TestCase):
 
 class TestBrakeCoastError(unittest.TestCase):
   def test_nothing_without_a_brake_request(self):
-    self.assertEqual(nidec_brake_coast_error(0.4, 0.0, False, True), 0.0)
-    self.assertEqual(nidec_brake_coast_error(-0.4, 0.2, False, True), 0.0)
+    self.assertEqual(nidec_brake_coast_error(0.4, 0.0, False, GAS_OFF), 0.0)
+    self.assertEqual(nidec_brake_coast_error(-0.4, 0.2, False, GAS_OFF), 0.0)
 
   def test_light_braking_counts_and_fades_to_nothing_at_heavy_braking(self):
-    self.assertAlmostEqual(nidec_brake_coast_error(0.4, 0.01, True, True), 0.4 * 0.98)
-    self.assertAlmostEqual(nidec_brake_coast_error(-0.4, NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE / 2, True, True), -0.2)
-    self.assertEqual(nidec_brake_coast_error(0.4, NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE, True, True), 0.0)
-    self.assertEqual(nidec_brake_coast_error(0.4, 1.0, True, True), 0.0)
+    self.assertAlmostEqual(nidec_brake_coast_error(0.4, 0.01, True, GAS_OFF), 0.4 * 0.98)
+    self.assertAlmostEqual(nidec_brake_coast_error(-0.4, NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE / 2, True, GAS_OFF), -0.2)
+    self.assertEqual(nidec_brake_coast_error(0.4, NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE, True, GAS_OFF), 0.0)
+    self.assertEqual(nidec_brake_coast_error(0.4, 1.0, True, GAS_OFF), 0.0)
 
   def test_absorbed_request_only_lowers_the_coast_decel(self):
-    self.assertEqual(nidec_brake_coast_error(-0.4, 0.0, True, True), -0.4)
-    self.assertEqual(nidec_brake_coast_error(0.4, 0.0, True, True), 0.0)
+    self.assertEqual(nidec_brake_coast_error(-0.4, 0.0, True, GAS_OFF), -0.4)
+    self.assertEqual(nidec_brake_coast_error(0.4, 0.0, True, GAS_OFF), 0.0)
 
-  def test_absorbed_request_needs_the_gas_wire_at_zero(self):
-    self.assertEqual(nidec_brake_coast_error(-0.4, 0.0, True, False), 0.0)
+  def test_nothing_while_the_engine_is_still_running_down(self):
+    for gas_off_time in (0.0, 0.5, NIDEC_BRAKE_COAST_GAS_OFF_MIN - DT):
+      self.assertEqual(nidec_brake_coast_error(-0.4, 0.0, True, gas_off_time), 0.0)
+      self.assertEqual(nidec_brake_coast_error(-0.4, 0.1, True, gas_off_time), 0.0)
+      self.assertEqual(nidec_brake_coast_error(0.4, 0.1, True, gas_off_time), 0.0)
+
+  def test_gas_cut_run_down_does_not_lower_the_coast_decel(self):
+    # gas cut at t=0 with a -0.3 m/s2 command: the car goes from +0.4 to its 0.6 m/s2 coast decel
+    # over about a second, the request is swallowed whole the entire time
+    coast = NidecBrakeCoast({band: 0.6 for band, _ in NIDEC_BRAKE_BANDS})
+    for i in range(150):
+      t = i * DT
+      a_ego = -0.6 + 1.0 * max(1.0 - t / 1.2, 0.0)
+      coast.update(nidec_brake_coast_error(-0.3 - a_ego, 0.0, True, t), 15.0, DT)
+    self.assertAlmostEqual(coast.at(15.0), 0.6)
 
 
 class TestBrakeScale(unittest.TestCase):
