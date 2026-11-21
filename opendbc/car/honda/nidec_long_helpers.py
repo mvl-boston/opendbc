@@ -34,14 +34,8 @@ NIDEC_BRAKE_GAIN_MAX = 4.0
 # the brake gain is the slope.
 NIDEC_BRAKE_COAST_KEYS: dict[str, str] = {band: f"HondaBrakeCoast{band}Params" for band, _ in NIDEC_BRAKE_BANDS}
 NIDEC_BRAKE_COAST_KI = 0.5  # m/s2 of coast decel per second per m/s2 of error
-NIDEC_BRAKE_COAST_MIN = 0.0
+NIDEC_BRAKE_COAST_MIN = 0.0  # never negative: that would hold brake against a zero request (launch)
 NIDEC_BRAKE_COAST_MAX = 1.5
-# Creep: below this speed the drivetrain pushes the car instead of slowing it, so the nodes under
-# it may learn a negative coast decel, which adds brake to a request (see nidec_brake_after_coast).
-# Speed and bound are the fixed creep term of upstream's compute_gb_honda_nidec (0.15 of brake at
-# standstill, gone at 2.3 m/s; off here, creep_factor is 0).
-NIDEC_BRAKE_CREEP_SPEED = 2.3
-NIDEC_BRAKE_CREEP_MAX = 0.15 * 4.8
 # normalized brake at which the coast decel stops learning: at light braking an error is mostly
 # offset, at heavy braking mostly gain, and the gain learner is already weighted by the brake
 NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE = 0.5
@@ -161,10 +155,9 @@ def nidec_brake_scale(factor: float, brake: float) -> float:
 class NidecBandedIntegrator:
   """One clamped integrator per NIDEC_BRAKE_BANDS node, blended and taught by the hat weights."""
 
-  def __init__(self, values: dict[str, float], k_i: float, lower: float | dict[str, float], upper: float):
-    self.k_i, self.upper = k_i, upper
-    self.lower = lower if isinstance(lower, dict) else {band: lower for band, _ in NIDEC_BRAKE_BANDS}
-    self.values = {band: float(min(max(values[band], self.lower[band]), upper)) for band, _ in NIDEC_BRAKE_BANDS}
+  def __init__(self, values: dict[str, float], k_i: float, lower: float, upper: float):
+    self.k_i, self.lower, self.upper = k_i, lower, upper
+    self.values = {band: float(min(max(values[band], lower), upper)) for band, _ in NIDEC_BRAKE_BANDS}
 
   def at(self, v_ego: float) -> float:
     return sum(w * self.values[band] for band, w in nidec_band_weights(NIDEC_BRAKE_BANDS, v_ego).items())
@@ -172,7 +165,7 @@ class NidecBandedIntegrator:
   def update(self, error: float, v_ego: float, dt: float) -> None:
     for band, w in nidec_band_weights(NIDEC_BRAKE_BANDS, v_ego).items():
       if w > 0.0:
-        self.values[band] = min(max(self.values[band] + w * self.k_i * error * dt, self.lower[band]), self.upper)
+        self.values[band] = min(max(self.values[band] + w * self.k_i * error * dt, self.lower), self.upper)
 
 
 class NidecBrakeGain(NidecBandedIntegrator):
@@ -209,40 +202,50 @@ class NidecBrakeCoast(NidecBandedIntegrator):
   that: at 3.5-7.5 m/s light braking needed a gain of 0.1-0.2 and heavier braking 0.9-1.1.
 
   Nodes seed from the wind term at their speed, so the first drive starts from today's braking.
-
-  Below NIDEC_BRAKE_CREEP_SPEED the value may be negative: there the car is pushed, not slowed.
-  MDX 3G Sport Hybrid, 172 s of steady openpilot braking below 5 m/s on routes
-  3792d010590cb83a/00000279, /00000283, /0000028c, /000002b1 and /000002b4, grade removed, decel
-  delivered against nominal brake decel fitted per speed bin:
-
-    m/s        0.4-0.6  0.6-0.8  0.8-1.0  1.0-1.25  1.25-1.5  1.5-2.0  2.0-3.0  3.0-5.0
-    slope        1.07     1.28     1.22     1.09      1.01      0.84     0.74     0.84
-    offset      -0.26    -0.41    -0.32    -0.17     -0.06     +0.15    +0.37    +0.40
-
-  The curve below 1.5 m/s is an offset that changes sign, not a slope that grows. With the offset
-  floored at zero the gain learned it as slope: the 0.5 m/s node went 0.16 -> 0.92 between
-  /000002b1 and /000002b4, about right for the light braking of a level stop and double on a
-  grade (/000002b4 t=324 and t=935, -3 deg: plan -0.45, aEgo -0.9 into the stop, nidec_pid at its
-  +0.2 limit).
   """
 
   def __init__(self, decels: dict[str, float]):
-    lower = {band: (-NIDEC_BRAKE_CREEP_MAX if speed < NIDEC_BRAKE_CREEP_SPEED else NIDEC_BRAKE_COAST_MIN) for band, speed in NIDEC_BRAKE_BANDS}
-    super().__init__(decels, NIDEC_BRAKE_COAST_KI, lower, NIDEC_BRAKE_COAST_MAX)
+    super().__init__(decels, NIDEC_BRAKE_COAST_KI, NIDEC_BRAKE_COAST_MIN, NIDEC_BRAKE_COAST_MAX)
 
 
-def nidec_brake_after_coast(brake_request: float, coast_decel: float) -> float:
-  """Normalized brake left to send once the coast decel (m/s2) is taken off the request.
+def nidec_brake_floor(brake_request: float, wind_brake: float) -> float:
+  """Normalized brake the learners may not go under: the request less the fixed wind term.
 
-  A negative coast decel (creep) adds brake, but only to a request that is up: with no request
-  there is nothing to add to, so creep never puts brake on the wire by itself (a launch, or the
-  gas side crawling in traffic).
+  This is the brake of the code before the banded gain and coast decel, with its gain at the
+  minimum of 1.0 (apply_brake = brake_last - wind_brake). The coast decel replaced the wind term
+  with a learned value, which at 3-8 m/s is larger than the wind term (0.37-0.49 m/s2 learned
+  against 0.07-0.40 with the windfactor at 3.0), so there the learned brake could be less than
+  that code would send.
   """
-  if brake_request <= 0.0:
-    return 0.0
-  return min(max(brake_request - coast_decel / NIDEC_BRAKE_ACCEL_SCALE, 0.0), 1.0)
+  return min(max(brake_request - wind_brake, 0.0), 1.0)
 
 
+def nidec_brake_guard(coast_brake: float, brake_scale: float, brake_floor: float) -> tuple[float, bool]:
+  """Hold gain * (request - coast decel) at or above the floor.
+
+  coast_brake is the normalized brake left after the coast decel, brake_scale the gain. Returns
+  the brake to hand to the gain (so that gain * brake is never under the floor) and whether the
+  floor is what set it. While it does, the learners may not move further the way that weakens
+  the brake (see nidec_brake_gain_error, nidec_brake_coast_error): the floor would hide the
+  error that brings them back.
+  """
+  if coast_brake * brake_scale < brake_floor:
+    return brake_floor / brake_scale, True
+  return coast_brake, False
+
+
+def nidec_brake_gain_error(error: float, brake_applied: float, floor_bound: bool) -> float:
+  """This frame's input to the brake gain: the brake-side error weighted by the brake applied.
+
+  With the brake held up by the floor the gain may rise, not fall.
+  """
+  gain_error = -error * brake_applied
+  return max(gain_error, 0.0) if floor_bound else gain_error
+
+
+# Stopping state: normalized brake that keeps a stopped car stopped on the level: upstream's
+# creep brake at standstill (compute_gb_honda_nidec creep_brake_value)
+NIDEC_STOPPING_HOLD_BRAKE = 0.15
 # Stopping state: m/s2 per second the brake may rise, as nominal decel (the old stoppingDecelRate)
 NIDEC_STOPPING_BRAKE_RATE = 0.1
 # and up to the hold (the planner's own stopping ramp is 1.0)
@@ -252,11 +255,9 @@ NIDEC_STOPPING_HOLD_RATE = 1.0
 def nidec_stopping_hold(hill_accel: float) -> float:
   """Normalized brake on the wire that keeps a stopped car stopped: creep plus a downhill grade.
 
-  hill_accel is the grade term of the brake request (sin(pitch) * g, negative downhill). The creep
-  part is upstream's fixed value at standstill, not the learned one: nothing is measured at a
-  standstill, so there is nothing to learn it from there.
+  hill_accel is the grade term of the brake request (sin(pitch) * g, negative downhill).
   """
-  return (NIDEC_BRAKE_CREEP_MAX + max(-hill_accel, 0.0)) / NIDEC_BRAKE_ACCEL_SCALE
+  return NIDEC_STOPPING_HOLD_BRAKE + max(-hill_accel, 0.0) / NIDEC_BRAKE_ACCEL_SCALE
 
 
 def nidec_stopping_brake(request: float, last: float, hold: float, dt: float) -> float:
@@ -302,7 +303,7 @@ class NidecAccelValid:
     return self.reading_time >= NIDEC_ACCEL_SETTLE_TIME
 
 
-def nidec_brake_coast_error(error: float, brake_applied: float, brake_requested: bool, gas_off_time: float) -> float:
+def nidec_brake_coast_error(error: float, brake_applied: float, brake_requested: bool, gas_off_time: float, floor_bound: bool = False) -> float:
   """The part of this frame's brake-side error (commanded minus delivered accel) that teaches the coast decel.
 
   brake_applied is the normalized brake that was on the wire, brake_requested whether a request
@@ -320,12 +321,15 @@ def nidec_brake_coast_error(error: float, brake_applied: float, brake_requested:
   decel there counts in full: without it a coast decel learned too high could never come back
   down (no brake, no error). Too much decel does not count: there is no brake left to take off,
   so the estimate would only run to its limit.
+  With the brake held up by the floor (floor_bound, see nidec_brake_guard) the coast decel may
+  fall, not rise.
   """
   if (not brake_requested) or gas_off_time < NIDEC_BRAKE_COAST_GAS_OFF_MIN:
     return 0.0
   if brake_applied <= 0.0:
     return min(error, 0.0)
-  return error * min(max(1.0 - brake_applied / NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE, 0.0), 1.0)
+  coast_error = error * min(max(1.0 - brake_applied / NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE, 0.0), 1.0)
+  return min(coast_error, 0.0) if floor_bound else coast_error
 
 
 class DelayLine:
