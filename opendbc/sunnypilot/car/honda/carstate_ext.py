@@ -12,20 +12,68 @@ from opendbc.car.honda.values import (HONDA_BOSCH, HONDA_BOSCH_RADARLESS, HONDA_
 from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
 from opendbc.car.common.conversions import Conversions as CV
 
+# CAMERA_MESSAGES SPEED_LIMIT_SIGN on EU Honda: limit is encoded as (km/h / 10)
+_METRIC_SIGN_NO_LIMIT = {0, 17, 61}
+
+
+def imperial_speed_limit_from_sign(raw: int) -> float:
+  speed_limit_raw = raw % 32
+  return speed_limit_raw * 5.0 * CV.MPH_TO_MS if (1 <= speed_limit_raw <= 17) else 0.0
+
+
+def metric_speed_limit_from_sign(raw: int) -> float:
+  if raw in _METRIC_SIGN_NO_LIMIT:
+    return 0.0
+  if 1 <= raw <= 25:
+    return raw * 10.0 * CV.KPH_TO_MS
+  return 0.0
+
 
 class CarStateExt:
   def __init__(self, CP, CP_SP):
     self.CP = CP
     self.CP_SP = CP_SP
 
+  @staticmethod
+  def _camera_messages_on_pt(car_fingerprint: str) -> bool:
+    return car_fingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD)
+
+  @staticmethod
+  def speed_limit_parsers(CP: structs.CarParams, CP_SP: structs.CarParamsSP) -> tuple[list, list]:
+    if not CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
+      return [], []
+
+    pt_messages: list = []
+    cam_messages: list = []
+    on_pt = CarStateExt._camera_messages_on_pt(CP.carFingerprint)
+
+    if on_pt:
+      pt_messages.append(("CAMERA_MESSAGES", 10))
+    else:
+      cam_messages.append(("CAMERA_MESSAGES", 10))
+
+    if CP_SP.flags & HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT:
+      cam_messages.append(("TSR_SPEED_LIMIT", 50))
+
+    return pt_messages, cam_messages
+
   def update(self, ret: structs.CarState, ret_sp: structs.CarStateSP, can_parsers: dict[StrEnum, CANParser]) -> None:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
 
     if self.CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
-      speed_bus = cp if (self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD)) else cp_cam
-      speed_limit_raw = speed_bus.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"] % 32
-      ret_sp.speedLimit = speed_limit_raw * 5.0 * CV.MPH_TO_MS if (1 <= speed_limit_raw <= 17) else 0.0
+      speed_bus = cp if self._camera_messages_on_pt(self.CP.carFingerprint) else cp_cam
+
+      if self.CP_SP.flags & HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT:
+        cam_limit = int(cp_cam.vl["TSR_SPEED_LIMIT"]["RECOGNIZED_LIMIT"])
+        if cam_limit > 0:
+          ret_sp.speedLimit = cam_limit * CV.KPH_TO_MS
+        else:
+          raw = int(speed_bus.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
+          ret_sp.speedLimit = metric_speed_limit_from_sign(raw)
+      else:
+        raw = int(speed_bus.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
+        ret_sp.speedLimit = imperial_speed_limit_from_sign(raw)
 
     if self.CP_SP.flags & HondaFlagsSP.NIDEC_HYBRID:
       ret.accFaulted = bool(cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_1"] or cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_2"])

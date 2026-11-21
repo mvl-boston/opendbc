@@ -14,6 +14,7 @@ class HondaFlagsSP(IntFlag):
   HYBRID_ALT_BRAKEHOLD = 4
   HAS_CAMERA_MESSAGES = 8
   STOCK_LONGITUDINAL = 16
+  METRIC_CAMERA_SPEED_LIMIT = 32
 
 
 class HondaSafetyFlagsSP:

@@ -12,6 +12,7 @@ from opendbc.car.interfaces import CarStateBase
 from opendbc.car.honda.hud_objects import HudObjectTracker
 
 from opendbc.sunnypilot.car.honda.carstate_ext import CarStateExt
+from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
 
 TransmissionType = structs.CarParams.TransmissionType
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -408,6 +409,10 @@ class CarState(CarStateBase, CarStateExt):
       # the bridged stock camera LKAS_HUD must stay alive on the powertrain bus
       pt_messages.append(("LKAS_HUD", 10))
     cam_messages = []
+    if CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
+      pt_extra, cam_extra = CarStateExt.speed_limit_parsers(CP, CP_SP)
+      pt_messages += pt_extra
+      cam_messages += cam_extra
     if self.CP.flags & HondaFlags.BOSCH_CANFD:
       # Radar-alive and relay-open detection for the deferred radar disable (see carcontroller).
       # Both messages intentionally go silent (the radar is disabled, the camera ends up behind the

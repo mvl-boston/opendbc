@@ -323,6 +323,10 @@ class CarInterface(CarInterfaceBase):
     if 0x35E in fingerprint[CAN.pt]:
       ret.flags |= HondaFlagsSP.HAS_CAMERA_MESSAGES.value
 
+    if candidate in (CAR.HONDA_E, CAR.HONDA_E_ADVANCE):
+      ret.flags |= HondaFlagsSP.HAS_CAMERA_MESSAGES.value
+      ret.flags |= HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT.value
+
     if candidate == CAR.HONDA_CIVIC:
       if ret.flags & HondaFlagsSP.EPS_MODIFIED:
         stock_cp.lateralTuning.pid.kpV, stock_cp.lateralTuning.pid.kiV = [[0.3], [0.1]]
