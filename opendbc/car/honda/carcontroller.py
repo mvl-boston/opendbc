@@ -17,6 +17,7 @@ from opendbc.car.common.pid import PIDController
 from opendbc.car.honda import lane_path
 from opendbc.car.honda import hud_objects
 from opendbc.car.honda.nidec_long_helpers import nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
+from opendbc.car.honda.radar_steer_bypass import RadarSteerBypass
 
 from opendbc.sunnypilot.car.honda.mads import MadsCarController
 from opendbc.sunnypilot.car.honda.gas_interceptor import GasInterceptorCarController
@@ -285,6 +286,16 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
     self.lkas_state_change_frames = 0
     self.tja_control = bool(CP.flags & HondaFlags.BOSCH_TJA_CONTROL)
     self.param_writer = HondaParamWriter()
+
+    # Stock-ACC steering bypass (see radar_steer_bypass.py): STEERING_CONTROL is also sent straight to the EPS on
+    # the powertrain bus, carrying the counter the radar is about to use. That frame pins its counter, which
+    # reseeds the packer's running counter for 0xE4, so it gets a packer of its own: the bus-0 stream towards the
+    # radar must keep its own continuous counter or the radar rejects it.
+    self.pt_steer_bypass = None
+    if CP.flags & HondaFlags.BOSCH_PT_STEER_BYPASS and not CP.openpilotLongitudinalControl:
+      self.pt_steer_bypass = RadarSteerBypass()
+      self.pt_steer_packer = CANPacker(dbc_names[Bus.pt])
+      self.pt_steer_last_request = False
 
     self.braking = False
     self.brake_steady = 0.
@@ -705,6 +716,19 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         can_sends.append((addr, dat, self.CAN.camera))
 
     # Send steering command.
+    if self.pt_steer_bypass is not None:
+      # EPS inactivity only means we are losing the race against the radar's copy when the EPS is otherwise healthy:
+      # not locked out at its own low-speed limit, not faulted, and not yielding to the driver
+      feedback_valid = CS.steer_status == "NORMAL" and not CS.out.steeringPressed and \
+                       CS.out.vEgo > self.params.STEER_GLOBAL_MIN_SPEED
+      self.pt_steer_bypass.update(CS.radar_steer_counters, self.pt_steer_last_request, CS.steer_control_active, feedback_valid)
+      pt_counter = self.pt_steer_bypass.next_counter()
+      # queued ahead of the bus-0 frame: if the radar re-authors on receipt of ours rather than on its own clock,
+      # the direct frame still reaches the EPS first
+      can_sends.append(hondacan.create_steering_control(self.pt_steer_packer, self.CAN, apply_torque, CC.latActive, self.tja_control,
+                                                        bus=self.CAN.pt, counter=pt_counter))
+      self.pt_steer_bypass.sent(pt_counter)
+      self.pt_steer_last_request = CC.latActive
     can_sends.append(hondacan.create_steering_control(self.packer, self.CAN, apply_torque, CC.latActive, self.tja_control))
 
     wind_brake_ms2 = np.interp(CS.out.vEgo, [0.0, 13.4, 22.4, 31.3, 40.2], [0.000, 0.049, 0.136, 0.267, 0.441]) # in m/s2 units
