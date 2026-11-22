@@ -488,6 +488,9 @@ class CarController(CarControllerBase):
   def update(self, CC, CS, now_nanos):
     gas_pedal_force = 0.0
     actuators = CC.actuators
+    # for the next speed calculation (see carstate zero_speed_rundown)
+    CS.long_active = bool(CC.longActive)
+    CS.plan_accel = float(actuators.accel)
     hud_control = CC.hudControl
     if self.CP.carFingerprint in HONDA_BOSCH:
       hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if 0 < CS.out.vCruise < 255 else 255

@@ -14,6 +14,7 @@ from opendbc.car.honda.values import CAR, DBC, STEER_THRESHOLD, HONDA_BOSCH, HON
 from opendbc.car.interfaces import CarStateBase
 from opendbc.car.honda.hud_objects import HudObjectTracker
 from opendbc.car.honda.steer_threshold_learner import HondaSteerThresholdLearner
+from opendbc.car.honda.zero_speed import zero_speed_rundown
 
 TransmissionType = structs.CarParams.TransmissionType
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -26,6 +27,10 @@ SETTINGS_BUTTONS_DICT = {CruiseSettings.DISTANCE: ButtonType.gapAdjustCruise, Cr
 class CarState(CarStateBase):
   def __init__(self, CP):
     super().__init__(CP)
+    # set by the car controller every frame: the last CarControl's longActive and actuators.accel
+    self.long_active = False
+    self.plan_accel = 0.0
+    self.v_ego_prev = 0.0
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
 
     if CP.transmissionType != TransmissionType.manual:
@@ -108,6 +113,19 @@ class CarState(CarStateBase):
     self.steer_threshold_learner = HondaSteerThresholdLearner(params.get, params.put)
     self._steer_base_threshold = STEER_THRESHOLD.get(self.CP.carFingerprint, 1200)
 
+  def update_speed(self, v_ego_raw: float) -> tuple[float, float]:
+    """vEgo and aEgo from the raw speed, with a zero reading under openpilot braking run down
+    at the commanded accel instead (see zero_speed_rundown). vEgoRaw stays the reading."""
+    v_ego, a_ego = self.update_speed_kf(v_ego_raw)
+    v_rundown = zero_speed_rundown(v_ego_raw, self.v_ego_prev, self.plan_accel, self.long_active, DT_CTRL)
+    if v_rundown is not None:
+      v_ego = v_rundown
+      a_ego = self.plan_accel if v_ego > 0.0 else 0.0
+      # the filter carries on from here when the reading comes back
+      self.v_ego_kf.set_x([[v_ego], [a_ego]])
+    self.v_ego_prev = v_ego
+    return v_ego, a_ego
+
   def update(self, can_parsers) -> structs.CarState:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
@@ -153,7 +171,7 @@ class CarState(CarStateBase):
     v_wheel = sum([cp.vl["WHEEL_SPEEDS"][f"WHEEL_SPEED_{s}"] for s in ("FL", "FR", "RL", "RR")]) / 4.0 * CV.KPH_TO_MS
     v_weight = float(np.interp(v_wheel, v_weight_bp, v_weight_v))
     ret.vEgoRaw = (1. - v_weight) * self.lowspeed_source * CV.KPH_TO_MS * self.CP.wheelSpeedFactor + v_weight * v_wheel
-    ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
+    ret.vEgo, ret.aEgo = self.update_speed(ret.vEgoRaw)
     ret.standstill = self.lowspeed_source < 1e-5
 
     # doorOpen is true if we can find any door open, but signal locations vary, and we may only see the driver's door
