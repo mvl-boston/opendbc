@@ -234,13 +234,42 @@ def nidec_brake_guard(coast_brake: float, brake_scale: float, brake_floor: float
   return coast_brake, False
 
 
-def nidec_brake_gain_error(error: float, brake_applied: float, floor_bound: bool) -> float:
+def nidec_brake_gain_error(error: float, brake_applied: float, no_weaken: bool) -> float:
   """This frame's input to the brake gain: the brake-side error weighted by the brake applied.
 
-  With the brake held up by the floor the gain may rise, not fall.
+  With no_weaken the gain may rise, not fall: the brake is held up by the floor (see
+  nidec_brake_guard), or the frame is from low speed (see nidec_brake_low_speed).
   """
   gain_error = -error * brake_applied
-  return max(gain_error, 0.0) if floor_bound else gain_error
+  return max(gain_error, 0.0) if no_weaken else gain_error
+
+
+# Below this speed (m/s) the brake is not released and the brake learners do not learn a weaker
+# brake (see nidec_brake_low_speed)
+NIDEC_BRAKE_LOW_SPEED = 2.0
+
+
+def nidec_brake_low_speed(v_ego: float) -> bool:
+  """Whether the speed is low enough that a reading of zero, or of a hard decel, may be false.
+
+  Honda wheel speeds snap to zero below about 0.3 m/s with the car still rolling, and the step
+  reads as a hard decel. MDX 3G, route 3792d010590cb83a/000002b7 at 382.7 s: 0.36 m/s snapped to
+  zero, aEgo read -2.1 m/s2, the brake came down from 29 counts to 10 and the car rolled on. When
+  the speed read again 0.6 s later the brake went from 14 to 114 counts in 0.3 s.
+  """
+  return v_ego < NIDEC_BRAKE_LOW_SPEED
+
+
+def nidec_brake_no_release(brake: float, last: float, v_ego: float, plan_accel: float) -> float:
+  """Normalized wire brake that does not come down at low speed until the plan asks to go.
+
+  brake is this frame's wire brake, last the one sent before it, plan_accel the planner's accel
+  (actuators.accel). Below NIDEC_BRAKE_LOW_SPEED the brake only rises or holds while the plan is
+  not positive; a positive plan releases it as before.
+  """
+  if nidec_brake_low_speed(v_ego) and plan_accel <= 0.0:
+    return max(brake, last)
+  return brake
 
 
 # Stopping state: normalized brake that keeps a stopped car stopped on the level: upstream's
@@ -303,7 +332,7 @@ class NidecAccelValid:
     return self.reading_time >= NIDEC_ACCEL_SETTLE_TIME
 
 
-def nidec_brake_coast_error(error: float, brake_applied: float, brake_requested: bool, gas_off_time: float, floor_bound: bool = False) -> float:
+def nidec_brake_coast_error(error: float, brake_applied: float, brake_requested: bool, gas_off_time: float, no_weaken: bool = False) -> float:
   """The part of this frame's brake-side error (commanded minus delivered accel) that teaches the coast decel.
 
   brake_applied is the normalized brake that was on the wire, brake_requested whether a request
@@ -321,15 +350,15 @@ def nidec_brake_coast_error(error: float, brake_applied: float, brake_requested:
   decel there counts in full: without it a coast decel learned too high could never come back
   down (no brake, no error). Too much decel does not count: there is no brake left to take off,
   so the estimate would only run to its limit.
-  With the brake held up by the floor (floor_bound, see nidec_brake_guard) the coast decel may
-  fall, not rise.
+  With no_weaken the coast decel may fall, not rise: the brake is held up by the floor (see
+  nidec_brake_guard), or the frame is from low speed (see nidec_brake_low_speed).
   """
   if (not brake_requested) or gas_off_time < NIDEC_BRAKE_COAST_GAS_OFF_MIN:
     return 0.0
   if brake_applied <= 0.0:
     return min(error, 0.0)
   coast_error = error * min(max(1.0 - brake_applied / NIDEC_BRAKE_COAST_LEARN_MAX_BRAKE, 0.0), 1.0)
-  return min(coast_error, 0.0) if floor_bound else coast_error
+  return min(coast_error, 0.0) if no_weaken else coast_error
 
 
 class DelayLine:
