@@ -489,6 +489,11 @@ class CarController(CarControllerBase):
     gas_pedal_force = 0.0
     actuators = CC.actuators
     hud_control = CC.hudControl
+
+    # for premature standstill workaround
+    CS.long_active = bool(CC.longActive)
+    CS.plan_accel = float(actuators.accel)
+
     if self.CP.carFingerprint in HONDA_BOSCH:
       hud_v_cruise = hud_control.setSpeed / CS.v_cruise_factor if 0 < CS.out.vCruise < 255 else 255
     else:
