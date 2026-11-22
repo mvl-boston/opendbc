@@ -5,6 +5,7 @@ from opendbc.car.honda.nidec_long_helpers import NIDEC_ACCEL_SETTLE_TIME, NIDEC_
                                                 NIDEC_BRAKE_GAIN_KI, NIDEC_BRAKE_GAIN_MAX, NIDEC_BRAKE_GAIN_MIN, NIDEC_STOPPING_BRAKE_RATE, \
                                                 NIDEC_STOPPING_HOLD_RATE, NidecAccelValid, NidecBrakeCoast, NidecBrakeGain, nidec_band_weights, \
                                                 nidec_brake_coast_error, nidec_brake_floor, nidec_brake_gain_error, nidec_brake_guard, \
+                                                NIDEC_BRAKE_LOW_SPEED, nidec_brake_low_speed, nidec_brake_no_release, \
                                                 nidec_brake_scale, nidec_stopping_brake, nidec_stopping_hold
 
 DT = 0.02
@@ -160,6 +161,38 @@ class TestBrakeFloor(unittest.TestCase):
       coast.update(nidec_brake_coast_error(0.5, 0.1, True, GAS_OFF, True), 5.0, DT)
     self.assertAlmostEqual(gain.at(5.0), 0.3)
     self.assertAlmostEqual(coast.at(5.0), 0.4)
+
+
+class TestLowSpeedBrake(unittest.TestCase):
+  def test_low_speed_is_below_two_metres_a_second(self):
+    self.assertEqual(NIDEC_BRAKE_LOW_SPEED, 2.0)
+    self.assertTrue(nidec_brake_low_speed(0.0))
+    self.assertTrue(nidec_brake_low_speed(1.99))
+    self.assertFalse(nidec_brake_low_speed(2.0))
+
+  def test_brake_does_not_come_down_at_low_speed_while_the_plan_is_not_positive(self):
+    for plan in (-2.0, -0.2, 0.0):
+      for speed in (0.0, 0.36, 1.99):
+        self.assertEqual(nidec_brake_no_release(0.04, 0.11, speed, plan), 0.11)
+        self.assertEqual(nidec_brake_no_release(0.0, 0.11, speed, plan), 0.11)
+
+  def test_brake_still_rises_at_low_speed(self):
+    self.assertEqual(nidec_brake_no_release(0.2, 0.11, 0.5, -0.5), 0.2)
+
+  def test_positive_plan_releases_the_brake(self):
+    self.assertEqual(nidec_brake_no_release(0.0, 0.5, 0.0, 0.01), 0.0)
+    self.assertEqual(nidec_brake_no_release(0.04, 0.11, 1.0, 0.3), 0.04)
+
+  def test_brake_follows_the_request_above_low_speed(self):
+    self.assertEqual(nidec_brake_no_release(0.04, 0.11, 2.0, -0.5), 0.04)
+    self.assertEqual(nidec_brake_no_release(0.04, 0.11, 10.0, -0.5), 0.04)
+
+  def test_false_zero_speed_does_not_bring_the_brake_down(self):
+    # route 000002b7 at 382.7 s: 29 counts on the wire, the request falls to 10 as the speed snaps to zero
+    wire = 29 / 256
+    for request, speed in ((21 / 256, 0.09), (10 / 256, 0.0), (11 / 256, 0.0), (13 / 256, 0.0)):
+      wire = nidec_brake_no_release(request, wire, speed, -0.3)
+    self.assertEqual(wire, 29 / 256)
 
 
 class TestStoppingBrake(unittest.TestCase):

@@ -20,7 +20,8 @@ from opendbc.car.honda import hud_objects
 from opendbc.car.honda.nidec_long_helpers import DelayLine, NIDEC_BRAKE_ACCEL_SCALE, NIDEC_BRAKE_BANDS, NIDEC_BRAKE_COAST_KEYS, \
                                                 NIDEC_BRAKE_GAIN_KEYS, NIDEC_BRAKE_GAIN_LEGACY_BAND, \
                                                 NidecAccelValid, NidecBrakeCoast, NidecBrakeGain, nidec_band_weights as band_weights, \
-                                                nidec_brake_coast_error, nidec_brake_floor, nidec_brake_gain_error, nidec_brake_guard, nidec_brake_scale, \
+                                                nidec_brake_coast_error, nidec_brake_floor, nidec_brake_gain_error, nidec_brake_guard, nidec_brake_low_speed, \
+                                                nidec_brake_no_release, nidec_brake_scale, \
                                                 nidec_launch_gas, nidec_launch_lead, nidec_stopping_brake, nidec_stopping_hold, \
                                                 nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
 from opendbc.car.honda.lateral_model import HondaLateralModel
@@ -1245,11 +1246,13 @@ class CarController(CarControllerBase):
             # brake it teaches the gain (slope); at light or fully absorbed braking it teaches the
             # coast decel (offset): more decel than commanded means the car sheds more by itself
             brake_error = brake_accel_delayed - CS.out.aEgo
+            # no weaker brake is learned from the floor, nor from low speed (then or now)
+            no_weaken = floor_bound_delayed or nidec_brake_low_speed(min(v_ego_delayed, CS.out.vEgo))
             if apply_brake > 0:
-              self.brake_gain.update(nidec_brake_gain_error(brake_error, apply_brake_delayed, floor_bound_delayed), v_ego_delayed, 2 * DT_CTRL)
+              self.brake_gain.update(nidec_brake_gain_error(brake_error, apply_brake_delayed, no_weaken), v_ego_delayed, 2 * DT_CTRL)
             if CC.longActive and (not CS.out.gasPressed) and (not CS.out.brakePressed):
               coast_error = nidec_brake_coast_error(brake_error, apply_brake_delayed, brake_requested_delayed, self.gas_off_time,
-                                                    floor_bound_delayed)
+                                                    no_weaken)
               self.brake_coast.update(coast_error, v_ego_delayed, 2 * DT_CTRL)
           self.brake_pid_factor = self.brake_gain.at(CS.out.vEgo)
           brakefactor = nidec_brake_scale(self.brake_pid_factor, float(apply_brake))
@@ -1257,8 +1260,11 @@ class CarController(CarControllerBase):
           if actuators.longControlState == LongCtrlState.stopping:
             apply_brake = nidec_stopping_brake(apply_brake * brakefactor, self.last_applied_brake,
                                                nidec_stopping_hold(hill_brake), 2 * DT_CTRL) / brakefactor
-          self.last_applied_brake = apply_brake * brakefactor
-          apply_brake = int(np.clip(apply_brake * brakefactor * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
+          wire_brake = min(apply_brake * brakefactor, 1.0)
+          if CC.longActive:
+            wire_brake = nidec_brake_no_release(wire_brake, self.last_applied_brake, CS.out.vEgo, actuators.accel)
+          self.last_applied_brake = wire_brake
+          apply_brake = int(np.clip(wire_brake * self.params.NIDEC_BRAKE_MAX, 0, self.params.NIDEC_BRAKE_MAX - 1))
           pump_on, self.last_pump_ts = brake_pump_hysteresis(apply_brake, self.apply_brake_last, self.last_pump_ts, ts)
 
           # limit brake release to 32 units per frame to match factory
