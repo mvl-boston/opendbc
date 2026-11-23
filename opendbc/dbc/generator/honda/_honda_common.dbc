@@ -229,4 +229,4 @@ VAL_ 862 SPEED_LIMIT_MPH 0 "NO_SIGN";
 VAL_ 862 ROAD_SIGN 0 "NO_SIGN" 89 "STOP_SIGN";
 VAL_ 884 DASHBOARD_ALERT 0 "none" 51 "acc_problem" 55 "cmbs_problem" 75 "key_not_detected" 79 "fasten_seatbelt" 111 "lkas_problem" 131 "brake_system_problem" 132 "brake_hold_problem" 139 "tbd" 161 "door_open";
 VAL_ 891 WIPERS 4 "High" 2 "Low" 0 "Off";
-VAL_ 1872 SPEED_LIMIT_METRIC 0 "NO_SIGN";
+VAL_ 1872 SPEED_LIMIT_KPH 0 "NO_SIGN";
