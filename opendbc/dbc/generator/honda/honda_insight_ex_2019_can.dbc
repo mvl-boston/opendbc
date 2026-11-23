@@ -4,7 +4,6 @@ CM_ "IMPORT _bosch_radar_acc.dbc";
 CM_ "IMPORT _lkas_hud_5byte.dbc";
 CM_ "IMPORT _steering_sensors_a.dbc";
 CM_ "IMPORT _gearbox_common.dbc";
-CM_ "IMPORT _honda_e_tsr.dbc";
 
 BO_ 432 STANDSTILL: 7 VSA
  SG_ BRAKE_ERROR_1 : 13|1@0+ (1,0) [0|1] "" EON

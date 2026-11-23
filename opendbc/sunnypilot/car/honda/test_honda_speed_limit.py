@@ -30,5 +30,5 @@ class TestHondaSpeedLimit(unittest.TestCase):
     fingerprint = gen_empty_fingerprint()
     CAN = CanBus(fingerprint=fingerprint)
     fingerprint[CAN.camera][0x750] = 8
-    self.assertIn(0x750, fingerprint[CAN.camera])
+    self.assertEqual(fingerprint[CAN.camera].get(0x750), 8)
     self.assertEqual(HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT.value, 32)

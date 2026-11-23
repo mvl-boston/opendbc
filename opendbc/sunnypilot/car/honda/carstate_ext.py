@@ -43,10 +43,15 @@ class CarStateExt:
     cp_cam = can_parsers[Bus.cam]
 
     if self.CP_SP.flags & HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT:
-      cam_limit = int(cp_cam.vl["TSR_SPEED_LIMIT"]["RECOGNIZED_LIMIT"])
-      if cam_limit > 0:
-        ret_sp.speedLimit = cam_limit * CV.KPH_TO_MS
-      else:
+      pt_dbc_names = cp_cam.dbc.name_to_msg
+      if "TSR_SPEED_LIMIT" in pt_dbc_names:
+        cam_limit = int(cp_cam.vl["TSR_SPEED_LIMIT"]["RECOGNIZED_LIMIT"])
+        if cam_limit > 0:
+          ret_sp.speedLimit = cam_limit * CV.KPH_TO_MS
+        elif "CAMERA_MESSAGES" in pt_dbc_names:
+          raw = int(cp_cam.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
+          ret_sp.speedLimit = metric_speed_limit_from_sign(raw)
+      elif "CAMERA_MESSAGES" in pt_dbc_names:
         raw = int(cp_cam.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
         ret_sp.speedLimit = metric_speed_limit_from_sign(raw)
     elif self.CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
