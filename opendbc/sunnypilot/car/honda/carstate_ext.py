@@ -25,11 +25,11 @@ class CarStateExt:
     ret_sp.speedLimit = 0.0
     if self.CP_SP.flags & HondaFlagsSP.HAS_METRIC_CAMERA_SPEED:
       speed_limit_raw = int(cp_cam.vl["CAMERA_SPEED_LIMIT_METRIC"]["SPEED_LIMIT_METRIC"])
-      ret_sp.speedLimit = cam_limit * CV.KPH_TO_MS  if (1 <= speed_limit_raw <= 200) else 0.0
+      ret_sp.speedLimit = speed_limit_raw * CV.KPH_TO_MS if (1 <= speed_limit_raw <= 200) else 0.0
 
     if ret_sp.speedLimit == 0.0 and self.CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
       speed_bus = cp if (self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD)) else cp_cam
-      speed_limit_raw = speed_bus.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"] % 32
+      speed_limit_raw = int(speed_bus.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"]) & 0x1F
       ret_sp.speedLimit = speed_limit_raw * 5.0 * CV.MPH_TO_MS if (1 <= speed_limit_raw <= 17) else 0.0
 
     if self.CP_SP.flags & HondaFlagsSP.NIDEC_HYBRID:
