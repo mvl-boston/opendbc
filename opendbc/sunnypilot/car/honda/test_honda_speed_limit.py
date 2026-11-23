@@ -16,3 +16,8 @@ class TestHondaSpeedLimit(unittest.TestCase):
     self.assertAlmostEqual(CarStateExt._metric_speed_limit_from_sign(3), 30 * CV.KPH_TO_MS)
     self.assertAlmostEqual(CarStateExt._metric_speed_limit_from_sign(10), 100 * CV.KPH_TO_MS)
     self.assertAlmostEqual(CarStateExt._metric_speed_limit_from_sign(61), 0.0)
+
+  def test_imperial_speed_limit_with_counter_nibble(self):
+    self.assertAlmostEqual(CarStateExt._imperial_speed_limit_m_s(199), 35 * CV.MPH_TO_MS)
+    self.assertAlmostEqual(CarStateExt._imperial_speed_limit_m_s(201), 45 * CV.MPH_TO_MS)
+    self.assertAlmostEqual(CarStateExt._imperial_speed_limit_m_s(125), 0.0)
