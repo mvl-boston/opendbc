@@ -1319,6 +1319,8 @@ class CarController(CarControllerBase):
             self.nidec_gas_boost = False
           if self.nidec_gas_boost:
             self.new_accel = 198
+            if pcm_speed > 0:
+              pcm_speed = 100.0
 
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
