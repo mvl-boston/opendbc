@@ -267,6 +267,7 @@ class CarController(CarControllerBase):
     self.brake_steady = 0.
     self.brake_last = 0.
     self.apply_brake_last = 0
+    self.nidec_gas_boost = False
     self.last_pump_ts = 0.
     self.stopping_counter = 0
 
@@ -1311,6 +1312,13 @@ class CarController(CarControllerBase):
             for band in self.gas_factors:
               self.gas_factors_nomaxspeed[band] = min(self.gas_factors_nomaxspeed[band], self.gas_factors[band])
               self.gas_alphas_nomaxspeed[band] = min(self.gas_alphas_nomaxspeed[band], self.gas_alphas[band])
+
+          if apply_brake < self.apply_brake_last:
+            self.nidec_gas_boost = True
+          if (not CC.longActive) or (CS.aEgo > actuators.accel - 0.2) or (apply_brake > self.apply_brake_last):
+            self.nidec_gas_boost = False
+          if self.nidec_base_boost:
+            self.new_accel = 198
 
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
