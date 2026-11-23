@@ -15,9 +15,6 @@ class HondaFlagsSP(IntFlag):
   HAS_CAMERA_MESSAGES = 8
   STOCK_LONGITUDINAL = 16
   METRIC_CAMERA_SPEED_LIMIT = 32
-  # 0x35E (CAMERA_MESSAGES) seen on that bus at fingerprint time
-  CAMERA_MESSAGES_ON_PT = 64
-  CAMERA_MESSAGES_ON_CAM = 128
 
 
 class HondaSafetyFlagsSP:

@@ -320,14 +320,10 @@ class CarInterface(CarInterfaceBase):
       if 0x223 in fingerprint[CAN.pt]:
         ret.flags |= HondaFlagsSP.HYBRID_ALT_BRAKEHOLD.value
 
-    if 0x35E in fingerprint[CAN.pt]:
-      ret.flags |= HondaFlagsSP.CAMERA_MESSAGES_ON_PT.value
-    if 0x35E in fingerprint[CAN.camera]:
-      ret.flags |= HondaFlagsSP.CAMERA_MESSAGES_ON_CAM.value
-    if ret.flags & (HondaFlagsSP.CAMERA_MESSAGES_ON_PT | HondaFlagsSP.CAMERA_MESSAGES_ON_CAM):
+    if 0x35E in fingerprint[CAN.pt] or 0x35E in fingerprint[CAN.camera]:
       ret.flags |= HondaFlagsSP.HAS_CAMERA_MESSAGES.value
 
-    if fingerprint[CAN.camera].get(0x750) == 8:
+    if fingerprint[CAN.camera].get(0x750) == 8 or fingerprint[CAN.pt].get(0x750) == 8:
       ret.flags |= HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT.value
 
     if candidate == CAR.HONDA_CIVIC:
