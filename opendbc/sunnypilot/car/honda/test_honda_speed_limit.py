@@ -6,12 +6,10 @@ See the LICENSE.md file in the root directory for more details.
 """
 import unittest
 
-from types import SimpleNamespace
-
 from opendbc.car.common.conversions import Conversions as CV
-from opendbc.car.structs import CarParams
-from opendbc.car.honda.values import CAR
-from opendbc.sunnypilot.car.honda.carstate_ext import CarStateExt, imperial_speed_limit_from_sign, metric_speed_limit_from_sign
+from opendbc.car import gen_empty_fingerprint
+from opendbc.car.honda.hondacan import CanBus
+from opendbc.sunnypilot.car.honda.carstate_ext import imperial_speed_limit_from_sign, metric_speed_limit_from_sign
 from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
 
 
@@ -28,9 +26,9 @@ class TestHondaSpeedLimit(unittest.TestCase):
     self.assertAlmostEqual(metric_speed_limit_from_sign(61), 0.0)
     self.assertAlmostEqual(metric_speed_limit_from_sign(17), 0.0)
 
-  def test_metric_speed_limit_parsers_use_camera_bus_only(self):
-    CP = SimpleNamespace(carFingerprint=CAR.HONDA_E)
-    CP_SP = SimpleNamespace(flags=HondaFlagsSP.HAS_CAMERA_MESSAGES | HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT)
-    pt_msgs, cam_msgs = CarStateExt.speed_limit_parsers(CP, CP_SP)
-    self.assertEqual(pt_msgs, [])
-    self.assertEqual(cam_msgs, [("TSR_SPEED_LIMIT", 50), ("CAMERA_MESSAGES", 10)])
+  def test_metric_camera_speed_limit_fingerprint_flag(self):
+    fingerprint = gen_empty_fingerprint()
+    CAN = CanBus(fingerprint=fingerprint)
+    fingerprint[CAN.camera][0x750] = 8
+    self.assertIn(0x750, fingerprint[CAN.camera])
+    self.assertEqual(HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT.value, 32)

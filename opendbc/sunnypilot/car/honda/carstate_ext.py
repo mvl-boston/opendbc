@@ -38,44 +38,21 @@ class CarStateExt:
   def _camera_messages_on_pt(car_fingerprint: str) -> bool:
     return car_fingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD)
 
-  @staticmethod
-  def speed_limit_parsers(CP: structs.CarParams, CP_SP: structs.CarParamsSP) -> tuple[list, list]:
-    if not CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
-      return [], []
-
-    pt_messages: list = []
-    cam_messages: list = []
-
-    # EU TSR must be read on ACC-CAN camera (bus 2). PT-side CAMERA_MESSAGES can carry
-    # fused/nav limits that are not sign recognition.
-    if CP_SP.flags & HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT:
-      cam_messages += [("TSR_SPEED_LIMIT", 50), ("CAMERA_MESSAGES", 10)]
-      return pt_messages, cam_messages
-
-    on_pt = CarStateExt._camera_messages_on_pt(CP.carFingerprint)
-    if on_pt:
-      pt_messages.append(("CAMERA_MESSAGES", 10))
-    else:
-      cam_messages.append(("CAMERA_MESSAGES", 10))
-
-    return pt_messages, cam_messages
-
   def update(self, ret: structs.CarState, ret_sp: structs.CarStateSP, can_parsers: dict[StrEnum, CANParser]) -> None:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
 
-    if self.CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
-      if self.CP_SP.flags & HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT:
-        cam_limit = int(cp_cam.vl["TSR_SPEED_LIMIT"]["RECOGNIZED_LIMIT"])
-        if cam_limit > 0:
-          ret_sp.speedLimit = cam_limit * CV.KPH_TO_MS
-        else:
-          raw = int(cp_cam.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
-          ret_sp.speedLimit = metric_speed_limit_from_sign(raw)
+    if self.CP_SP.flags & HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT:
+      cam_limit = int(cp_cam.vl["TSR_SPEED_LIMIT"]["RECOGNIZED_LIMIT"])
+      if cam_limit > 0:
+        ret_sp.speedLimit = cam_limit * CV.KPH_TO_MS
       else:
-        speed_bus = cp if self._camera_messages_on_pt(self.CP.carFingerprint) else cp_cam
-        raw = int(speed_bus.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
-        ret_sp.speedLimit = imperial_speed_limit_from_sign(raw)
+        raw = int(cp_cam.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
+        ret_sp.speedLimit = metric_speed_limit_from_sign(raw)
+    elif self.CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
+      speed_bus = cp if self._camera_messages_on_pt(self.CP.carFingerprint) else cp_cam
+      raw = int(speed_bus.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
+      ret_sp.speedLimit = imperial_speed_limit_from_sign(raw)
 
     if self.CP_SP.flags & HondaFlagsSP.NIDEC_HYBRID:
       ret.accFaulted = bool(cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_1"] or cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_2"])

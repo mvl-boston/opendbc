@@ -12,7 +12,6 @@ from opendbc.car.interfaces import CarStateBase
 from opendbc.car.honda.hud_objects import HudObjectTracker
 
 from opendbc.sunnypilot.car.honda.carstate_ext import CarStateExt
-from opendbc.sunnypilot.car.honda.values_ext import HondaFlagsSP
 
 TransmissionType = structs.CarParams.TransmissionType
 ButtonType = structs.CarState.ButtonEvent.Type
@@ -27,6 +26,10 @@ class CarState(CarStateBase, CarStateExt):
     CarStateBase.__init__(self, CP, CP_SP)
     CarStateExt.__init__(self, CP, CP_SP)
     can_define = CANDefine(DBC[CP.carFingerprint][Bus.pt])
+
+    self.long_active = False
+    self.plan_accel = 0.0
+    self.v_ego_prev = 0.0
 
     if CP.transmissionType != TransmissionType.manual:
       self.gearbox_msg = "GEARBOX_AUTO"
@@ -149,8 +152,15 @@ class CarState(CarStateBase, CarStateExt):
     v_wheel = sum([cp.vl["WHEEL_SPEEDS"][f"WHEEL_SPEED_{s}"] for s in ("FL", "FR", "RL", "RR")]) / 4.0 * CV.KPH_TO_MS
     v_weight = float(np.interp(v_wheel, v_weight_bp, v_weight_v))
     ret.vEgoRaw = (1. - v_weight) * self.lowspeed_source * CV.KPH_TO_MS * self.CP.wheelSpeedFactor + v_weight * v_wheel
-    ret.vEgo, ret.aEgo = self.update_speed_kf(ret.vEgoRaw)
-    ret.standstill = self.lowspeed_source < 1e-5
+
+    # workaround Honda snap to zero-speed, by presuming it follows plan accel
+    if ret.vEgoRaw < 1e-5 and self.plan_accel < 1e-3 and self.long_active:
+      self.v_ego_prev = max(self.v_ego_prev + self.plan_accel * DT_CTRL, 0.0)
+    else:
+      self.v_ego_prev = ret.vEgoRaw
+
+    ret.vEgo, ret.aEgo = self.update_speed_kf(self.v_ego_prev)
+    ret.standstill = self.v_ego_prev < 1e-5
 
     # doorOpen is true if we can find any door open, but signal locations vary, and we may only see the driver's door
     # TODO: Test the eight Nidec cars without SCM signals for driver's door state, may be able to consolidate further
@@ -409,10 +419,6 @@ class CarState(CarStateBase, CarStateExt):
       # the bridged stock camera LKAS_HUD must stay alive on the powertrain bus
       pt_messages.append(("LKAS_HUD", 10))
     cam_messages = []
-    if CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
-      pt_extra, cam_extra = CarStateExt.speed_limit_parsers(CP, CP_SP)
-      pt_messages += pt_extra
-      cam_messages += cam_extra
     if self.CP.flags & HondaFlags.BOSCH_CANFD:
       # Radar-alive and relay-open detection for the deferred radar disable (see carcontroller).
       # Both messages intentionally go silent (the radar is disabled, the camera ends up behind the
