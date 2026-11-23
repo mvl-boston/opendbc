@@ -45,15 +45,18 @@ class CarStateExt:
 
     pt_messages: list = []
     cam_messages: list = []
-    on_pt = CarStateExt._camera_messages_on_pt(CP.carFingerprint)
 
+    # EU TSR must be read on ACC-CAN camera (bus 2). PT-side CAMERA_MESSAGES can carry
+    # fused/nav limits that are not sign recognition.
+    if CP_SP.flags & HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT:
+      cam_messages += [("TSR_SPEED_LIMIT", 50), ("CAMERA_MESSAGES", 10)]
+      return pt_messages, cam_messages
+
+    on_pt = CarStateExt._camera_messages_on_pt(CP.carFingerprint)
     if on_pt:
       pt_messages.append(("CAMERA_MESSAGES", 10))
     else:
       cam_messages.append(("CAMERA_MESSAGES", 10))
-
-    if CP_SP.flags & HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT:
-      cam_messages.append(("TSR_SPEED_LIMIT", 50))
 
     return pt_messages, cam_messages
 
@@ -62,16 +65,15 @@ class CarStateExt:
     cp_cam = can_parsers[Bus.cam]
 
     if self.CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
-      speed_bus = cp if self._camera_messages_on_pt(self.CP.carFingerprint) else cp_cam
-
       if self.CP_SP.flags & HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT:
         cam_limit = int(cp_cam.vl["TSR_SPEED_LIMIT"]["RECOGNIZED_LIMIT"])
         if cam_limit > 0:
           ret_sp.speedLimit = cam_limit * CV.KPH_TO_MS
         else:
-          raw = int(speed_bus.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
+          raw = int(cp_cam.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
           ret_sp.speedLimit = metric_speed_limit_from_sign(raw)
       else:
+        speed_bus = cp if self._camera_messages_on_pt(self.CP.carFingerprint) else cp_cam
         raw = int(speed_bus.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
         ret_sp.speedLimit = imperial_speed_limit_from_sign(raw)
 

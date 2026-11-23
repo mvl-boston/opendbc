@@ -4,6 +4,7 @@ BO_ 1872 TSR_SPEED_LIMIT: 8 CAM
  SG_ FRAME_TAIL : 63|8@0+ (1,0) [0|255] "" XXX
 
 CM_ BO_ 1872 "EU Honda camera TSR at 50 Hz on ACC-CAN camera side (0x750); not used on US Bosch CAN";
+CM_ SG_ 862 SPEED_LIMIT_SIGN "On EU Honda e, use CAMERA_MESSAGES from ACC-CAN camera (bus 2) for sign TSR; PT-side copies can include nav/GPS fused limits";
 CM_ SG_ 1872 RECOGNIZED_LIMIT "Posted speed in km/h from camera sign recognition; 0 = no sign";
 CM_ SG_ 1872 SIGN_TYPE "Sign subtype / extra code; meaning unknown";
 
