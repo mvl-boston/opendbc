@@ -17,48 +17,38 @@ class CarStateExt:
   def __init__(self, CP, CP_SP):
     self.CP = CP
     self.CP_SP = CP_SP
-    self._speed_limit_msgs_registered = False
+    self._metric_cam_msgs_registered = False
 
-  def _speed_bus(self, cp: CANParser, cp_cam: CANParser) -> CANParser:
-    if self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD):
-      return cp
-    return cp_cam
-
-  def _register_speed_limit_messages(self, speed_bus: CANParser) -> None:
-    if self._speed_limit_msgs_registered:
+  def _register_metric_cam_messages(self, cp_cam: CANParser) -> None:
+    if self._metric_cam_msgs_registered or not (self.CP_SP.flags & HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT):
       return
-    messages = []
-    if self.CP_SP.flags & HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT:
-      messages = ["TSR_SPEED_LIMIT", "CAMERA_MESSAGES"]
-    elif self.CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
-      messages = ["CAMERA_MESSAGES"]
-    for msg in messages:
-      if msg not in speed_bus.dbc.name_to_msg:
-        continue
-      addr = speed_bus.dbc.name_to_msg[msg].address
-      if addr not in speed_bus.message_states:
-        speed_bus._add_message(msg, float('nan'))
-    self._speed_limit_msgs_registered = True
+    for msg in ("TSR_SPEED_LIMIT", "CAMERA_MESSAGES"):
+      if msg in cp_cam.dbc.name_to_msg:
+        addr = cp_cam.dbc.name_to_msg[msg].address
+        if addr not in cp_cam.message_states:
+          cp_cam._add_message(msg, float('nan'))
+    self._metric_cam_msgs_registered = True
 
   def update(self, ret: structs.CarState, ret_sp: structs.CarStateSP, can_parsers: dict[StrEnum, CANParser]) -> None:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
-    speed_bus = self._speed_bus(cp, cp_cam)
 
+    ret_sp.speedLimit = 0.0
     if self.CP_SP.flags & HondaFlagsSP.METRIC_CAMERA_SPEED_LIMIT:
-      self._register_speed_limit_messages(speed_bus)
-      if "TSR_SPEED_LIMIT" in speed_bus.dbc.name_to_msg:
-        cam_limit = int(speed_bus.vl["TSR_SPEED_LIMIT"]["RECOGNIZED_LIMIT"])
+      self._register_metric_cam_messages(cp_cam)
+      if "TSR_SPEED_LIMIT" in cp_cam.dbc.name_to_msg:
+        cam_limit = int(cp_cam.vl["TSR_SPEED_LIMIT"]["RECOGNIZED_LIMIT"])
         if cam_limit > 0:
           ret_sp.speedLimit = cam_limit * CV.KPH_TO_MS
-        elif "CAMERA_MESSAGES" in speed_bus.dbc.name_to_msg:
-          raw = int(speed_bus.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
+        elif "CAMERA_MESSAGES" in cp_cam.dbc.name_to_msg:
+          raw = int(cp_cam.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
           ret_sp.speedLimit = self._metric_speed_limit_from_sign(raw)
-      elif "CAMERA_MESSAGES" in speed_bus.dbc.name_to_msg:
-        raw = int(speed_bus.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
+      elif "CAMERA_MESSAGES" in cp_cam.dbc.name_to_msg:
+        raw = int(cp_cam.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"])
         ret_sp.speedLimit = self._metric_speed_limit_from_sign(raw)
-    elif self.CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
-      self._register_speed_limit_messages(speed_bus)
+
+    if ret_sp.speedLimit == 0.0 and self.CP_SP.flags & HondaFlagsSP.HAS_CAMERA_MESSAGES:
+      speed_bus = cp if (self.CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS - HONDA_BOSCH_CANFD)) else cp_cam
       speed_limit_raw = int(speed_bus.vl["CAMERA_MESSAGES"]["SPEED_LIMIT_SIGN"]) & 0x1F
       ret_sp.speedLimit = speed_limit_raw * 5.0 * CV.MPH_TO_MS if (1 <= speed_limit_raw <= 17) else 0.0
 
@@ -78,11 +68,6 @@ class CarStateExt:
 
     if ret.gearShifter == GearShifter.brake:
       ret.brakePressed = True # allows MADS in B (regen braking) mode
-
-  @staticmethod
-  def _imperial_speed_limit_m_s(raw: int) -> float:
-    speed_limit_raw = raw & 0x1F
-    return speed_limit_raw * 5.0 * CV.MPH_TO_MS if (1 <= speed_limit_raw <= 17) else 0.0
 
   @staticmethod
   def _metric_speed_limit_from_sign(raw: int) -> float:
