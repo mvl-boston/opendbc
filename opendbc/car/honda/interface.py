@@ -323,7 +323,7 @@ class CarInterface(CarInterfaceBase):
     if 0x35E in fingerprint[CAN.pt]:
       ret.flags |= HondaFlagsSP.HAS_CAMERA_MESSAGES.value
 
-    if fingerprint[CAN.camera].get(0x750) == 8:
+    if 0x750 in fingerprint[CAN.camera]:
       ret.flags |= HondaFlagsSP.HAS_METRIC_CAMERA_SPEED.value
 
     if candidate == CAR.HONDA_CIVIC:
