@@ -23,7 +23,8 @@ from opendbc.car.honda.nidec_long_helpers import DelayLine, NIDEC_BRAKE_ACCEL_SC
                                                 nidec_brake_coast_error, nidec_brake_floor, nidec_brake_gain_error, nidec_brake_guard, nidec_brake_low_speed, \
                                                 nidec_brake_no_release, nidec_brake_scale, \
                                                 nidec_launch_gas, nidec_launch_lead, nidec_stopping_brake, nidec_stopping_hold, \
-                                                nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
+                                                nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed, \
+                                                NidecReleaseSeed
 from opendbc.car.honda.lateral_model import HondaLateralModel
 
 VisualAlert = structs.CarControl.HUDControl.VisualAlert
@@ -267,7 +268,6 @@ class CarController(CarControllerBase):
     self.brake_steady = 0.
     self.brake_last = 0.
     self.apply_brake_last = 0
-    self.nidec_gas_boost = False
     self.last_pump_ts = 0.
     self.stopping_counter = 0
 
@@ -436,6 +436,22 @@ class CarController(CarControllerBase):
     # Hands over to dv_launch at first motion so nothing accumulates in the servo low-pass.
     self.dv_break = 6.0 if (Params().get("HondaLaunchDvBreakParams") is None) else Params().get("HondaLaunchDvBreakParams")  # m/s
     self.launch_active = False
+
+    def load_unregistered_param(key, default):
+      try:
+        return load_param(key, default)
+      except Exception as e:
+        if e.__class__.__name__ != "UnknownKeyName":
+          raise
+        return float(default)
+
+    # rolling counterpart of the launch seeds (see NidecReleaseSeed). Until it has learned its own
+    # values it starts from what the standstill launch learned on this car. The two keys persist
+    # once they are registered in openpilot common/params_keys.h; until then every drive starts
+    # from the launch values again.
+    self.release_seed = NidecReleaseSeed(load_unregistered_param("HondaReleaseGasParams", self.gas_launch),
+                                         load_unregistered_param("HondaReleaseDvParams", self.dv_break),
+                                         self.gas_launch_min, self.params.NIDEC_GAS_MAX)
     # gas-channel recovery window: opened at driver-gas override release, at launch window
     # exit, at openpilot brake release and at engage while rolling. In every case the wire gas
     # is coming out of a known dead state (the concurrent gas+brake guard zeroes it for the
@@ -853,6 +869,12 @@ class CarController(CarControllerBase):
       if CC.longActive and (not self.long_active_prev) and (CS.out.vEgo > 0.1) and (not self.launch_active):
         self.gas_recovery_ticks = 200
       self.long_active_prev = CC.longActive
+      # brake release seed: the window and the two seconds after it are a recovery window, so the
+      # gas and speed learners do not read the seeded wire as their own
+      release_available = CC.longActive and (not CS.out.gasPressed) and (not CS.out.brakePressed) and (not self.launch_active)
+      if self.release_seed.update(release_available, CS.out.vEgo, CS.out.aEgo, float(actuators.accel), self.apply_brake_last > 0,
+                                  set_speed_governed):
+        self.gas_recovery_ticks = 200
 
     if self.CP.carFingerprint not in HONDA_BOSCH:
       # all of this is only relevant for HONDA NIDEC
@@ -894,6 +916,8 @@ class CarController(CarControllerBase):
             speed_lead = self.dv_break
         else:
           speed_lead = nidec_speed_lead_mps(sf_eff, float(self.accel), alpha_eff)
+          if self.release_seed.active:
+            speed_lead = max(speed_lead, self.release_seed.lead)
         pcm_speed = float(np.clip(CS.out.vEgo + speed_lead, 0.0, 100.0))
         gas_accel = adjust_accel + wind_brake_ms2 * self.windfactor
         gf_eff = sum(w * self.gas_factors[band] for band, w in gas_w.items())
@@ -941,6 +965,9 @@ class CarController(CarControllerBase):
           # the full authority band until first motion, then hand back to the learned seed.
           launch_seed = self.params.NIDEC_GAS_MAX
         self.new_accel = int(min(launch_seed, self.params.NIDEC_GAS_MAX))
+      elif self.release_seed.active:
+        # same one-frame jump as the launch seed; the rise clip continues from it at window exit
+        self.new_accel = int(max(self.new_accel, self.release_seed.gas))
       # recursive sensitivity of the model prediction to average_factor, advanced with the model itself;
       # used by the average_factor learner below (must be computed before prior_gas_average is updated)
       self.average_factor_sens = (self.new_accel - self.prior_gas_average) + (1 - effective_average_factor) * self.average_factor_sens
@@ -1303,6 +1330,7 @@ class CarController(CarControllerBase):
           # Launch windows own their own release and open the window at exit.
           if (self.apply_brake_last > 0) and (apply_brake == 0) and CC.longActive and (not self.launch_active):
             self.gas_recovery_ticks = 200
+            self.release_seed.arm()
 
           if not set_speed_governed:
             self.gas_factors_nomaxspeed = dict(self.gas_factors)
@@ -1312,15 +1340,6 @@ class CarController(CarControllerBase):
             for band in self.gas_factors:
               self.gas_factors_nomaxspeed[band] = min(self.gas_factors_nomaxspeed[band], self.gas_factors[band])
               self.gas_alphas_nomaxspeed[band] = min(self.gas_alphas_nomaxspeed[band], self.gas_alphas[band])
-
-          if apply_brake < self.apply_brake_last:
-            self.nidec_gas_boost = True
-          if (not CC.longActive) or (CS.out.aEgo > actuators.accel - 0.2) or (apply_brake > self.apply_brake_last):
-            self.nidec_gas_boost = False
-          if self.nidec_gas_boost:
-            self.new_accel = 198
-            if pcm_speed > 0:
-              pcm_speed = 100.0
 
           self.apply_brake_last = apply_brake
           self.brake = apply_brake / self.params.NIDEC_BRAKE_MAX
@@ -1497,6 +1516,8 @@ class CarController(CarControllerBase):
           "HondaLaunchDvParams": self.dv_launch,
           "HondaLaunchGasParams": self.gas_launch,
           "HondaLaunchDvBreakParams": self.dv_break,
+          "HondaReleaseGasParams": self.release_seed.gas,
+          "HondaReleaseDvParams": self.release_seed.lead,
         }
         for band, _ in NIDEC_BRAKE_BANDS:
           learned_values[NIDEC_BRAKE_GAIN_KEYS[band]] = self.brake_gain.values[band]

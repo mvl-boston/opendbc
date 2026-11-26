@@ -94,6 +94,101 @@ def nidec_launch_gas(accel: float, gas_launch: float, gas_max: float) -> float:
   return _interp(accel, NIDEC_LAUNCH_TEMPLATE_ACCEL, NIDEC_LAUNCH_GAS_FULL_ACCEL, gas_launch, max(gas_launch, gas_max))
 
 
+# Brake release seed (see NidecReleaseSeed)
+NIDEC_RELEASE_ARM_TICKS = 200  # 100 Hz ticks after the brake leaves the wire in which the window may open
+NIDEC_RELEASE_UNDER_PLAN = 0.2  # m/s2 the car must be under a positive plan for the window to open, and to stay open
+NIDEC_RELEASE_SLOW_TICKS = 100  # a window still open after this was slow: more seed
+NIDEC_RELEASE_MAX_TICKS = 300
+NIDEC_RELEASE_OVERSHOOT_TICKS = 100  # ticks after the window over which the overshoot is averaged
+NIDEC_RELEASE_OVERSHOOT = 0.3  # m/s2 mean over the plan in those ticks: less seed
+NIDEC_RELEASE_STEP = 0.05
+NIDEC_RELEASE_LEAD_MIN = 1.0  # m/s
+NIDEC_RELEASE_LEAD_MAX = 100.0  # m/s, the PCM_SPEED wire range
+
+
+class NidecReleaseSeed:
+  """Learned PCM_GAS and PCM_SPEED lead for the pull away from an openpilot brake while rolling.
+
+  After a brake the PCM's pedal starts from zero, and how soon it comes back depends on what is on
+  the wire in the first frames. MDX 3G, brake releases above 2 m/s followed by a plan of 0.55 m/s2
+  or more, not held by the set speed, times from the brake leaving the wire:
+
+  - general pipeline (routes 3792d010590cb83a/00000279, /000002b1, /000002b4, /000002b7, 21
+    releases): PCM_GAS 0-55 and a lead of 3.7 m/s or less 0.15 s after the release, pedal moving at
+    1.07-1.27 s, aEgo over 0.3 m/s2 at 2.2-2.4 s, 0.1-0.6 m/s gained in 3 s against a planned 1.6-2.2.
+  - PCM_GAS 198 and the full PCM_SPEED from the release until aEgo was within 0.2 m/s2 of the plan
+    (routes /000002cb, /000002cf, /000002db, 13 releases): pedal moving at 0.50 s, aEgo over 0.3 at
+    1.43 s, 1.56 m/s gained in 3 s against a planned 2.6.
+
+  The same wire did nothing where the PCM was already holding at the set speed (pedal at 1.9 s
+  against 1.6 s, 13 and 16 releases), and one second after a catch-up that had taken more than a
+  second the car was 0.28 m/s2 over the plan on average, against 0.12 with the general pipeline
+  (over by 0.3 or more after 9 of 26 against 8 of 44).
+
+  So the level is learned rather than fixed. The window opens once per brake release, when the
+  plan is positive and the car is NIDEC_RELEASE_UNDER_PLAN under it, and closes when the car has
+  caught up. A window that is still open after NIDEC_RELEASE_SLOW_TICKS raises both values, a mean
+  overshoot of NIDEC_RELEASE_OVERSHOOT in the second after it lowers them, so the pair is bracketed
+  from both sides. A window ended by the driver, the brake, a plan back at zero or the set speed
+  teaches nothing.
+
+  PCM_GAS while the brake is still on the wire is not part of it: PCM_SPEED is 0 then, and in 114 s
+  of PCM_GAS 198 over a nonzero brake on the same three routes the pedal stayed at zero (no fault
+  either) and the pedal came back no sooner after it (correlation -0.06 with its length, 18 releases).
+  """
+
+  def __init__(self, gas: float, lead: float, gas_min: float, gas_max: float):
+    self.gas_min, self.gas_max = gas_min, gas_max
+    self.gas = float(min(max(gas, gas_min), gas_max))
+    self.lead = float(min(max(lead, NIDEC_RELEASE_LEAD_MIN), NIDEC_RELEASE_LEAD_MAX))
+    self.active = False
+    self.armed_ticks = 0
+    self.ticks = 0
+    self.overshoot_ticks = 0
+    self.overshoot_sum = 0.0
+
+  def arm(self) -> None:
+    """The openpilot brake has just left the wire."""
+    self.armed_ticks = NIDEC_RELEASE_ARM_TICKS
+
+  def _scale(self, factor: float) -> None:
+    self.gas = float(min(max(self.gas * factor, self.gas_min), self.gas_max))
+    self.lead = float(min(max(self.lead * factor, NIDEC_RELEASE_LEAD_MIN), NIDEC_RELEASE_LEAD_MAX))
+
+  def update(self, available: bool, v_ego: float, a_ego: float, accel: float, brake_applied: bool, set_speed_governed: bool) -> bool:
+    """One 100 Hz tick. available: openpilot longitudinal is active, no driver pedal, not a standstill launch."""
+    if self.overshoot_ticks > 0:
+      if not available:
+        self.overshoot_ticks = 0
+      else:
+        self.overshoot_sum += a_ego - accel
+        self.overshoot_ticks -= 1
+        if self.overshoot_ticks == 0:
+          overshoot = self.overshoot_sum / NIDEC_RELEASE_OVERSHOOT_TICKS
+          if overshoot > NIDEC_RELEASE_OVERSHOOT:
+            self._scale(1.0 - NIDEC_RELEASE_STEP * min(overshoot / NIDEC_RELEASE_OVERSHOOT, 2.0))
+
+    under_plan = (accel > 0.0) and (a_ego < accel - NIDEC_RELEASE_UNDER_PLAN)
+    if self.active:
+      self.ticks += 1
+      if (not available) or brake_applied or set_speed_governed or (accel <= 0.0):
+        self.active = False
+      elif (not under_plan) or (self.ticks >= NIDEC_RELEASE_MAX_TICKS):
+        self.active = False
+        if self.ticks > NIDEC_RELEASE_SLOW_TICKS:
+          self._scale(1.0 + NIDEC_RELEASE_STEP)
+        self.overshoot_ticks = NIDEC_RELEASE_OVERSHOOT_TICKS
+        self.overshoot_sum = 0.0
+    elif self.armed_ticks > 0:
+      self.armed_ticks -= 1
+      if available and (not brake_applied) and (not set_speed_governed) and (v_ego > 0.1) and under_plan:
+        self.active = True
+        self.armed_ticks = 0
+        self.ticks = 0
+        self.overshoot_ticks = 0
+    return self.active
+
+
 def nidec_speed_channel_pinned(dv_lead: float, dv_sat: float, dv_coast: float = NIDEC_DV_SAT_MIN) -> bool:
   """True when the lead the servo is answering is past its responsive band in either direction.
 

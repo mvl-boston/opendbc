@@ -1,6 +1,8 @@
 import unittest
 
 from opendbc.car.honda.nidec_long_helpers import DelayLine, NIDEC_LAUNCH_GAS_FULL_ACCEL, NIDEC_LAUNCH_LEAD_MIN_ACCEL, NIDEC_LAUNCH_TEMPLATE_ACCEL, \
+                                                NIDEC_RELEASE_ARM_TICKS, NIDEC_RELEASE_LEAD_MAX, NIDEC_RELEASE_MAX_TICKS, \
+                                                NIDEC_RELEASE_OVERSHOOT_TICKS, NIDEC_RELEASE_SLOW_TICKS, NidecReleaseSeed, \
                                                 nidec_launch_gas, nidec_launch_lead, nidec_speed_lead_mps, nidec_speed_channel_pinned, \
                                                 nidec_set_speed_governed
 
@@ -34,6 +36,117 @@ class TestNidecLaunchFollowsPlan(unittest.TestCase):
     seeds = [nidec_launch_gas(a, 100.0, 198) for a in plans]
     self.assertEqual(leads, sorted(leads))
     self.assertEqual(seeds, sorted(seeds))
+
+
+class TestNidecReleaseSeed(unittest.TestCase):
+  def setUp(self):
+    self.seed = NidecReleaseSeed(110.0, 6.0, 100.0, 198.0)
+
+  def tick(self, n=1, available=True, v_ego=8.0, a_ego=-0.3, accel=0.5, brake_applied=False, set_speed_governed=False):
+    for _ in range(n):
+      active = self.seed.update(available, v_ego, a_ego, accel, brake_applied, set_speed_governed)
+    return active
+
+  def test_closed_until_a_brake_release(self):
+    self.assertFalse(self.tick(500))
+
+  def test_opens_after_a_release_once_the_plan_is_positive_and_the_car_is_under_it(self):
+    self.seed.arm()
+    self.assertFalse(self.tick(a_ego=-0.4, accel=-0.1))  # the plan still wants the car to slow
+    self.assertFalse(self.tick(a_ego=0.4, accel=0.5))  # already on the plan
+    self.assertTrue(self.tick(a_ego=-0.3, accel=0.1))
+
+  def test_does_not_open_once_the_arm_time_is_over(self):
+    self.seed.arm()
+    self.tick(NIDEC_RELEASE_ARM_TICKS, a_ego=-0.4, accel=-0.1)
+    self.assertFalse(self.tick())
+
+  def test_does_not_open_at_standstill_at_the_set_speed_or_under_a_driver_pedal(self):
+    for kwargs in ({"v_ego": 0.0}, {"set_speed_governed": True}, {"available": False}, {"brake_applied": True}):
+      self.seed.arm()
+      self.assertFalse(self.tick(**kwargs), kwargs)
+
+  def test_one_window_per_release(self):
+    self.seed.arm()
+    self.assertTrue(self.tick())
+    self.assertFalse(self.tick(a_ego=0.4))
+    self.assertFalse(self.tick())
+
+  def test_quick_catch_up_teaches_nothing(self):
+    self.seed.arm()
+    self.tick(NIDEC_RELEASE_SLOW_TICKS)
+    self.assertFalse(self.tick(a_ego=0.4))
+    self.tick(NIDEC_RELEASE_OVERSHOOT_TICKS, a_ego=0.5)
+    self.assertEqual((self.seed.gas, self.seed.lead), (110.0, 6.0))
+
+  def test_slow_catch_up_raises_both(self):
+    self.seed.arm()
+    self.tick(NIDEC_RELEASE_SLOW_TICKS + 1)
+    self.assertFalse(self.tick(a_ego=0.4))
+    self.assertAlmostEqual(self.seed.gas, 115.5)
+    self.assertAlmostEqual(self.seed.lead, 6.3)
+
+  def test_timeout_counts_as_slow(self):
+    self.seed.arm()
+    self.assertTrue(self.tick(NIDEC_RELEASE_MAX_TICKS))
+    self.assertFalse(self.tick())
+    self.assertAlmostEqual(self.seed.gas, 115.5)
+
+  def test_overshoot_after_the_window_lowers_both(self):
+    self.seed.arm()
+    self.tick(10)
+    self.tick(a_ego=0.4)
+    self.tick(NIDEC_RELEASE_OVERSHOOT_TICKS, a_ego=0.8)  # 0.3 over the plan for a second
+    self.assertAlmostEqual(self.seed.gas, 104.5)
+    self.assertAlmostEqual(self.seed.lead, 5.7)
+
+  def test_larger_overshoot_lowers_more_up_to_twice_the_step(self):
+    for a_ego, lead in ((0.95, 5.55), (1.1, 5.4), (3.0, 5.4)):
+      seed = NidecReleaseSeed(150.0, 6.0, 100.0, 198.0)
+      seed.arm()
+      seed.update(True, 8.0, -0.3, 0.5, False, False)
+      seed.update(True, 8.0, 0.4, 0.5, False, False)
+      for _ in range(NIDEC_RELEASE_OVERSHOOT_TICKS):
+        seed.update(True, 8.0, a_ego, 0.5, False, False)
+      self.assertAlmostEqual(seed.lead, lead)
+
+  def test_window_ended_from_outside_teaches_nothing(self):
+    for kwargs in ({"available": False}, {"brake_applied": True}, {"set_speed_governed": True}, {"accel": 0.0}):
+      seed = NidecReleaseSeed(110.0, 6.0, 100.0, 198.0)
+      seed.arm()
+      for _ in range(NIDEC_RELEASE_SLOW_TICKS + 50):
+        seed.update(True, 8.0, -0.3, 0.5, False, False)
+      args = {"available": True, "v_ego": 8.0, "a_ego": -0.3, "accel": 0.5, "brake_applied": False, "set_speed_governed": False} | kwargs
+      self.assertFalse(seed.update(**args), kwargs)
+      for _ in range(NIDEC_RELEASE_OVERSHOOT_TICKS):
+        seed.update(True, 8.0, 2.0, 0.5, False, False)
+      self.assertEqual((seed.gas, seed.lead), (110.0, 6.0), kwargs)
+
+  def test_driver_pedal_drops_the_overshoot_measurement(self):
+    self.seed.arm()
+    self.tick(10)
+    self.tick(a_ego=0.4)
+    self.tick(50, a_ego=2.0)
+    self.tick(available=False, a_ego=2.0)
+    self.tick(NIDEC_RELEASE_OVERSHOOT_TICKS, a_ego=2.0)
+    self.assertEqual((self.seed.gas, self.seed.lead), (110.0, 6.0))
+
+  def test_values_stay_inside_their_ranges(self):
+    seed = NidecReleaseSeed(50.0, 500.0, 100.0, 198.0)
+    self.assertEqual((seed.gas, seed.lead), (100.0, NIDEC_RELEASE_LEAD_MAX))
+    for _ in range(200):
+      seed.arm()
+      for _ in range(NIDEC_RELEASE_SLOW_TICKS + 2):
+        seed.update(True, 8.0, -0.3, 0.5, False, False)
+      seed.update(True, 8.0, 0.4, 0.5, False, False)
+    self.assertEqual((seed.gas, seed.lead), (198.0, NIDEC_RELEASE_LEAD_MAX))
+    for _ in range(200):
+      seed.arm()
+      seed.update(True, 8.0, -0.3, 0.5, False, False)
+      seed.update(True, 8.0, 0.4, 0.5, False, False)
+      for _ in range(NIDEC_RELEASE_OVERSHOOT_TICKS):
+        seed.update(True, 8.0, 2.0, 0.5, False, False)
+    self.assertEqual((seed.gas, seed.lead), (100.0, 1.0))
 
 
 class TestNidecSpeedChannelPinned(unittest.TestCase):
