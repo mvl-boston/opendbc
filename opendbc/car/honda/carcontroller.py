@@ -1315,7 +1315,7 @@ class CarController(CarControllerBase):
 
           if apply_brake < self.apply_brake_last:
             self.nidec_gas_boost = True
-          if (not CC.longActive) or (CS.out.aEgo > actuators.accel - 0.2) or (apply_brake > self.apply_brake_last):
+          if (not CC.longActive) or ((CS.out.aEgo > actuators.accel - 0.2) and (apply_brake == 0)) or (apply_brake > self.apply_brake_last):
             self.nidec_gas_boost = False
           if self.nidec_gas_boost:
             self.new_accel = 198
