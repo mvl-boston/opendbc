@@ -54,7 +54,7 @@ class CarControllerParams:
         steer_max = 1000  # TODO: determine if there is a dead zone at the top end
       elif CP.carFingerprint in (CAR.HONDA_CIVIC, CAR.HONDA_CLARITY):
         steer_max = 2560
-      elif CP.carFingerprint == CAR.ACURA_ILX:
+      elif CP.carFingerprint in (CAR.ACURA_ILX, CAR.HONDA_NVAN):
         steer_max = 3840  # TODO: determine if there is a dead zone at the top end
       elif CP.carFingerprint == CAR.ACURA_RDX_3G:
         steer_max = 4095  # TODO: determine if there is a dead zone at the top end
@@ -205,6 +205,13 @@ class CAR(Platforms):
   HONDA_NBOX_2G = HondaBoschPlatformConfig(
     [
       HondaCarDocs("Honda N-Box 2018", "All", min_steer_speed=5.),
+    ],
+    CarSpecs(wheelbase=2.520, steerRatio=18.64),
+    {Bus.pt: 'acura_rdx_2020_can_generated'},
+  )
+  HONDA_NVAN = HondaBoschPlatformConfig(
+    [
+      HondaCarDocs("Honda N-VAN 2018", "All", min_steer_speed=5.),
     ],
     CarSpecs(wheelbase=2.520, steerRatio=18.64),
     {Bus.pt: 'acura_rdx_2020_can_generated'},
@@ -538,6 +545,7 @@ STEER_THRESHOLD = {
   CAR.ACURA_MDX_3G: 400,
   CAR.ACURA_TLX_1G: 200,
   CAR.ACURA_RLX_HYBRID: 2400,
+  CAR.HONDA_NVAN: 600,
 }
 
 
@@ -587,7 +595,7 @@ FW_QUERY_CONFIG = FwQueryConfig(
               CAR.HONDA_CRV_SA, CAR.ACURA_MDX_3G, CAR.HONDA_ACCORD_9G, CAR.ACURA_RLX_HYBRID,
               *[c for c in CAR if c.config.flags & (HondaFlags.BOSCH_ALT_RADAR | HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD)]],
     Ecu.vsa: [CAR.ACURA_RDX_3G, CAR.HONDA_ACCORD, CAR.HONDA_CIVIC, CAR.HONDA_CIVIC_BOSCH, CAR.HONDA_CRV_5G, CAR.HONDA_CRV_HYBRID, CAR.HONDA_E,
-              CAR.HONDA_E_ADVANCE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G, CAR.ACURA_MDX_4G,
+              CAR.HONDA_E_ADVANCE, CAR.HONDA_INSIGHT, CAR.HONDA_NBOX_2G, CAR.HONDA_NVAN, CAR.ACURA_MDX_4G,
               CAR.HONDA_ACCORD_9G, CAR.ACURA_RLX_HYBRID, CAR.ACURA_MDX_3G,
               *[c for c in CAR if c.config.flags & (HondaFlags.BOSCH_ALT_RADAR | HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD)]],
   },
