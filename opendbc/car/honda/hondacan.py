@@ -245,6 +245,17 @@ def create_legacy_brake_command(packer, bus):
   return packer.make_can_msg("LEGACY_BRAKE_COMMAND", bus, {})
 
 
+SCM_BUTTONS_COUNTER_MAX = 4  # 2-bit rolling counter on Bosch SCM_BUTTONS
+
+
+def seed_scm_packer_counter(packer, stock_counter: int) -> None:
+  """Continue the stock PT SCM counter on OP button-spam frames (counter is 2-bit, mod 4)."""
+  msg = packer.dbc.name_to_msg.get("SCM_BUTTONS")
+  if msg is None:
+    return
+  packer.counters[msg.address] = (int(stock_counter) + 1) % SCM_BUTTONS_COUNTER_MAX
+
+
 def spam_buttons_command(packer, CAN, cruise_button, cruise_setting, ambient_light, car_fingerprint, bus=None):
   values = {
     'CRUISE_BUTTONS': cruise_button,

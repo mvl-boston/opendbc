@@ -83,6 +83,7 @@ class CarState(CarStateBase):
     self.radar_50hz_tick = False
 
     self.scm_ambient_light = 0
+    self.scm_counter = 0
     # CAN FD deferred radar disable (see carcontroller): the stock radar is assumed alive until it has
     # been silent for a few frames, and the relay is detected open once the camera's STEERING_CONTROL
     # stops being physically visible on the PT bus.
@@ -120,6 +121,7 @@ class CarState(CarStateBase):
     prev_cruise_setting = self.cruise_setting
     self.cruise_setting = cp.vl["SCM_BUTTONS"]["CRUISE_SETTING"]
     self.cruise_buttons = cp.vl["SCM_BUTTONS"]["CRUISE_BUTTONS"]
+    self.scm_counter = int(cp.vl["SCM_BUTTONS"]["COUNTER"])
     if self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
       # The camera consumes SCM_BUTTONS content beyond the buttons (losing/zeroing this byte raises an
       # adaptive high beam error), so it must be echoed on frames sent in the SCM's place.

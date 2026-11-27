@@ -259,6 +259,8 @@ class CarController(CarControllerBase):
 
     self.lkas_button_send_remaining = 0
     self.last_lkas_button_frame = 0
+    # last stock SCM counter used to seed button-spam (None between spam bursts)
+    self.scm_spam_stock_counter = None
     self.radar_disable_counter = 0
 
     self.gasalpha = 0.0 if (Params().get("HondaGasAlphaParams") is None) else Params().get("HondaGasAlphaParams")
@@ -431,6 +433,11 @@ class CarController(CarControllerBase):
       "55": 1.0 if (Params().get("HondaLatAccelFactor55Params") is None) else Params().get("HondaLatAccelFactor55Params"),
       "60": 1.0 if (Params().get("HondaLatAccelFactor60Params") is None) else Params().get("HondaLatAccelFactor60Params")
     }
+
+  def _seed_scm_spam_if_needed(self, CS) -> None:
+    if self.scm_spam_stock_counter != CS.scm_counter:
+      hondacan.seed_scm_packer_counter(self.packer, CS.scm_counter)
+      self.scm_spam_stock_counter = CS.scm_counter
 
   def update(self, CC, CS, now_nanos):
     gas_pedal_force = 0.0
@@ -1054,9 +1061,13 @@ class CarController(CarControllerBase):
         can_sends.append(hondacan.create_bosch_supplemental_1(self.packer, self.CAN))
       # If using stock ACC, spam cancel command to kill gas when OP disengages.
       if pcm_cancel_cmd:
+        self._seed_scm_spam_if_needed(CS)
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.CANCEL, 0, CS.scm_ambient_light, self.CP.carFingerprint))
       elif CC.cruiseControl.resume:
+        self._seed_scm_spam_if_needed(CS)
         can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CruiseButtons.RES_ACCEL, 0, CS.scm_ambient_light, self.CP.carFingerprint))
+      else:
+        self.scm_spam_stock_counter = None
 
     else:
       # Send gas and brake commands.
@@ -1301,8 +1312,11 @@ class CarController(CarControllerBase):
       else:
         cruise_setting = CS.cruise_setting
 
+      self._seed_scm_spam_if_needed(CS)
       can_sends.append(hondacan.spam_buttons_command(self.packer, self.CAN, CS.cruise_buttons, cruise_setting,
                                                      CS.scm_ambient_light, self.CP.carFingerprint, bus=self.CAN.camera))
+    elif self.CP.carFingerprint in (HONDA_BOSCH_RADARLESS | HONDA_BOSCH_CANFD):
+      self.scm_spam_stock_counter = None
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = self.last_torque
