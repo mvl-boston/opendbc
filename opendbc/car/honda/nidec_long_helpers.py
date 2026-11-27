@@ -83,6 +83,17 @@ def nidec_launch_lead(accel: float, dv_launch: float, general_lead: float) -> fl
   return _interp(accel, NIDEC_LAUNCH_LEAD_MIN_ACCEL, NIDEC_LAUNCH_TEMPLATE_ACCEL, min(general_lead, dv_launch), dv_launch)
 
 
+def nidec_plan_boost_trigger(plan_accel: float, plan_accel_rising: bool, apply_brake: float, standstill: bool) -> bool:
+  """Arm the release gas boost from the planner's accels[0] instead of the brake command.
+
+  Only while openpilot is still braking, so a rising plan in ordinary cruise never asks for
+  full gas. At standstill the plan must also be positive: plan noise under a stopped lead
+  would otherwise latch the boost for the whole hold."""
+  if not plan_accel_rising or apply_brake <= 0:
+    return False
+  return plan_accel > 0.0 or not standstill
+
+
 def nidec_launch_gas(accel: float, gas_launch: float, gas_max: float) -> float:
   """PCM_GAS seed in the launch window once the car is moving.
 
