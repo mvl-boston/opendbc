@@ -1,8 +1,24 @@
 import unittest
 
 from opendbc.car.honda.nidec_long_helpers import DelayLine, NIDEC_LAUNCH_GAS_FULL_ACCEL, NIDEC_LAUNCH_LEAD_MIN_ACCEL, NIDEC_LAUNCH_TEMPLATE_ACCEL, \
-                                                nidec_launch_gas, nidec_launch_lead, nidec_speed_lead_mps, nidec_speed_channel_pinned, \
-                                                nidec_set_speed_governed
+                                                nidec_launch_gas, nidec_launch_lead, nidec_plan_boost_trigger, nidec_speed_lead_mps, \
+                                                nidec_speed_channel_pinned, nidec_set_speed_governed
+
+
+class TestNidecPlanBoostTrigger(unittest.TestCase):
+  def test_rising_positive_plan_under_the_stop_hold_arms(self):
+    self.assertTrue(nidec_plan_boost_trigger(0.04, True, 300, True))
+
+  def test_stop_hold_needs_a_positive_plan(self):
+    self.assertFalse(nidec_plan_boost_trigger(-0.01, True, 300, True))
+    self.assertFalse(nidec_plan_boost_trigger(0.0, True, 300, True))
+
+  def test_rolling_brake_release_arms_while_the_plan_is_still_negative(self):
+    self.assertTrue(nidec_plan_boost_trigger(-0.4, True, 80, False))
+
+  def test_never_without_brake_or_a_rising_plan(self):
+    self.assertFalse(nidec_plan_boost_trigger(0.5, True, 0, False))
+    self.assertFalse(nidec_plan_boost_trigger(0.5, False, 300, True))
 
 
 class TestNidecLaunchFollowsPlan(unittest.TestCase):

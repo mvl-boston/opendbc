@@ -6,6 +6,10 @@ from queue import Empty, Queue
 
 import numpy as np
 from openpilot.common.params import Params
+try:
+  import openpilot.cereal.messaging as messaging
+except ImportError:  # opendbc used outside an openpilot checkout
+  messaging = None
 from opendbc.car.common.conversions import Conversions as CV
 
 from opendbc.can import CANPacker
@@ -22,7 +26,7 @@ from opendbc.car.honda.nidec_long_helpers import DelayLine, NIDEC_BRAKE_ACCEL_SC
                                                 NidecAccelValid, NidecBrakeCoast, NidecBrakeGain, nidec_band_weights as band_weights, \
                                                 nidec_brake_coast_error, nidec_brake_floor, nidec_brake_gain_error, nidec_brake_guard, nidec_brake_low_speed, \
                                                 nidec_brake_no_release, nidec_brake_scale, \
-                                                nidec_launch_gas, nidec_launch_lead, nidec_stopping_brake, nidec_stopping_hold, \
+                                                nidec_launch_gas, nidec_launch_lead, nidec_plan_boost_trigger, nidec_stopping_brake, nidec_stopping_hold, \
                                                 nidec_speed_lead_mps, nidec_speed_channel_pinned, nidec_set_speed_governed
 from opendbc.car.honda.lateral_model import HondaLateralModel
 
@@ -268,6 +272,11 @@ class CarController(CarControllerBase):
     self.brake_last = 0.
     self.apply_brake_last = 0
     self.nidec_gas_boost = False
+    # The boost is triggered from the planner's own accels[0]: actuators.accel is pinned at
+    # stopAccel while longcontrol sits in its stopping state, so it trails the plan by up to ~1s.
+    self.plan_sm = messaging.SubMaster(['longitudinalPlan']) if messaging is not None else None
+    self.plan_accel = 0.0
+    self.plan_accel_rising = False
     self.last_pump_ts = 0.
     self.stopping_counter = 0
 
@@ -1313,7 +1322,17 @@ class CarController(CarControllerBase):
               self.gas_factors_nomaxspeed[band] = min(self.gas_factors_nomaxspeed[band], self.gas_factors[band])
               self.gas_alphas_nomaxspeed[band] = min(self.gas_alphas_nomaxspeed[band], self.gas_alphas[band])
 
-          if apply_brake < self.apply_brake_last:
+          if self.plan_sm is not None:
+            self.plan_sm.update(0)
+            if not self.plan_sm.alive['longitudinalPlan']:
+              self.plan_accel_rising = False
+            elif self.plan_sm.updated['longitudinalPlan']:
+              accels = self.plan_sm['longitudinalPlan'].accels
+              plan_accel = float(accels[0]) if len(accels) else 0.0
+              self.plan_accel_rising = plan_accel > self.plan_accel
+              self.plan_accel = plan_accel
+
+          if nidec_plan_boost_trigger(self.plan_accel, self.plan_accel_rising, apply_brake, CS.out.standstill):
             self.nidec_gas_boost = True
           if (not CC.longActive) or ((CS.out.aEgo >= actuators.accel) and (apply_brake == 0)) or (apply_brake > self.apply_brake_last):
             self.nidec_gas_boost = False
