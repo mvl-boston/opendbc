@@ -277,7 +277,7 @@ class CarController(CarControllerBase):
     self.plan_sm = messaging.SubMaster(['longitudinalPlan']) if messaging is not None else None
     self.plan_accel = 0.0
     self.plan_accel_rising = False
-    self.plan_accel_falling = False    
+    self.plan_accel_negative = False    
     self.last_pump_ts = 0.
     self.stopping_counter = 0
 
@@ -1330,18 +1330,14 @@ class CarController(CarControllerBase):
             elif self.plan_sm.updated['longitudinalPlan']:
               accels = self.plan_sm['longitudinalPlan'].accels
               plan_accel = float(accels[0]) if len(accels) else 0.0
-              if plan_accel > self.plan_accel:
-                self.plan_accel_rising = True
-                self.plan_accel_falling = False
-              if plan_accel < self.plan_accel:
-                self.plan_accel_rising = False
-                self.plan_accel_falling = True
+              self.plan_accel_rising = (plan_accel > self.plan_accel):
+              self.plan_accel_negative = (plan_accel < -1e-5)
               self.plan_accel = plan_accel
 
           if nidec_plan_boost_trigger(self.plan_accel, self.plan_accel_rising, apply_brake, CS.out.standstill):
             self.nidec_gas_boost = True
           if (not CC.longActive) or ((CS.out.aEgo >= actuators.accel) and (apply_brake == 0)) or (apply_brake > self.apply_brake_last) or \
-              self.plan_accel_falling:
+              self.plan_accel_negative:
             self.nidec_gas_boost = False
           if self.nidec_gas_boost:
             self.new_accel = 198
