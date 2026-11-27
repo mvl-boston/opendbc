@@ -277,7 +277,7 @@ class CarController(CarControllerBase):
     self.plan_sm = messaging.SubMaster(['longitudinalPlan']) if messaging is not None else None
     self.plan_accel = 0.0
     self.plan_accel_rising = False
-    self.plan_accel_negative = False    
+    self.plan_accel_negative = False
     self.last_pump_ts = 0.
     self.stopping_counter = 0
 
@@ -1330,7 +1330,7 @@ class CarController(CarControllerBase):
             elif self.plan_sm.updated['longitudinalPlan']:
               accels = self.plan_sm['longitudinalPlan'].accels
               plan_accel = float(accels[0]) if len(accels) else 0.0
-              self.plan_accel_rising = (plan_accel > self.plan_accel):
+              self.plan_accel_rising = (plan_accel > self.plan_accel)
               self.plan_accel_negative = (plan_accel < -1e-5)
               self.plan_accel = plan_accel
 
