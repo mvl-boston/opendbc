@@ -11,10 +11,7 @@ uint32_t microsecond_timer_get(void) {
 
 #include "opendbc/safety/can.h"
 #include "opendbc/safety/safety.h"
-
-void safety_tick_current_safety_config() {
-  safety_tick(&current_safety_config);
-}
+#include "opendbc/safety/ignition.h"
 
 bool safety_config_valid() {
   if (current_safety_config.rx_checks_len <= 0) {
@@ -49,8 +46,8 @@ bool get_controls_allowed(void){
   return controls_allowed;
 }
 
-int get_alternative_experience(void){
-  return alternative_experience;
+bool get_ignition_can(void){
+  return ignition_can;
 }
 
 bool get_relay_malfunction(void){
@@ -151,10 +148,6 @@ void set_desired_angle_last(int t){
   desired_angle_last = t;
 }
 
-int get_desired_angle_last(void){
-  return desired_angle_last;
-}
-
 void set_angle_meas(int min, int max){
   angle_meas.min = min;
   angle_meas.max = max;
@@ -168,19 +161,32 @@ int get_angle_meas_max(void){
   return angle_meas.max;
 }
 
+void set_desired_curvature_last(int t){
+  curvature_state.desired_last = t;
+}
+
+int get_desired_curvature_last(void){
+  return curvature_state.desired_last;
+}
+
+void set_curvature_meas(int min, int max){
+  curvature_state.meas.min = min;
+  curvature_state.meas.max = max;
+}
+
+int get_curvature_meas_min(void){
+  return curvature_state.meas.min;
+}
+
+int get_curvature_meas_max(void){
+  return curvature_state.meas.max;
+}
+
 
 // ***** car specific helpers *****
 
 void set_honda_alt_brake_msg(bool c){
   honda_alt_brake_msg = c;
-}
-
-void set_honda_bosch_long(bool c){
-  honda_bosch_long = c;
-}
-
-int get_honda_hw(void) {
-  return honda_hw;
 }
 
 void set_honda_fwd_brake(bool c){
@@ -201,4 +207,7 @@ void init_tests(void){
 
   // assumes autopark on safety mode init to avoid a fault. get rid of that for testing
   tesla_autopark = false;
+
+  ignition_can = false;
+  ignition_can_cnt = 0U;
 }
