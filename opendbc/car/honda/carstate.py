@@ -87,6 +87,12 @@ class CarState(CarStateBase, CarStateExt):
     self.radar_50hz_tick_counter = 0
     self.radar_50hz_tick = False
 
+    # CAN FD: phase LKAS_HUD replacements to forwarded CAMERA_MESSAGES (see carcontroller).
+    self.camera_messages_counter = 0
+    self.camera_messages_seen = False
+    self.camera_hud_tick_counter = 0
+    self.camera_hud_tick = False
+
     self.scm_ambient_light = 0
     # CAN FD deferred radar disable (see carcontroller): the stock radar is assumed alive until it has
     # been silent for a few frames, and the relay is detected open once the camera's STEERING_CONTROL
@@ -368,6 +374,19 @@ class CarState(CarStateBase, CarStateExt):
         self.radar_50hz_tick_counter += 1
       self.radar_50hz_tick = (self.radar_50hz_tick_counter == 1)
 
+      # 10 Hz: CAMERA_MESSAGES on the camera bus; stock sends 0x33D in the same frame as 0x35E.
+      # Pulse one frame before the next camera frame (+1 transmit delay -> same bus-0 instant as forwarded 0x35E).
+      self.camera_hud_tick = False
+      cam_msg_tick_vals = cp_cam.vl_all.get("CAMERA_MESSAGES", {}).get("COUNTER", [])
+      if len(cam_msg_tick_vals) > 0:
+        self.camera_messages_counter = cp_cam.vl["CAMERA_MESSAGES"]["COUNTER"]
+        self.camera_messages_seen = True
+        self.camera_hud_tick_counter = 0
+      elif self.camera_messages_seen:
+        self.camera_hud_tick_counter += 1
+      if self.camera_messages_seen and self.camera_hud_tick_counter == 9:
+        self.camera_hud_tick = True
+
       # Deferred radar disable (see carcontroller). The stock radar transmits ACC_CONTROL every 2
       # frames, so 4 missed frames means it has been silenced; assume alive until then so the
       # replacement stream never overlaps it.
@@ -428,6 +447,8 @@ class CarState(CarStateBase, CarStateExt):
       # HUD_OBJECTS is polled by the HudObjectTracker, but not every radarless camera emits it,
       # so subscribe with NaN frequency to skip the alive/timeout checks.
       cam_messages += [("HUD_OBJECTS", float('nan'))]
+    if self.CP.flags & HondaFlags.BOSCH_CANFD:
+      cam_messages += [("CAMERA_MESSAGES", 10), ("LKAS_HUD", 10)]
     parsers = {
       Bus.pt: CANParser(DBC[CP.carFingerprint][Bus.pt], pt_messages, CanBus(CP).pt),
       Bus.cam: CANParser(DBC[CP.carFingerprint][Bus.pt], cam_messages, CanBus(CP).camera),

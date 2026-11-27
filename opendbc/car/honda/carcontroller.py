@@ -1269,8 +1269,11 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
                                                  hud_control, hud_v_cruise, CS.is_metric, CS.acc_hud, speed_control,
                                                  self.CP.openpilotLongitudinalControl))
 
-    # Send dashboard UI commands.
-    if self.frame % 10 == 0:
+    # Send dashboard UI commands. On CAN FD, phase LKAS_HUD to CAMERA_MESSAGES like radar look-alikes.
+    send_periodic_hud = self.frame % 10 == 0
+    if self.CP.flags & HondaFlags.BOSCH_CANFD and CS.camera_messages_seen:
+      send_periodic_hud = CS.camera_hud_tick
+    if send_periodic_hud:
       if self.CP.openpilotLongitudinalControl:
         if not (self.CP.flags & HondaFlags.BOSCH_CANFD):
           # On Nidec, this also controls longitudinal positive acceleration

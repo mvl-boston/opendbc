@@ -200,6 +200,10 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
   if CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
     lkas_hud_values['LANE_LINES'] = 3
 
+    if CP.flags & HondaFlags.BOSCH_CANFD and CS.camera_messages_seen:
+      # Match the counter on the next forwarded CAMERA_MESSAGES frame (see carstate camera_hud_tick).
+      lkas_hud_values['COUNTER'] = (int(CS.camera_messages_counter) + 1) % 4
+
     # car likely needs to see LKAS_PROBLEM fall within a specific time frame, so forward from camera
     # TODO: needed for Bosch CAN FD?
     if CP.flags & HondaFlags.BOSCH_RADARLESS:
