@@ -10,7 +10,9 @@ output:
   - skips          # Print "skip" (i.e. no files matched)
 
 test:
-  parallel: true
+  parallel: false
+  env:
+    CAPNP_INCLUDE: ${CAPNP_INCLUDE}
   commands:
     # *** static analysis
     ruff:

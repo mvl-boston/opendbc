@@ -7,9 +7,7 @@ import warnings
 from urllib.request import urlopen
 import zstandard as zstd
 
-from opendbc.car.common.basedir import BASEDIR
-
-capnp_log = capnp.load(os.path.join(BASEDIR, "rlog.capnp"), imports=[BASEDIR])
+from opendbc.car.schema import capnp_log
 
 
 def decompress_stream(data: bytes):
