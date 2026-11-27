@@ -1291,7 +1291,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
         steer_maxed = (abs(apply_torque) >= self.params.STEER_MAX) or not (CS.steer_control_active)
 
       lkas_state_change = None
-      if self.CP.flags & (HondaFlags.BOSCH_RADARLESS | HondaFlags.BOSCH_CANFD):
+      if self.CP.flags & HondaFlags.BOSCH_RADARLESS:
         # Hold for 3 seconds on transitions to fade in lanes
         hud_key = CC.latActive and not steer_maxed
         if hud_key != self.lkas_hud_key:
@@ -1299,6 +1299,7 @@ class CarController(CarControllerBase, MadsCarController, GasInterceptorCarContr
           self.lkas_state_change_frames = 30  # 3s at the 10Hz LKAS_HUD rate, matching stock pulse length
         lkas_state_change = self.lkas_state_change_frames > 0
         self.lkas_state_change_frames = max(0, self.lkas_state_change_frames - 1)
+      # CAN FD: LKAS_STATE_CHANGE (and related lane HUD bits) passthrough from camera in create_lkas_hud.
 
       can_sends.extend(hondacan.create_lkas_hud(self.packer, self.CAN.lkas, self.CP, hud_control, CC.latActive,
                                                 steering_available, reduced_steering, alert_steer_required, CS.lkas_hud, self.dashed_lanes,

@@ -216,6 +216,11 @@ def create_lkas_hud(packer, bus, CP, hud_control, lat_active, steering_available
     lkas_hud_values['RDM_OFF'] = 1
     lkas_hud_values['LANE_ASSIST_BEEP_OFF'] = 1
 
+  # CAN FD diagnostic: mirror stock camera HUD lane bits on the relayed bus-0 copy.
+  if CP.flags & HondaFlags.BOSCH_CANFD and lkas_hud:
+    for key in ('LANE_LINES', 'LKAS_READY', 'DASHED_LANES', 'SOLID_LANES', 'LKAS_STATE_CHANGE'):
+      lkas_hud_values[key] = lkas_hud[key]
+
   if CP.flags & HondaFlags.BOSCH_EXT_HUD and not CP.openpilotLongitudinalControl:
     commands.append(packer.make_can_msg('LKAS_HUD_A', bus, lkas_hud_values))
     commands.append(packer.make_can_msg('LKAS_HUD_B', bus, lkas_hud_values))
