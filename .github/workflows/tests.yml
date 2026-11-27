@@ -72,7 +72,7 @@ jobs:
     name: Safety mutation tests (${{ matrix.name }})
     needs: tests
     runs-on: ${{ matrix.os }}
-    timeout-minutes: ${{ github.repository == 'commaai/opendbc' && 45 || 999 }}
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
