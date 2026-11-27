@@ -55,7 +55,7 @@ jobs:
 
   safety_tests:
     name: safety
-    runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-latest' }}
+    runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-24.04' }}
     steps:
     - uses: commaai/timeout@v1
       with:
@@ -71,11 +71,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-latest' }}
-            name: Linux
-          - os: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-macos-8x14' || 'macos-latest' }}
-            name: macOS
+        include: ${{ github.repository == 'commaai/opendbc' && fromJSON('[{"os":"namespace-profile-amd64-8x16","name":"Linux"},{"os":"namespace-profile-macos-8x14","name":"macOS"}]') || fromJSON('[{"os":"ubuntu-24.04","name":"Linux"}]') }}
     steps:
       - uses: actions/checkout@v7
       - name: Run mutation tests
@@ -86,7 +82,7 @@ jobs:
   car_diff:
     name: car diff
     if: false
-    runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-latest' }}
+    runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-24.04' }}
     env:
       GIT_REF: ${{ github.event_name == 'push' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) && github.event.before || format('origin/{0}', github.event.repository.default_branch) }}
     steps:
@@ -128,7 +124,7 @@ jobs:
 
   test_models:
     name: test models
-    runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-latest' }}
+    runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-24.04' }}
     strategy:
       fail-fast: false
       matrix:
