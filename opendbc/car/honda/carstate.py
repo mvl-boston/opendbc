@@ -361,7 +361,7 @@ class CarState(CarStateBase, CarStateExt):
       self.hud_tick = (self.hud_tick_counter == 9)
 
       # 50 Hz: 0x750 -> LANE_PATH/HUD_OBJECTS, one frame before the next tick
-      tick_50hz_vals = cp_radar.vl_all.get("RADAR_50HZ_TICK_REFERENCE", {}).get("IGNORE", [])
+      tick_50hz_vals = cp_radar.vl_all.get("CAMERA_SPEED_LIMIT_METRIC", {}).get("SPEED_LIMIT_KPH", [])
       if len(tick_50hz_vals) > 0:
         self.radar_50hz_tick_counter = 0
       else:
@@ -438,11 +438,11 @@ class CarState(CarStateBase, CarStateExt):
       # These radar tick-reference messages are only read via vl_all, which (unlike vl) does not
       # auto-subscribe messages, so they must be listed explicitly or they are never parsed.
       #   0x710 RADAR_SUPP_TICK_REFERENCE (1 Hz), 0x730 RADAR_HUD_TICK_REFERENCE (10 Hz),
-      #   0x750 RADAR_50HZ_TICK_REFERENCE (50 Hz)
+      #   0x750 CAMERA_SPEED_LIMIT_METRIC (50 Hz, a radar tick on CAN FD)
       parsers[Bus.radar] = CANParser(DBC[CP.carFingerprint][Bus.radar], [
         ("RADAR_SUPP_TICK_REFERENCE", 0),
         ("RADAR_HUD_TICK_REFERENCE", 0),
-        ("RADAR_50HZ_TICK_REFERENCE", 0),
+        ("CAMERA_SPEED_LIMIT_METRIC", 0),
       ], CanBus(CP).radar)
 
     return parsers

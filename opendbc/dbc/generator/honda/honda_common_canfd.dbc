@@ -67,9 +67,6 @@ BO_ 1808 RADAR_SUPP_TICK_REFERENCE: 32 XXX
 BO_ 1840 RADAR_HUD_TICK_REFERENCE: 6 XXX
  SG_ IGNORE : 11|1@0+ (1,0) [0|1] "" XXX
 
-BO_ 1872 RADAR_50HZ_TICK_REFERENCE: 16 XXX
- SG_ IGNORE : 11|1@0+ (1,0) [0|1] "" XXX
-
 CM_ SG_ 254913116 LANE_PATH_LENGTH "number of valid LANE_PATH points in the current sweep (6 = idle/no lane, up to 23-24); the dash needs this to match the in-band 2047 terminator to draw the lane lines";
 CM_ SG_ 254913116 LEFT_LANE "3 = left lane line detected, 0 = none; tracks the camera's LKAS_HUD LANE_LINES bit 1 exactly in factory logs. The CAN FD equivalent of radarless LKAS_HUD_2 LEFT_LANE; the dash won't draw the lane lines while both are 0";
 CM_ SG_ 254913116 RIGHT_LANE "3 = right lane line detected, 0 = none; tracks the camera's LKAS_HUD LANE_LINES bit 0 exactly in factory logs. The CAN FD equivalent of radarless LKAS_HUD_2 RIGHT_LANE; the dash won't draw the lane lines while both are 0";
