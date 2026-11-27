@@ -11,14 +11,16 @@ env:
 
 jobs:
   tests:
-    name: ./test.sh
+    name: ./test.sh (${{ matrix.name }})
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-24.04' }}
+            name: ubuntu-24.04
           - os: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-macos-8x14' || 'macos-latest' }}
+            name: macos-latest
     steps:
     - uses: actions/checkout@v4
       with:
@@ -52,6 +54,7 @@ jobs:
 
   safety_tests:
     name: safety
+    needs: tests
     runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-24.04' }}
     strategy:
       fail-fast: false
@@ -66,9 +69,18 @@ jobs:
       run: ./opendbc/safety/tests/test.sh ${{ matrix.flags }}
 
   mutation:
-    name: Safety mutation tests
-    runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-24.04' }}
-    timeout-minutes: 45
+    name: Safety mutation tests (${{ matrix.name }})
+    needs: tests
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: ${{ github.repository == 'commaai/opendbc' && 45 || 999 }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-24.04' }}
+            name: Linux
+          - os: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-macos-8x14' || 'macos-latest' }}
+            name: macOS
     steps:
       - uses: actions/checkout@v4
       - name: Run mutation tests
@@ -79,6 +91,7 @@ jobs:
 
   test_models:
     name: test models
+    needs: tests
     runs-on: ${{ github.repository == 'commaai/opendbc' && 'namespace-profile-amd64-8x16' || 'ubuntu-24.04' }}
     strategy:
       fail-fast: false
