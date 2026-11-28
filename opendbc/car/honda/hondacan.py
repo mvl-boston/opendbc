@@ -80,9 +80,15 @@ def create_acc_commands(packer, CAN, enabled, active, accel, gas, stopping_count
   commands = []
 
   control_on = 5 if enabled else 0
-  gas_command = gas if active and gas_force > 0 else -30000
   accel_command = accel if active else 0
-  braking = 1 if active and gas_force < 0 else 0
+  # Wire BRAKE_REQUEST / GAS_COMMAND off the signed accel command, not gas_force (which
+  # includes wind/hill/alpha for pedal mapping). Using gas_force < 0 for braking made
+  # BRAKE_REQUEST assert while ACCEL_COMMAND was still > -0.3 on Honda Insight Bosch
+  # (route f73c0e8f3868a12f/09: 28% of brake frames vs 1% on stock ACC in 0b) and
+  # killed gas whenever wind pushed gas_force negative while the planner was still
+  # commanding acceleration.
+  braking = 1 if active and accel_command < -0.05 else 0
+  gas_command = gas if active and (not braking) and gas > 0 else -30000
   standstill = 1 if active and stopping_counter > 0 else 0
   standstill_release = 1 if active and stopping_counter == 0 else 0
 
