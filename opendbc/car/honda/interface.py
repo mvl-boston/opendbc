@@ -4,13 +4,15 @@ from opendbc.car import get_safety_config, structs, uds
 from opendbc.car.common.conversions import Conversions as CV
 from opendbc.car.disable_ecu import disable_ecu, clear_all_dtcs, clear_ecu_dtcs
 from opendbc.car.honda.hondacan import CanBus
-from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HondaSafetyFlags
+from opendbc.car.honda.values import CarControllerParams, HondaFlags, CAR, HondaSafetyFlags, HONDA_BOSCH, HONDA_BOSCH_RADARLESS
 from opendbc.car.honda.carcontroller import CarController
 from opendbc.car.honda.carstate import CarState
 from opendbc.car.honda.radar_interface import RadarInterface
 from opendbc.car.interfaces import CarInterfaceBase
 
 TransmissionType = structs.CarParams.TransmissionType
+
+BOSCH_RADAR_DIAG_ADDR = 0x18DAB0F1
 
 
 class CarInterface(CarInterfaceBase):
@@ -303,32 +305,26 @@ class CarInterface(CarInterfaceBase):
 
   @staticmethod
   def init(CP, can_recv, can_send, communication_control=None):
-    if CP.flags & HondaFlags.BOSCH and not (CP.flags & HondaFlags.BOSCH_RADARLESS) and CP.openpilotLongitudinalControl:
-      if communication_control is None and CP.flags & HondaFlags.BOSCH_CANFD:
-        # CAN FD: only clear DTCs here; the radar silencing itself is deferred to CarController until
-        # the comma relay is confirmed open. init() runs while the panda is still in the ELM327 safety
-        # mode, and silencing the radar from here raced the safety-mode switch: openpilot's replacement
-        # ACC_CONTROL stream was blocked until the switch landed, and whenever that took longer than
-        # ~110 ms the brake module (VSA) latched CRUISE_FAULT (accFaulted) for the entire drive.
-        #
-        # The brake module latches a radar lost-communication DTC when the radar goes silent for more
-        # than ~0.1 s at cutover, and the DTC matures over trips (Honda two-trip detection): once it is
-        # confirmed from a previous drive, the very next comm-loss detection trips
-        # BRAKE_MODULE.CRUISE_FAULT ~0.16 s after the radar is silenced. Broadcast-clear stored DTCs on
-        # all ECUs (powertrain and camera buses) every drive so the maturation counter is reset, and
-        # clear the radar's own stored DTCs so codes accumulated while it was disabled don't re-fault a
-        # later drive. Clearing must precede the radar silence because a DTC clear can take an ECU
-        # several hundred ms to process.
+    # The radar silencing is NOT done here for any Bosch radar car; it is deferred to CarController until
+    # the comma relay is confirmed open (see CS.bosch_relay_open / CS.stock_acc_alive). init() runs while
+    # the panda is still in the ELM327 safety mode, and silencing the radar from here raced the
+    # safety-mode switch: openpilot's replacement ACC_CONTROL stream was blocked until the switch landed,
+    # and whenever that took longer than ~110 ms the brake module (VSA) latched a fault for the entire
+    # drive. On CAN FD that is BRAKE_MODULE.CRUISE_FAULT (accFaulted); on classic Bosch (e.g. ACURA_MDX_4G)
+    # it is STANDSTILL.BRAKE_ERROR_1/2, which carstate masks into cruiseState.available = False.
+    if CP.carFingerprint in (HONDA_BOSCH - HONDA_BOSCH_RADARLESS) and CP.openpilotLongitudinalControl:
+      if communication_control is not None:
+        # explicit CommunicationControl request (deinit path)
+        disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=BOSCH_RADAR_DIAG_ADDR, com_cont_req=communication_control)
+      else:
+        # Clear matured radar comm-loss DTCs before CarController's deferred disable silences the radar.
+        # CAN FD trips BRAKE_MODULE.CRUISE_FAULT; classic Bosch trips STANDSTILL.BRAKE_ERROR_1/2. Honda
+        # two-trip detection means a single bad alpha-long cutover on a prior drive can make the very
+        # next key-on fault at the first radar silence.
         # NOTE: ELM327 safety mode allows the 29-bit functional diagnostic address on every bus, so the
         # broadcast needs no TX allowlist entry in the car safety mode.
         clear_all_dtcs(can_send, [CanBus(CP).pt, CanBus(CP).camera])
-        clear_ecu_dtcs(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1)
-      else:
-        # 0x80 silences response
-        if communication_control is None:
-          communication_control = bytes([uds.SERVICE_TYPE.COMMUNICATION_CONTROL, 0x80 | uds.CONTROL_TYPE.DISABLE_RX_DISABLE_TX,
-                                         uds.MESSAGE_TYPE.NORMAL_AND_NETWORK_MANAGEMENT])
-        disable_ecu(can_recv, can_send, bus=CanBus(CP).pt, addr=0x18DAB0F1, com_cont_req=communication_control)
+        clear_ecu_dtcs(can_recv, can_send, bus=CanBus(CP).pt, addr=BOSCH_RADAR_DIAG_ADDR)
 
   @staticmethod
   def deinit(CP, can_recv, can_send):
