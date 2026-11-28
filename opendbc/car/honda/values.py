@@ -83,6 +83,8 @@ class HondaSafetyFlags(IntFlag):
   # RLX: a bridge panda relays the stock camera's LKAS_HUD from the steer bus onto the powertrain bus
   RLX_STEER_BRIDGE = 64
   NO_ENGINE_DATA_MSG = 128
+  # Experimental lead spoof toward the radar (Bosch ALT_RADAR, stock long). Bit 32 is NIDEC_HYBRID on this fork.
+  LEAD_SPOOF = 256
 
 
 class HondaFlags(IntFlag):
@@ -108,6 +110,9 @@ class HondaFlags(IntFlag):
   BOSCH_TJA_CONTROL = 4096
   LKAS_MINSPEED_CUTOFF = 8192
   HYBRID_ALT_BRAKEHOLD = 16384  # Some Nidec Hybrids use a different brakehold
+  # Experimental: inject a phantom camera forward-object toward the radar so the low-speed TJA
+  # steering relay stays engaged when the camera finds no lead car (see carcontroller/hondacan).
+  BOSCH_LEAD_SPOOF = 32768
 
 
 # Car button codes
@@ -330,7 +335,7 @@ class CAR(Platforms):
     [HondaCarDocs("Acura MDX 2022-24", "All", min_steer_speed=70. * CV.KPH_TO_MS)],
     CarSpecs(wheelbase=2.89, steerRatio=15.8, centerToFrontRatio=0.428),  # as spec
     {Bus.pt: 'honda_common_canfd_generated'}, # not CANFD car but shares same dbc
-    flags=HondaFlags.BOSCH_ALT_RADAR | HondaFlags.BOSCH_TJA_CONTROL,
+    flags=HondaFlags.BOSCH_ALT_RADAR | HondaFlags.BOSCH_TJA_CONTROL | HondaFlags.BOSCH_LEAD_SPOOF,
   )
   # mid-model refresh
   ACURA_MDX_4G_MMR = HondaBoschCANFDPlatformConfig(
@@ -347,7 +352,7 @@ class CAR(Platforms):
     [HondaCarDocs("Acura TLX 2021-23", "All")],
     CarSpecs(wheelbase=2.87, steerRatio=14.0, centerToFrontRatio=0.43),
     {Bus.pt: 'honda_civic_hatchback_ex_2017_can_generated'},
-    flags=HondaFlags.BOSCH_ALT_RADAR,
+    flags=HondaFlags.BOSCH_ALT_RADAR | HondaFlags.BOSCH_LEAD_SPOOF,
   )
   # mid-model refresh
   ACURA_TLX_2G_MMR = HondaBoschCANFDPlatformConfig(

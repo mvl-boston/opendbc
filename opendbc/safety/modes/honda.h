@@ -71,6 +71,12 @@ static unsigned int honda_abs_prev_counter_checksum = 0xFFU;
 // counts down on each stock SCM_BUTTONS rx, topped up on each OP SCM_BUTTONS tx to the camera:
 // the stock buttons are only blocked from forwarding while OP's replacement stream is actually flowing
 static int honda_op_buttons_fresh = 0;
+
+// Experimental lead spoof: inject a phantom camera forward-object toward the radar so the low-speed
+// TJA steering relay stays engaged when the camera reports no lead. See modes/honda.h fwd/tx hooks.
+#define HONDA_LEAD_SPOOF_TIMEOUT 15  // 100 Hz powertrain decay: ~0.15 s after injection stops
+static bool honda_lead_spoof = false;
+static int honda_lead_spoof_timeout = 0;  // >0 while openpilot is actively injecting the phantom
 typedef enum {HONDA_NIDEC, HONDA_BOSCH} HondaHw;
 static HondaHw honda_hw = HONDA_NIDEC;
 
@@ -256,6 +262,14 @@ static void honda_rx_hook(const CANPacket_t *msg) {
       }
     }
   }
+
+  // Experimental lead spoof: decay the phantom-injection window off a high-rate powertrain message.
+  // The window is refreshed each time openpilot transmits the phantom (see tx hook); when injection
+  // stops (e.g. a real camera lead appears and openpilot yields, or the car leaves the relay band),
+  // the window decays and the camera's real object frames resume forwarding to the radar.
+  if (honda_lead_spoof && (msg->addr == 0x17CU) && (honda_lead_spoof_timeout > 0)) {
+    honda_lead_spoof_timeout--;
+  }
 }
 
 static bool honda_tx_hook(const CANPacket_t *msg) {
@@ -421,6 +435,12 @@ static bool honda_tx_hook(const CANPacket_t *msg) {
   // the stock buttons resume forwarding within ~10 button frames (~0.4 s).
   if (tx && (msg->addr == 0x296U) && (msg->bus == 2U)) {
     honda_op_buttons_fresh = 10;
+  }
+
+  // Experimental lead spoof: openpilot transmitting a phantom object slot 0 (0x280) refreshes the
+  // suppression window for the real camera slot in the forward hook.
+  if (honda_lead_spoof && msg_matches(msg, 0x280U, 0U)) {
+    honda_lead_spoof_timeout = HONDA_LEAD_SPOOF_TIMEOUT;
   }
 
   // Only tester present ("\x02\x3E\x80\x00\x00\x00\x00\x00") allowed on diagnostics address
@@ -596,6 +616,24 @@ static safety_config honda_bosch_init(uint16_t param) {
     {0x18DAB0F1, 1, 8, .check_relay = false},
   };
 
+  // Bosch w/ experimental lead spoof: base Bosch messages plus the phantom slot-0 object bank on the
+  // radar-side bus (0x280-0x283 + aux 0x2C8). Content is not safety-relevant (the radar, not the EPS,
+  // consumes these); the phantom only affects the radar's low-speed steering-relay lead gate.
+  static CanMsg HONDA_BOSCH_LEAD_SPOOF_TX_MSGS[] = {
+    {0xE4, 0, 5, .check_relay = true},
+    {0xE5, 0, 8, .check_relay = true},
+    {0x296, 1, 4, .check_relay = false},
+    {0x33D, 0, 5, .check_relay = true},
+    {0x33D, 0, 8, .check_relay = true},
+    {0x33DA, 0, 5, .check_relay = true},
+    {0x33DB, 0, 8, .check_relay = true},
+    {0x280, 0, 8, .check_relay = false},
+    {0x281, 0, 8, .check_relay = false},
+    {0x282, 0, 8, .check_relay = false},
+    {0x283, 0, 8, .check_relay = false},
+    {0x2C8, 0, 8, .check_relay = false},
+  };
+
   // Bosch radarless
   static CanMsg HONDA_RADARLESS_TX_MSGS[] = {
     {0xE4, 0, 5, .check_relay = true},
@@ -654,6 +692,7 @@ static safety_config honda_bosch_init(uint16_t param) {
   const uint16_t HONDA_PARAM_RADARLESS = 8;
   const uint16_t HONDA_PARAM_BOSCH_CANFD = 16;
   const uint16_t HONDA_PARAM_NO_ENGINE_DATA_MSG = 128;
+  const uint16_t HONDA_PARAM_LEAD_SPOOF = 256;
 
   // Bosch radarless and CAN-FD have the powertrain bus on bus 0
   static RxCheck honda_bosch_pt0_rx_checks[] = {
@@ -693,6 +732,8 @@ static safety_config honda_bosch_init(uint16_t param) {
   honda_abs_prev_rl = 0U;
   honda_abs_prev_rr = 0U;
   honda_abs_prev_counter_checksum = 0xFFU;
+  honda_lead_spoof = GET_FLAG(param, HONDA_PARAM_LEAD_SPOOF) && !honda_bosch_radarless && !honda_bosch_canfd;
+  honda_lead_spoof_timeout = 0;
   // Checking for alternate brake override from safety parameter
   honda_alt_brake_msg = GET_FLAG(param, HONDA_PARAM_ALT_BRAKE);
   honda_stock_longitudinal = false;
@@ -735,6 +776,8 @@ static safety_config honda_bosch_init(uint16_t param) {
   } else {
     if (honda_bosch_long) {
       SET_TX_MSGS(HONDA_BOSCH_LONG_TX_MSGS, ret);
+    } else if (honda_lead_spoof) {
+      SET_TX_MSGS(HONDA_BOSCH_LEAD_SPOOF_TX_MSGS, ret);
     } else {
       SET_TX_MSGS(HONDA_BOSCH_TX_MSGS, ret);
     }
@@ -782,6 +825,17 @@ static bool honda_bosch_fwd_hook(int bus_num, int addr) {
   // responses from forwarding to the camera (the camera doesn't need them)
   if (honda_bosch_canfd && (bus_num == 0) && (addr == 0x18DAF1B0)) {
     block_msg = true;
+  }
+
+  // Experimental lead spoof: while openpilot is injecting the phantom object (timeout window kept
+  // alive by phantom TX and cleared by a real camera lead), suppress the camera's real slot-0 object
+  // frames (0x280-0x283 + aux 0x2C8) on their way from the camera (bus 2) to the radar (bus 0) so the
+  // radar sees only the phantom. When a real lead is present, or openpilot stops injecting, these are
+  // forwarded normally.
+  if (honda_lead_spoof && (bus_num == 2) && (honda_lead_spoof_timeout > 0)) {
+    if ((addr == 0x280) || (addr == 0x281) || (addr == 0x282) || (addr == 0x283) || (addr == 0x2C8)) {
+      block_msg = true;
+    }
   }
 
   return block_msg;
