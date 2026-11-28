@@ -1,9 +1,3 @@
-BO_ 148 KINEMATICS: 8 XXX
- SG_ LAT_ACCEL : 7|10@0+ (-0.035,17.92) [-20|20] "m/s2" EON
- SG_ LONG_ACCEL : 25|10@0+ (-0.035,17.92) [-20|20] "m/s2" EON
- SG_ CHECKSUM : 59|4@0+ (1,0) [0|3] "" EON
- SG_ COUNTER : 61|2@0+ (1,0) [0|3] "" EON
-
 BO_ 228 STEERING_CONTROL: 5 EON
  SG_ STEER_TORQUE : 7|16@0- (1,0) [-4096|4096] "" EPS
  SG_ DRIVER_OVERRIDE : 17|1@0+ (1,0) [0|1] "" XXX
@@ -218,7 +212,7 @@ CM_ SG_ 577 LINE_DASHED "1 = line is dashed";
 CM_ SG_ 577 LINE_SOLID "1 = line is solid";
 
 VAL_ 228 CONTROL_STATE 0 "init" 1 "standby" 2 "lka_active" 3 "driver_override" 5 "rdm_active";
-VAL_ 399 STEER_STATUS 6 "tmp_fault" 5 "fault_1" 4 "no_torque_alert_2" 3 "low_speed_lockout" 2 "no_torque_alert_1" 0 "normal";
+VAL_ 399 STEER_STATUS 6 "tmp_fault" 5 "fault_1" 4 "no_torque_alert_2" 3 "low_speed_lockout" 2 "no_torque_alert_1" 1 "tja_low_speed_lockout" 0 "normal";
 VAL_ 662 CRUISE_BUTTONS 7 "tbd" 6 "tbd" 5 "tbd" 4 "accel_res" 3 "decel_set" 2 "cancel" 1 "main" 0 "none" ;
 VAL_ 662 CRUISE_SETTING 3 "distance_adj" 2 "tbd" 1 "lkas_button" 0 "none" ;
 VAL_ 806 CMBS_STATES 3 "pressed" 0 "released" ;

@@ -44,7 +44,6 @@ class CarState(CarStateBase, MadsCarState):
     ret.gasPressed = cp.vl["EngVehicleSpThrottle"]["ApedPos_Pc_ActlArb"] / 100. > 1e-6
 
     # brake pedal
-    ret.brake = cp.vl["BrakeSnData_4"]["BrkTot_Tq_Actl"] / 32756.  # torque in Nm
     ret.brakePressed = cp.vl["EngBrakeData"]["BpedDrvAppl_D_Actl"] == 2
     ret.parkingBrake = cp.vl["DesiredTorqBrk"]["PrkBrkStatus"] in (1, 2)
 
@@ -55,6 +54,8 @@ class CarState(CarStateBase, MadsCarState):
     ret.steerFaultTemporary = cp.vl["EPAS_INFO"]["EPAS_Failure"] == 1
     ret.steerFaultPermanent = cp.vl["EPAS_INFO"]["EPAS_Failure"] in (2, 3)
     ret.espDisabled = cp.vl["Cluster_Info1_FD1"]["DrvSlipCtlMde_D_Rq"] != 0  # 0 is default mode
+    # the PSCM stops lane assist (LaActAvail_D_Actl -> 0) when ABS is active
+    ret.espActive = bool(cp.vl["DesiredTorqBrk"]["AbsActv_B_Actl"])
 
     if self.CP.flags & FordFlags.CANFD:
       # this signal is always 0 on non-CAN FD cars
@@ -101,7 +102,7 @@ class CarState(CarStateBase, MadsCarState):
     ret.seatbeltUnlatched = cp.vl["RCMStatusMessage2_FD1"]["FirstRowBuckleDriver"] == 2
 
     # blindspot sensors
-    if self.CP.enableBsm:
+    if self.CP.flags & FordFlags.HAS_BSM:
       cp_bsm = cp_cam if self.CP.flags & FordFlags.CANFD else cp
       ret.leftBlindspot = cp_bsm.vl["Side_Detect_L_Stat"]["SodDetctLeft_D_Stat"] != 0
       ret.rightBlindspot = cp_bsm.vl["Side_Detect_R_Stat"]["SodDetctRight_D_Stat"] != 0

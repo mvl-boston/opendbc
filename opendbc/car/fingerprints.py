@@ -8,6 +8,7 @@ from opendbc.car.hyundai.values import CAR as HYUNDAI
 from opendbc.car.mazda.values import CAR as MAZDA
 from opendbc.car.mock.values import CAR as MOCK
 from opendbc.car.nissan.values import CAR as NISSAN
+from opendbc.car.rivian.values import CAR as RIVIAN
 from opendbc.car.subaru.values import CAR as SUBARU
 from opendbc.car.toyota.values import CAR as TOYOTA
 from opendbc.car.volkswagen.values import CAR as VW
@@ -333,6 +334,11 @@ MIGRATION = {
   "SKODA SCALA 1ST GEN": VW.SKODA_KAMIQ_MK1,
   "SKODA_SCALA_MK1": VW.SKODA_KAMIQ_MK1,
   "SKODA SUPERB 3RD GEN": VW.SKODA_SUPERB_MK3,
+  "RIVIAN_R1_GEN1": RIVIAN.RIVIAN_R1,
+  "RIVIAN_R1_GEN2": RIVIAN.RIVIAN_R1,
+  "HYUNDAI_SONATA_HEV_2024": HYUNDAI.HYUNDAI_SONATA_2024,
+  "HYUNDAI_TUCSON_HEV_2025": HYUNDAI.HYUNDAI_TUCSON_4TH_GEN,
+  "HYUNDAI_KONA_HEV_2ND_GEN": HYUNDAI.HYUNDAI_KONA_2ND_GEN,
 
   "mock": MOCK.MOCK,
 }

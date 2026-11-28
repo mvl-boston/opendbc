@@ -8,6 +8,7 @@ from opendbc.car.hyundai.hyundaicanfd import CanBus
 from opendbc.car.hyundai.values import HyundaiFlags, Buttons, CarControllerParams, CAR
 from opendbc.car.interfaces import CarControllerBase
 
+from opendbc.sunnypilot.car.hyundai.ccnc import CcncCarController
 from opendbc.sunnypilot.car.hyundai.escc import EsccCarController
 from opendbc.sunnypilot.car.hyundai.icbm import IntelligentCruiseButtonManagementInterface
 from opendbc.sunnypilot.car.hyundai.longitudinal.controller import LongitudinalController
@@ -22,6 +23,12 @@ LongCtrlState = structs.CarControl.Actuators.LongControlState
 MAX_ANGLE = 85
 MAX_ANGLE_FRAMES = 89
 MAX_ANGLE_CONSECUTIVE_FRAMES = 2
+
+# On some HKG CAN and CAN FD non-CANFD_ALT_BUTTONS, the cancel button (CF_Clu_CruiseSwState / CRUISE_BUTTONS = 4) is
+# a pause/resume toggle, not a dedicated cancel. Firing it mid-brake inadvertently can cause a re-enable attempt
+# and triggers the "SCC Conditions Not Met" alert. Delaying the button send lets factory SCC disengage
+# naturally on brake press. We send ~100 ms later if it fails to do so, or if we want to cancel for another reason.
+CANCEL_BUTTON_DELAY_FRAMES = 10
 
 
 def process_hud_alert(enabled, fingerprint, hud_control):
@@ -48,10 +55,11 @@ def process_hud_alert(enabled, fingerprint, hud_control):
   return sys_warning, sys_state, left_lane_warning, right_lane_warning
 
 
-class CarController(CarControllerBase, EsccCarController, LeadDataCarController, LongitudinalController, MadsCarController,
+class CarController(CarControllerBase, CcncCarController, EsccCarController, LeadDataCarController, LongitudinalController, MadsCarController,
                     IntelligentCruiseButtonManagementInterface):
   def __init__(self, dbc_names, CP, CP_SP):
     CarControllerBase.__init__(self, dbc_names, CP, CP_SP)
+    CcncCarController.__init__(self, CP, CP_SP)
     EsccCarController.__init__(self, CP, CP_SP)
     MadsCarController.__init__(self)
     LeadDataCarController.__init__(self, CP)
@@ -66,13 +74,14 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     self.apply_torque_last = 0
     self.car_fingerprint = CP.carFingerprint
     self.last_button_frame = 0
+    self.cancel_counter = 0
 
   def update(self, CC, CC_SP, CS, now_nanos):
-    EsccCarController.update(self, CS)
-    LeadDataCarController.update(self, CC_SP)
-    MadsCarController.update(self, self.CP, CC, CC_SP, self.frame)
-    if self.frame % 2 == 0:
-      LongitudinalController.update(self, CC, CS)
+    EsccCarController.update_escc(self, CS)
+    LeadDataCarController.update_lead_data(self, CC_SP)
+    MadsCarController.update_mads(self, self.CP, CC, CC_SP, self.frame)
+    if self.frame % 5 == 0:
+      LongitudinalController.update_longitudinal(self, CC, CS)
 
     actuators = CC.actuators
     hud_control = CC.hudControl
@@ -88,10 +97,6 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
 
     if not CC.latActive:
       apply_torque = 0
-
-    # Hold torque with induced temporary fault when cutting the actuation bit
-    # FIXME: we don't use this with CAN FD?
-    torque_fault = CC.latActive and not apply_steer_req
 
     self.apply_torque_last = apply_torque
 
@@ -109,24 +114,33 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
             self.CP.openpilotLongitudinalControl:
       # for longitudinal control, either radar or ADAS driving ECU
       addr, bus = 0x7d0, self.CAN.ECAN if self.CP.flags & HyundaiFlags.CANFD else 0
-      if self.CP.flags & HyundaiFlags.CANFD_LKA_STEERING.value:
+      if self.CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG.value:
         addr, bus = 0x730, self.CAN.ECAN
       can_sends.append(make_tester_present_msg(addr, bus, suppress_response=True))
 
       # for blinkers
-      if self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
+      if self.CP.flags & HyundaiFlags.CANFD_ENABLE_BLINKERS:
         can_sends.append(make_tester_present_msg(0x7b1, self.CAN.ECAN, suppress_response=True))
+
+    # Delay the cancel button send so the brake can disengage factory SCC first.
+    # Reset whenever openpilot is no longer requesting cancel.
+    self.cancel_counter = self.cancel_counter + 1 if CC.cruiseControl.cancel else 0
 
     # *** CAN/CAN FD specific ***
     if self.CP.flags & HyundaiFlags.CANFD:
       can_sends.extend(self.create_canfd_msgs(apply_steer_req, apply_torque, set_speed_in_units, accel,
                                               stopping, hud_control, CS, CC))
+      can_sends.extend(CcncCarController.update_ccnc(self, CS, CC))
     else:
+      # Hold torque with induced temporary fault when cutting the actuation bit
+      # FIXME: we don't use this with CAN FD?
+      torque_fault = CC.latActive and not apply_steer_req
+
       can_sends.extend(self.create_can_msgs(apply_steer_req, apply_torque, torque_fault, set_speed_in_units, accel,
                                             stopping, hud_control, actuators, CS, CC))
 
     # Intelligent Cruise Button Management
-    can_sends.extend(IntelligentCruiseButtonManagementInterface.update(self, CS, CC_SP, self.packer, self.frame, self.last_button_frame, self.CAN))
+    can_sends.extend(IntelligentCruiseButtonManagementInterface.update_icbm(self, CS, CC_SP, self.packer, self.frame, self.last_button_frame, self.CAN))
 
     new_actuators = actuators.as_builder()
     new_actuators.torque = apply_torque / self.params.STEER_MAX
@@ -151,7 +165,7 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
 
     # Button messages
     if not self.CP.openpilotLongitudinalControl:
-      if CC.cruiseControl.cancel:
+      if self.cancel_counter > CANCEL_BUTTON_DELAY_FRAMES:
         can_sends.append(hyundaican.create_clu11(self.packer, self.frame, CS.clu11, Buttons.CANCEL, self.CP))
       elif CC.cruiseControl.resume:
         # send resume at a max freq of 10Hz
@@ -187,7 +201,7 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
   def create_canfd_msgs(self, apply_steer_req, apply_torque, set_speed_in_units, accel, stopping, hud_control, CS, CC):
     can_sends = []
 
-    lka_steering = self.CP.flags & HyundaiFlags.CANFD_LKA_STEERING
+    lka_steering = self.CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG
     lka_steering_long = lka_steering and self.CP.openpilotLongitudinalControl
 
     # steering control
@@ -196,20 +210,20 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
     # prevent LFA from activating on LKA steering cars by sending "no lane lines detected" to ADAS ECU
     if self.frame % 5 == 0 and lka_steering:
       can_sends.append(hyundaicanfd.create_suppress_lfa(self.packer, self.CAN, CS.lfa_block_msg,
-                                                        self.CP.flags & HyundaiFlags.CANFD_LKA_STEERING_ALT))
+                                                        self.CP.flags & HyundaiFlags.CANFD_LKA_STEER_MSG_ALT))
 
     # LFA and HDA icons
-    if self.frame % 5 == 0 and (not lka_steering or lka_steering_long):
+    if self.frame % 5 == 0 and (not lka_steering or lka_steering_long) and not self.ccnc_lfa_steering:
       can_sends.append(hyundaicanfd.create_lfahda_cluster(self.packer, self.CAN, CC.enabled, self.lfa_icon))
 
     # blinkers
-    if lka_steering and self.CP.flags & HyundaiFlags.ENABLE_BLINKERS:
+    if lka_steering and self.CP.flags & HyundaiFlags.CANFD_ENABLE_BLINKERS:
       can_sends.extend(hyundaicanfd.create_spas_messages(self.packer, self.CAN, CC.leftBlinker, CC.rightBlinker))
 
     if self.CP.openpilotLongitudinalControl:
       if lka_steering:
         can_sends.extend(hyundaicanfd.create_adrv_messages(self.packer, self.CAN, self.frame))
-      else:
+      elif not self.ccnc_lfa_steering:
         can_sends.extend(hyundaicanfd.create_fca_warning_light(self.packer, self.CAN, self.frame))
       if self.frame % 2 == 0:
         can_sends.append(hyundaicanfd.create_acc_control(self.packer, self.CAN, CC.enabled, self.accel_last, accel, stopping, CC.cruiseControl.override,
@@ -220,10 +234,11 @@ class CarController(CarControllerBase, EsccCarController, LeadDataCarController,
       if (self.frame - self.last_button_frame) * DT_CTRL > 0.25:
         # cruise cancel
         if CC.cruiseControl.cancel:
-          if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS:
+          # Here we send ACC message to cancel, not buttons. Don't delay
+          if self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS and not lka_steering:
             can_sends.append(hyundaicanfd.create_acc_cancel(self.packer, self.CP, self.CAN, CS.cruise_info))
             self.last_button_frame = self.frame
-          else:
+          elif not self.CP.flags & HyundaiFlags.CANFD_ALT_BUTTONS and self.cancel_counter > CANCEL_BUTTON_DELAY_FRAMES:
             for _ in range(20):
               can_sends.append(hyundaicanfd.create_buttons(self.packer, self.CP, self.CAN, CS.buttons_counter + 1, Buttons.CANCEL))
             self.last_button_frame = self.frame

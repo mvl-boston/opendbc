@@ -19,10 +19,9 @@ class CarControllerParams:
     self.STEER_DRIVER_FACTOR = 1       # from dbc
 
     if CP.flags & SubaruFlags.GLOBAL_GEN2:
-      # TODO: lower rate limits, this reaches min/max in 0.5s which negatively affects tuning
-      self.STEER_MAX = 1000
-      self.STEER_DELTA_UP = 40
-      self.STEER_DELTA_DOWN = 40
+      self.STEER_MAX = 1500
+      self.STEER_DELTA_UP = 35
+      self.STEER_DELTA_DOWN = 50
     elif CP.carFingerprint == CAR.SUBARU_IMPREZA_2020:
       self.STEER_DELTA_UP = 35
       self.STEER_MAX = 1439
@@ -63,6 +62,7 @@ class SubaruFlags(IntFlag):
   # Detected flags
   SEND_INFOTAINMENT = 1
   DISABLE_EYESIGHT = 2
+  HAS_BSM = 128  # blind spot monitoring
 
   # Static flags
   GLOBAL_GEN2 = 4
@@ -127,11 +127,11 @@ class CAR(Platforms):
   # Global platform
   SUBARU_ASCENT = SubaruPlatformConfig(
     [SubaruCarDocs("Subaru Ascent 2019-21", "All")],
-    CarSpecs(mass=2031, wheelbase=2.89, steerRatio=13.5),
+    CarSpecs(wheelbase=2.89, steerRatio=13.5),
   )
   SUBARU_OUTBACK = SubaruGen2PlatformConfig(
     [SubaruCarDocs("Subaru Outback 2020-22", "All", car_parts=CarParts.common([CarHarness.subaru_b]))],
-    CarSpecs(mass=1568, wheelbase=2.67, steerRatio=17),
+    CarSpecs(wheelbase=2.67, steerRatio=17),
   )
   SUBARU_LEGACY = SubaruGen2PlatformConfig(
     [SubaruCarDocs("Subaru Legacy 2020-22", "All", car_parts=CarParts.common([CarHarness.subaru_b]))],
@@ -143,7 +143,7 @@ class CAR(Platforms):
       SubaruCarDocs("Subaru Crosstrek 2018-19", video="https://youtu.be/Agww7oE1k-s?t=26"),
       SubaruCarDocs("Subaru XV 2018-19", video="https://youtu.be/Agww7oE1k-s?t=26"),
     ],
-    CarSpecs(mass=1568, wheelbase=2.67, steerRatio=15),
+    CarSpecs(wheelbase=2.67, steerRatio=15),
   )
   SUBARU_IMPREZA_2020 = SubaruPlatformConfig(
     [
@@ -151,18 +151,18 @@ class CAR(Platforms):
       SubaruCarDocs("Subaru Crosstrek 2020-23"),
       SubaruCarDocs("Subaru XV 2020-21"),
     ],
-    CarSpecs(mass=1480, wheelbase=2.67, steerRatio=17),
+    CarSpecs(wheelbase=2.67, steerRatio=17),
     flags=SubaruFlags.STEER_RATE_LIMITED,
   )
   # TODO: is there an XV and Impreza too?
   SUBARU_CROSSTREK_HYBRID = SubaruPlatformConfig(
     [SubaruCarDocs("Subaru Crosstrek Hybrid 2020", car_parts=CarParts.common([CarHarness.subaru_b]))],
-    CarSpecs(mass=1668, wheelbase=2.67, steerRatio=17),
+    CarSpecs(wheelbase=2.67, steerRatio=17),
     flags=SubaruFlags.HYBRID,
   )
   SUBARU_FORESTER = SubaruPlatformConfig(
     [SubaruCarDocs("Subaru Forester 2019-21", "All")],
-    CarSpecs(mass=1568, wheelbase=2.67, steerRatio=17),
+    CarSpecs(wheelbase=2.67, steerRatio=17),
     flags=SubaruFlags.STEER_RATE_LIMITED,
   )
   SUBARU_FORESTER_HYBRID = SubaruPlatformConfig(
@@ -173,13 +173,13 @@ class CAR(Platforms):
   # Pre-global
   SUBARU_FORESTER_PREGLOBAL = SubaruPlatformConfig(
     [SubaruCarDocs("Subaru Forester 2017-18")],
-    CarSpecs(mass=1568, wheelbase=2.67, steerRatio=20),
+    CarSpecs(wheelbase=2.67, steerRatio=20),
     {Bus.pt: 'subaru_forester_2017_generated'},
     flags=SubaruFlags.PREGLOBAL,
   )
   SUBARU_LEGACY_PREGLOBAL = SubaruPlatformConfig(
     [SubaruCarDocs("Subaru Legacy 2015-18")],
-    CarSpecs(mass=1568, wheelbase=2.67, steerRatio=12.5),
+    CarSpecs(wheelbase=2.67, steerRatio=12.5),
     {Bus.pt: 'subaru_outback_2015_generated'},
     flags=SubaruFlags.PREGLOBAL,
   )
@@ -226,6 +226,7 @@ SUBARU_ALT_VERSION_RESPONSE = bytes([uds.SERVICE_TYPE.READ_DATA_BY_IDENTIFIER + 
   p16(0xf100)
 
 FW_QUERY_CONFIG = FwQueryConfig(
+  fw_version_regex=br"(?:[\x00-\xff]{4,5}|[\x00-\xff]{8}|[\x00-\xff]{10})",
   requests=[
     Request(
       [StdQueries.TESTER_PRESENT_REQUEST, SUBARU_VERSION_REQUEST],
@@ -273,7 +274,7 @@ FW_QUERY_CONFIG = FwQueryConfig(
   ],
   # We don't get the EPS from non-OBD queries on GEN2 cars. Note that we still attempt to match when it exists
   non_essential_ecus={
-    Ecu.eps: list(CAR.with_flags(SubaruFlags.GLOBAL_GEN2)),
+    Ecu.eps: [c for c in CAR if c.config.flags & SubaruFlags.GLOBAL_GEN2],
   }
 )
 

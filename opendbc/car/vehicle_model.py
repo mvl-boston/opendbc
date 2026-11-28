@@ -27,15 +27,17 @@ class VehicleModel:
       CP: Car Parameters
     """
     # for math readability, convert long names car params into short names
-    self.m: float = CP.mass
-    self.j: float = CP.rotationalInertia
+    # Tire stiffness and rotational inertia are already divided by vehicle mass, which cancels out of the model.
+    # Use unit mass to preserve the standard bicycle-model equations below.
+    self.m: float = 1.0
+    self.j: float = CP.rotationalInertiaPerMass
     self.l: float = CP.wheelbase
     self.aF: float = CP.centerToFront
     self.aR: float = CP.wheelbase - CP.centerToFront
-    self.chi: float = CP.steerRatioRear
+    self.chi: float = 0.  # no rear steering
 
-    self.cF_orig: float = CP.tireStiffnessFront
-    self.cR_orig: float = CP.tireStiffnessRear
+    self.cF_orig: float = CP.tireStiffnessFrontPerMass
+    self.cR_orig: float = CP.tireStiffnessRearPerMass
     self.update_params(1.0, CP.steerRatio)
 
   def update_params(self, stiffness_factor: float, steer_ratio: float) -> None:
@@ -111,7 +113,7 @@ class VehicleModel:
       u: Speed [m/s]
 
     Returns:
-      Roll compensation curvature [rad]
+      Roll compensation curvature [1/m]
     """
     sf = calc_slip_factor(self)
 
@@ -178,12 +180,12 @@ def create_dyn_state_matrices(u: float, VM: VehicleModel) -> tuple[np.ndarray, n
     A tuple with the 2x2 A matrix, and 2x2 B matrix
 
   Parameters in the vehicle model:
-    cF: Tire stiffness Front [N/rad]
-    cR: Tire stiffness Rear [N/rad]
+    cF: Tire stiffness front per unit mass [N/(rad*kg)]
+    cR: Tire stiffness rear per unit mass [N/(rad*kg)]
     aF: Distance from CG to front wheels [m]
     aR: Distance from CG to rear wheels [m]
-    m: Mass [kg]
-    j: Rotational inertia [kg m^2]
+    m: Unit mass (1); stiffness and inertia are mass-normalized
+    j: Rotational inertia per unit mass [m^2]
     sR: Steering ratio [-]
     chi: Steer ratio rear [-]
   """
@@ -219,7 +221,7 @@ def dyn_ss_sol(sa: float, u: float, roll: float, VM: VehicleModel) -> np.ndarray
   """
   A, B = create_dyn_state_matrices(u, VM)
   inp = np.array([[sa], [roll]])
-  return -solve(A, B) @ inp  # type: ignore
+  return -solve(A, B) @ inp
 
 
 def calc_slip_factor(VM: VehicleModel) -> float:

@@ -8,7 +8,7 @@ from typing import Any
 from collections.abc import Callable
 from functools import cache
 
-from opendbc.car import DT_CTRL, apply_hysteresis, gen_empty_fingerprint, scale_rot_inertia, scale_tire_stiffness, STD_CARGO_KG
+from opendbc.car import DT_CTRL, apply_hysteresis, gen_empty_fingerprint, scale_rot_inertia_per_mass, scale_tire_stiffness_per_mass
 from opendbc.car import structs
 from opendbc.car.can_definitions import CanData, CanRecvCallable, CanSendCallable
 from opendbc.car.common.basedir import BASEDIR
@@ -44,8 +44,8 @@ GEAR_SHIFTER_MAP: dict[str, structs.CarState.GearShifter] = {
   'B': GearShifter.brake, 'BRAKE': GearShifter.brake,
 }
 
-TorqueFromLateralAccelCallbackType = Callable[[float, structs.CarParams.LateralTorqueTuning, bool], float]
-LateralAccelFromTorqueCallbackType = Callable[[float, structs.CarParams.LateralTorqueTuning, bool], float]
+TorqueFromLateralAccelCallbackType = Callable[[float, structs.CarParams.LateralTorqueTuning], float]
+LateralAccelFromTorqueCallbackType = Callable[[float, structs.CarParams.LateralTorqueTuning], float]
 
 
 @cache
@@ -81,24 +81,42 @@ def get_torque_params():
 
 
 class RadarInterfaceBase(ABC):
+  trigger_msg: int  # last message of a radar frame, required when rcp is set
+
   def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
     self.CP = CP
     self.CP_SP = CP_SP
-    self.rcp = None
+    self.rcp: CANParser | None = None
+    self.updated_messages: set[int] = set()
     self.pts: dict[int, structs.RadarData.RadarPoint] = {}
+    self.track_id: int = 0
     self.frame = 0
 
-  def update(self, can_packets: list[tuple[int, list[CanData]]]) -> structs.RadarDataT | None:
-    self.frame += 1
-    if (self.frame % 5) == 0:  # 20 Hz is very standard
-      return structs.RadarData()
-    return None
+  def update(self, can_strings: list[tuple[int, list[CanData]]]) -> structs.RadarDataT | None:
+    # no radar parser: publish empty radar data at 20Hz to keep radard running
+    if self.rcp is None:
+      self.frame += 1
+      return structs.RadarData() if self.frame % 5 == 0 else None
+
+    # accumulate updated messages until the radar frame is complete
+    self.updated_messages.update(self.rcp.update(can_strings))
+    if self.trigger_msg not in self.updated_messages:
+      return None
+
+    ret = self._update(self.rcp, self.updated_messages)
+    self.updated_messages.clear()
+    return ret
+
+  def _update(self, rcp: CANParser, updated_messages: set[int]) -> structs.RadarDataT | None:
+    raise NotImplementedError
 
 
 class CarInterfaceBase(ABC, CarInterfaceBaseSP):
-  CarState: 'CarStateBase'
-  CarController: 'CarControllerBase'
-  RadarInterface: 'RadarInterfaceBase' = RadarInterfaceBase
+  CarState: type['CarStateBase']
+  CarController: type['CarControllerBase']
+  RadarInterface: type['RadarInterfaceBase'] = RadarInterfaceBase
+
+  DRIVABLE_GEARS: tuple[structs.CarState.GearShifter, ...] = ()
 
   def __init__(self, CP: structs.CarParams, CP_SP: structs.CarParamsSP):
     self.CP = CP
@@ -119,7 +137,7 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
     return self.CC.update(c, c_sp, self.CS, now_nanos)
 
   @staticmethod
-  def get_pid_accel_limits(CP, current_speed, cruise_speed):
+  def get_pid_accel_limits(CP, CP_SP, current_speed, cruise_speed):
     return ACCEL_MIN, ACCEL_MAX
 
   @classmethod
@@ -131,7 +149,7 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
 
   @classmethod
   def get_non_essential_params_sp(cls, car_params, candidate: str) -> structs.CarParamsSP:
-    return cls.get_params_sp(car_params, candidate, gen_empty_fingerprint(), list(), False, False)
+    return cls.get_params_sp(car_params, candidate, gen_empty_fingerprint(), list(), False, False, False)
 
   @classmethod
   def get_params(cls, candidate: str, fingerprint: dict[int, dict[int, int]], car_fw: list[structs.CarParams.CarFw],
@@ -139,7 +157,6 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
     ret = CarInterfaceBase.get_std_params(candidate)
 
     platform = PLATFORMS[candidate]
-    ret.mass = platform.config.specs.mass
     ret.wheelbase = platform.config.specs.wheelbase
     ret.steerRatio = platform.config.specs.steerRatio
     ret.centerToFront = ret.wheelbase * platform.config.specs.centerToFrontRatio
@@ -150,26 +167,23 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
 
     ret = cls._get_params(ret, candidate, fingerprint, car_fw, alpha_long, is_release, docs)
 
-    # Vehicle mass is published curb weight plus assumed payload such as a human driver; notCars have no assumed payload
-    if not ret.notCar:
-      ret.mass = ret.mass + STD_CARGO_KG
-
     # Set params dependent on values set by the car interface
-    ret.rotationalInertia = scale_rot_inertia(ret.mass, ret.wheelbase)
-    ret.tireStiffnessFront, ret.tireStiffnessRear = scale_tire_stiffness(ret.mass, ret.wheelbase, ret.centerToFront, ret.tireStiffnessFactor)
+    ret.rotationalInertiaPerMass = scale_rot_inertia_per_mass(ret.wheelbase)
+    ret.tireStiffnessFrontPerMass, ret.tireStiffnessRearPerMass = scale_tire_stiffness_per_mass(ret.wheelbase, ret.centerToFront,
+                                                                                              ret.tireStiffnessFactor)
 
     return ret
 
   @classmethod
   def get_params_sp(cls, car_params, candidate: str, fingerprint: dict[int, dict[int, int]], car_fw: list[structs.CarParams.CarFw], alpha_long: bool,
-                    docs: bool) -> structs.CarParamsSP:
+                    is_release_sp: bool, docs: bool) -> structs.CarParamsSP:
     car_params_sp = structs.CarParamsSP()
 
     platform = PLATFORMS[candidate]
     car_params_sp.flags |= int(platform.config.sp_flags)
     car_params_sp.pcmCruiseSpeed = True
 
-    return cls._get_params_sp(car_params, car_params_sp, candidate, fingerprint, car_fw, alpha_long, docs)
+    return cls._get_params_sp(car_params, car_params_sp, candidate, fingerprint, car_fw, alpha_long, is_release_sp, docs)
 
   @staticmethod
   @abstractmethod
@@ -179,7 +193,7 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
 
   @staticmethod
   def _get_params_sp(stock_cp: structs.CarParams, ret: structs.CarParamsSP, candidate, fingerprint: dict[int, dict[int, int]],
-                     car_fw: list[structs.CarParams.CarFw], alpha_long: bool, docs: bool) -> structs.CarParamsSP:
+                     car_fw: list[structs.CarParams.CarFw], alpha_long: bool, is_release_sp: bool, docs: bool) -> structs.CarParamsSP:
     carlog.debug(f"Car {candidate} does not have a _get_params_sp method, using defaults")
     return ret
 
@@ -240,15 +254,8 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
 
     ret.pcmCruise = True     # openpilot's state is tied to the PCM's cruise state on most cars
     ret.minEnableSpeed = -1. # enable is done by stock ACC, so ignore this
-    ret.steerRatioRear = 0.  # no rear steering, at least on the listed cars aboveA
     ret.openpilotLongitudinalControl = False
     ret.stopAccel = -2.0
-    ret.stoppingDecelRate = 0.8 # brake_travel/s while trying to stop
-    ret.vEgoStopping = 0.5
-    ret.vEgoStarting = 0.5
-    ret.longitudinalTuning.kf = 1.
-    ret.longitudinalTuning.kpBP = [0.]
-    ret.longitudinalTuning.kpV = [0.]
     ret.longitudinalTuning.kiBP = [0.]
     ret.longitudinalTuning.kiV = [0.]
     # TODO estimate car specific lag, use .15s for now
@@ -261,9 +268,6 @@ class CarInterfaceBase(ABC, CarInterfaceBaseSP):
     params = get_torque_params()[candidate]
 
     tune.init('torque')
-    tune.torque.kf = 1.0
-    tune.torque.kp = 1.0
-    tune.torque.ki = 0.3
     tune.torque.friction = params['FRICTION']
     tune.torque.latAccelFactor = params['LAT_ACCEL_FACTOR']
     tune.torque.latAccelOffset = 0.0

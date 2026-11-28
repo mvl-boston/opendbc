@@ -5,25 +5,26 @@ This file is part of sunnypilot and is licensed under the MIT License.
 See the LICENSE.md file in the root directory for more details.
 """
 
-import numpy as np
 import unittest
 
-from opendbc.safety.tests.common import CANPackerPanda, PandaSafetyTestBase
+from opendbc.safety.tests.common import CANPackerSafety, CarSafetyTest
 
 
-class GasInterceptorSafetyTest(PandaSafetyTestBase):
+class GasInterceptorSafetyTest(CarSafetyTest):
 
   INTERCEPTOR_THRESHOLD = 0
+
+  def test_gas_pressed_bits(self):
+    self.skipTest("interceptor encodes gas from raw bytes, not a single DBC signal")
 
   cnt_gas_cmd = 0
   cnt_user_gas = 0
 
-  packer: CANPackerPanda
+  packer: CANPackerSafety
 
   @classmethod
   def setUpClass(cls):
     if cls.__name__ == "GasInterceptorSafetyTest" or cls.__name__.endswith("Base"):
-      cls.safety = None
       raise unittest.SkipTest
 
   def _interceptor_gas_cmd(self, gas: int):
@@ -32,13 +33,13 @@ class GasInterceptorSafetyTest(PandaSafetyTestBase):
       values["GAS_COMMAND"] = gas * 255.
       values["GAS_COMMAND2"] = gas * 255.
     self.__class__.cnt_gas_cmd += 1
-    return self.packer.make_can_msg_panda("GAS_COMMAND", 0, values)
+    return self.packer.make_can_msg_safety("GAS_COMMAND", 0, values)
 
   def _interceptor_user_gas(self, gas: int):
     values = {"INTERCEPTOR_GAS": gas, "INTERCEPTOR_GAS2": gas,
               "PEDAL_COUNTER": self.__class__.cnt_user_gas}
     self.__class__.cnt_user_gas += 1
-    return self.packer.make_can_msg_panda("GAS_SENSOR", 0, values)
+    return self.packer.make_can_msg_safety("GAS_SENSOR", 0, values)
 
   # Skip non-interceptor user gas tests
   def test_prev_gas(self):
@@ -73,7 +74,7 @@ class GasInterceptorSafetyTest(PandaSafetyTestBase):
     self._rx(self._interceptor_user_gas(0))
 
   def test_gas_interceptor_safety_check(self):
-    for gas in np.arange(0, 4000, 100):
+    for gas in range(0, 4000, 100):
       for controls_allowed in [True, False]:
         self.safety.set_controls_allowed(controls_allowed)
         if controls_allowed:
@@ -81,3 +82,10 @@ class GasInterceptorSafetyTest(PandaSafetyTestBase):
         else:
           send = gas == 0
         self.assertEqual(send, self._tx(self._interceptor_gas_cmd(gas)))
+
+  def test_gas_interceptor_low_byte_only(self):
+    msg = self._interceptor_gas_cmd(0)
+    msg[0].data[1] = 1
+    for controls_allowed in (True, False):
+      self.safety.set_controls_allowed(controls_allowed)
+      self.assertEqual(controls_allowed, self._tx(msg))

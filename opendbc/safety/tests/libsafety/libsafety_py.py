@@ -1,77 +1,116 @@
 import os
+import re
+import subprocess
+import tempfile
+from functools import cache
+from pathlib import Path
+from typing import Any
+
 from cffi import FFI
-from typing import Protocol
 
 from opendbc.safety import LEN_TO_DLC
-from opendbc.safety.tests.libsafety.safety_helpers import PandaSafety, setup_safety_helpers
 
 libsafety_dir = os.path.dirname(os.path.abspath(__file__))
-libsafety_fn = os.path.join(libsafety_dir, "libsafety.so")
+
+
+@cache
+def single_precision_flags() -> list[str]:
+  # Clang accepts this GCC flag only as an ignored optimization warning.
+  flag = '-fsingle-precision-constant'
+  result = subprocess.run(['cc', '-Werror', flag, '-x', 'c', '-c', '-', '-o', os.devnull],
+                          input=b'', stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+  return [flag] if result.returncode == 0 else []
+
+
+def _build_libsafety(release: bool = False) -> str:
+  """Compile libsafety.so to a temp file and return its path."""
+  root = str(Path(libsafety_dir).parents[3])
+  safety_c = os.path.join(libsafety_dir, "safety.c")
+
+  cflags = [
+    '-Wall', '-Wextra', '-Werror', '-nostdlib', '-fno-builtin',
+    '-std=gnu11', '-Wfatal-errors', '-Wno-pointer-to-int-cast',
+    '-g', '-O0', '-fno-omit-frame-pointer', *single_precision_flags(),
+  ]
+  # Coverage must exclude the branches inserted by UBSan.
+  if os.environ.get("SAFETY_COVERAGE") == "1":
+    ldflags = ['-fprofile-arcs', '-ftest-coverage'] if not release else []
+  else:
+    ldflags = ['-fsanitize=undefined', '-fno-sanitize-recover=undefined']
+    # comma devices have no UBSan runtime, trap instead
+    if os.environ.get("SAFETY_UBSAN_TRAP") == "1":
+      ldflags.append('-fsanitize-trap=undefined')
+  cflags += ldflags
+  if not release:
+    cflags += ['-DALLOW_DEBUG']
+
+  fd, safety_os = tempfile.mkstemp(suffix='.os', dir=libsafety_dir)
+  os.close(fd)
+  fd, libsafety_so = tempfile.mkstemp(suffix='.so')
+  os.close(fd)
+
+  subprocess.check_call(['cc', '-fPIC', *cflags, '-I', root, '-c', safety_c, '-o', safety_os])
+  subprocess.check_call(['cc', '-shared', safety_os, '-o', libsafety_so, *ldflags])
+  return libsafety_so
+
+
+def cdef_from_files(*paths: Path) -> str:
+  source = "\n".join(path.read_text() for path in paths)
+  source = re.sub(r"//[^\n]*|/\*.*?\*/", "", source, flags=re.DOTALL)
+  # cffi sizes an enum as int, but the packed enums of the MADS state are one byte in C
+  source = re.sub(r"typedef enum __attribute__\(\(packed\)\) \{[^}]*\} (\w+);", r"typedef uint8_t \1;", source)
+  source = re.sub(r"__attribute__\(\(.*\)\)", "", source)
+
+  # Keep integer constants, type declarations, and function signatures, including definitions.
+  constants = re.findall(r"^#define \w+ \d+[UuLl]*[ \t]*$", source, re.MULTILINE)
+  types = re.findall(r"^(?:typedef|struct|enum)\b(?:[^;{]|\{[^}]*\})+;", source, re.MULTILINE)
+  functions = re.findall(r"^((?!typedef\b|static\b)\w[\w *]*\b\w+\([^;{}]*\))\s*[;{]", source, re.MULTILINE)
+  return "\n".join([*constants, *types, *(f"{signature};" for signature in dict.fromkeys(functions))])
+
 
 ffi = FFI()
+safety_dir = Path(libsafety_dir).parents[1]
+ffi.cdef(cdef_from_files(safety_dir / "can.h"), packed=True)
+# one cdef, so a function both declared in a header and defined in safety.c is only declared once
+ffi.cdef(cdef_from_files(safety_dir / "sunnypilot" / "mads_declarations.h", safety_dir / "declarations.h", safety_dir / "ignition.h",
+                         Path(libsafety_dir) / "safety.c"))
 
+# Functions not captured by cdef_from_file (macros, non-standard formatting, or generated)
 ffi.cdef("""
-typedef struct {
-  unsigned char fd : 1;
-  unsigned char bus : 3;
-  unsigned char data_len_code : 4;
-  unsigned char rejected : 1;
-  unsigned char returned : 1;
-  unsigned char extended : 1;
-  unsigned int addr : 29;
-  unsigned char checksum;
-  unsigned char data[64];
-} CANPacket_t;
-""", packed=True)
-
-ffi.cdef("""
-bool safety_rx_hook(CANPacket_t *msg);
-bool safety_tx_hook(CANPacket_t *msg);
-int safety_fwd_hook(int bus_num, int addr);
-int set_safety_hooks(uint16_t mode, uint16_t param);
+int get_alternative_experience(void);
+int get_desired_angle_last(void);
+void set_honda_bosch_long(bool c);
+int get_honda_hw(void);
+void set_ignition_can(bool c);
+int get_temp_debug(void);
+void mutation_set_active_mutant(int id);
+int mutation_get_active_mutant(void);
 """)
 
-ffi.cdef("""
-void can_set_checksum(CANPacket_t *packet);
-""")
+ffi.cdef("extern SafetyCopy safety_a; extern SafetyCopy safety_b; extern bool safety_redundancy_fault; extern uint32_t ignition_can_cnt;")
 
-setup_safety_helpers(ffi)
+# cffi builds these from the C sources at load time, so there is nothing to check statically
+LibSafety = Any
+CANPacket = Any
 
+libsafety: LibSafety
 
-class CANPacket:
-  reserved: int
-  bus: int
-  data_len_code: int
-  rejected: int
-  returned: int
-  extended: int
-  addr: int
-  data: list[int]
+def load(path):
+  global libsafety
+  libsafety = ffi.dlopen(str(path))
 
+def __getattr__(name):
+  if name == "libsafety":
+    load(_build_libsafety())
+    return libsafety
+  raise AttributeError(name)
 
-class Panda(PandaSafety, Protocol):
-  # CAN
-  def can_set_checksum(self, p: CANPacket) -> None: ...
-
-  # safety
-  def safety_rx_hook(self, msg: CANPacket) -> int: ...
-  def safety_tx_hook(self, msg: CANPacket) -> int: ...
-  def safety_fwd_hook(self, bus_num: int, addr: int) -> int: ...
-  def set_safety_hooks(self, mode: int, param: int) -> int: ...
-
-
-libsafety: Panda = ffi.dlopen(libsafety_fn)
-
-
-# helpers
-
-def make_CANPacket(addr: int, bus: int, dat):
+def make_CANPacket(addr: int, bus: int, dat, fill: int = 0):
   ret = ffi.new('CANPacket_t *')
   ret[0].extended = 1 if addr >= 0x800 else 0
   ret[0].addr = addr
   ret[0].data_len_code = LEN_TO_DLC[len(dat)]
   ret[0].bus = bus
-  ret[0].data = bytes(dat)
-  libsafety.can_set_checksum(ret)
-
+  # fill is the buffer past the msg's length, which the safety must never read
+  ret[0].data = bytes(dat) + bytes([fill]) * (len(ret[0].data) - len(dat))
   return ret

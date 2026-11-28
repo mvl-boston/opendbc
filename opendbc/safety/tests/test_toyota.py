@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-from parameterized import parameterized_class
+from opendbc.testing import parameterized_class
 import numpy as np
 import random
 import unittest
@@ -8,10 +8,9 @@ import itertools
 from opendbc.car.toyota.values import ToyotaSafetyFlags
 from opendbc.sunnypilot.car.toyota.values import ToyotaSafetyFlagsSP
 from opendbc.car.structs import CarParams
-from opendbc.safety import ALTERNATIVE_EXPERIENCE
 from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
-from opendbc.safety.tests.common import CANPackerPanda
+from opendbc.safety.tests.common import CANPackerSafety
 from opendbc.safety.tests.gas_interceptor_common import GasInterceptorSafetyTest
 
 TOYOTA_COMMON_TX_MSGS = [[0x2E4, 0], [0x191, 0], [0x412, 0], [0x343, 0], [0x1D2, 0]]  # LKAS + LTA + ACC & PCM cancel cmds
@@ -26,78 +25,96 @@ UNSUPPORTED_DSU = [
   {"SAFETY_PARAM_SP": ToyotaSafetyFlagsSP.DEFAULT},
   {"SAFETY_PARAM_SP": ToyotaSafetyFlagsSP.UNSUPPORTED_DSU},
 ]
+class TestToyotaSafetyBase(common.CarSafetyTest, common.LongitudinalAccelSafetyTest):
 
-
-class TestToyotaSafetyBase(common.PandaCarSafetyTest, common.LongitudinalAccelSafetyTest):
+  DBC = "toyota_nodsu_pt_generated"
+  SAFETY_MODEL = CarParams.SafetyModel.toyota
 
   TX_MSGS = TOYOTA_COMMON_TX_MSGS + TOYOTA_COMMON_LONG_TX_MSGS
   RELAY_MALFUNCTION_ADDRS = {0: (0x2E4, 0x191, 0x412, 0x343)}
   FWD_BLACKLISTED_ADDRS = {2: [0x2E4, 0x412, 0x191, 0x343]}
   EPS_SCALE = 73
+  ECU_DISABLED = True  # radar is knocked out with tester present for openpilot longitudinal
+
+  RX_QUALITY_FLAGS = {
+    "WHEEL_SPEEDS": {f"WHEEL_SPEED_{wheel}_FAULT": (0,) for wheel in ("FR", "FL", "RR", "RL")},
+    "STEER_TORQUE_SENSOR": {"STEER_ANGLE_INITIALIZING": (0,)},
+  }
 
   SAFETY_PARAM_SP: int = 0
 
-  packer: CANPackerPanda
-  safety: libsafety_py.Panda
+  def setUp(self):
+    self._safety_param_sp = self.SAFETY_PARAM_SP
+    libsafety_py.libsafety.set_current_safety_param_sp(self.SAFETY_PARAM_SP)
+    super().setUp()
+
+  packer: CANPackerSafety
+  safety: libsafety_py.LibSafety
 
   def _torque_meas_msg(self, torque: int, driver_torque: int | None = None):
     values = {"STEER_TORQUE_EPS": (torque / self.EPS_SCALE) * 100.}
     if driver_torque is not None:
       values["STEER_TORQUE_DRIVER"] = driver_torque
-    return self.packer.make_can_msg_panda("STEER_TORQUE_SENSOR", 0, values)
+    return self.packer.make_can_msg_safety("STEER_TORQUE_SENSOR", 0, values)
 
   # Both torque and angle safety modes test with each other's steering commands
   def _torque_cmd_msg(self, torque, steer_req=1):
     values = {"STEER_TORQUE_CMD": torque, "STEER_REQUEST": steer_req}
-    return self.packer.make_can_msg_panda("STEERING_LKA", 0, values)
+    return self.packer.make_can_msg_safety("STEERING_LKA", 0, values)
 
   def _angle_meas_msg(self, angle: float, steer_angle_initializing: bool = False):
     # This creates a steering torque angle message. Not set on all platforms,
     # relative to init angle on some older TSS2 platforms. Only to be used with LTA
     values = {"STEER_ANGLE": angle, "STEER_ANGLE_INITIALIZING": int(steer_angle_initializing)}
-    return self.packer.make_can_msg_panda("STEER_TORQUE_SENSOR", 0, values)
+    return self.packer.make_can_msg_safety("STEER_TORQUE_SENSOR", 0, values)
 
   def _angle_cmd_msg(self, angle: float, enabled: bool):
     return self._lta_msg(int(enabled), int(enabled), angle, torque_wind_down=100 if enabled else 0)
 
   def _lta_msg(self, req, req2, angle_cmd, torque_wind_down=100):
     values = {"STEER_REQUEST": req, "STEER_REQUEST_2": req2, "STEER_ANGLE_CMD": angle_cmd, "TORQUE_WIND_DOWN": torque_wind_down}
-    return self.packer.make_can_msg_panda("STEERING_LTA", 0, values)
+    return self.packer.make_can_msg_safety("STEERING_LTA", 0, values)
+
+  def _accel_msg_343(self, accel, cancel_req=0):
+    values = {"ACCEL_CMD": accel, "CANCEL_REQ": cancel_req}
+    return self.packer.make_can_msg_safety("ACC_CONTROL", 0, values)
 
   def _accel_msg(self, accel, cancel_req=0):
-    values = {"ACCEL_CMD": accel, "CANCEL_REQ": cancel_req}
-    return self.packer.make_can_msg_panda("ACC_CONTROL", 0, values)
+    return self._accel_msg_343(accel, cancel_req)
 
   def _speed_msg(self, speed):
     values = {("WHEEL_SPEED_%s" % n): speed * 3.6 for n in ["FR", "FL", "RR", "RL"]}
-    return self.packer.make_can_msg_panda("WHEEL_SPEEDS", 0, values)
+    return self.packer.make_can_msg_safety("WHEEL_SPEEDS", 0, values)
 
   def _user_brake_msg(self, brake):
     values = {"BRAKE_PRESSED": brake}
-    return self.packer.make_can_msg_panda("BRAKE_MODULE", 0, values)
+    return self.packer.make_can_msg_safety("BRAKE_MODULE", 0, values)
 
   def _user_gas_msg(self, gas):
     cruise_active = self.safety.get_controls_allowed()
     values = {"GAS_RELEASED": not gas, "CRUISE_ACTIVE": cruise_active}
-    return self.packer.make_can_msg_panda("PCM_CRUISE", 0, values)
+    return self.packer.make_can_msg_safety("PCM_CRUISE", 0, values)
 
   def _pcm_status_msg(self, enable):
     values = {"CRUISE_ACTIVE": enable}
-    return self.packer.make_can_msg_panda("PCM_CRUISE", 0, values)
+    return self.packer.make_can_msg_safety("PCM_CRUISE", 0, values)
 
   def _acc_state_msg(self, enabled):
     msg = "DSU_CRUISE" if self.SAFETY_PARAM_SP & ToyotaSafetyFlagsSP.UNSUPPORTED_DSU else "PCM_CRUISE_2"
     values = {"MAIN_ON": enabled}
-    return self.packer.make_can_msg_panda(msg, 0, values)
+    return self.packer.make_can_msg_safety(msg, 0, values)
 
-  def test_diagnostics(self, stock_longitudinal: bool = False, ecu_disabled: bool = True):
+  def _ignore_frequency_check_msgs(self):
+    return [self._acc_state_msg(False)] if self.SAFETY_PARAM_SP & ToyotaSafetyFlagsSP.UNSUPPORTED_DSU else []
+
+  def test_diagnostics(self):
     for should_tx, msg in ((False, b"\x6D\x02\x3E\x00\x00\x00\x00\x00"),  # fwdCamera tester present
                            (False, b"\x0F\x03\xAA\xAA\x00\x00\x00\x00"),  # non-tester present
                            (True, b"\x0F\x02\x3E\x00\x00\x00\x00\x00")):
       tester_present = libsafety_py.make_CANPacket(0x750, 0, msg)
-      self.assertEqual(should_tx and ecu_disabled and not stock_longitudinal, self._tx(tester_present))
+      self.assertEqual(should_tx and self.ECU_DISABLED and self.LONGITUDINAL, self._tx(tester_present))
 
-  def test_block_aeb(self, stock_longitudinal: bool = False):
+  def test_block_aeb(self):
     for controls_allowed in (True, False):
       for bad in (True, False):
         for _ in range(10):
@@ -106,7 +123,7 @@ class TestToyotaSafetyBase(common.PandaCarSafetyTest, common.LongitudinalAccelSa
           if not bad:
             dat = [0]*6 + dat[-1:]
           msg = libsafety_py.make_CANPacket(0x283, 0, bytes(dat))
-          self.assertEqual(not bad and not stock_longitudinal, self._tx(msg))
+          self.assertEqual(not bad and self.LONGITUDINAL, self._tx(msg))
 
   # Only allow LTA msgs with no actuation
   def test_lta_steer_cmd(self):
@@ -120,32 +137,30 @@ class TestToyotaSafetyBase(common.PandaCarSafetyTest, common.LongitudinalAccelSa
       self.assertEqual(should_tx, self._tx(self._lta_msg(req, req2, angle, torque_wind_down)),
                        f"{req=} {req2=} {angle=} {torque_wind_down=}")
 
-  def test_rx_hook(self):
-    # checksum checks
-    for msg in ["trq", "pcm"]:
-      self.safety.set_controls_allowed(1)
-      if msg == "trq":
-        msg = self._torque_meas_msg(0)
-      if msg == "pcm":
-        msg = self._pcm_status_msg(True)
-      self.assertTrue(self._rx(msg))
-      msg[0].data[4] = 0
-      msg[0].data[5] = 0
-      msg[0].data[6] = 0
-      msg[0].data[7] = 0
-      self.assertFalse(self._rx(msg))
-      self.assertFalse(self.safety.get_controls_allowed())
+  def test_vehicle_moving_any_wheel(self):
+    # one wheel turning either way is moving, even when the wheel speeds sum to zero
+    for wheel_speeds in ({"FL": 0.01}, {"RR": -0.01}, {"FR": 0.01, "RL": -0.01}):
+      self._rx(self._speed_msg(0))
+      self.assertFalse(self.safety.get_vehicle_moving())
+      values = {f"WHEEL_SPEED_{wheel}": wheel_speeds.get(wheel, 0) for wheel in ("FR", "FL", "RR", "RL")}
+      self.assertTrue(self._rx(self.packer.make_can_msg_safety("WHEEL_SPEEDS", 0, values)))
+      self.assertTrue(self.safety.get_vehicle_moving(), wheel_speeds)
 
-
+  def test_vehicle_speed_measurements(self):
+    # OVERRIDDEN: 72.22_ is the max speed in m/s
+    self._common_measurement_test(self._speed_msg, 0, 259 / 3.6, 1,
+                                  self.safety.get_vehicle_speed_min, self.safety.get_vehicle_speed_max)
 class TestToyotaSafetyGasInterceptorBase(GasInterceptorSafetyTest, TestToyotaSafetyBase):
 
   TX_MSGS = TOYOTA_COMMON_TX_MSGS + TOYOTA_COMMON_LONG_TX_MSGS + GAS_INTERCEPTOR_TX_MSGS
   INTERCEPTOR_THRESHOLD = 805
+  GAS_PRESSED_THRESHOLD = 805
 
   def setUp(self):
     super().setUp()
     self.safety = libsafety_py.libsafety
-    self.safety.set_current_safety_param_sp(self.SAFETY_PARAM_SP | ToyotaSafetyFlagsSP.GAS_INTERCEPTOR)
+    self._safety_param_sp = self.SAFETY_PARAM_SP | ToyotaSafetyFlagsSP.GAS_INTERCEPTOR
+    self.safety.set_current_safety_param_sp(self._safety_param_sp)
     self.safety.set_safety_hooks(CarParams.SafetyModel.toyota, self.safety.get_current_safety_param())
     self.safety.init_tests()
 
@@ -163,8 +178,6 @@ class TestToyotaSafetyGasInterceptorBase(GasInterceptorSafetyTest, TestToyotaSaf
       with self.subTest(test=test.__name__):
         with self.assertRaises(AssertionError):
           test()
-
-
 @parameterized_class(UNSUPPORTED_DSU)
 class TestToyotaSafetyTorque(TestToyotaSafetyBase, common.MotorTorqueSteeringSafetyTest, common.SteerRequestCutSafetyTest):
 
@@ -176,33 +189,33 @@ class TestToyotaSafetyTorque(TestToyotaSafetyBase, common.MotorTorqueSteeringSaf
   TORQUE_MEAS_TOLERANCE = 1  # toyota safety adds one to be conservative for rounding
 
   # Safety around steering req bit
-  MIN_VALID_STEERING_FRAMES = 18
+  MIN_VALID_STEERING_FRAMES = 17
   MAX_INVALID_STEERING_FRAMES = 1
+
+  @property
+  def SAFETY_PARAM(self):
+    return self.EPS_SCALE
 
   @classmethod
   def setUpClass(cls):
     if cls.__name__ == "TestToyotaSafetyTorque":
-      cls.safety = None
       raise unittest.SkipTest
 
+  def test_steer_angle_initializing_ignored(self):
+    # TSS-P cars don't set STEER_ANGLE_INITIALIZING, so torque control doesn't check it
+    for steer_angle_initializing in (True, False):
+      self.assertTrue(self._rx(self._angle_meas_msg(0, steer_angle_initializing)))
+
   def setUp(self):
-    self.packer = CANPackerPanda("toyota_nodsu_pt_generated")
-    self.safety = libsafety_py.libsafety
+    super().setUp()
     self.safety.set_current_safety_param_sp(self.SAFETY_PARAM_SP)
-    self.safety.set_safety_hooks(CarParams.SafetyModel.toyota, self.EPS_SCALE)
-    self.safety.init_tests()
-
-
 @parameterized_class(UNSUPPORTED_DSU)
 class TestToyotaSafetyTorqueGasInterceptor(TestToyotaSafetyGasInterceptorBase, TestToyotaSafetyTorque):
 
   @classmethod
   def setUpClass(cls):
     if cls.__name__ == "TestToyotaSafetyTorqueGasInterceptor":
-      cls.safety = None
       raise unittest.SkipTest
-
-
 class TestToyotaSafetyAngle(TestToyotaSafetyBase, common.AngleSteeringSafetyTest):
 
   # Angle control limits
@@ -213,15 +226,12 @@ class TestToyotaSafetyAngle(TestToyotaSafetyBase, common.AngleSteeringSafetyTest
   ANGLE_RATE_UP = [0.3, 0.15, 0.15]  # windup limit
   ANGLE_RATE_DOWN = [0.36, 0.26, 0.26]  # unwind limit
 
-  MAX_LTA_ANGLE = 94.9461  # PCS faults if commanding above this, deg
   MAX_MEAS_TORQUE = 1500  # max allowed measured EPS torque before wind down
   MAX_LTA_DRIVER_TORQUE = 150  # max allowed driver torque before wind down
 
-  def setUp(self):
-    self.packer = CANPackerPanda("toyota_nodsu_pt_generated")
-    self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.toyota, self.EPS_SCALE | ToyotaSafetyFlags.LTA)
-    self.safety.init_tests()
+  @property
+  def SAFETY_PARAM(self):
+    return self.EPS_SCALE | ToyotaSafetyFlags.LTA
 
   # Only allow LKA msgs with no actuation
   def test_lka_steer_cmd(self):
@@ -262,32 +272,41 @@ class TestToyotaSafetyAngle(TestToyotaSafetyBase, common.AngleSteeringSafetyTest
             should_tx = req == req2 and (torque_wind_down in (0, 100)) and not mismatch
             self.assertEqual(should_tx, self._tx(self._lta_msg(req, req2, angle, torque_wind_down)))
 
-          # Test max EPS torque and driver override thresholds
-          cases = itertools.product(
-            (0, self.MAX_MEAS_TORQUE - 1, self.MAX_MEAS_TORQUE, self.MAX_MEAS_TORQUE + 1, self.MAX_MEAS_TORQUE * 2),
-            (0, self.MAX_LTA_DRIVER_TORQUE - 1, self.MAX_LTA_DRIVER_TORQUE, self.MAX_LTA_DRIVER_TORQUE + 1, self.MAX_LTA_DRIVER_TORQUE * 2)
-          )
-
-          for eps_torque, driver_torque in cases:
-            for sign in (-1, 1):
-              for _ in range(6):
-                self._rx(self._torque_meas_msg(sign * eps_torque, sign * driver_torque))
-
-              # Toyota adds 1 to EPS torque since it is rounded after EPS factor
-              should_tx = (eps_torque - 1) <= self.MAX_MEAS_TORQUE and driver_torque <= self.MAX_LTA_DRIVER_TORQUE
-              self.assertEqual(should_tx, self._tx(self._lta_msg(1, 1, angle, 100)))
-              self.assertTrue(self._tx(self._lta_msg(1, 1, angle, 0)))  # should tx if we wind down torque
-
         else:
           # Controls not allowed
           for req, req2, torque_wind_down in itertools.product([0, 1], [0, 1], [0, 50, 100]):
             should_tx = not (req or req2) and torque_wind_down == 0
             self.assertEqual(should_tx, self._tx(self._lta_msg(req, req2, angle, torque_wind_down)))
 
+    # Test max EPS torque and driver override thresholds (independent of angle, test a few representative angles)
+    for angle in (-89, 0, 89):
+      self.safety.set_controls_allowed(True)
+      self._reset_angle_measurement(angle)
+      self._set_prev_desired_angle(angle)
+
+      cases = itertools.product(
+        (0, self.MAX_MEAS_TORQUE - 1, self.MAX_MEAS_TORQUE, self.MAX_MEAS_TORQUE + 1, self.MAX_MEAS_TORQUE * 2),
+        (0, self.MAX_LTA_DRIVER_TORQUE - 1, self.MAX_LTA_DRIVER_TORQUE, self.MAX_LTA_DRIVER_TORQUE + 1, self.MAX_LTA_DRIVER_TORQUE * 2)
+      )
+
+      for eps_torque, driver_torque in cases:
+        for sign in (-1, 1):
+          for _ in range(6):
+            self._rx(self._torque_meas_msg(sign * eps_torque, sign * driver_torque))
+
+          # Toyota adds 1 to EPS torque since it is rounded after EPS factor
+          should_tx = (eps_torque - 1) <= self.MAX_MEAS_TORQUE and driver_torque <= self.MAX_LTA_DRIVER_TORQUE
+          self.assertEqual(should_tx, self._tx(self._lta_msg(1, 1, angle, 100)))
+          self.assertTrue(self._tx(self._lta_msg(1, 1, angle, 0)))  # should tx if we wind down torque
+
+      # only the smaller of |min| and |max| over the window is checked
+      self._rx(self._torque_meas_msg(0, 0))
+      self.assertTrue(self._tx(self._lta_msg(1, 1, angle, 100)))
+
   def test_angle_measurements(self):
     """
     * Tests angle meas quality flag dictates whether angle measurement is parsed, and if rx is valid
-    * Tests rx hook correctly clips the angle measurement, since it is to be compared to LTA cmd when inactive
+    * Tests rx hook correctly tracks the angle measurement min/max, since it is to be compared to LTA cmd when inactive
     """
     for steer_angle_initializing in (True, False):
       for angle in np.arange(0, self.STEER_ANGLE_MAX * 2, 1):
@@ -307,35 +326,28 @@ class TestToyotaSafetyAngle(TestToyotaSafetyBase, common.AngleSteeringSafetyTest
         self._rx(self._angle_meas_msg(0))
         self.assertEqual(self.safety.get_angle_meas_min(), 0)
         self.assertEqual(self.safety.get_angle_meas_max(), 0)
-
-
 class TestToyotaSafetyAngleGasInterceptor(TestToyotaSafetyGasInterceptorBase, TestToyotaSafetyAngle):
   pass
-
-
 @parameterized_class(UNSUPPORTED_DSU)
 class TestToyotaAltBrakeSafety(TestToyotaSafetyTorque):
+
+  DBC = "toyota_new_mc_pt_generated"
+
+  @property
+  def SAFETY_PARAM(self):
+    return self.EPS_SCALE | ToyotaSafetyFlags.ALT_BRAKE
 
   @classmethod
   def setUpClass(cls):
     if cls.__name__ == "TestToyotaAltBrakeSafety":
-      cls.safety = None
       raise unittest.SkipTest
 
   def setUp(self):
-    self.packer = CANPackerPanda("toyota_new_mc_pt_generated")
-    self.safety = libsafety_py.libsafety
+    super().setUp()
     self.safety.set_current_safety_param_sp(self.SAFETY_PARAM_SP)
-    self.safety.set_safety_hooks(CarParams.SafetyModel.toyota, self.EPS_SCALE | ToyotaSafetyFlags.ALT_BRAKE)
-    self.safety.init_tests()
 
-  def _user_brake_msg(self, brake):
-    values = {"BRAKE_PRESSED": brake}
-    return self.packer.make_can_msg_panda("BRAKE_MODULE", 0, values)
-
-  # No LTA message in the DBC
   def test_lta_steer_cmd(self):
-    pass
+    self.skipTest("new_mc DBC has no STEERING_LTA")
 
 
 @parameterized_class(UNSUPPORTED_DSU)
@@ -344,14 +356,11 @@ class TestToyotaAltBrakeSafetyGasInterceptor(TestToyotaSafetyGasInterceptorBase,
   @classmethod
   def setUpClass(cls):
     if cls.__name__ == "TestToyotaAltBrakeSafetyGasInterceptor":
-      cls.safety = None
       raise unittest.SkipTest
 
   # No LTA message in the DBC
   def test_lta_steer_cmd(self):
     pass
-
-
 class TestToyotaStockLongitudinalBase(TestToyotaSafetyBase):
 
   TX_MSGS = TOYOTA_COMMON_TX_MSGS
@@ -361,12 +370,6 @@ class TestToyotaStockLongitudinalBase(TestToyotaSafetyBase):
 
   LONGITUDINAL = False
 
-  def test_diagnostics(self, stock_longitudinal: bool = True, ecu_disabled: bool = True):
-    super().test_diagnostics(stock_longitudinal=stock_longitudinal, ecu_disabled=ecu_disabled)
-
-  def test_block_aeb(self, stock_longitudinal: bool = True):
-    super().test_block_aeb(stock_longitudinal=stock_longitudinal)
-
   def test_acc_cancel(self):
     """
       Regardless of controls allowed, never allow ACC_CONTROL if cancel bit isn't set
@@ -374,70 +377,59 @@ class TestToyotaStockLongitudinalBase(TestToyotaSafetyBase):
     for controls_allowed in [True, False]:
       self.safety.set_controls_allowed(controls_allowed)
       for accel in np.arange(self.MIN_ACCEL - 1, self.MAX_ACCEL + 1, 0.1):
-        self.assertFalse(self._tx(self._accel_msg(accel)))
-        should_tx = np.isclose(accel, 0, atol=0.0001)
-        self.assertEqual(should_tx, self._tx(self._accel_msg(accel, cancel_req=1)))
-
-
+        self.assertFalse(self._tx(self._accel_msg_343(accel)))
+        should_tx = np.isclose(accel, self.INACTIVE_ACCEL, atol=0.0001)
+        self.assertEqual(should_tx, self._tx(self._accel_msg_343(accel, cancel_req=1)))
 @parameterized_class(UNSUPPORTED_DSU)
 class TestToyotaStockLongitudinalTorque(TestToyotaStockLongitudinalBase, TestToyotaSafetyTorque):
+
+  @property
+  def SAFETY_PARAM(self):
+    return self.EPS_SCALE | ToyotaSafetyFlags.STOCK_LONGITUDINAL
 
   @classmethod
   def setUpClass(cls):
     if cls.__name__ == "TestToyotaStockLongitudinalTorque":
-      cls.safety = None
       raise unittest.SkipTest
 
   def setUp(self):
-    self.packer = CANPackerPanda("toyota_nodsu_pt_generated")
-    self.safety = libsafety_py.libsafety
+    super().setUp()
     self.safety.set_current_safety_param_sp(self.SAFETY_PARAM_SP)
-    self.safety.set_safety_hooks(CarParams.SafetyModel.toyota, self.EPS_SCALE | ToyotaSafetyFlags.STOCK_LONGITUDINAL)
-    self.safety.init_tests()
-
-
 class TestToyotaStockLongitudinalAngle(TestToyotaStockLongitudinalBase, TestToyotaSafetyAngle):
 
-  def setUp(self):
-    self.packer = CANPackerPanda("toyota_nodsu_pt_generated")
-    self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.toyota,
-                                 self.EPS_SCALE | ToyotaSafetyFlags.STOCK_LONGITUDINAL | ToyotaSafetyFlags.LTA)
-    self.safety.init_tests()
-
-
+  @property
+  def SAFETY_PARAM(self):
+    return self.EPS_SCALE | ToyotaSafetyFlags.STOCK_LONGITUDINAL | ToyotaSafetyFlags.LTA
 class TestToyotaSecOcSafetyBase(TestToyotaSafetyBase):
+
+  DBC = "toyota_secoc_pt_generated"
 
   TX_MSGS = TOYOTA_SECOC_TX_MSGS
   RELAY_MALFUNCTION_ADDRS = {0: (0x2E4, 0x191, 0x412, 0x131)}
   FWD_BLACKLISTED_ADDRS = {2: [0x2E4, 0x191, 0x412, 0x131]}
+  ECU_DISABLED = False
 
-  def setUp(self):
-    self.packer = CANPackerPanda("toyota_secoc_pt_generated")
-    self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.toyota,
-                                 self.EPS_SCALE | ToyotaSafetyFlags.SECOC)
-    self.safety.init_tests()
+  @property
+  def SAFETY_PARAM(self):
+    return self.EPS_SCALE | ToyotaSafetyFlags.SECOC
 
-  # 0x283|PRE_COLLISION is not allowed on SecOC platforms
-  def test_block_aeb(self, stock_longitudinal: bool = False):
-    pass
-
-  def test_diagnostics(self, stock_longitudinal: bool = False, ecu_disabled: bool = False):
-    super().test_diagnostics(stock_longitudinal=stock_longitudinal, ecu_disabled=ecu_disabled)
+  def test_angle_meas_initializing(self):
+    # SecOC doesn't check the STEER_TORQUE_SENSOR quality flag, so the rx hook drops initializing angles itself
+    self.assertTrue(self._rx(self._angle_meas_msg(10, steer_angle_initializing=True)))
+    self.assertEqual(0, self.safety.get_angle_meas_max())
 
   # This platform also has alternate brake and PCM messages, but same naming in the DBC, so same packers work
 
   def _user_gas_msg(self, gas):
     values = {"GAS_PEDAL_USER": gas}
-    return self.packer.make_can_msg_panda("GAS_PEDAL", 0, values)
+    return self.packer.make_can_msg_safety("GAS_PEDAL", 0, values)
 
   # This platform sends both STEERING_LTA (same as other Toyota) and STEERING_LTA_2 (SecOC signed)
   # STEERING_LTA is checked for no-actuation by the base class, STEERING_LTA_2 is checked for no-actuation below
 
-  def _lta_2_msg(self, req, req2, angle_cmd, torque_wind_down=100):
+  def _lta_2_msg(self, req, req2, angle_cmd):
     values = {"STEER_REQUEST": req, "STEER_REQUEST_2": req2, "STEER_ANGLE_CMD": angle_cmd}
-    return self.packer.make_can_msg_panda("STEERING_LTA_2", 0, values)
+    return self.packer.make_can_msg_safety("STEERING_LTA_2", 0, values)
 
   def test_lta_2_steer_cmd(self):
     for engaged, req, req2, angle in itertools.product([True, False], [0, 1], [0, 1], np.linspace(-20, 20, 5)):
@@ -446,53 +438,36 @@ class TestToyotaSecOcSafetyBase(TestToyotaSafetyBase):
       should_tx = not req and not req2 and angle == 0
       self.assertEqual(should_tx, self._tx(self._lta_2_msg(req, req2, angle)), f"{req=} {req2=} {angle=}")
 
+  def _accel_msg_183(self, accel):
+    values = {"ACCEL_CMD": accel}
+    return self.packer.make_can_msg_safety("ACC_CONTROL_2", 0, values)
 
+  def _accel_msg(self, accel):
+    return self._accel_msg_183(accel)
 class TestToyotaSecOcSafetyStockLongitudinal(TestToyotaSecOcSafetyBase, TestToyotaStockLongitudinalBase):
 
-  def setUp(self):
-    self.packer = CANPackerPanda("toyota_secoc_pt_generated")
-    self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.toyota,
-                                 self.EPS_SCALE | ToyotaSafetyFlags.STOCK_LONGITUDINAL | ToyotaSafetyFlags.SECOC)
-    self.safety.init_tests()
-
-  def test_diagnostics(self, stock_longitudinal: bool = True, ecu_disabled: bool = False):
-    super().test_diagnostics(stock_longitudinal=stock_longitudinal, ecu_disabled=ecu_disabled)
-
-
+  @property
+  def SAFETY_PARAM(self):
+    return self.EPS_SCALE | ToyotaSafetyFlags.STOCK_LONGITUDINAL | ToyotaSafetyFlags.SECOC
 class TestToyotaSecOcSafety(TestToyotaSecOcSafetyBase):
 
-  RELAY_MALFUNCTION_ADDRS = {0: (0x2E4, 0x343, 0x183, 0x191, 0x412, 0x131)}
+  RELAY_MALFUNCTION_ADDRS = {0: (0x2E4, 0x191, 0x412, 0x131, 0x343, 0x183)}
   FWD_BLACKLISTED_ADDRS = {2: [0x2E4, 0x191, 0x412, 0x131, 0x343, 0x183]}
 
-  def setUp(self):
-    self.packer = CANPackerPanda("toyota_secoc_pt_generated")
-    self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.toyota, self.EPS_SCALE | ToyotaSafetyFlags.SECOC)
-    self.safety.init_tests()
+  @unittest.skip("test not applicable for cars without a DSU")
+  def test_block_aeb(self):
+    pass
 
-  def _accel_msg_2(self, accel):
-    values = {"ACCEL_CMD": accel}
-    return self.packer.make_can_msg_panda("ACC_CONTROL_2", 0, values)
-
-  def test_accel_actuation_limits(self, stock_longitudinal=False):
-    limits = ((self.MIN_ACCEL, self.MAX_ACCEL, ALTERNATIVE_EXPERIENCE.DEFAULT),
-              (self.MIN_ACCEL, self.MAX_ACCEL, ALTERNATIVE_EXPERIENCE.RAISE_LONGITUDINAL_LIMITS_TO_ISO_MAX))
-
-    for min_accel, max_accel, alternative_experience in limits:
-      # enforce we don't skip over 0 or inactive accel
-      for accel in np.concatenate((np.arange(min_accel - 1, max_accel + 1, 0.05), [0, self.INACTIVE_ACCEL])):
-        accel = round(accel, 2)  # floats might not hit exact boundary conditions without rounding
-        for controls_allowed in [True, False]:
-          self.safety.set_controls_allowed(controls_allowed)
-          self.safety.set_alternative_experience(alternative_experience)
-          # On a SecOC vehicle, we still transmit ACC_CONTROL but the accel value moves to ACC_CONTROL_2
-          # Verify that all non-idle accel values in ACC_CONTROL are rejected, verify ACC_CONTROL_2 accel normally
-          should_tx_1 = accel == self.INACTIVE_ACCEL
-          should_tx_2 = (controls_allowed and min_accel <= accel <= max_accel) or accel == self.INACTIVE_ACCEL
-          self.assertEqual(should_tx_1, self._tx(self._accel_msg(accel)))
-          self.assertEqual(should_tx_2, self._tx(self._accel_msg_2(accel)))
-
-
+  def test_343_actuation_blocked(self):
+    """
+    For SecOC cars, longitudinal acceleration must be sent in ACC_CONTROL_2, but all other ACC
+    data remains in ACC_CONTROL. Verify no actuation is sent via ACC_CONTROL.
+    """
+    for controls_allowed in [True, False]:
+      self.safety.set_controls_allowed(controls_allowed)
+      for accel in np.arange(self.MIN_ACCEL - 1, self.MAX_ACCEL + 1, 0.1):
+        should_tx = np.isclose(accel, self.INACTIVE_ACCEL, atol=0.0001)
+        self.assertEqual(should_tx, self._tx(self._accel_msg_343(accel)))
+        self.assertEqual(should_tx, self._tx(self._accel_msg_343(accel, cancel_req=1)))
 if __name__ == "__main__":
   unittest.main()

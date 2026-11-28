@@ -1,10 +1,10 @@
-import crcmod
+from opendbc.car.crc import CRC8J1850, mk_crc8_fun
 from opendbc.car.hyundai.values import CAR, HyundaiFlags
 
 from opendbc.sunnypilot.car.hyundai.escc import EnhancedSmartCruiseControl
-from opendbc.sunnypilot.car.hyundai.lead_data_ext import CanLeadData
+from opendbc.sunnypilot.car.hyundai.lead_data_ext import LeadData
 
-hyundai_checksum = crcmod.mkCrcFun(0x11D, initCrc=0xFD, rev=False, xorOut=0xdf)
+hyundai_checksum = mk_crc8_fun(CRC8J1850, init_crc=0xFD, xor_out=0xDF)
 
 
 def create_lkas11(packer, frame, CP, apply_torque, steer_req,
@@ -42,7 +42,7 @@ def create_lkas11(packer, frame, CP, apply_torque, steer_req,
                            CAR.HYUNDAI_IONIQ_EV_2020, CAR.HYUNDAI_IONIQ_PHEV, CAR.KIA_SELTOS, CAR.HYUNDAI_ELANTRA_2021, CAR.GENESIS_G70_2020,
                            CAR.HYUNDAI_ELANTRA_HEV_2021, CAR.HYUNDAI_SONATA_HYBRID, CAR.HYUNDAI_KONA_EV, CAR.HYUNDAI_KONA_HEV, CAR.HYUNDAI_KONA_EV_2022,
                            CAR.HYUNDAI_SANTA_FE_2022, CAR.KIA_K5_2021, CAR.HYUNDAI_IONIQ_HEV_2022, CAR.HYUNDAI_SANTA_FE_HEV_2022,
-                           CAR.HYUNDAI_SANTA_FE_PHEV_2022, CAR.KIA_STINGER_2022, CAR.KIA_K5_HEV_2020, CAR.KIA_CEED,
+                           CAR.HYUNDAI_SANTA_FE_PHEV_2022, CAR.KIA_STINGER_2022, CAR.KIA_K5_HEV_2020, CAR.KIA_CEED, CAR.KIA_CEED_PHEV,
                            CAR.HYUNDAI_AZERA_6TH_GEN, CAR.HYUNDAI_AZERA_HEV_6TH_GEN, CAR.HYUNDAI_CUSTIN_1ST_GEN, CAR.HYUNDAI_KONA_2022,
                            CAR.KIA_CEED_PHEV_2022_NON_SCC, CAR.HYUNDAI_KONA_EV_NON_SCC, CAR.HYUNDAI_ELANTRA_2022_NON_SCC,
                            CAR.GENESIS_G70_2021_NON_SCC, CAR.KIA_SELTOS_2023_NON_SCC, CAR.HYUNDAI_BAYON_1ST_GEN_NON_SCC):
@@ -79,7 +79,7 @@ def create_lkas11(packer, frame, CP, apply_torque, steer_req,
     values["CF_Lkas_LdwsActivemode"] = 0
     values["CF_Lkas_FcwOpt_USM"] = 0
 
-  elif CP.carFingerprint == CAR.HYUNDAI_GENESIS:
+  elif CP.carFingerprint in (CAR.HYUNDAI_GENESIS, CAR.KIA_OPTIMA_H):
     # This field is actually LdwsActivemode
     # Genesis and Optima fault when forwarding while engaged
     values["CF_Lkas_LdwsActivemode"] = 2
@@ -131,9 +131,9 @@ def create_lfahda_mfc(packer, enabled, lfa_icon):
   return packer.make_can_msg("LFAHDA_MFC", 0, values)
 
 
-def create_acc_commands(packer, enabled, accel, upper_jerk, idx, lead_data: CanLeadData,
+def create_acc_commands(packer, enabled, accel, upper_jerk, idx, lead_data: LeadData,
                         hud_control, set_speed, stopping, long_override, use_fca, CP,
-                        main_cruise_enabled, tuning, ESCC: EnhancedSmartCruiseControl = None):
+                        main_cruise_enabled, tuning, ESCC: EnhancedSmartCruiseControl | None = None):
   commands = []
 
   def get_scc11_values():
@@ -204,6 +204,7 @@ def create_acc_commands(packer, enabled, accel, upper_jerk, idx, lead_data: CanL
 
   scc12_values = get_scc12_values()
   scc12_values = calculate_scc12_checksum(scc12_values)
+
   commands.append(packer.make_can_msg("SCC12", 0, scc12_values))
 
   scc14_values = get_scc14_values()
@@ -222,7 +223,7 @@ def create_acc_commands(packer, enabled, accel, upper_jerk, idx, lead_data: CanL
   return commands
 
 
-def create_acc_opt(packer, CP, ESCC: EnhancedSmartCruiseControl = None):
+def create_acc_opt(packer, CP, ESCC: EnhancedSmartCruiseControl | None = None):
   """
     Creates SCC13 and FCA12. If ESCC is enabled, it will only create SCC13 since ESCC does not block FCA12.
     :param packer:
@@ -266,3 +267,13 @@ def create_frt_radar_opt(packer):
     "CF_FCA_Equip_Front_Radar": 1,
   }
   return packer.make_can_msg("FRT_RADAR11", 0, frt_radar11_values)
+
+
+def hyundai_can_checksum(address: int, sig, d: bytearray) -> int:
+  if address == 0x386:
+    checksum = sum((b & (0x3F if i % 2 else 0xFF)).bit_count() for i, b in enumerate(d)) ^ 9
+    return (checksum >> (2 if sig.name.endswith("_MSB") else 0)) & 0x3
+
+  if address == 0x394:
+    d = d[:7]
+  return (sig.get_raw_value(d) - sum((b >> 4) + (b & 0xF) for b in d)) & 0xF

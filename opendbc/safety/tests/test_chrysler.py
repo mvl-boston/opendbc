@@ -2,13 +2,14 @@
 import unittest
 
 from opendbc.car.chrysler.values import ChryslerSafetyFlags
+from opendbc.sunnypilot.car.chrysler.values_ext import ChryslerSafetyFlagsSP
 from opendbc.car.structs import CarParams
 from opendbc.safety.tests.libsafety import libsafety_py
 import opendbc.safety.tests.common as common
-from opendbc.safety.tests.common import CANPackerPanda
+class TestChryslerSafety(common.CarSafetyTest, common.MotorTorqueSteeringSafetyTest):
+  DBC = "chrysler_pacifica_2017_hybrid_generated"
+  SAFETY_MODEL = CarParams.SafetyModel.chrysler
 
-
-class TestChryslerSafety(common.PandaCarSafetyTest, common.MotorTorqueSteeringSafetyTest):
   TX_MSGS = [[0x23B, 0], [0x292, 0], [0x2A6, 0], [0x2D9, 0]]
   RELAY_MALFUNCTION_ADDRS = {0: (0x292, 0x2A6, 0x2D9)}
   FWD_BLACKLISTED_ADDRS = {2: [0x292, 0x2A6, 0x2D9]}
@@ -23,39 +24,33 @@ class TestChryslerSafety(common.PandaCarSafetyTest, common.MotorTorqueSteeringSa
 
   DAS_BUS = 0
 
-  def setUp(self):
-    self.packer = CANPackerPanda("chrysler_pacifica_2017_hybrid_generated")
-    self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.chrysler, 0)
-    self.safety.init_tests()
-
   def _button_msg(self, cancel=False, resume=False, accel=False, decel=False):
     values = {"ACC_Cancel": cancel, "ACC_Resume": resume, "ACC_Accel": accel, "ACC_Decel": decel}
-    return self.packer.make_can_msg_panda("CRUISE_BUTTONS", self.DAS_BUS, values)
+    return self.packer.make_can_msg_safety("CRUISE_BUTTONS", self.DAS_BUS, values)
 
   def _pcm_status_msg(self, enable):
     values = {"ACC_ACTIVE": enable}
-    return self.packer.make_can_msg_panda("DAS_3", self.DAS_BUS, values)
+    return self.packer.make_can_msg_safety("DAS_3", self.DAS_BUS, values)
 
   def _speed_msg(self, speed):
     values = {"SPEED_LEFT": speed, "SPEED_RIGHT": speed}
-    return self.packer.make_can_msg_panda("SPEED_1", 0, values)
+    return self.packer.make_can_msg_safety("SPEED_1", 0, values)
 
   def _user_gas_msg(self, gas):
     values = {"Accelerator_Position": gas}
-    return self.packer.make_can_msg_panda("ECM_5", 0, values)
+    return self.packer.make_can_msg_safety("ECM_5", 0, values)
 
   def _user_brake_msg(self, brake):
     values = {"Brake_Pedal_State": 1 if brake else 0}
-    return self.packer.make_can_msg_panda("ESP_1", 0, values)
+    return self.packer.make_can_msg_safety("ESP_1", 0, values)
 
   def _torque_meas_msg(self, torque):
     values = {"EPS_TORQUE_MOTOR": torque}
-    return self.packer.make_can_msg_panda("EPS_2", 0, values)
+    return self.packer.make_can_msg_safety("EPS_2", 0, values)
 
   def _torque_cmd_msg(self, torque, steer_req=1):
     values = {"STEERING_TORQUE": torque, "LKAS_CONTROL_BIT": self.LKAS_ACTIVE_VALUE if steer_req else 0}
-    return self.packer.make_can_msg_panda("LKAS_COMMAND", 0, values)
+    return self.packer.make_can_msg_safety("LKAS_COMMAND", 0, values)
 
   def test_buttons(self):
     for controls_allowed in (True, False):
@@ -95,10 +90,17 @@ class TestChryslerSafety(common.PandaCarSafetyTest, common.MotorTorqueSteeringSa
 
   def _lkas_button_msg(self, enabled):
     values = {"TOGGLE_LKAS": enabled}
-    return self.packer.make_can_msg_panda("TRACTION_BUTTON", 0, values)
+    return self.packer.make_can_msg_safety("TRACTION_BUTTON", 0, values)
+
+  def _ignore_frequency_check_msgs(self):
+    return [self._lkas_button_msg(False)]
 
 
 class TestChryslerRamDTSafety(TestChryslerSafety):
+  DBC = "chrysler_ram_dt_generated"
+
+  SAFETY_PARAM = ChryslerSafetyFlags.RAM_DT
+
   TX_MSGS = [[0xB1, 2], [0xA6, 0], [0xFA, 0]]
   RELAY_MALFUNCTION_ADDRS = {0: (0xA6, 0xFA)}
   FWD_BLACKLISTED_ADDRS = {2: [0xA6, 0xFA]}
@@ -111,22 +113,18 @@ class TestChryslerRamDTSafety(TestChryslerSafety):
 
   LKAS_ACTIVE_VALUE = 2
 
-  def setUp(self):
-    self.packer = CANPackerPanda("chrysler_ram_dt_generated")
-    self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.chrysler, ChryslerSafetyFlags.RAM_DT)
-    self.safety.init_tests()
-
   def _speed_msg(self, speed):
     values = {"Vehicle_Speed": speed}
-    return self.packer.make_can_msg_panda("ESP_8", 0, values)
+    return self.packer.make_can_msg_safety("ESP_8", 0, values)
 
   def _lkas_button_msg(self, enabled):
     values = {"LKAS_Button": enabled}
-    return self.packer.make_can_msg_panda("Center_Stack_2", 0, values)
-
-
+    return self.packer.make_can_msg_safety("Center_Stack_2", 0, values)
 class TestChryslerRamHDSafety(TestChryslerSafety):
+  DBC = "chrysler_ram_hd_generated"
+
+  SAFETY_PARAM = ChryslerSafetyFlags.RAM_HD
+
   TX_MSGS = [[0x275, 0], [0x276, 0], [0x23A, 2]]
   RELAY_MALFUNCTION_ADDRS = {0: (0x276, 0x275)}
   FWD_BLACKLISTED_ADDRS = {2: [0x275, 0x276]}
@@ -140,19 +138,26 @@ class TestChryslerRamHDSafety(TestChryslerSafety):
 
   LKAS_ACTIVE_VALUE = 2
 
-  def setUp(self):
-    self.packer = CANPackerPanda("chrysler_ram_hd_generated")
-    self.safety = libsafety_py.libsafety
-    self.safety.set_safety_hooks(CarParams.SafetyModel.chrysler, ChryslerSafetyFlags.RAM_HD)
-    self.safety.init_tests()
-
   def _speed_msg(self, speed):
     values = {"Vehicle_Speed": speed}
-    return self.packer.make_can_msg_panda("ESP_8", 0, values)
+    return self.packer.make_can_msg_safety("ESP_8", 0, values)
 
   def _lkas_button_msg(self, enabled):
     values = {"LKAS_Button": enabled}
-    return self.packer.make_can_msg_panda("Center_Stack_2", 0, values)
+    return self.packer.make_can_msg_safety("Center_Stack_2", 0, values)
+
+
+class TestChryslerRamHDAltButtonSafety(TestChryslerRamHDSafety):
+  TX_MSGS = [[0x275, 0], [0x276, 0], [0x23B, 2]]
+
+  def setUp(self):
+    self._safety_param_sp = ChryslerSafetyFlagsSP.RAM_HD_ALT_BUTTONS
+    libsafety_py.libsafety.set_current_safety_param_sp(self._safety_param_sp)
+    super().setUp()
+
+  def _button_msg(self, cancel=False, resume=False, accel=False, decel=False):
+    values = {"ACC_Cancel": cancel, "ACC_Resume": resume, "ACC_Accel": accel, "ACC_Decel": decel}
+    return self.packer.make_can_msg_safety("CRUISE_BUTTONS_ALT", self.DAS_BUS, values)
 
 
 if __name__ == "__main__":

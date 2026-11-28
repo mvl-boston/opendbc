@@ -16,13 +16,17 @@ class CarStateExt:
     self.CP = CP
     self.CP_SP = CP_SP
 
-  def update(self, ret: structs.CarState, can_parsers: dict[StrEnum, CANParser]) -> None:
+  def update_ext(self, ret: structs.CarState, can_parsers: dict[StrEnum, CANParser]) -> None:
     cp = can_parsers[Bus.pt]
     cp_cam = can_parsers[Bus.cam]
 
-    if self.CP_SP.flags & HondaFlagsSP.CLARITY:
+    if self.CP_SP.flags & HondaFlagsSP.NIDEC_HYBRID:
       ret.accFaulted = bool(cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_1"] or cp.vl["HYBRID_BRAKE_ERROR"]["BRAKE_ERROR_2"])
       ret.stockAeb = bool(cp_cam.vl["BRAKE_COMMAND"]["AEB_REQ_1"] and cp_cam.vl["BRAKE_COMMAND"]["COMPUTER_BRAKE_HYBRID"] > 1e-5)
+
+    if self.CP_SP.flags & HondaFlagsSP.HYBRID_ALT_BRAKEHOLD:
+      ret.brakeHoldActive = cp.vl["BRAKE_HOLD_HYBRID_ALT"]["BRAKE_HOLD_ACTIVE"] == 1
+      ret.blockPcmEnable = ret.brakeHoldActive and not self.CP_SP.enableGasInterceptor
 
     if self.CP_SP.enableGasInterceptor:
       # Same threshold as panda, equivalent to 1e-5 with previous DBC scaling
