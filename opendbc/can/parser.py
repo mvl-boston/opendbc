@@ -11,21 +11,6 @@ MAX_BAD_COUNTER = 5
 CAN_INVALID_CNT = 5
 
 
-def get_raw_value(dat: bytes | bytearray, sig: Signal) -> int:
-  ret = 0
-  i = sig.msb // 8
-  bits = sig.size
-  while 0 <= i < len(dat) and bits > 0:
-    lsb = sig.lsb if (sig.lsb // 8) == i else i * 8
-    msb = sig.msb if (sig.msb // 8) == i else (i + 1) * 8 - 1
-    size = msb - lsb + 1
-    d = (dat[i] >> (lsb - (i * 8))) & ((1 << size) - 1)
-    ret |= d << (bits - size)
-    bits -= size
-    i = i - 1 if sig.is_little_endian else i + 1
-  return ret
-
-
 @dataclass
 class MessageState:
   address: int
@@ -59,7 +44,7 @@ class MessageState:
       self.first_seen_nanos = nanos
 
     for i, sig in enumerate(self.signals):
-      tmp = get_raw_value(dat, sig)
+      tmp = sig.get_raw_value(dat)
       if sig.is_signed:
         tmp -= ((tmp >> (sig.size - 1)) & 0x1) * (1 << sig.size)
 
@@ -129,7 +114,7 @@ class CANParser:
   def __init__(self, dbc_name: str, messages: list[tuple[str | int, int]], bus: int):
     self.dbc_name: str = dbc_name
     self.bus: int = bus
-    self.dbc: DBC = DBC(dbc_name)
+    self.dbc = DBC(dbc_name)
 
     self.vl: dict[int | str, dict[str, float]] = VLDict(self)
     self.vl_all: dict[int | str, dict[str, list[float]]] = {}
@@ -152,6 +137,7 @@ class CANParser:
     self.can_invalid_cnt: int = CAN_INVALID_CNT
     self.last_nonempty_nanos: int = 0
     self._last_update_nanos: int = 0
+    self._prev_can_valid: bool = False
 
   def _add_message(self, name_or_addr: str | int, freq: int | None = None) -> None:
     if isinstance(name_or_addr, numbers.Number):
@@ -201,6 +187,7 @@ class CANParser:
     valid = True
     counters_valid = True
     bus_timeout = self.bus_timeout
+    is_honda = 'honda' in self.dbc_name or 'acura' in self.dbc_name
     for state in self.message_states.values():
       if state.counter_fail >= MAX_BAD_COUNTER:
         counters_valid = False
@@ -211,7 +198,18 @@ class CANParser:
 
     # TODO: probably only want to increment this once per update() call
     self.can_invalid_cnt = 0 if valid else min(self.can_invalid_cnt + 1, CAN_INVALID_CNT)
-    return self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
+    result = self.can_invalid_cnt < CAN_INVALID_CNT and counters_valid
+    log_invalid = is_honda and self._prev_can_valid and not result
+
+    if log_invalid:
+      for state in self.message_states.values():
+        if state.counter_fail >= MAX_BAD_COUNTER:
+          carlog.error({"counter invalid - message": state, "bus": self.bus})
+        if not state.valid(self._last_update_nanos, bus_timeout):
+          carlog.error({"can invalid - message": state, "bus": self.bus})
+
+    self._prev_can_valid = result
+    return result
 
   def update(self, strings, sendcan: bool = False):
     if strings and not isinstance(strings[0], list | tuple):
