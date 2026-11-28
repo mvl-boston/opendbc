@@ -1,4 +1,5 @@
 import math
+import os
 import threading
 import time
 from collections import deque
@@ -224,11 +225,14 @@ def band_weights(bands, v_ego):
 
 
 class HondaParamWriter:
-  # Each Params.put is write + fsync + rename + fsync(dir); the dir fsync forces an ext4 journal
-  # commit that first flushes every dirty page in the filesystem (loggerd's buffered video). The
-  # band learners grew the per-minute flush to ~33 keys, and firing those back-to-back is ~66
-  # fsyncs in one burst that other synchronous params users (hardwared, mapd) then wait behind.
-  # Writes are paced one key per PARAM_WRITE_SPACING and unchanged values are skipped.
+  # Params.put is write + fsync + rename + fsync(dir). Each fsync forces an ext4 journal commit,
+  # and in data=ordered mode that commit first has to flush every other file's dirty data
+  # (loggerd's buffered video), stalling everything else that touches /data until it finishes.
+  # Thread or I/O priority cannot avoid that: the cost is paid by the shared journal, not by
+  # this thread. So learned values are written without fsync (temp file + atomic rename) and
+  # reach flash with the kernel's own periodic commit. A power cut can lose the last few
+  # seconds of learning, never corrupt a value. Writes stay paced one key per
+  # PARAM_WRITE_SPACING and unchanged values are skipped.
   PARAM_WRITE_SPACING = 1.0  # s
 
   def __init__(self):
@@ -251,6 +255,22 @@ class HondaParamWriter:
     except Empty:
       pass
 
+  def _write_unsynced(self, key, value):
+    self._params.check_key(key)
+    path = self._params.get_param_path(key)
+    tmp_path = os.path.join(os.path.dirname(path), f".tmp_value_honda_{os.getpid()}_{threading.get_native_id()}")
+    try:
+      with open(tmp_path, "w") as f:
+        f.write(str(value))
+      os.replace(tmp_path, path)
+    except OSError:
+      try:
+        os.unlink(tmp_path)
+      except OSError:
+        pass
+      return False
+    return True
+
   def _run(self):
     pending: dict[str, float] = {}
     while True:
@@ -261,11 +281,10 @@ class HondaParamWriter:
       if self._written.get(key) == value:
         continue
 
-      # block=True keeps the pacing on the disk op itself rather than on a handoff to the
-      # C++ async queue, which would re-create the burst
-      self._params.put(key, value, block=True)
-      self._written[key] = value
+      if self._write_unsynced(key, value):
+        self._written[key] = value
       time.sleep(self.PARAM_WRITE_SPACING)
+
 
 class CarController(CarControllerBase, MadsCarController, GasInterceptorCarController, IntelligentCruiseButtonManagementInterface,
                     EpsModCarController):
